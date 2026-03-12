@@ -135,6 +135,15 @@ const up = {
     service_nick: p.serviceNick, profile_code: p.profileCode, thickness: p.thickness,
     sheet_size: p.sheetSize, cost_price: p.costPrice ?? 0, base_price: p.basePrice ?? 0,
     unit: p.unit, variants: p.variants ?? [],
+    model_no: p.modelNo ?? '', brand: p.brand ?? '',
+    main_category: p.mainCategory ?? '', sub_category: p.subCategory ?? '',
+    finish_color: p.finishColor ?? '', material: p.material ?? '',
+    direction: p.direction ?? '', tongue_length: p.tongueLength ?? '',
+    spindle_length: p.spindleLength ?? '', image_url: p.imageUrl ?? '',
+    hs_code: p.hsCode ?? '', is_set: p.isSet ?? false,
+    set_components: p.setComponents ?? [], technical_specs: p.technicalSpecs ?? {},
+    width: p.width ?? 0, height: p.height ?? 0,
+    frame_color: p.frameColor ?? '', mesh_color: p.meshColor ?? '',
   })),
 
   store: (data: any[]) => data.map(s => ({
@@ -282,6 +291,15 @@ const down = {
     serviceNick: r.service_nick, profileCode: r.profile_code, thickness: r.thickness,
     sheetSize: r.sheet_size, costPrice: r.cost_price ?? 0, basePrice: r.base_price ?? 0,
     unit: r.unit, variants: r.variants ?? [],
+    modelNo: r.model_no ?? '', brand: r.brand ?? '',
+    mainCategory: r.main_category ?? '', subCategory: r.sub_category ?? '',
+    finishColor: r.finish_color ?? '', material: r.material ?? '',
+    direction: r.direction ?? '', tongueLength: r.tongue_length ?? '',
+    spindleLength: r.spindle_length ?? '', imageUrl: r.image_url ?? '',
+    hsCode: r.hs_code ?? '', isSet: r.is_set ?? false,
+    setComponents: r.set_components ?? [], technicalSpecs: r.technical_specs ?? {},
+    width: r.width ?? 0, height: r.height ?? 0,
+    frameColor: r.frame_color ?? '', meshColor: r.mesh_color ?? '',
   })),
 
   store: (rows: any[]) => rows.map(r => ({
