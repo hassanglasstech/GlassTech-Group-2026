@@ -14,6 +14,7 @@ import NipponProductForm from '@/modules/nippon/components/NipponProductForm';
 import NipponSmartImporter from './components/NipponSmartImporter';
 import { NipponCatalogPrint } from '@/modules/nippon/prints/NipponCatalogPrint';
 import * as XLSX from 'xlsx';
+import { toast } from 'sonner';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type ActiveTab = 'list' | 'bulk' | 'excel' | 'import';
@@ -125,8 +126,11 @@ const NipponProductMaster: React.FC = () => {
     const result = await saveProductToStore(product, updatedProducts, updatedStore);
     await AsyncSalesService.saveProducts(result.allProds);
     InventoryService.saveStore(result.allStore);
-    await refreshData();
+    const isEdit = !!editingProduct;
     setIsModalOpen(false);
+    setEditingProduct(null);
+    await refreshData();
+    toast.success(isEdit ? `"${product.description}" updated.` : `"${product.description}" added.`);
   };
 
   // ─── BULK PASTE ───────────────────────────────────────────────────────────
@@ -210,6 +214,7 @@ const NipponProductMaster: React.FC = () => {
     await refreshData();
     setBulkSaved(count);
     setBulkSaving(false);
+    toast.success(`${count} products saved!`);
     setTimeout(() => setBulkSaved(0), 3000);
   };
 
@@ -756,7 +761,7 @@ const NipponProductMaster: React.FC = () => {
                         <td className="pr-6 text-right">
                           <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button onClick={() => { setEditingProduct(p); setIsModalOpen(true); }} className="p-1.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded transition-all"><Edit2 size={12}/></button>
-                            <button onClick={async () => { if(confirm('Delete?')) { const u = (await AsyncSalesService.getProducts()).filter(x => x.id !== p.id); await AsyncSalesService.saveProducts(u); await refreshData(); }}} className="p-1.5 text-slate-400 hover:text-red-600 bg-white border border-slate-200 rounded transition-all"><Trash2 size={12}/></button>
+                            <button onClick={async () => { if(confirm(`"${p.description}" delete karen?`)) { const u = (await AsyncSalesService.getProducts()).filter(x => x.id !== p.id); await AsyncSalesService.saveProducts(u); await refreshData(); toast.success(`"${p.description}" deleted.`); }}} className="p-1.5 text-slate-400 hover:text-red-600 bg-white border border-slate-200 rounded transition-all"><Trash2 size={12}/></button>
                           </div>
                         </td>
                       </tr>
