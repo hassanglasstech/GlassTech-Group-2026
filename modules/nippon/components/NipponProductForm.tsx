@@ -244,6 +244,13 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
     setTimeout(() => { setIsUploading(false); setUploadProgress(0); }, 600);
   };
 
+  // Track dirty state — must be before any early return
+  useEffect(() => {
+    if (!isOpen) return;
+    const current = JSON.stringify(formData);
+    setIsDirty(current !== initialFormRef.current);
+  }, [formData, isOpen]);
+
   if (!isOpen) return null;
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -259,13 +266,6 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
     const file = e.dataTransfer.files?.[0];
     if (file) processFile(file);
   };
-
-  // Track dirty state
-  useEffect(() => {
-    if (!isOpen) return;
-    const current = JSON.stringify(formData);
-    setIsDirty(current !== initialFormRef.current);
-  }, [formData, isOpen]);
 
   const handleClose = () => {
     if (isDirty) {
