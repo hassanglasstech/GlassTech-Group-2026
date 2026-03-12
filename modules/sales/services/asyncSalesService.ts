@@ -64,6 +64,11 @@ export const AsyncSalesService = {
     const { error } = await supabase.from('products').upsert(mapped);
     if (error) throw error;
   },
+
+  deleteProduct: async (id: string): Promise<void> => {
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    if (error) throw error;
+  },
   
   getQuotations: async (): Promise<Quotation[]> => {
     await delay(100);
