@@ -377,6 +377,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                                 <div className="h-full bg-red-500 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }}/>
                             </div>
                         )}
+                        {!isUploading && (
                             <label className="inline-block mt-2 cursor-pointer bg-red-600 text-white text-[10px] font-black uppercase px-3 py-1.5 rounded-lg hover:bg-red-700 transition-all">
                                 Choose Image
                                 <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
