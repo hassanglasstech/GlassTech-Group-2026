@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Product, StoreItem, Vendor } from '../../shared/types';
 import { SalesService } from '../../sales/services/salesService';
 import { supabase } from '@/src/services/supabaseClient';
@@ -50,16 +50,23 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
   const [isSetModalOpen, setIsSetModalOpen] = useState(false);
   const [newComponent, setNewComponent] = useState({ description: '', unit: 'PCS', qtyPerSet: 1 });
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [duplicates, setDuplicates] = useState<Product[]>([]);
   const [showDupWarning, setShowDupWarning] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const initialFormRef = useRef<string>('');
 
   useEffect(() => {
     if (isOpen) {
         const allVendors = SalesService.getVendors();
         setNipponVendors(allVendors.filter(v => v.company === 'Nippon'));
+        setIsDirty(false);
+        setShowDupWarning(false);
+        setDuplicates([]);
 
         if (editingProduct) {
-            setFormData({
+            const fd = {
                 internalId: editingProduct.profileCode || '',
                 modelNo: editingProduct.modelNo || '',
                 description: editingProduct.description,
@@ -85,16 +92,20 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                 isSet: editingProduct.isSet || false,
                 setComponents: editingProduct.setComponents || [],
                 hsCode: editingProduct.hsCode || ''
-            });
+            };
+            setFormData(fd);
+            initialFormRef.current = JSON.stringify(fd);
         } else {
-            setFormData({
+            const fd = {
                 internalId: '', modelNo: '', description: '', brand: '', 
-                mainCategory: '', subCategory: '', category: 'Hardware',
+                mainCategory: '', subCategory: '', category: 'Hardware' as const,
                 unit: 'PCS', costPrice: 0, basePrice: 0, finishColor: '', material: '',
                 direction: '', tongueLength: '', spindleLength: '', minLevel: 10,
                 image: '', technicalSpecs: {}, width: 0, height: 0, frameColor: '', meshColor: '',
                 isSet: false, setComponents: [], hsCode: ''
-            });
+            };
+            setFormData(fd);
+            initialFormRef.current = JSON.stringify(fd);
         }
     }
   }, [isOpen, editingProduct]);
@@ -209,25 +220,28 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
     if (!file.type.startsWith('image/')) return toast.error('Sirf image files allowed hain');
     
     setIsUploading(true);
+    setUploadProgress(10);
 
     // Show local preview immediately
     const localUrl = URL.createObjectURL(file);
     setFormData(prev => ({ ...prev, image: localUrl }));
+    setUploadProgress(35);
 
     const publicUrl = await uploadToSupabase(file);
+    setUploadProgress(90);
 
     if (publicUrl) {
       setFormData(prev => ({ ...prev, image: publicUrl }));
       URL.revokeObjectURL(localUrl);
+      setUploadProgress(100);
       toast.success('Image uploaded successfully');
     } else {
-      // Fallback: store as base64 locally if Supabase fails
       toast.error('Supabase upload failed — check Storage bucket "product-images" is public');
       setFormData(prev => ({ ...prev, image: '' }));
       URL.revokeObjectURL(localUrl);
     }
 
-    setIsUploading(false);
+    setTimeout(() => { setIsUploading(false); setUploadProgress(0); }, 600);
   };
 
   if (!isOpen) return null;
@@ -246,8 +260,34 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
     if (file) processFile(file);
   };
 
+  // Track dirty state
+  useEffect(() => {
+    if (!isOpen) return;
+    const current = JSON.stringify(formData);
+    setIsDirty(current !== initialFormRef.current);
+  }, [formData, isOpen]);
+
+  const handleClose = () => {
+    if (isDirty) {
+      if (!window.confirm('Unsaved changes hain — wapas jayen?')) return;
+    }
+    onClose();
+  };
+
   const handleSave = (force = false) => {
-      if (!formData.description || !formData.unit) return toast.error("Description and Unit are required.");
+      const errors: Record<string, string> = {};
+      if (!formData.description.trim()) errors.description = 'Description required';
+      if (!formData.unit) errors.unit = 'Unit required';
+      if (!formData.modelNo.trim()) errors.modelNo = 'Model No required';
+      
+      if (Object.keys(errors).length > 0) {
+        setFieldErrors(errors);
+        // Scroll to first error
+        const firstKey = Object.keys(errors)[0];
+        document.querySelector(`[data-field="${firstKey}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      setFieldErrors({});
       if (isUploading) return toast.error("Please wait — image still uploading...");
       if (!force && duplicates.length > 0) { setShowDupWarning(true); return; }
       
@@ -297,7 +337,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                     <h3 className="text-xl font-black uppercase tracking-tight">{editingProduct ? 'Edit Component' : 'New Hardware Item'}</h3>
                     <p className="text-[10px] font-bold text-red-200 uppercase tracking-widest mt-1">Nippon Catalog Entry</p>
                 </div>
-                <button onClick={onClose} className="hover:bg-white/10 p-2 rounded-full transition-all"><X size={24}/></button>
+                <button onClick={handleClose} className="hover:bg-white/10 p-2 rounded-full transition-all"><X size={24}/></button>
             </div>
             
             <div className="p-8 space-y-6 bg-slate-50 overflow-y-auto max-h-[70vh]">
@@ -313,7 +353,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                         {isUploading ? (
                             <div className="flex flex-col items-center gap-1">
                                 <Loader2 size={24} className="text-red-500 animate-spin" />
-                                <span className="text-[8px] font-black text-slate-400 uppercase">Uploading</span>
+                                <span className="text-[8px] font-black text-slate-400 uppercase">{uploadProgress}%</span>
                             </div>
                         ) : formData.image ? (
                             <img src={formData.image} alt="Preview" className="w-full h-full object-cover" />
@@ -330,9 +370,13 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                     <div className="flex-1">
                         <h4 className="text-xs font-black uppercase text-slate-700">Product Image</h4>
                         <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">
-                            {isUploading ? 'Uploading to Supabase Storage...' : 'Drag & drop or click to upload. Auto-compressed to 300px thumbnail.'}
+                            {isUploading ? `Uploading... ${uploadProgress}%` : 'Drag & drop or click to upload. Auto-compressed to 300px thumbnail.'}
                         </p>
-                        {!isUploading && !formData.image && (
+                        {isUploading && (
+                            <div className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-red-500 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }}/>
+                            </div>
+                        )}
                             <label className="inline-block mt-2 cursor-pointer bg-red-600 text-white text-[10px] font-black uppercase px-3 py-1.5 rounded-lg hover:bg-red-700 transition-all">
                                 Choose Image
                                 <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
@@ -413,8 +457,9 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-slate-400">Model No / Code</label>
-                        <input type="text" className="sap-input w-full font-black uppercase text-blue-600" value={formData.modelNo} onChange={e => { const v = e.target.value; setFormData({...formData, modelNo: v}); checkDuplicates({modelNo: v}); }} placeholder="e.g. CZS133"/>
+                        <label className="text-[10px] font-bold uppercase text-slate-400">Model No / Code {fieldErrors.modelNo && <span className="text-rose-500 ml-1">*</span>}</label>
+                        <input data-field="modelNo" type="text" className={`sap-input w-full font-black uppercase text-blue-600 ${fieldErrors.modelNo ? 'ring-2 ring-rose-400 border-rose-400' : ''}`} value={formData.modelNo} onChange={e => { const v = e.target.value; setFormData({...formData, modelNo: v}); setFieldErrors(p => ({...p, modelNo: ''})); checkDuplicates({modelNo: v}); }} placeholder="e.g. CZS133"/>
+                        {fieldErrors.modelNo && <p className="text-[9px] text-rose-500 font-bold uppercase">{fieldErrors.modelNo}</p>}
                     </div>
                     <div className="space-y-1">
                         <label className="text-[10px] font-bold uppercase text-slate-400">Brand / Vendor</label>
@@ -436,8 +481,9 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                    <label className="text-[10px] font-bold uppercase text-slate-400">Description</label>
-                    <input type="text" className="sap-input w-full font-bold uppercase" value={formData.description} onChange={e => { const v = e.target.value; setFormData({...formData, description: v}); checkDuplicates({description: v}); }} placeholder="Item Name..."/>
+                    <label className="text-[10px] font-bold uppercase text-slate-400">Description {fieldErrors.description && <span className="text-rose-500 ml-1">*</span>}</label>
+                    <input data-field="description" type="text" className={`sap-input w-full font-bold uppercase ${fieldErrors.description ? 'ring-2 ring-rose-400 border-rose-400' : ''}`} value={formData.description} onChange={e => { const v = e.target.value; setFormData({...formData, description: v}); setFieldErrors(p => ({...p, description: ''})); checkDuplicates({description: v}); }} placeholder="Item Name..."/>
+                    {fieldErrors.description && <p className="text-[9px] text-rose-500 font-bold uppercase">{fieldErrors.description}</p>}
                 </div>
 
                 {/* PROGRESSIVE DUPLICATE BANNER */}
@@ -505,8 +551,8 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                         </select>
                     </div>
                     <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-slate-400">Unit</label>
-                        <select className="sap-input w-full font-bold" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})}>
+                        <label className="text-[10px] font-bold uppercase text-slate-400">Unit {fieldErrors.unit && <span className="text-rose-500 ml-1">*</span>}</label>
+                        <select data-field="unit" className={`sap-input w-full font-bold ${fieldErrors.unit ? 'ring-2 ring-rose-400 border-rose-400' : ''}`} value={formData.unit} onChange={e => { setFormData({...formData, unit: e.target.value}); setFieldErrors(p => ({...p, unit: ''})); }}>
                             <option value="PCS">Piece (PCS)</option>
                             <option value="Set">Set</option>
                             <option value="Pair">Pair</option>
@@ -644,16 +690,22 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                 </div>
             </div>
 
-            <div className="px-8 py-6 bg-white border-t flex justify-end space-x-3">
-                <button onClick={onClose} className="px-6 py-2 text-slate-400 font-bold uppercase text-xs hover:text-slate-600">Cancel</button>
-                <button 
-                    onClick={handleSave} 
-                    disabled={isUploading}
-                    className="bg-red-600 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-red-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {isUploading ? <Loader2 size={16} className="animate-spin"/> : <Box size={16}/>}
-                    <span>{isUploading ? 'Uploading...' : 'Save Hardware'}</span>
-                </button>
+            <div className="px-8 py-5 bg-white border-t border-slate-100 flex justify-between items-center sticky bottom-0 z-10 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+                <div className="flex items-center gap-2">
+                  {isDirty && <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-1">● Unsaved changes</span>}
+                  {!isDirty && editingProduct && <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">No changes</span>}
+                </div>
+                <div className="flex items-center gap-3">
+                  <button onClick={handleClose} className="px-6 py-2 text-slate-400 font-bold uppercase text-xs hover:text-slate-600">Cancel</button>
+                  <button 
+                      onClick={handleSave} 
+                      disabled={isUploading}
+                      className="bg-red-600 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-red-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                      {isUploading ? <Loader2 size={16} className="animate-spin"/> : <Box size={16}/>}
+                      <span>{isUploading ? `Uploading ${uploadProgress}%...` : editingProduct ? 'Update' : 'Save Hardware'}</span>
+                  </button>
+                </div>
             </div>
 
 
