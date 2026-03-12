@@ -120,17 +120,19 @@ const NipponProductMaster: React.FC = () => {
     return { allProds, allStore };
   };
 
-  const handleSaveProduct = async (product: Product, storeItemData?: Partial<StoreItem>) => {
+  const handleSaveProduct = async (product: Product, storeItemData?: Partial<StoreItem>, silent?: boolean) => {
     let updatedProducts = await AsyncSalesService.getProducts();
     let updatedStore = InventoryService.getStore();
     const result = await saveProductToStore(product, updatedProducts, updatedStore);
     await AsyncSalesService.saveProducts(result.allProds);
     InventoryService.saveStore(result.allStore);
-    const isEdit = !!editingProduct;
-    setIsModalOpen(false);
-    setEditingProduct(null);
     await refreshData();
-    toast.success(isEdit ? `"${product.description}" updated.` : `"${product.description}" added.`);
+    if (!silent) {
+      const isEdit = !!editingProduct;
+      setIsModalOpen(false);
+      setEditingProduct(null);
+      toast.success(isEdit ? `"${product.description}" updated.` : `"${product.description}" added.`);
+    }
   };
 
   // ─── BULK PASTE ───────────────────────────────────────────────────────────
@@ -424,7 +426,19 @@ const NipponProductMaster: React.FC = () => {
   const filtered = useMemo(() => products
     .filter(p => {
       const q = searchTerm.toLowerCase();
-      return (p.description.toLowerCase().includes(q) || String(p.modelNo || '').toLowerCase().includes(q) || String(p.profileCode || '').toLowerCase().includes(q))
+      return (
+        p.description.toLowerCase().includes(q) ||
+        String(p.modelNo || '').toLowerCase().includes(q) ||
+        String(p.profileCode || '').toLowerCase().includes(q) ||
+        String(p.brand || '').toLowerCase().includes(q) ||
+        String(p.finishColor || '').toLowerCase().includes(q) ||
+        String(p.material || '').toLowerCase().includes(q) ||
+        String(p.direction || '').toLowerCase().includes(q) ||
+        String(p.mainCategory || '').toLowerCase().includes(q) ||
+        String(p.subCategory || '').toLowerCase().includes(q) ||
+        String(p.tongueLength || '').toLowerCase().includes(q) ||
+        String(p.hsCode || '').toLowerCase().includes(q)
+      )
         && (catFilter === 'All' || p.category === catFilter);
     })
     .sort((a, b) => a.description.localeCompare(b.description)),
