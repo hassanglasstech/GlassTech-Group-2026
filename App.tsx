@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, Suspense } from 'react';
 import { HashRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Users, ShoppingBag, Landmark, ShieldCheck, Briefcase, Factory, Globe, Warehouse, Menu, Bell, Search, Truck, Handshake, Folder, Loader2, X } from 'lucide-react';
@@ -83,20 +82,60 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
   );
 };
 
+// ── Boot screen shown while fetchFromCloud is running ──────────────────────
+const BootScreen: React.FC<{ status: string }> = ({ status }) => (
+  <div className="fixed inset-0 bg-[#1c2936] flex flex-col items-center justify-center z-[999]">
+    <div className="flex flex-col items-center space-y-6">
+      <div className="w-16 h-16 flex items-center justify-center bg-blue-500/20 rounded-2xl border border-blue-500/30">
+        <span className="font-black text-2xl text-blue-300">GT</span>
+      </div>
+      <div className="text-center space-y-1">
+        <p className="font-black text-white text-lg uppercase tracking-widest">Glasstech ERP 2026</p>
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em]">Initializing System...</p>
+      </div>
+      <div className="flex flex-col items-center space-y-3">
+        <Loader2 size={28} className="animate-spin text-blue-400" />
+        <p className="text-xs font-bold text-blue-300 tracking-wider">{status}</p>
+      </div>
+      <div className="w-64 h-1 bg-white/10 rounded-full overflow-hidden">
+        <div className="h-full bg-blue-500 rounded-full animate-pulse" style={{ width: '60%' }} />
+      </div>
+    </div>
+  </div>
+);
+
 const App: React.FC = () => {
   const { selectedCompany, isSidebarOpen, setSidebarOpen } = useAppStore();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [isSyncing, setIsSyncing] = useState(false);
 
+  // ── isReady blocks rendering until cloud data is loaded ──────────────────
+  const [isReady, setIsReady] = useState(false);
+  const [bootStatus, setBootStatus] = useState('Connecting to Cloud...');
+
   useEffect(() => {
     const init = async () => {
-      await SyncService.fetchFromCloud();
-      await AppService.seedInitialData();
-      // TRIGGER AUTO BACKUP on App Mount (Phase 3 Requirement)
-      AppService.checkAndTriggerAutoBackup(); 
+      try {
+        // ─── RESTORE FLAG CHECK ───────────────────────────────────────────────
+        const skipSync = localStorage.getItem('gtk_skip_cloud_sync_once');
+        if (skipSync === 'true') {
+          localStorage.removeItem('gtk_skip_cloud_sync_once');
+          setBootStatus('Backup restored — skipping cloud sync...');
+        } else {
+          setBootStatus('Fetching data from Cloud...');
+          await SyncService.fetchFromCloud();
+        }
+        setBootStatus('Seeding local data...');
+        await AppService.seedInitialData();
+        AppService.checkAndTriggerAutoBackup();
+      } catch (e) {
+        console.error('Init error:', e);
+      } finally {
+        setIsReady(true);
+      }
     };
     init();
-    
+
     const handleResize = () => {
       const mobile = window.innerWidth < 1024;
       setIsMobile(mobile);
@@ -106,6 +145,8 @@ const App: React.FC = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  if (!isReady) return <BootScreen status={bootStatus} />;
 
   return (
     <HashRouter>
@@ -121,8 +162,7 @@ const App: React.FC = () => {
               <span className="text-[10px] font-black text-blue-200 uppercase tracking-widest bg-blue-500/20 px-2 py-1 rounded whitespace-nowrap">{selectedCompany} UNIT</span>
             </div>
             <div className="flex items-center space-x-2 md:space-x-4">
-              {console.log("Rendering Sync Button")}
-              <button 
+              <button
                 onClick={async () => {
                   setIsSyncing(true);
                   const res = await SyncService.syncAll();
@@ -138,12 +178,14 @@ const App: React.FC = () => {
               </button>
               <div className="relative hidden lg:block"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input type="text" placeholder="Transaction Search..." className="bg-white/10 border-none rounded-lg py-1.5 px-8 text-xs w-48 placeholder-slate-400 focus:ring-1 focus:ring-blue-400 outline-none transition-all" /></div>
               <button className="hover:bg-white/10 p-2 rounded-full relative"><Bell size={18}/><span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-[#354a5f]"></span></button>
-              <div className="flex items-center space-x-2 cursor-pointer hover:bg-white/10 p-1 rounded-lg transition-colors border border-white/5"><div className="w-7 h-7 rounded-lg bg-blue-500 flex items-center justify-center font-bold text-[10px] shadow-lg">AD</div></div>
+              <div className="flex items-center space-x-2 cursor-pointer hover:bg-white/10 p-1 rounded-lg transition-colors border border-white/5">
+                <div className="w-7 h-7 rounded-lg bg-blue-500 flex items-center justify-center font-bold text-[10px] shadow-lg">AD</div>
+              </div>
             </div>
           </header>
           <div className="flex-1 overflow-y-auto scroll-smooth">
             <div className="p-3 md:p-8 max-w-[1600px] mx-auto min-h-full flex flex-col">
-              <Suspense fallback={<div className="h-full flex flex-col items-center justify-center text-slate-400 animate-pulse"><Loader2 size={48} className="animate-spin text-blue-500 mb-4" /><p className="text-[10px] font-black uppercase tracking-[0.3em]">Authenticating Terminal...</p></div>}>
+              <Suspense fallback={<div className="h-full flex flex-col items-center justify-center text-slate-400 animate-pulse"><Loader2 size={48} className="animate-spin text-blue-500 mb-4" /><p className="text-[10px] font-black uppercase tracking-[0.3em]">Loading Module...</p></div>}>
                 <Routes>
                   <Route path="/" element={<Dashboard company={selectedCompany} />} />
                   <Route path="/hr/*" element={<HRModule />} />
