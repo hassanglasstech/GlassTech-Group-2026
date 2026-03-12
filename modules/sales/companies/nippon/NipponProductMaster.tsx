@@ -775,7 +775,7 @@ const NipponProductMaster: React.FC = () => {
                         <td className="pr-6 text-right">
                           <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button onClick={() => { setEditingProduct(p); setIsModalOpen(true); }} className="p-1.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded transition-all"><Edit2 size={12}/></button>
-                            <button onClick={async () => { if(confirm(`"${p.description}" delete karen?`)) { const u = (await AsyncSalesService.getProducts()).filter(x => x.id !== p.id); await AsyncSalesService.saveProducts(u); await refreshData(); toast.success(`"${p.description}" deleted.`); }}} className="p-1.5 text-slate-400 hover:text-red-600 bg-white border border-slate-200 rounded transition-all"><Trash2 size={12}/></button>
+                            <button onClick={async () => { if(confirm(`"${p.description}" delete karen?`)) { try { await AsyncSalesService.deleteProduct(p.id); setProducts(prev => prev.filter(x => x.id !== p.id)); toast.success(`"${p.description}" deleted.`); } catch { toast.error('Delete failed'); } }}} className="p-1.5 text-slate-400 hover:text-red-600 bg-white border border-slate-200 rounded transition-all"><Trash2 size={12}/></button>
                           </div>
                         </td>
                       </tr>
