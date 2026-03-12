@@ -10,7 +10,26 @@ import { UnifiedPaymentPrint } from '@/modules/finance/components/prints/Unified
 import { ServiceOrderPrint } from '@/modules/sales/components/prints/ServiceOrderPrint';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import ConfirmDialog from '@/components/ConfirmDialog';
+// Inline ConfirmDialog — no external dependency needed
+const ConfirmDialog: React.FC<{
+    title: string; message: string; confirmLabel: string;
+    severity?: 'danger' | 'warning' | 'info';
+    onConfirm: () => void; onCancel: () => void;
+}> = ({ title, message, confirmLabel, severity = 'info', onConfirm, onCancel }) => {
+    const btnColor = severity === 'danger' ? 'bg-rose-600 hover:bg-rose-700' : severity === 'warning' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700';
+    return (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[600] p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 space-y-4 animate-in zoom-in duration-150">
+                <h3 className="text-sm font-black uppercase text-slate-800 tracking-tight">{title}</h3>
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">{message}</p>
+                <div className="flex justify-end gap-3 pt-2">
+                    <button onClick={onCancel} className="px-4 py-2 text-xs font-bold text-slate-400 uppercase hover:text-slate-600 transition-colors">Cancel</button>
+                    <button onClick={onConfirm} className={`px-5 py-2 text-xs font-black text-white uppercase rounded-xl tracking-widest transition-colors ${btnColor}`}>{confirmLabel}</button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 interface DispatchPlannerProps {
     company: Company;
