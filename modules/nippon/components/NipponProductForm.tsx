@@ -2,8 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { Product, StoreItem, Vendor } from '../../shared/types';
 import { SalesService } from '../../sales/services/salesService';
+import { supabase } from '../../../src/services/supabaseClient';
 import { toast } from 'sonner';
-import { X, Box, Tag, Building2, Hash, Layout, ListFilter, UploadCloud } from 'lucide-react';
+import { X, Box, Tag, Building2, Hash, Layout, ListFilter, UploadCloud, Loader2, ImageOff } from 'lucide-react';
 
 interface NipponProductFormProps {
   isOpen: boolean;
@@ -21,8 +22,8 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
       modelNo: '',
       description: '',
       brand: '',
-      mainCategory: '', // Added: Window, Door
-      subCategory: '', // Added: Handle
+      mainCategory: '',
+      subCategory: '',
       category: 'Hardware' as 'Hardware' | 'Accessory' | 'Consumable',
       unit: 'PCS',
       costPrice: 0,
@@ -48,6 +49,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isSetModalOpen, setIsSetModalOpen] = useState(false);
   const [newComponent, setNewComponent] = useState({ description: '', unit: 'PCS', qtyPerSet: 1 });
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -95,43 +97,101 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
     }
   }, [isOpen, editingProduct]);
 
-  const processFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (event) => {
+  // ─── Supabase Storage Upload ───────────────────────────────────────────────
+  const uploadToSupabase = async (file: File): Promise<string | null> => {
+    try {
+      // Compress image first using canvas (200px thumbnail)
+      const compressed = await compressImage(file, 300);
+      const ext = 'jpg';
+      const modelSlug = (formData.modelNo || `item-${Date.now()}`).replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
+      const fileName = `nippon/${modelSlug}-${Date.now()}.${ext}`;
+
+      const { error } = await supabase.storage
+        .from('product-images')
+        .upload(fileName, compressed, {
+          contentType: 'image/jpeg',
+          upsert: true,
+        });
+
+      if (error) {
+        console.error('Supabase upload error:', error);
+        return null;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(fileName);
+
+      return urlData.publicUrl;
+    } catch (err) {
+      console.error('Upload failed:', err);
+      return null;
+    }
+  };
+
+  const compressImage = (file: File, targetSize: number): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
         const img = new Image();
         img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const TARGET_SIZE = 400;
-            canvas.width = TARGET_SIZE;
-            canvas.height = TARGET_SIZE;
-            
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-                ctx.fillStyle = '#FFFFFF';
-                ctx.fillRect(0, 0, TARGET_SIZE, TARGET_SIZE);
-                
-                let drawWidth = img.width;
-                let drawHeight = img.height;
-                
-                if (drawWidth > drawHeight) {
-                    drawHeight = (drawHeight / drawWidth) * TARGET_SIZE;
-                    drawWidth = TARGET_SIZE;
-                } else {
-                    drawWidth = (drawWidth / drawHeight) * TARGET_SIZE;
-                    drawHeight = TARGET_SIZE;
-                }
-                
-                const offsetX = (TARGET_SIZE - drawWidth) / 2;
-                const offsetY = (TARGET_SIZE - drawHeight) / 2;
-                ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
-            }
-            
-            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
-            setFormData(prev => ({ ...prev, image: compressedBase64 }));
+          const canvas = document.createElement('canvas');
+          canvas.width = targetSize;
+          canvas.height = targetSize;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return reject('No canvas context');
+
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, targetSize, targetSize);
+
+          let drawW = img.width, drawH = img.height;
+          if (drawW > drawH) {
+            drawH = (drawH / drawW) * targetSize;
+            drawW = targetSize;
+          } else {
+            drawW = (drawW / drawH) * targetSize;
+            drawH = targetSize;
+          }
+          const offsetX = (targetSize - drawW) / 2;
+          const offsetY = (targetSize - drawH) / 2;
+          ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
+
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject('Blob conversion failed');
+          }, 'image/jpeg', 0.82);
         };
-        img.src = event.target?.result as string;
-    };
-    reader.readAsDataURL(file);
+        img.onerror = reject;
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const processFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) return toast.error('Sirf image files allowed hain');
+    
+    setIsUploading(true);
+
+    // Show local preview immediately
+    const localUrl = URL.createObjectURL(file);
+    setFormData(prev => ({ ...prev, image: localUrl }));
+
+    const publicUrl = await uploadToSupabase(file);
+
+    if (publicUrl) {
+      setFormData(prev => ({ ...prev, image: publicUrl }));
+      URL.revokeObjectURL(localUrl);
+      toast.success('Image uploaded successfully');
+    } else {
+      // Fallback: store as base64 locally if Supabase fails
+      toast.error('Supabase upload failed — check Storage bucket "product-images" is public');
+      setFormData(prev => ({ ...prev, image: '' }));
+      URL.revokeObjectURL(localUrl);
+    }
+
+    setIsUploading(false);
   };
 
   if (!isOpen) return null;
@@ -141,16 +201,8 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
     if (file) processFile(file);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
+  const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); };
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
@@ -160,6 +212,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
 
   const handleSave = () => {
       if (!formData.description || !formData.unit) return toast.error("Description and Unit are required.");
+      if (isUploading) return toast.error("Please wait — image still uploading...");
       
       const newProduct: Product = {
           id: editingProduct ? editingProduct.id : `NIP-${formData.modelNo || Date.now()}`,
@@ -211,7 +264,8 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
             </div>
             
             <div className="p-8 space-y-6 bg-slate-50 overflow-y-auto max-h-[70vh]">
-                {/* IMAGE UPLOAD SECTION */}
+
+                {/* ── IMAGE UPLOAD ── */}
                 <div 
                     className={`flex items-center space-x-6 bg-white p-4 rounded-2xl border-2 border-dashed transition-all group ${isDragging ? 'border-red-500 bg-red-50' : 'border-slate-200 hover:border-red-300'}`}
                     onDragOver={handleDragOver}
@@ -219,26 +273,46 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                     onDrop={handleDrop}
                 >
                     <div className="relative w-24 h-24 bg-slate-100 rounded-xl overflow-hidden flex items-center justify-center border border-slate-200 shrink-0">
-                        {formData.image ? (
+                        {isUploading ? (
+                            <div className="flex flex-col items-center gap-1">
+                                <Loader2 size={24} className="text-red-500 animate-spin" />
+                                <span className="text-[8px] font-black text-slate-400 uppercase">Uploading</span>
+                            </div>
+                        ) : formData.image ? (
                             <img src={formData.image} alt="Preview" className="w-full h-full object-cover" />
                         ) : (
                             <Box size={32} className="text-slate-300" />
                         )}
-                        <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
-                            <UploadCloud size={20} className="text-white" />
-                            <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
-                        </label>
+                        {!isUploading && (
+                            <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
+                                <UploadCloud size={20} className="text-white" />
+                                <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                            </label>
+                        )}
                     </div>
-                    <div>
+                    <div className="flex-1">
                         <h4 className="text-xs font-black uppercase text-slate-700">Product Image</h4>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Upload a clear photo for the catalog and invoices.</p>
-                        {formData.image && (
-                            <button 
-                                onClick={() => setFormData({ ...formData, image: '' })}
-                                className="text-[10px] font-black text-rose-500 uppercase mt-2 hover:underline"
-                            >
-                                Remove Image
-                            </button>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">
+                            {isUploading ? 'Uploading to Supabase Storage...' : 'Drag & drop or click to upload. Auto-compressed to 300px thumbnail.'}
+                        </p>
+                        {!isUploading && !formData.image && (
+                            <label className="inline-block mt-2 cursor-pointer bg-red-600 text-white text-[10px] font-black uppercase px-3 py-1.5 rounded-lg hover:bg-red-700 transition-all">
+                                Choose Image
+                                <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                            </label>
+                        )}
+                        {formData.image && !isUploading && (
+                            <div className="flex items-center gap-3 mt-2">
+                                <span className="text-[9px] font-bold text-emerald-600 uppercase flex items-center gap-1">
+                                    ✓ Saved to Supabase Storage
+                                </span>
+                                <button 
+                                    onClick={() => setFormData({ ...formData, image: '' })}
+                                    className="text-[10px] font-black text-rose-500 uppercase hover:underline flex items-center gap-1"
+                                >
+                                    <ImageOff size={10}/> Remove
+                                </button>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -267,11 +341,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                                 value={formData.mainCategory}
                                 onChange={e => {
                                     const newMain = e.target.value;
-                                    setFormData({
-                                        ...formData, 
-                                        mainCategory: newMain,
-                                        subCategory: newMain === 'Silicon' ? '' : formData.subCategory
-                                    });
+                                    setFormData({ ...formData, mainCategory: newMain, subCategory: newMain === 'Silicon' ? '' : formData.subCategory });
                                 }}
                             >
                                 <option value="">-- Select Category --</option>
@@ -360,8 +430,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
                                 <input 
-                                    type="checkbox" 
-                                    id="isSet" 
+                                    type="checkbox" id="isSet" 
                                     className="w-4 h-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
                                     checked={formData.isSet}
                                     onChange={e => setFormData({...formData, isSet: e.target.checked})}
@@ -431,7 +500,6 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                             <input type="text" className="w-full p-2 bg-white border rounded-lg text-xs font-bold uppercase" value={formData.meshColor} onChange={e => setFormData({...formData, meshColor: e.target.value})} placeholder="e.g. Grey"/>
                         </div>
 
-                        {/* DYNAMIC SPECS */}
                         {Object.entries(formData.technicalSpecs).map(([key, value]) => (
                             <div key={key} className="space-y-1 relative group">
                                 <label className="text-[9px] font-bold uppercase text-slate-400">{key}</label>
@@ -455,7 +523,6 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                         ))}
                     </div>
                     
-                    {/* ADD NEW SPEC */}
                     <div className="mt-4 grid grid-cols-2 gap-2">
                         <input type="text" className="p-2 bg-white border rounded-lg text-xs font-bold" placeholder="Spec Name" value={newSpecKey} onChange={e => setNewSpecKey(e.target.value)} />
                         <div className="flex gap-1">
@@ -464,8 +531,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                                 onClick={() => {
                                     if(newSpecKey && newSpecValue) {
                                         setFormData({...formData, technicalSpecs: {...formData.technicalSpecs, [newSpecKey]: newSpecValue}});
-                                        setNewSpecKey('');
-                                        setNewSpecValue('');
+                                        setNewSpecKey(''); setNewSpecValue('');
                                     }
                                 }}
                                 className="bg-slate-800 text-white px-3 rounded-lg text-xs font-black"
@@ -488,8 +554,13 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
 
             <div className="px-8 py-6 bg-white border-t flex justify-end space-x-3">
                 <button onClick={onClose} className="px-6 py-2 text-slate-400 font-bold uppercase text-xs hover:text-slate-600">Cancel</button>
-                <button onClick={handleSave} className="bg-red-600 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-red-700 transition-all flex items-center gap-2">
-                    <Box size={16}/> <span>Save Hardware</span>
+                <button 
+                    onClick={handleSave} 
+                    disabled={isUploading}
+                    className="bg-red-600 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-red-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {isUploading ? <Loader2 size={16} className="animate-spin"/> : <Box size={16}/>}
+                    <span>{isUploading ? 'Uploading...' : 'Save Hardware'}</span>
                 </button>
             </div>
 
@@ -506,21 +577,11 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                                 <div className="grid grid-cols-2 gap-2">
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-bold uppercase text-slate-400">Description</label>
-                                        <input 
-                                            type="text" 
-                                            className="sap-input w-full text-xs" 
-                                            value={newComponent.description} 
-                                            onChange={e => setNewComponent({...newComponent, description: e.target.value})}
-                                            placeholder="e.g. Handle Body"
-                                        />
+                                        <input type="text" className="sap-input w-full text-xs" value={newComponent.description} onChange={e => setNewComponent({...newComponent, description: e.target.value})} placeholder="e.g. Handle Body"/>
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-bold uppercase text-slate-400">Unit</label>
-                                        <select 
-                                            className="sap-input w-full text-xs" 
-                                            value={newComponent.unit} 
-                                            onChange={e => setNewComponent({...newComponent, unit: e.target.value})}
-                                        >
+                                        <select className="sap-input w-full text-xs" value={newComponent.unit} onChange={e => setNewComponent({...newComponent, unit: e.target.value})}>
                                             <option value="PCS">PCS</option>
                                             <option value="Set">Set</option>
                                             <option value="Pair">Pair</option>
@@ -532,20 +593,12 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                                 <div className="flex gap-2">
                                     <div className="flex-1 space-y-1">
                                         <label className="text-[10px] font-bold uppercase text-slate-400">Qty Per Set</label>
-                                        <input 
-                                            type="number" 
-                                            className="sap-input w-full text-xs" 
-                                            value={newComponent.qtyPerSet} 
-                                            onChange={e => setNewComponent({...newComponent, qtyPerSet: Number(e.target.value)})}
-                                        />
+                                        <input type="number" className="sap-input w-full text-xs" value={newComponent.qtyPerSet} onChange={e => setNewComponent({...newComponent, qtyPerSet: Number(e.target.value)})}/>
                                     </div>
                                     <button 
                                         onClick={() => {
                                             if(newComponent.description) {
-                                                setFormData({
-                                                    ...formData,
-                                                    setComponents: [...formData.setComponents, { ...newComponent, id: `COMP-${Date.now()}` }]
-                                                });
+                                                setFormData({ ...formData, setComponents: [...formData.setComponents, { ...newComponent, id: `COMP-${Date.now()}` }] });
                                                 setNewComponent({ description: '', unit: 'PCS', qtyPerSet: 1 });
                                             }
                                         }}
@@ -553,7 +606,6 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                                     >ADD</button>
                                 </div>
                             </div>
-
                             <div className="border-t pt-4 space-y-2 max-h-48 overflow-y-auto">
                                 {formData.setComponents.map((comp, idx) => (
                                     <div key={comp.id} className="flex justify-between items-center bg-slate-50 p-2 rounded-lg border">
@@ -561,15 +613,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                                             <p className="text-xs font-black uppercase text-slate-700">{comp.description}</p>
                                             <p className="text-[10px] font-bold text-slate-400 uppercase">{comp.qtyPerSet} {comp.unit}</p>
                                         </div>
-                                        <button 
-                                            onClick={() => {
-                                                setFormData({
-                                                    ...formData,
-                                                    setComponents: formData.setComponents.filter((_, i) => i !== idx)
-                                                });
-                                            }}
-                                            className="text-rose-500 p-1 hover:bg-rose-50 rounded"
-                                        ><X size={14}/></button>
+                                        <button onClick={() => setFormData({ ...formData, setComponents: formData.setComponents.filter((_, i) => i !== idx) })} className="text-rose-500 p-1 hover:bg-rose-50 rounded"><X size={14}/></button>
                                     </div>
                                 ))}
                                 {formData.setComponents.length === 0 && (
@@ -578,10 +622,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                             </div>
                         </div>
                         <div className="px-6 py-4 bg-slate-50 border-t flex justify-end">
-                            <button 
-                                onClick={() => setIsSetModalOpen(false)}
-                                className="bg-slate-800 text-white px-6 py-2 rounded-xl font-black uppercase text-[10px] tracking-widest"
-                            >Done</button>
+                            <button onClick={() => setIsSetModalOpen(false)} className="bg-slate-800 text-white px-6 py-2 rounded-xl font-black uppercase text-[10px] tracking-widest">Done</button>
                         </div>
                     </div>
                 </div>
