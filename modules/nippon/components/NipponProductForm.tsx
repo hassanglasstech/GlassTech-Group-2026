@@ -331,7 +331,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
-        <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in duration-200 border border-slate-300">
+        <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl flex flex-col animate-in zoom-in duration-200 border border-slate-300 max-h-[90vh]">
             <div className="px-8 py-6 bg-red-700 text-white flex justify-between items-center shrink-0">
                 <div>
                     <h3 className="text-xl font-black uppercase tracking-tight">{editingProduct ? 'Edit Component' : 'New Hardware Item'}</h3>
@@ -340,7 +340,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                 <button onClick={handleClose} className="hover:bg-white/10 p-2 rounded-full transition-all"><X size={24}/></button>
             </div>
             
-            <div className="p-8 space-y-6 bg-slate-50 overflow-y-auto max-h-[70vh]">
+            <div className="p-8 space-y-6 bg-slate-50 overflow-y-auto flex-1">
 
                 {/* ── IMAGE UPLOAD ── */}
                 <div 
