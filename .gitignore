@@ -22,8 +22,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
-# Environment — NEVER commit real credentials
-.env
-.env.local
-.env.production

@@ -1,15 +1,12 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { HashRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, ShoppingBag, Landmark, ShieldCheck, Briefcase, Factory, Globe, Warehouse, Menu, Bell, Search, Truck, Handshake, Folder, Loader2, X, AlertTriangle, CheckCircle } from 'lucide-react';
+import { LayoutDashboard, Users, ShoppingBag, Landmark, ShieldCheck, Briefcase, Factory, Globe, Warehouse, Menu, Bell, Search, Truck, Handshake, Folder, Loader2, X } from 'lucide-react';
 import { Company } from './modules/shared/constants';
 import { AppService } from './modules/shared/services/appService';
 import { useAppStore } from './modules/shared/store/appStore';
 import { SyncService } from './src/services/SyncService';
-import { isSupabaseConfigured } from './src/services/supabaseClient';
 import { Toaster, toast } from 'sonner';
-import ErrorBoundary from './components/ErrorBoundary';
-import { SyncQueue } from './modules/shared/services/db';
 
 
 // --- LAZY LOAD MODULES ---
@@ -86,81 +83,20 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
   );
 };
 
-// ── Boot screen shown while fetchFromCloud is running ──────────────────────
-const BootScreen: React.FC<{ status: string }> = ({ status }) => (
-  <div className="fixed inset-0 bg-[#1c2936] flex flex-col items-center justify-center z-[999]">
-    <div className="flex flex-col items-center space-y-6">
-      <div className="w-16 h-16 flex items-center justify-center bg-blue-500/20 rounded-2xl border border-blue-500/30">
-        <span className="font-black text-2xl text-blue-300">GT</span>
-      </div>
-      <div className="text-center space-y-1">
-        <p className="font-black text-white text-lg uppercase tracking-widest">Glasstech ERP 2026</p>
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em]">Initializing System...</p>
-      </div>
-      <div className="flex flex-col items-center space-y-3">
-        <Loader2 size={28} className="animate-spin text-blue-400" />
-        <p className="text-xs font-bold text-blue-300 tracking-wider">{status}</p>
-      </div>
-      <div className="w-64 h-1 bg-white/10 rounded-full overflow-hidden">
-        <div className="h-full bg-blue-500 rounded-full animate-pulse" style={{ width: '60%' }} />
-      </div>
-    </div>
-  </div>
-);
-
 const App: React.FC = () => {
   const { selectedCompany, isSidebarOpen, setSidebarOpen } = useAppStore();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSyncedTs, setLastSyncedTs] = useState<number>(SyncService.getLastSyncTs());
-  const [showCredWarning, setShowCredWarning] = useState(!isSupabaseConfigured);
-
-  // ── isReady blocks rendering until cloud data is loaded ──────────────────
-  const [isReady, setIsReady] = useState(false);
-  const [bootStatus, setBootStatus] = useState('Connecting to Cloud...');
 
   useEffect(() => {
     const init = async () => {
-      try {
-        setBootStatus('Fetching data from Cloud...');
-        const fetchResult = await SyncService.fetchFromCloud();
-
-        // If pending sync queue has items and we just came online, retry
-        if (fetchResult.success && SyncService.hasPendingSync()) {
-          setBootStatus('Retrying pending sync...');
-          toast.info('Retrying unsynced changes...');
-          const syncResult = await SyncService.syncAll();
-          if (syncResult.success) {
-            SyncQueue.clear();
-            setLastSyncedTs(Date.now());
-          }
-        }
-
-        setBootStatus('Seeding local data...');
-        await AppService.seedInitialData();
-        AppService.checkAndTriggerAutoBackup();
-      } catch (e) {
-        console.error('Init error:', e);
-      } finally {
-        setIsReady(true);
-      }
+      await SyncService.fetchFromCloud();
+      await AppService.seedInitialData();
+      // TRIGGER AUTO BACKUP on App Mount (Phase 3 Requirement)
+      AppService.checkAndTriggerAutoBackup(); 
     };
     init();
-
-    // ── Retry sync when device comes back online ──────────────────────────
-    const handleOnline = async () => {
-      if (SyncService.hasPendingSync()) {
-        toast.info('Connection restored — syncing pending changes...');
-        const res = await SyncService.syncAll();
-        if (res.success) {
-          SyncQueue.clear();
-          setLastSyncedTs(Date.now());
-          toast.success('Pending changes synced!');
-        }
-      }
-    };
-    window.addEventListener('online', handleOnline);
-
+    
     const handleResize = () => {
       const mobile = window.innerWidth < 1024;
       setIsMobile(mobile);
@@ -168,14 +104,8 @@ const App: React.FC = () => {
       else setSidebarOpen(false);
     };
     window.addEventListener('resize', handleResize);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('online', handleOnline);
-    };
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-  // Show boot screen until data is ready
-  if (!isReady) return <BootScreen status={bootStatus} />;
 
   return (
     <HashRouter>
@@ -191,39 +121,20 @@ const App: React.FC = () => {
               <span className="text-[10px] font-black text-blue-200 uppercase tracking-widest bg-blue-500/20 px-2 py-1 rounded whitespace-nowrap">{selectedCompany} UNIT</span>
             </div>
             <div className="flex items-center space-x-2 md:space-x-4">
-              {/* Credential warning banner */}
-              {showCredWarning && (
-                <div className="hidden md:flex items-center space-x-2 bg-amber-500/20 border border-amber-400/40 rounded-lg px-3 py-1.5 text-xs font-bold text-amber-300">
-                  <AlertTriangle size={13} />
-                  <span>Supabase not configured — offline mode</span>
-                  <button onClick={() => setShowCredWarning(false)} className="ml-1 hover:text-white"><X size={12}/></button>
-                </div>
-              )}
-              {/* Last synced label */}
-              {!showCredWarning && lastSyncedTs > 0 && (
-                <div className="hidden lg:flex items-center space-x-1 text-[10px] font-bold text-slate-400">
-                  <CheckCircle size={11} className="text-green-400"/>
-                  <span>Synced {Math.round((Date.now() - lastSyncedTs) / 60000)}m ago</span>
-                </div>
-              )}
-              {/* Sync button */}
-              <button
+              {console.log("Rendering Sync Button")}
+              <button 
                 onClick={async () => {
                   setIsSyncing(true);
                   const res = await SyncService.syncAll();
                   setIsSyncing(false);
-                  if (res.success) {
-                    setLastSyncedTs(Date.now());
-                    toast.success('Synced to Cloud!');
-                  } else {
-                    toast.error('Sync Failed!');
-                  }
+                  if (res.success) toast.success("Synced to Cloud!");
+                  else toast.error("Sync Failed!");
                 }}
                 disabled={isSyncing}
                 className="hover:bg-white/10 p-2 rounded-full text-white transition-colors"
-                title={isSupabaseConfigured ? 'Sync to Cloud' : 'Supabase not configured'}
+                title="Sync to Cloud"
               >
-                {isSyncing ? <Loader2 size={18} className="animate-spin" /> : <Globe size={18} className={!isSupabaseConfigured ? 'text-slate-500' : ''} />}
+                {isSyncing ? <Loader2 size={18} className="animate-spin" /> : <Globe size={18} />}
               </button>
               <div className="relative hidden lg:block"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input type="text" placeholder="Transaction Search..." className="bg-white/10 border-none rounded-lg py-1.5 px-8 text-xs w-48 placeholder-slate-400 focus:ring-1 focus:ring-blue-400 outline-none transition-all" /></div>
               <button className="hover:bg-white/10 p-2 rounded-full relative"><Bell size={18}/><span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-[#354a5f]"></span></button>
@@ -232,24 +143,22 @@ const App: React.FC = () => {
           </header>
           <div className="flex-1 overflow-y-auto scroll-smooth">
             <div className="p-3 md:p-8 max-w-[1600px] mx-auto min-h-full flex flex-col">
-              <ErrorBoundary>
-                <Suspense fallback={<div className="h-full flex flex-col items-center justify-center text-slate-400 animate-pulse"><Loader2 size={48} className="animate-spin text-blue-500 mb-4" /><p className="text-[10px] font-black uppercase tracking-[0.3em]">Loading Module...</p></div>}>
-                  <Routes>
-                    <Route path="/" element={<Dashboard company={selectedCompany} />} />
-                    <Route path="/hr/*" element={<HRModule />} />
-                    <Route path="/sales/*" element={<SalesCRM />} />
-                    <Route path="/inventory" element={<InventoryModule />} />
-                    <Route path="/logistics" element={<LogisticsModule />} />
-                    <Route path="/vendors" element={<VendorHub />} />
-                    <Route path="/projects/*" element={<ProjectsModule />} />
-                    <Route path="/production" element={<ProductionModule />} />
-                    <Route path="/hub/*" element={<IntercompanyHub />} />
-                    <Route path="/requisitions" element={<Requisitions />} />
-                    <Route path="/accounts/*" element={<AccountsModule />} />
-                    <Route path="/admin" element={<AdminSecurity />} />
-                  </Routes>
-                </Suspense>
-              </ErrorBoundary>
+              <Suspense fallback={<div className="h-full flex flex-col items-center justify-center text-slate-400 animate-pulse"><Loader2 size={48} className="animate-spin text-blue-500 mb-4" /><p className="text-[10px] font-black uppercase tracking-[0.3em]">Authenticating Terminal...</p></div>}>
+                <Routes>
+                  <Route path="/" element={<Dashboard company={selectedCompany} />} />
+                  <Route path="/hr/*" element={<HRModule />} />
+                  <Route path="/sales/*" element={<SalesCRM />} />
+                  <Route path="/inventory" element={<InventoryModule />} />
+                  <Route path="/logistics" element={<LogisticsModule />} />
+                  <Route path="/vendors" element={<VendorHub />} />
+                  <Route path="/projects/*" element={<ProjectsModule />} />
+                  <Route path="/production" element={<ProductionModule />} />
+                  <Route path="/hub/*" element={<IntercompanyHub />} />
+                  <Route path="/requisitions" element={<Requisitions />} />
+                  <Route path="/accounts/*" element={<AccountsModule />} />
+                  <Route path="/admin" element={<AdminSecurity />} />
+                </Routes>
+              </Suspense>
             </div>
           </div>
         </main>
