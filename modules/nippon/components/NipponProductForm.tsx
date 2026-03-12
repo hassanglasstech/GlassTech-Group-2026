@@ -4,7 +4,7 @@ import { Product, StoreItem, Vendor } from '../../shared/types';
 import { SalesService } from '../../sales/services/salesService';
 import { supabase } from '../../../src/services/supabaseClient';
 import { toast } from 'sonner';
-import { X, Box, Tag, Building2, Hash, Layout, ListFilter, UploadCloud, Loader2, ImageOff } from 'lucide-react';
+import { X, Box, Tag, Building2, Hash, Layout, ListFilter, UploadCloud, Loader2, ImageOff, AlertTriangle } from 'lucide-react';
 
 interface NipponProductFormProps {
   isOpen: boolean;
@@ -50,6 +50,8 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
   const [isSetModalOpen, setIsSetModalOpen] = useState(false);
   const [newComponent, setNewComponent] = useState({ description: '', unit: 'PCS', qtyPerSet: 1 });
   const [isUploading, setIsUploading] = useState(false);
+  const [duplicates, setDuplicates] = useState<Product[]>([]);
+  const [showDupWarning, setShowDupWarning] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -169,6 +171,19 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
     });
   };
 
+
+  // Duplicate detection on modelNo change
+  const checkDuplicates = (modelNo: string, desc: string) => {
+    if (!modelNo && !desc) { setDuplicates([]); return; }
+    const all = SalesService.getProducts().filter(p => p.company === 'Nippon' && p.id !== (editingProduct?.id || ''));
+    const mn = modelNo.trim().toUpperCase();
+    const ds = desc.trim().toUpperCase();
+    const found = all.filter(p =>
+      (mn && p.modelNo?.toUpperCase() === mn) ||
+      (ds && p.description?.toUpperCase() === ds)
+    );
+    setDuplicates(found);
+  };
   const processFile = async (file: File) => {
     if (!file.type.startsWith('image/')) return toast.error('Sirf image files allowed hain');
     
@@ -210,9 +225,10 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
     if (file) processFile(file);
   };
 
-  const handleSave = () => {
+  const handleSave = (force = false) => {
       if (!formData.description || !formData.unit) return toast.error("Description and Unit are required.");
       if (isUploading) return toast.error("Please wait — image still uploading...");
+      if (!force && duplicates.length > 0) { setShowDupWarning(true); return; }
       
       const newProduct: Product = {
           id: editingProduct ? editingProduct.id : `NIP-${formData.modelNo || Date.now()}`,
@@ -377,7 +393,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                         <label className="text-[10px] font-bold uppercase text-slate-400">Model No / Code</label>
-                        <input type="text" className="sap-input w-full font-black uppercase text-blue-600" value={formData.modelNo} onChange={e => setFormData({...formData, modelNo: e.target.value})} placeholder="e.g. CZS133"/>
+                        <input type="text" className="sap-input w-full font-black uppercase text-blue-600" value={formData.modelNo} onChange={e => { const v = e.target.value; setFormData({...formData, modelNo: v}); checkDuplicates(v, formData.description); }} placeholder="e.g. CZS133"/>
                     </div>
                     <div className="space-y-1">
                         <label className="text-[10px] font-bold uppercase text-slate-400">Brand / Vendor</label>
@@ -400,8 +416,30 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
 
                 <div className="space-y-1">
                     <label className="text-[10px] font-bold uppercase text-slate-400">Description</label>
-                    <input type="text" className="sap-input w-full font-bold uppercase" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Item Name..."/>
+                    <input type="text" className="sap-input w-full font-bold uppercase" value={formData.description} onChange={e => { const v = e.target.value; setFormData({...formData, description: v}); checkDuplicates(formData.modelNo, v); }} placeholder="Item Name..."/>
                 </div>
+
+                {/* DUPLICATE WARNING BANNER */}
+                {duplicates.length > 0 && (
+                    <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 space-y-2">
+                        <div className="flex items-center gap-2 text-amber-700">
+                            <AlertTriangle size={14}/>
+                            <span className="text-[10px] font-black uppercase tracking-widest">Similar items found ({duplicates.length})</span>
+                        </div>
+                        <div className="space-y-1 max-h-24 overflow-y-auto">
+                            {duplicates.map(d => (
+                                <div key={d.id} className="flex justify-between items-center bg-white border border-amber-200 rounded-lg px-2 py-1">
+                                    <div>
+                                        <p className="text-[10px] font-black text-slate-700 uppercase">{d.description}</p>
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Model: {d.modelNo || '—'} | Color: {d.finishColor || '—'} | Dir: {d.direction || '—'}</p>
+                                    </div>
+                                    <span className="text-[8px] font-black text-amber-600 uppercase bg-amber-100 px-2 py-0.5 rounded-full">{d.id}</span>
+                                </div>
+                            ))}
+                        </div>
+                        <p className="text-[9px] font-bold text-amber-600">Different color/direction? Fill specs below and save anyway.</p>
+                    </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
@@ -564,6 +602,31 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                 </button>
             </div>
 
+
+            {/* DUPLICATE CONFIRM MODAL */}
+            {showDupWarning && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[600] p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 space-y-4 animate-in zoom-in duration-150">
+                        <div className="flex items-center gap-3 text-amber-600">
+                            <AlertTriangle size={20}/>
+                            <h3 className="text-sm font-black uppercase">Duplicate Warning</h3>
+                        </div>
+                        <p className="text-xs text-slate-500 font-medium">Same Model No or Description already exists. Save anyway?</p>
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                            {duplicates.map(d => (
+                                <div key={d.id} className="bg-slate-50 rounded-lg px-3 py-1.5 border">
+                                    <p className="text-[10px] font-black text-slate-700 uppercase">{d.description}</p>
+                                    <p className="text-[9px] text-slate-400 font-bold uppercase">Model: {d.modelNo} | Color: {d.finishColor || '—'} | Dir: {d.direction || '—'}</p>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex justify-end gap-3 pt-2">
+                            <button onClick={() => setShowDupWarning(false)} className="px-4 py-2 text-xs font-bold text-slate-400 uppercase hover:text-slate-600">Cancel</button>
+                            <button onClick={() => { setShowDupWarning(false); handleSave(true); }} className="px-5 py-2 text-xs font-black text-white uppercase rounded-xl bg-amber-500 hover:bg-amber-600 tracking-widest">Save Anyway</button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {/* SET COMPONENTS MODAL */}
             {isSetModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 z-[500]">
