@@ -137,7 +137,7 @@ const up = {
     unit: p.unit, variants: p.variants ?? [],
   })),
 
-  store_items: (data: any[]) => data.map(s => ({
+  store: (data: any[]) => data.map(s => ({
     id: s.id, company: s.company, name: s.name, category: s.category,
     quantity: s.quantity ?? 0, unrestricted_qty: s.unrestrictedQty ?? 0,
     qi_qty: s.qiQty ?? 0, blocked_qty: s.blockedQty ?? 0,
@@ -379,19 +379,19 @@ export const SyncService = {
       await upsertTable('quotations',        up.quotations(safeParse(KEYS.QUOTATIONS) ?? []));
       await upsertTable('projects',          safeParse(KEYS.PROJECTS)            ?? []);
       await upsertTable('products',          up.products(safeParse(KEYS.PRODUCTS) ?? []));
-      await upsertTable('store_items',       up.store_items(safeParse(KEYS.STORE) ?? []));
+      await upsertTable('store',       up.store(safeParse(KEYS.STORE) ?? []));
       await upsertTable('stock_ledger',      safeParse(KEYS.STOCK_LEDGER)        ?? []);
       await upsertTable('inspection_lots',   safeParse(KEYS.INSPECTION_LOTS)     ?? []);
       await upsertTable('production_pieces', up.production_pieces(productionPieces));
       await upsertTable('dispatches',        up.dispatches(safeParse(KEYS.TEMPERING_DISPATCHES) ?? []));
       await upsertTable('gate_passes',       safeParse(KEYS.GATE_PASSES)         ?? []);
       await upsertTable('warehouse_spots',   up.warehouse_spots(safeParse(KEYS.WAREHOUSE_SPOTS) ?? []));
-      await upsertTable('job_orders',        safeParse(KEYS.JOB_ORDERS)          ?? []);
+      
       await upsertTable('requisitions',      up.requisitions(safeParse(KEYS.REQUISITIONS) ?? []));
       await upsertTable('purchase_orders',   up.purchase_orders(safeParse(KEYS.PURCHASE_ORDERS) ?? []));
       await upsertTable('vendors',           up.vendors(safeParse(KEYS.VENDORS) ?? []));
-      await upsertTable('remnants',          safeParse(KEYS.REMNANTS)            ?? []);
-      await upsertTable('handling_units',    safeParse(KEYS.HANDLING_UNITS)      ?? []);
+      
+      
       await upsertTable('activity_logs',     up.activity_logs(safeParse(KEYS.ACTIVITY_LOGS) ?? []));
 
       console.log('[SyncService] ✅ Full sync done!');
@@ -436,17 +436,17 @@ export const SyncService = {
       await fetch('quotations',        KEYS.QUOTATIONS,           down.quotations);
       await fetch('projects',          KEYS.PROJECTS);
       await fetch('products',          KEYS.PRODUCTS,             down.products);
-      await fetch('store_items',       KEYS.STORE,                down.store);
+      await fetch('store',       KEYS.STORE,                down.store);
       await fetch('stock_ledger',      KEYS.STOCK_LEDGER);
       await fetch('inspection_lots',   KEYS.INSPECTION_LOTS);
       await fetch('gate_passes',       KEYS.GATE_PASSES);
       await fetch('warehouse_spots',   KEYS.WAREHOUSE_SPOTS,      down.warehouse_spots);
-      await fetch('job_orders',        KEYS.JOB_ORDERS);
+      
       await fetch('requisitions',      KEYS.REQUISITIONS,         down.requisitions);
       await fetch('purchase_orders',   KEYS.PURCHASE_ORDERS,      down.purchase_orders);
       await fetch('vendors',           KEYS.VENDORS,              down.vendors);
-      await fetch('remnants',          KEYS.REMNANTS);
-      await fetch('handling_units',    KEYS.HANDLING_UNITS);
+      
+      
       await fetch('activity_logs',     KEYS.ACTIVITY_LOGS,        down.activity_logs);
 
       // dispatches → tempering_dispatches key
