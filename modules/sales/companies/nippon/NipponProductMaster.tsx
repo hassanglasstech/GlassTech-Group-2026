@@ -76,6 +76,7 @@ const NipponProductMaster: React.FC = () => {
   // Bulk Paste state
   const [bulkRows, setBulkRows] = useState<BulkRow[]>(() => Array.from({ length: 20 }, EMPTY_ROW));
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(false);
   const [bulkSaved, setBulkSaved] = useState(0);
   const bulkTableRef = useRef<HTMLDivElement>(null);
 
@@ -97,6 +98,21 @@ const NipponProductMaster: React.FC = () => {
     const allStore = InventoryService.getStore().filter(s => s.company === company);
     setProducts(allProds);
     setStoreItems(allStore);
+  };
+
+  const handleCleanup = async () => {
+    if (!confirm('Incomplete/orphan records (no description or model no) Supabase se delete ho jayenge. Confirm?')) return;
+    setIsCleaning(true);
+    try {
+      const all = await AsyncSalesService.getProducts();
+      const nippon = all.filter(p => p.company === company);
+      const orphans = nippon.filter(p => !p.description?.trim() || !p.modelNo?.trim());
+      if (!orphans.length) { toast.success('Koi orphan record nahi mila.'); setIsCleaning(false); return; }
+      await Promise.all(orphans.map(p => AsyncSalesService.deleteProduct(p.id)));
+      await refreshData();
+      toast.success(`${orphans.length} incomplete records deleted.`);
+    } catch { toast.error('Cleanup failed'); }
+    setIsCleaning(false);
   };
 
   const getStockLevel = (prodId: string) => storeItems.find(s => s.id === prodId)?.quantity ?? 0;
@@ -184,7 +200,7 @@ const NipponProductMaster: React.FC = () => {
     let allStore = InventoryService.getStore();
     let count = 0;
     for (const row of filled) {
-      const id = `NIP-${row.modelNo.trim().toUpperCase() || Date.now()}`;
+      const id = `NIP-${(row.modelNo.trim() || Date.now().toString()).toUpperCase().replace(/[^A-Z0-9]/g,"-")}${row.finishColor ? "-" + row.finishColor.toUpperCase().replace(/[^A-Z0-9]/g,"-") : ""}${row.direction ? "-" + row.direction.toUpperCase().replace(/[^A-Z0-9]/g,"-") : ""}`;
       const product: Product = {
         id, company: 'Nippon',
         description: row.description.trim().toUpperCase(),
@@ -348,7 +364,7 @@ const NipponProductMaster: React.FC = () => {
 
     for (const row of excelRows) {
       if (!row.description.trim()) { skipped++; continue; }
-      const id = `NIP-${row.modelNo.trim().toUpperCase() || Date.now()}`;
+      const id = `NIP-${(row.modelNo.trim() || Date.now().toString()).toUpperCase().replace(/[^A-Z0-9]/g,"-")}${row.finishColor ? "-" + row.finishColor.toUpperCase().replace(/[^A-Z0-9]/g,"-") : ""}${row.direction ? "-" + row.direction.toUpperCase().replace(/[^A-Z0-9]/g,"-") : ""}`;
       // Merge uploaded image url if available
       const imgMatch = imageMatches.find(m => m.matchedModelNo.toUpperCase() === row.modelNo.toUpperCase() && m.uploadedUrl);
       const product: Product = {
@@ -708,6 +724,9 @@ const NipponProductMaster: React.FC = () => {
                 <div className="w-px h-6 bg-slate-200 mx-1"></div>
                 <button onClick={() => jsonInputRef.current?.click()} className="p-2 text-slate-600 hover:bg-white rounded-lg transition-all" title="Restore JSON"><UploadCloud size={18}/></button>
               </div>
+              <button onClick={handleCleanup} disabled={isCleaning} className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all border border-rose-100" title="Delete incomplete/orphan records">
+                {isCleaning ? <Loader2 size={18} className="animate-spin"/> : <Trash2 size={18}/>}
+              </button>
               <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl mr-2">
                 <button onClick={() => setViewMode('table')} className={`p-2 rounded-lg transition-all ${viewMode === 'table' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}><List size={18}/></button>
                 <button onClick={() => setViewMode('catalog')} className={`p-2 rounded-lg transition-all ${viewMode === 'catalog' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}><LayoutGrid size={18}/></button>
