@@ -9,6 +9,8 @@ import {
 import { UnifiedPaymentPrint } from '@/modules/finance/components/prints/UnifiedPaymentPrint';
 import { ServiceOrderPrint } from '@/modules/sales/components/prints/ServiceOrderPrint';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 interface DispatchPlannerProps {
     company: Company;
@@ -33,7 +35,14 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
     company, dispatches, pieces, jobOrders, clients, vendors, refreshData 
 }) => {
     const navigate = useNavigate();
-    const [viewMode, setViewMode] = useState<'Operations' | 'Planning'>('Operations');
+    const [dialog, setDialog] = React.useState<{
+    title: string; message: string; confirmLabel: string;
+    severity: 'danger' | 'warning' | 'info';
+    onConfirm: () => void;
+  } | null>(null);
+  const closeDialog = () => setDialog(null);
+
+  const [viewMode, setViewMode] = useState<'Operations' | 'Planning'>('Operations');
     const [isPlannerOpen, setIsPlannerOpen] = useState(false);
     const [printingDispatch, setPrintingDispatch] = useState<TemperingDispatch | null>(null);
     const [printingGatePass, setPrintingGatePass] = useState<TemperingDispatch | null>(null);
@@ -78,7 +87,7 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
     const temperingVendors = useMemo(() => vendors.filter(v => v.type === 'Tempering'), [vendors]);
 
     const handleAddStop = () => {
-        if (!newStop.plantName || !newStop.serviceType) return alert("Destination and Service Type required.");
+        if (!newStop.plantName || !newStop.serviceType) { toast.error("Destination and Service Type required."); return; }
         const stop: PlannedStop = { id: `STOP-${Date.now()}`, plantName: newStop.plantName.toUpperCase(), serviceType: newStop.serviceType as any, pickLocation: tripHeader.originLocation, selectedPieceIds: [], expectedReturnDate: newStop.expectedReturnDate };
         setStops([...stops, stop]);
         setNewStop({ plantName: '', serviceType: 'Site Delivery', pickLocation: tripHeader.originLocation, selectedPieceIds: [], expectedReturnDate: '' });
@@ -88,7 +97,7 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
     const handleRemoveStop = (id: string) => setStops(stops.filter(s => s.id !== id));
 
     const handleFinalizeTrip = () => {
-        if (stops.length === 0) return alert("Please add at least one drop/destination.");
+        if (stops.length === 0) { toast.error("Please add at least one drop/destination."); return; }
         const today = new Date().toISOString().split('T')[0];
         const isFuture = tripHeader.date > today;
         const initialStatus = isFuture ? 'Scheduled' : 'Ready to Dispatch';
@@ -108,13 +117,19 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
         refreshData();
         setIsPlannerOpen(false);
         resetForm();
-        alert(`Trip ${tripId} Created. Go to 'Destination Trip Loading' in Production to assign pieces.`);
+        toast.info(`Trip ${tripId} Created. Go to 'Destination Trip Loading' in Production to assign pieces.`);
     };
 
     const resetForm = () => { setTripHeader({ date: new Date().toISOString().split('T')[0], time: '09:00', originLocation: 'Factory' }); setStops([]); };
 
     const handleDispatchAction = (id: string) => {
-        if (!confirm("Mark trip as DISPATCHED? This freezes the manifest.")) return;
+        setDialog({
+      title: 'Confirm',
+      message: "Mark trip as DISPATCHED? This freezes the manifest.",
+      confirmLabel: 'Proceed',
+      severity: 'warning',
+      onConfirm: () => { closeDialog(); },
+    }); return;
         
         const allDispatches = ProductionService.getTemperingDispatches();
         const targetDispatch = allDispatches.find(d => d.id === id);
@@ -156,7 +171,13 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
     };
 
     const handleCancelTrip = (tripId: string) => {
-        if (!confirm("CANCEL trip? Unloads items and deletes records.")) return;
+        setDialog({
+      title: 'Confirm',
+      message: "CANCEL trip? Unloads items and deletes records.",
+      confirmLabel: 'Proceed',
+      severity: 'danger',
+      onConfirm: () => { closeDialog(); },
+    }); return;
         const allDispatches = ProductionService.getTemperingDispatches();
         const dispatchesToProcess = allDispatches.filter(d => (d.tripId === tripId) || (d.id === tripId)); 
         const dispatchIdsToProcess = new Set(dispatchesToProcess.map(d => d.id));
@@ -204,7 +225,7 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
 
     const handlePrintVoucher = (group: { id: string, stops: TemperingDispatch[], driver: string }) => {
         const totalFare = group.stops.reduce((s, stop) => s + (stop.totalCharges || 0), 0);
-        if (totalFare <= 0) return alert("No charges recorded for this trip.");
+        if (totalFare <= 0) { toast.info("No charges recorded for this trip."); return; }
 
         const dummyEntry: PettyCashEntry = {
             id: `PV-${Date.now().toString().slice(-6)}`,
@@ -237,6 +258,17 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
 
     return (
         <div className="space-y-6 animate-in slide-in-from-right duration-300">
+           {dialog && (
+               <ConfirmDialog
+                   isOpen
+                   title={dialog.title}
+                   message={dialog.message}
+                   confirmLabel={dialog.confirmLabel}
+                   severity={dialog.severity}
+                   onConfirm={dialog.onConfirm}
+                   onCancel={closeDialog}
+               />
+           )}
            {printingVoucher && (
                <UnifiedPaymentPrint 
                    data={printingVoucher.data} 
@@ -502,179 +534,202 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
            {/* UNIFIED PRINT CHALLAN DESIGN */}
            {printingDispatch && (() => {
              const allDispatchPieces = pieces.filter(p => p.dispatchId === printingDispatch.id);
+             const totalSqFt = allDispatchPieces.reduce((sum, p) => {
+                 const order = jobOrders.find(o => o.orderNo === p.orderId);
+                 const item = order?.items[p.itemIndex];
+                 return sum + (item ? (item.totalSqFt / (item.qty || 1)) : 0);
+             }, 0);
+
+             // Chunk pieces into pages
              const MAX_ROWS = 25;
              const chunks: typeof allDispatchPieces[] = [];
-             let currentChunk: typeof allDispatchPieces = [];
-             allDispatchPieces.forEach((p, index) => {
-                 currentChunk.push(p);
-                 if (currentChunk.length === MAX_ROWS && index < allDispatchPieces.length - 1) {
-                     chunks.push(currentChunk);
-                     currentChunk = [];
-                 }
-             });
-             if (currentChunk.length > 0) chunks.push(currentChunk);
+             let rem = [...allDispatchPieces];
+             // Page 1 has less rows due to header
+             chunks.push(rem.splice(0, 18));
+             while (rem.length > 0) chunks.push(rem.splice(0, MAX_ROWS));
+             if (chunks.length === 0) chunks.push([]);
 
              return (
-               <div className="print-only bg-white text-black p-0 font-sans leading-tight min-h-screen flex flex-col">
+               <div className="print-only bg-white text-black font-sans leading-tight">
                 <style>{`
-                      @media print {
-                          @page { size: A4; margin: 0; }
-                          body { margin: 0; padding: 0; }
-                          html, body { height: auto !important; overflow: visible !important; background: white !important; }
-                          body * { visibility: hidden; }
-                          .print-only, .print-only * { visibility: visible; }
-                          .print-only { position: absolute; top: 0; left: 0; width: 100%; background: white; z-index: 99999; }
-                          .print-container { width: 100% !important; padding: 15mm !important; box-sizing: border-box !important; }
-                          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                          .bg-slate-50 { background-color: #f8fafc !important; }
-                          .bg-slate-100 { background-color: #f1f5f9 !important; }
-                          table { page-break-inside: auto; width: 100%; border-collapse: collapse; }
-                          tr { page-break-inside: avoid; page-break-after: auto; }
-                          .page-break-before { page-break-before: always; }
-                      }
-                      .font-pill-challan { border: 2px solid #0f172a; border-radius: 9999px; padding: 6px 50px; font-weight: 900; letter-spacing: 0.2em; color: #0f172a; }
-                  `}</style>
+                    @media screen { .print-only { display: none !important; } }
+                    @media print {
+                        @page { size: A4; margin: 0; }
+                        body { margin: 0; padding: 0; }
+                        html, body { height: auto !important; overflow: visible !important; background: white !important; }
+                        body * { visibility: hidden; }
+                        .print-only, .print-only * { visibility: visible; }
+                        .print-only { position: absolute; top: 0; left: 0; width: 100%; background: white; z-index: 99999; }
+                        .print-container { width: 100% !important; padding: 15mm !important; box-sizing: border-box !important; }
+                        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                        .bg-slate-50  { background-color: #f8fafc !important; }
+                        .bg-slate-100 { background-color: #f1f5f9 !important; }
+                        .bg-slate-200 { background-color: #e2e8f0 !important; }
+                        table { page-break-inside: auto; width: 100%; border-collapse: collapse; }
+                        tr { page-break-inside: avoid; page-break-after: auto; }
+                        th, td { border: 1.5px solid #000 !important; }
+                        .page-break-before { page-break-before: always; }
+                        .no-print { display: none !important; }
+                    }
+                    .font-pill-challan { border: 2px solid #0f172a; border-radius: 9999px; padding: 5px 48px; font-weight: 900; letter-spacing: 0.25em; color: #0f172a; display: inline-block; }
+                `}</style>
 
-                <div className="print-container">
-                     <div className="flex justify-between items-start mb-4">
-                         <div>
-                             <h1 className="text-4xl font-bold tracking-tighter text-slate-900">GlassTech</h1>
-                             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-1">Complete Architectural Glass Solutions</p>
-                             <p className="text-[9px] font-medium text-slate-400">KORANGI INDUSTRIAL AREA, KARACHI.</p>
-                         </div>
-                         <div className="text-right">
-                             <h2 className="text-4xl font-bold tracking-tighter text-slate-900">{company}</h2>
-                             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-1">GLASS PROCESSING UNIT</p>
-                         </div>
-                     </div>
+                {chunks.map((chunk, chunkIdx) => {
+                    const isFirst = chunkIdx === 0;
+                    const isLast  = chunkIdx === chunks.length - 1;
 
-                     <div className="flex justify-center my-6">
-                         <div className="font-pill-challan text-sm uppercase">D E L I V E R Y &nbsp; C H A L L A N</div>
-                     </div>
+                    return (
+                        <div key={chunkIdx} className={chunkIdx > 0 ? 'page-break-before' : ''}>
+                            <div className="print-container">
 
-                     <div className="flex justify-between mb-6 text-[10px]">
-                         <div className="space-y-1">
-                             <p className="text-slate-400 font-bold uppercase tracking-tighter">DESTINATION:</p>
-                             <h3 className="text-2xl font-black text-slate-900 leading-none uppercase">{printingDispatch.plantName}</h3>
-                             <p className="text-indigo-700 font-black uppercase">Service Type: {printingDispatch.serviceType}</p>
-                         </div>
-                         <div className="text-right space-y-1">
-                             <div className="flex justify-end space-x-2">
-                                 <span className="text-slate-400 font-bold uppercase">CHALLAN REF:</span>
-                                 <span className="text-blue-700 font-black">{printingDispatch.id}</span>
-                             </div>
-                             <div className="flex justify-end space-x-2">
-                                 <span className="text-slate-400 font-bold uppercase">DATE:</span>
-                                 <span className="font-black text-slate-700">{printingDispatch.date}</span>
-                             </div>
-                             <div className="flex justify-end space-x-2">
-                                 <span className="text-slate-400 font-bold uppercase">VEHICLE:</span>
-                                 <span className="font-black text-slate-900">{printingDispatch.vehicleNo}</span>
-                             </div>
-                             <div className="flex justify-end space-x-2">
-                                 <span className="text-slate-400 font-bold uppercase">DRIVER:</span>
-                                 <span className="font-black text-slate-900">{printingDispatch.driverName}</span>
-                             </div>
-                         </div>
-                     </div>
+                                {/* PAGE 1 HEADER */}
+                                {isFirst && (
+                                    <>
+                                        {/* Letterhead */}
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div>
+                                                <h1 className="text-4xl font-bold tracking-tighter text-slate-900">GlassTech</h1>
+                                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-1">Complete Architectural Glass Solutions</p>
+                                                <p className="text-[9px] font-medium text-slate-400">KORANGI INDUSTRIAL AREA, KARACHI.</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <h2 className="text-4xl font-bold tracking-tighter text-slate-900">{company}</h2>
+                                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-1">GLASS PROCESSING UNIT</p>
+                                            </div>
+                                        </div>
 
-                     {(() => {
-                         const totalSqFt = allDispatchPieces.reduce((sum, p) => {
-                             const order = jobOrders.find(o => o.orderNo === p.orderId);
-                             const item = order?.items[p.itemIndex];
-                             return sum + (item ? (item.totalSqFt / (item.qty || 1)) : 0);
-                         }, 0);
-                         
-                         return (
-                             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 flex items-center justify-between">
-                                 <div className="flex space-x-8 border-r border-slate-200 pr-8">
-                                     <div>
-                                         <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Total Quantity</p>
-                                         <p className="text-lg font-black text-slate-900">{allDispatchPieces.length} <span className="text-[10px] text-slate-400">Pcs</span></p>
-                                     </div>
-                                     <div>
-                                         <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Estimated Ft²</p>
-                                         <p className="text-lg font-black text-blue-700">{totalSqFt.toFixed(2)}</p>
-                                     </div>
-                                 </div>
-                                 <div className="flex flex-wrap gap-x-4 gap-y-1 justify-end flex-1 pl-6">
-                                     <div className="flex items-center space-x-1 bg-white border border-slate-200 rounded-md px-2 py-0.5">
-                                         <span className="text-[8px] font-black text-slate-400 uppercase">LOAD TYPE:</span>
-                                         <span className="text-[10px] font-black text-slate-700 uppercase">{printingDispatch.serviceType}</span>
-                                     </div>
-                                     <div className="flex items-center space-x-1 bg-white border border-slate-200 rounded-md px-2 py-0.5">
-                                         <span className="text-[8px] font-black text-slate-400 uppercase">ORIGIN:</span>
-                                         <span className="text-[10px] font-black text-slate-700 uppercase">{printingDispatch.pickLocation || 'FACTORY'}</span>
-                                     </div>
-                                 </div>
-                             </div>
-                         );
-                     })()}
+                                        {/* Title pill */}
+                                        <div className="flex justify-center my-5">
+                                            <span className="font-pill-challan text-sm uppercase">D E L I V E R Y &nbsp; C H A L L A N</span>
+                                        </div>
 
-                     <div className="flex-1">
-                         {chunks.map((chunk, chunkIdx) => (
-                             <div key={chunkIdx} className={chunkIdx > 0 ? 'page-break-before mt-8' : ''}>
-                                 <table className="w-full text-left border-collapse text-[10px]">
-                                     <thead>
-                                         <tr className="bg-slate-50 border-y border-slate-300 text-[9px] font-black uppercase tracking-widest text-slate-600">
-                                             <th className="py-2.5 px-2 text-center w-10">S.No</th>
-                                             <th className="py-2.5 px-2">Piece Description & Ref Order</th>
-                                             <th className="py-2.5 px-2 text-center w-32">Size (Inches)</th>
-                                             <th className="py-2.5 px-2 text-center w-16">Qty</th>
-                                             <th className="py-2.5 px-2 text-center w-20">Received</th>
-                                         </tr>
-                                     </thead>
-                                     <tbody className="divide-y divide-slate-200">
-                                         {chunk.map((p, idx) => {
-                                             const order = jobOrders.find(o => o.orderNo === p.orderId);
-                                             const item = order?.items[p.itemIndex];
-                                             return (
-                                                 <tr key={p.id}>
-                                                     <td className="py-2 px-2 text-center text-slate-400 font-bold">{chunkIdx * MAX_ROWS + idx + 1}</td>
-                                                     <td className="py-2 px-2">
-                                                         <p className="font-black text-slate-800 uppercase leading-tight">{p.id}</p>
-                                                         <p className="text-[7.5px] font-bold text-blue-600 uppercase mt-0.5 tracking-tighter">Specs: {p.specs}</p>
-                                                         <p className="text-[7px] text-slate-400 font-bold uppercase italic">Ref Order: {p.orderId}</p>
-                                                     </td>
-                                                     <td className="py-2 px-2 text-center font-bold text-slate-700">
-                                                         {item ? `${item.inchW}.${item.sootW || 0} x ${item.inchH}.${item.sootH || 0}` : '-'}
-                                                     </td>
-                                                     <td className="py-2 px-2 text-center font-black text-slate-900">1</td>
-                                                     <td className="py-2 px-2 text-center text-slate-300">_______</td>
-                                                 </tr>
-                                             );
-                                         })}
-                                     </tbody>
-                                 </table>
-                             </div>
-                         ))}
-                     </div>
+                                        {/* Destination + meta */}
+                                        <div className="flex justify-between mb-4">
+                                            <div>
+                                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">DESTINATION:</p>
+                                                <h3 className="text-2xl font-black text-slate-900 uppercase leading-none">{printingDispatch.plantName}</h3>
+                                                <p className="text-[11px] font-black text-indigo-700 uppercase mt-1">SERVICE TYPE: {printingDispatch.serviceType}</p>
+                                            </div>
+                                            <div className="text-right space-y-1 text-[11px]">
+                                                <div className="flex justify-end space-x-2">
+                                                    <span className="text-slate-400 font-bold uppercase">CHALLAN REF:</span>
+                                                    <span className="text-blue-700 font-black">{printingDispatch.id}</span>
+                                                </div>
+                                                <div className="flex justify-end space-x-2">
+                                                    <span className="text-slate-400 font-bold uppercase">DATE:</span>
+                                                    <span className="font-black">{printingDispatch.date}</span>
+                                                </div>
+                                                <div className="flex justify-end space-x-2">
+                                                    <span className="text-slate-400 font-bold uppercase">VEHICLE:</span>
+                                                    <span className="font-black">{printingDispatch.vehicleNo || 'TBD'}</span>
+                                                </div>
+                                                <div className="flex justify-end space-x-2">
+                                                    <span className="text-slate-400 font-bold uppercase">DRIVER:</span>
+                                                    <span className="font-black">{printingDispatch.driverName || 'TBD'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
 
-                     <div className="mt-10 pt-6 border-t-2 border-slate-900 break-inside-avoid">
-                         <div className="flex justify-between items-start">
-                             <div className="w-[55%]">
-                                 <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-900 mb-3 border-b border-slate-200 pb-1">Safety & Protocol</h4>
-                                 <ul className="text-[9px] space-y-1.5 text-slate-600 font-bold leading-tight">
-                                     <li className="flex items-start space-x-2"><span className="text-slate-300">•</span><span>Receiver acknowledges items in good condition.</span></li>
-                                     <li className="flex items-start space-x-2"><span className="text-slate-300">•</span><span>Any breakage or mismatch must be reported immediately.</span></li>
-                                     <li className="flex items-start space-x-2"><span className="text-rose-500">•</span><span className="text-slate-900 italic font-black uppercase">Fragile Material - Handle with Industrial Safety Standards.</span></li>
-                                 </ul>
-                             </div>
-                         </div>
+                                        {/* Summary bar */}
+                                        <div className="border-2 border-black bg-slate-50 p-3 mb-4 flex items-center justify-between">
+                                            <div className="flex space-x-8 border-r-2 border-black pr-8">
+                                                <div>
+                                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">TOTAL QUANTITY</p>
+                                                    <p className="text-xl font-black text-slate-900">{allDispatchPieces.length} <span className="text-[10px] font-bold text-slate-400">Pcs</span></p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">ESTIMATED FT²</p>
+                                                    <p className="text-xl font-black text-blue-700">{totalSqFt.toFixed(2)}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-4 pl-6">
+                                                <div className="border border-black px-3 py-1">
+                                                    <span className="text-[8px] font-black text-slate-400 uppercase">LOAD TYPE: </span>
+                                                    <span className="text-[10px] font-black uppercase">{printingDispatch.serviceType}</span>
+                                                </div>
+                                                <div className="border border-black px-3 py-1">
+                                                    <span className="text-[8px] font-black text-slate-400 uppercase">ORIGIN: </span>
+                                                    <span className="text-[10px] font-black uppercase">{printingDispatch.pickLocation || 'FACTORY'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
 
-                         <div className="mt-24 grid grid-cols-3 gap-10">
-                             <div className="border-t border-slate-900 pt-2 text-center text-[9px] font-black uppercase text-slate-400">Warehouse Controller</div>
-                             <div className="border-t border-slate-900 pt-2 text-center text-[9px] font-black uppercase text-slate-400">Transporter</div>
-                             <div className="border-t border-slate-900 pt-2 text-center text-[9px] font-black uppercase text-slate-900 font-black">Receiver's Signature</div>
-                         </div>
+                                {/* CONTINUATION HEADER (page 2+) */}
+                                {!isFirst && (
+                                    <div className="flex justify-between items-center border-b-2 border-black pb-2 mb-3">
+                                        <p className="text-sm font-black uppercase">{printingDispatch.id} — {printingDispatch.plantName}</p>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Page {chunkIdx + 1}</p>
+                                    </div>
+                                )}
 
-                         <div className="mt-8 text-center">
-                             <p className="text-[8px] font-black uppercase tracking-[0.3em] text-slate-300 italic">
-                                 Computer generated delivery document. Document ID: {printingDispatch.id}
-                             </p>
-                         </div>
-                     </div>
-                </div>
+                                {/* TABLE */}
+                                <table className="w-full text-left border-2 border-black text-[10px]">
+                                    <thead className="bg-slate-200">
+                                        <tr>
+                                            <th className="py-2 px-2 border-2 border-black text-center w-10 text-[9px] font-black uppercase">S.NO</th>
+                                            <th className="py-2 px-2 border-2 border-black text-[9px] font-black uppercase">Piece Description &amp; Ref Order</th>
+                                            <th className="py-2 px-2 border-2 border-black text-center w-32 text-[9px] font-black uppercase">Size (Inches)</th>
+                                            <th className="py-2 px-2 border-2 border-black text-center w-14 text-[9px] font-black uppercase">Qty</th>
+                                            <th className="py-2 px-2 border-2 border-black text-center w-20 text-[9px] font-black uppercase">Received</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {chunk.map((p, idx) => {
+                                            const globalIdx = chunkIdx === 0 ? idx : 18 + (chunkIdx - 1) * MAX_ROWS + idx;
+                                            const order = jobOrders.find(o => o.orderNo === p.orderId);
+                                            const item  = order?.items[p.itemIndex];
+                                            const sizeStr = item
+                                                ? ((item.mmW || item.mmH)
+                                                    ? `${item.mmW || 0} x ${item.mmH || 0}`
+                                                    : `${item.inchW || 0}.${item.sootW || 0} x ${item.inchH || 0}.${item.sootH || 0}`)
+                                                : '—';
+                                            return (
+                                                <tr key={p.id}>
+                                                    <td className="py-2 px-2 border-2 border-black text-center font-bold text-slate-500">{globalIdx + 1}</td>
+                                                    <td className="py-2 px-2 border-2 border-black">
+                                                        <p className="font-black text-slate-900 uppercase leading-tight">{p.id}</p>
+                                                        <p className="text-[8px] font-bold text-blue-600 uppercase mt-0.5">SPECS: {p.specs}</p>
+                                                        <p className="text-[8px] text-slate-400 font-bold uppercase italic">REF ORDER: {p.orderId}</p>
+                                                    </td>
+                                                    <td className="py-2 px-2 border-2 border-black text-center font-black text-slate-800">{sizeStr}</td>
+                                                    <td className="py-2 px-2 border-2 border-black text-center font-black">1</td>
+                                                    <td className="py-2 px-2 border-2 border-black text-center text-slate-300 font-bold">_______</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+
+                                {/* FOOTER — last page only */}
+                                {isLast && (
+                                    <div className="mt-10 pt-4 border-t-2 border-black">
+                                        <div className="w-[60%]">
+                                            <h4 className="text-[9px] font-black uppercase tracking-widest mb-2">SAFETY &amp; PROTOCOL</h4>
+                                            <p className="text-[9px] font-bold text-slate-600 leading-relaxed">• Receiver acknowledges items in good condition.</p>
+                                            <p className="text-[9px] font-bold text-slate-600 leading-relaxed">• Any breakage or mismatch must be reported immediately.</p>
+                                            <p className="text-[9px] font-black uppercase italic leading-relaxed">• FRAGILE MATERIAL - HANDLE WITH INDUSTRIAL SAFETY STANDARDS.</p>
+                                        </div>
+
+                                        <div className="mt-16 grid grid-cols-3 gap-10">
+                                            <div className="border-t-2 border-black pt-2 text-center text-[9px] font-black uppercase text-slate-500">Warehouse Controller</div>
+                                            <div className="border-t-2 border-black pt-2 text-center text-[9px] font-black uppercase text-slate-500">Transporter</div>
+                                            <div className="border-t-2 border-black pt-2 text-center text-[9px] font-black uppercase font-black">Receiver's Signature</div>
+                                        </div>
+
+                                        <div className="mt-6 text-center">
+                                            <p className="text-[8px] font-black uppercase tracking-[0.3em] text-slate-300 italic">
+                                                C O M P U T E R &nbsp; G E N E R A T E D &nbsp; D E L I V E R Y &nbsp; D O C U M E N T . &nbsp; D O C U M E N T &nbsp; I D : &nbsp; {printingDispatch.id}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
+                            </div>
+                        </div>
+                    );
+                })}
                </div>
              );
           })()}
