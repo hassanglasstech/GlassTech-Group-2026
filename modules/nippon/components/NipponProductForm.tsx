@@ -9,7 +9,7 @@ import { X, Box, Tag, Building2, Hash, Layout, ListFilter, UploadCloud, Loader2,
 interface NipponProductFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (product: Product, storeItem?: Partial<StoreItem>) => void;
+  onSave: (product: Product, storeItem?: Partial<StoreItem>, silent?: boolean) => void;
   editingProduct: Product | null;
 }
 
@@ -222,7 +222,6 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
     setIsUploading(true);
     setUploadProgress(10);
 
-    // Show local preview immediately
     const localUrl = URL.createObjectURL(file);
     setFormData(prev => ({ ...prev, image: localUrl }));
     setUploadProgress(35);
@@ -234,9 +233,15 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
       setFormData(prev => ({ ...prev, image: publicUrl }));
       URL.revokeObjectURL(localUrl);
       setUploadProgress(100);
-      toast.success('Image uploaded successfully');
+      toast.success('Image uploaded');
+
+      // Auto-save image to existing product immediately
+      if (editingProduct) {
+        const updatedProduct = { ...editingProduct, imageUrl: publicUrl };
+        onSave(updatedProduct, undefined, true);
+      }
     } else {
-      toast.error('Supabase upload failed — check Storage bucket "product-images" is public');
+      toast.error('Upload failed — check Storage bucket "product-images" is public');
       setFormData(prev => ({ ...prev, image: '' }));
       URL.revokeObjectURL(localUrl);
     }
