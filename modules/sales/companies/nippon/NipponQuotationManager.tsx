@@ -76,6 +76,36 @@ const NipponQuotationManager: React.FC = () => {
     return specs;
   };
 
+  const handleAddSetComponents = () => {
+    if (!pendingSetSuggestion) return;
+    const idx = pendingSetSuggestion.index;
+    const comps = pendingSetSuggestion.remainingComponents;
+    const newLines = comps.map((c: any, ci: number) => {
+      const matchProd = products.find((p: any) =>
+        p.id === c.id || p.description.toUpperCase() === c.description.toUpperCase()
+      );
+      return {
+        id: \`SET-ADD-\${Date.now()}-\${ci}\`,
+        description: matchProd ? matchProd.description : c.description,
+        locationCode: matchProd?.profileCode || '',
+        glazingSpecs: matchProd?.brand || '',
+        glassSize: c.unit || 'PCS',
+        qty: c.qtyPerSet || 1,
+        width: 0, height: 0, totalSqFt: 0,
+        pricePerUnit: matchProd?.basePrice || 0,
+        amount: (c.qtyPerSet || 1) * (matchProd?.basePrice || 0),
+        isSetMember: true,
+        setId: pendingSetSuggestion.setProduct.id,
+      };
+    });
+    setFormData((prev: any) => {
+      const next = [...(prev.items || [])];
+      next.splice(idx + 1, 0, ...newLines);
+      return { ...prev, items: next };
+    });
+    setPendingSetSuggestion(null);
+  };
+
   return (
     <div className="space-y-6">
       {printingQuote && <NipponPrintTemplate printingQuote={printingQuote} clients={clients} printType={nipponPrintType} />}
@@ -210,7 +240,7 @@ const NipponQuotationManager: React.FC = () => {
                             : (() => {
                                 // Count only non-section, non-setHeader items before this index
                                 const serialNo = formData.items!.slice(0, idx).filter(
-                                  (i:any) => !i.isSection && !i.isSetHeader
+                                  (i: any) => !i.isSection && !(i as any).isSetHeader
                                 ).length + 1;
                                 return serialNo;
                               })()
@@ -407,9 +437,6 @@ const NipponQuotationManager: React.FC = () => {
             </div>
         </div>
       )}
-    </div>
-  );
-};
 
       {/* ══════════════════════════════════════════════════════════
            SET SUGGESTION MODAL — appears when set product selected
@@ -426,7 +453,7 @@ const NipponQuotationManager: React.FC = () => {
             <div className="p-6 space-y-4">
               <p className="text-xs text-slate-600 font-medium">This product is part of a set with {pendingSetSuggestion.remainingComponents.length} components:</p>
               <div className="bg-slate-50 rounded-xl p-3 space-y-1.5 border border-slate-200">
-                {pendingSetSuggestion.remainingComponents.map((c:any, ci:number) => (
+                {pendingSetSuggestion.remainingComponents.map((c: any, ci: number) => (
                   <div key={ci} className="flex justify-between text-xs">
                     <span className="font-bold text-slate-800 uppercase">{c.description}</span>
                     <span className="text-slate-500 font-medium">{c.qtyPerSet} {c.unit}</span>
@@ -441,36 +468,7 @@ const NipponQuotationManager: React.FC = () => {
                   This Item Only
                 </button>
                 <button
-                  onClick={() => {
-                    // Add remaining components as individual lines after current
-                    const idx = pendingSetSuggestion.index;
-                    const comps = pendingSetSuggestion.remainingComponents;
-                    const allProds = products;
-                    const newLines = comps.map((c:any, ci:number) => {
-                      const matchProd = allProds.find((p:any) =>
-                        p.id === c.id || p.description.toUpperCase() === c.description.toUpperCase()
-                      );
-                      return {
-                        id: `SET-ADD-${Date.now()}-${ci}`,
-                        description: matchProd ? matchProd.description : c.description,
-                        locationCode: matchProd?.profileCode || '',
-                        glazingSpecs: matchProd?.brand || '',
-                        glassSize: c.unit || 'PCS',
-                        qty: c.qtyPerSet || 1,
-                        width: 0, height: 0, totalSqFt: 0,
-                        pricePerUnit: matchProd?.basePrice || 0,
-                        amount: (c.qtyPerSet || 1) * (matchProd?.basePrice || 0),
-                        isSetMember: true,
-                        setId: pendingSetSuggestion.setProduct.id,
-                      };
-                    });
-                    setFormData((prev:any) => {
-                      const next = [...(prev.items || [])];
-                      next.splice(idx + 1, 0, ...newLines);
-                      return { ...prev, items: next };
-                    });
-                    setPendingSetSuggestion(null);
-                  }}
+                  onClick={handleAddSetComponents}
                   className="col-span-1 py-2.5 text-xs font-bold text-blue-700 border border-blue-200 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors uppercase"
                 >
                   Add Other Items
