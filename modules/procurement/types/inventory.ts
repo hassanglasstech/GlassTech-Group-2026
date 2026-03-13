@@ -148,6 +148,15 @@ export interface Requisition {
   qty?: number;
   description?: string;
   type?: string;
+
+  // Financial Impact Fields (Phase 3)
+  requiresCashPayment?: boolean;     // Does this REQ need a cash payment?
+  estimatedAmount?: number;          // Expected payment amount
+  paymentStatus?: 'Pending' | 'Paid' | 'Partial' | 'Not Required';
+  paidAmount?: number;               // Amount actually paid
+  paymentRef?: string;               // Cash journal / GL doc reference
+  paymentDate?: string;              // Date payment was made
+  glAccountHint?: string;            // Suggested GL account code
 }
 
 export interface PurchaseOrder { 
