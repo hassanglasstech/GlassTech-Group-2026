@@ -48,19 +48,37 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
       const txId = `INV-${Date.now().toString().slice(-6)}`;
       const newLedgerEntries: LedgerTransaction[] = [];
 
+      // ── CORRECT IFRS ENTRY: AR Dr / Revenue Cr / Sales Tax Payable Cr ──
+      const salesTaxRate = 0.18; // 18% GST — adjust per company if needed
+      const salesTaxAmount = Math.round(totalRevenue * salesTaxRate);
+      const revenueNet = totalRevenue; // Revenue is net amount on invoice
+      const arAmount = totalRevenue + salesTaxAmount; // AR = Net + Tax
+
+      // Find Sales Tax Payable account
+      const salesTaxAcc = myAccounts.find(a =>
+        a.name.toLowerCase().includes('sales tax payable') ||
+        a.name.toLowerCase().includes('output tax') ||
+        a.code.startsWith('21311') || a.code.startsWith('2131')
+      );
+
+      const senderDetails: any[] = [
+        { accountId: receivableAcc.id, debit: arAmount, credit: 0, text: `A/R — ${clientName}` },
+        { accountId: revenueAcc.id, debit: 0, credit: revenueNet, text: `Revenue: ${order.projectName || 'General'}` },
+      ];
+      if (salesTaxAcc) {
+        senderDetails.push({ accountId: salesTaxAcc.id, debit: 0, credit: salesTaxAmount, text: 'Sales Tax Payable (Output 18%)' });
+      }
+
       const senderTx: LedgerTransaction = {
           id: txId,
           company,
-          docType: 'DR', // Customer Invoice
+          docType: 'DR',
           docDate: new Date().toISOString().split('T')[0],
           date: new Date().toISOString().split('T')[0],
           description: `INVOICE: ${clientName} - Ref: ${order.orderNo}`,
           referenceId: order.orderNo || order.id,
-          status: 'Posted',
-          details: [
-              { accountId: receivableAcc.id, debit: totalRevenue, credit: 0, text: `Due from ${clientName}` },
-              { accountId: revenueAcc.id, debit: 0, credit: totalRevenue, text: `Revenue: ${order.projectName || 'General'}` }
-          ]
+          status: 'Parked', // Park first — accountant reviews before posting
+          details: senderDetails
       };
       newLedgerEntries.push(senderTx);
 
@@ -94,7 +112,7 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
                   date: new Date().toISOString().split('T')[0],
                   description: `AUTO-PURCHASE: From ${company} - Ref: ${order.orderNo}`,
                   referenceId: txId,
-                  status: 'Posted',
+                  status: 'Parked',
                   details: [
                       { accountId: costAcc.id, debit: totalRevenue, credit: 0, text: `Material Cost (Auto from ${company})` },
                       { accountId: payableAcc.id, debit: 0, credit: totalRevenue, text: `Payable to ${company}` }
