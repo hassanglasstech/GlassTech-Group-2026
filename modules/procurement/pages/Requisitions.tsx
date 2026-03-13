@@ -79,7 +79,8 @@ const Requisitions: React.FC = () => {
     overtimeHours: 0, overtimeProject: '', overtimeEmployees: [] as string[],
     employeeName: '', siteName: '', from: '', to: '', amount: 0,
     vehicleType: '', vehicleNo: '', driver: '', purpose: '',
-    projectOrSiteName: '', qty: 0, description: '', type: ''
+    projectOrSiteName: '', qty: 0, description: '', type: '',
+    requiresCashPayment: false, glAccountHint: ''
   });
 
   const [formItems, setFormItems] = useState<RequisitionItem[]>([
@@ -202,7 +203,10 @@ const Requisitions: React.FC = () => {
       projectOrSiteName: formHeader.projectOrSiteName,
       qty: formHeader.qty,
       description: formHeader.description,
-      type: formHeader.type
+      type: formHeader.type,
+      requiresCashPayment: formHeader.requiresCashPayment,
+      glAccountHint: formHeader.glAccountHint,
+      paymentStatus: formHeader.requiresCashPayment ? 'Pending' : 'Not Required',
     };
     InventoryService.saveRequisitions([...allReqs, newPR]);
     refreshData();
@@ -408,6 +412,11 @@ const Requisitions: React.FC = () => {
                         <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${r.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : r.status === 'Rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
                           {r.status}
                         </span>
+                        {r.requiresCashPayment && r.status === 'Approved' && (
+                          <span className={`ml-1 px-2 py-0.5 rounded text-[9px] font-black uppercase ${r.paymentStatus === 'Paid' ? 'bg-blue-100 text-blue-700' : r.paymentStatus === 'Partial' ? 'bg-purple-100 text-purple-700' : 'bg-rose-100 text-rose-700'}`}>
+                            {r.paymentStatus === 'Paid' ? '✓ Paid' : r.paymentStatus === 'Partial' ? 'Partial' : '⚠ Awaiting Payment'}
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-3 text-right space-x-2" onClick={e => e.stopPropagation()}>
                         {r.status === 'Pending' && (
@@ -563,6 +572,38 @@ const Requisitions: React.FC = () => {
                     )}
                     <div className="col-span-1 space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Req. Date</label><input type="date" className="sap-input w-full font-bold" value={formHeader.date} onChange={e => setFormHeader({...formHeader, date: e.target.value})} /></div>
                  </div>
+                 {/* Financial Impact Toggle */}
+                 {formHeader.category !== 'HR' && (
+                   <div className="mt-3 p-4 rounded-2xl border border-slate-200 bg-white">
+                     <div className="flex items-center justify-between">
+                       <div>
+                         <p className="text-xs font-black uppercase text-slate-700">Requires Cash / Bank Payment?</p>
+                         <p className="text-[10px] text-slate-400 mt-0.5">Enable if this REQ needs a payment voucher from Finance</p>
+                       </div>
+                       <button
+                         type="button"
+                         onClick={() => setFormHeader({...formHeader, requiresCashPayment: !formHeader.requiresCashPayment})}
+                         className={`relative w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none ${formHeader.requiresCashPayment ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                       >
+                         <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${formHeader.requiresCashPayment ? 'translate-x-6' : 'translate-x-0'}`}/>
+                       </button>
+                     </div>
+                     {formHeader.requiresCashPayment && (
+                       <div className="mt-3 grid grid-cols-2 gap-3">
+                         <div className="space-y-1">
+                           <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Suggested GL Account (Optional)</label>
+                           <input type="text" placeholder="e.g. 53211 — Office Supplies" className="sap-input w-full text-xs font-bold uppercase"
+                             value={formHeader.glAccountHint} onChange={e => setFormHeader({...formHeader, glAccountHint: e.target.value})} />
+                         </div>
+                         <div className="flex items-end pb-1">
+                           <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-[10px] text-amber-800 font-bold">
+                             ⚡ Finance will see this in their Payment Queue
+                           </div>
+                         </div>
+                       </div>
+                     )}
+                   </div>
+                 )}
                  {['Material / Inventory', 'Maintenance / R&M', 'General Expense'].includes(formHeader.subCategory) ? (
                      <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
                         <div className="p-4 bg-slate-50 border-b flex justify-between items-center"><h4 className="font-black text-slate-700 uppercase text-xs">Item Overview</h4><button onClick={addItemRow} className="text-blue-600 font-bold text-xs hover:underline">+ Add Item</button></div>
