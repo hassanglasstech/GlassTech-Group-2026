@@ -42,6 +42,7 @@ export const AsyncSalesService = {
       setComponents: r.set_components ?? [], technicalSpecs: r.technical_specs ?? {},
       width: r.width ?? 0, height: r.height ?? 0,
       frameColor: r.frame_color ?? '', meshColor: r.mesh_color ?? '',
+      subDescription: r.sub_description ?? '',
     }));
   },
   saveProducts: async (data: Product[]): Promise<void> => {
@@ -60,13 +61,9 @@ export const AsyncSalesService = {
       set_components: p.setComponents ?? [], technical_specs: p.technicalSpecs ?? {},
       width: p.width ?? 0, height: p.height ?? 0,
       frame_color: p.frameColor ?? '', mesh_color: p.meshColor ?? '',
+      sub_description: (p as any).subDescription ?? '',
     }));
     const { error } = await supabase.from('products').upsert(mapped);
-    if (error) throw error;
-  },
-
-  deleteProduct: async (id: string): Promise<void> => {
-    const { error } = await supabase.from('products').delete().eq('id', id);
     if (error) throw error;
   },
   
