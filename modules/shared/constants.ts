@@ -82,10 +82,33 @@ export type RequisitionStatus = typeof RequisitionStatus[keyof typeof Requisitio
 export const PurchaseOrderStatus = {
   SENT: 'Sent',
   RECEIVED: 'Received',
+  GRN_PENDING: 'GRN Pending',
+  GRN_DONE: 'GRN Done',
+  INVOICE_PENDING: 'Invoice Pending',
+  MATCHED: 'Matched',
+  PAYMENT_PENDING: 'Payment Pending',
+  PAID: 'Paid',
   IN_PRODUCTION: 'In Production',
-  DELIVERED: 'Delivered'
+  DELIVERED: 'Delivered',
+  ON_HOLD: 'On Hold'
 } as const;
 export type PurchaseOrderStatus = typeof PurchaseOrderStatus[keyof typeof PurchaseOrderStatus];
+
+export const ApprovalLevel = {
+  L1: 'L1',   // Department Manager  < 100k
+  L2: 'L2',   // Director / GM       100k – 500k
+  L3: 'L3',   // MD / CEO            > 500k
+} as const;
+export type ApprovalLevel = typeof ApprovalLevel[keyof typeof ApprovalLevel];
+
+export const MatchStatus = {
+  PENDING: 'Pending',
+  TWO_WAY: '2-Way',
+  THREE_WAY: '3-Way',
+  MISMATCH: 'Mismatch',
+  ON_HOLD: 'On-Hold',
+} as const;
+export type MatchStatus = typeof MatchStatus[keyof typeof MatchStatus];
 
 export const ClientStatus = {
   ACTIVE: 'Active',
