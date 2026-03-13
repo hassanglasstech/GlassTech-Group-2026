@@ -5,7 +5,7 @@ import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { getBrandNick } from '@/modules/shared/utils/brandUtils';
 import { 
-  Plus, Search, Edit2, Trash2, Package, Filter, Download, Box, 
+  Plus, Search, Edit2, Trash2, Package, Filter, Download, Box, X,
   FileJson, FileSpreadsheet, FileUp, UploadCloud, LayoutGrid, List, Printer, Layers, AlertCircle, CheckCircle2, ChevronDown
 } from 'lucide-react';
 import NipponProductForm from '@/modules/nippon/components/NipponProductForm';
@@ -797,14 +797,19 @@ const NipponProductMaster: React.FC = () => {
                     );
                   })}
                 </div>
-                {setForm.setPrice === 0 && (
-                  <p className="text-[10px] text-slate-400">
-                    Suggested price: PKR {setForm.components.reduce((s, id) => {
-                      const p = products.find(x => x.id === id);
-                      return s + (p?.basePrice || 0);
-                    }, 0).toLocaleString()}
-                  </p>
-                )}
+                {setForm.setPrice === 0 && (() => {
+                  const suggested = setForm.components.reduce((s, id) => {
+                    const p = products.find(x => x.id === id);
+                    return s + (p?.basePrice || 0);
+                  }, 0);
+                  return suggested > 0 ? (
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Suggested price: PKR {suggested.toLocaleString()}
+                      <button onClick={() => setSetForm(f => ({...f, setPrice: suggested}))}
+                        className="ml-2 text-amber-600 font-bold hover:underline">Apply</button>
+                    </p>
+                  ) : null;
+                })()}
               </div>
             )}
           </div>
