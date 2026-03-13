@@ -8,8 +8,7 @@ import FactoryCashJournal from '../companies/factory/components/FactoryCashJourn
 import FactoryGateControl from '../companies/factory/components/FactoryGateControl';
 import FactoryRequisitions from '../companies/factory/components/FactoryRequisitions';
 import FactoryFinanceDashboardView from '../../finance/components/FactoryFinanceDashboardView';
-import COAViewer from '../../finance/components/COAViewer';
-import { FACTORY_COA } from '../../finance/constants/coa';
+import ChartOfAccounts from '../../finance/pages/ChartOfAccounts';
 import { BarChart3, ListTree } from 'lucide-react';
 
 const FactoryProduction: React.FC = () => {
@@ -53,7 +52,7 @@ const FactoryProduction: React.FC = () => {
       </div>
 
       {activeTab === 'dashboard' && <FactoryFinanceDashboardView metrics={{expenses: 500000, repairMaintenance: 150000, assetPurchases: 200000, consumablePurchases: 50000}} />}
-      {activeTab === 'coa' && <COAViewer data={FACTORY_COA} />}
+      {activeTab === 'coa' && <ChartOfAccounts company="Factory" />}
       {activeTab === 'cash' && <FactoryCashJournal cashEntries={cashEntries} refreshData={refreshData} />}
       {activeTab === 'gate' && <FactoryGateControl dispatches={dispatches} gatePasses={gatePasses} refreshData={refreshData} />}
       {activeTab === 'requisition' && <FactoryRequisitions requisitions={requisitions} refreshData={refreshData} />}
