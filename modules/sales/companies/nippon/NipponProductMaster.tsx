@@ -9,7 +9,6 @@ import {
   FileJson, FileSpreadsheet, FileUp, UploadCloud, LayoutGrid, List, Printer, Layers, AlertCircle, CheckCircle2, ChevronDown
 } from 'lucide-react';
 import NipponProductForm from '@/modules/nippon/components/NipponProductForm';
-import NipponSmartImporter from './components/NipponSmartImporter';
 import { NipponCatalogPrint } from '@/modules/nippon/prints/NipponCatalogPrint';
 import * as XLSX from 'xlsx';
 
@@ -22,10 +21,9 @@ const NipponProductMaster: React.FC = () => {
   const [catFilter, setCatFilter] = useState('All');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'catalog'>('table');
+  const [activeTab, setActiveTab] = useState<'list' | 'sets'>('list');
   const [setDetailProduct, setSetDetailProduct] = useState<Product | null>(null);
-  const [activeMainTab, setActiveMainTab] = useState<'products' | 'sets'>('products');
   const [hoveredSetId, setHoveredSetId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'list' | 'import'>('list');
   const [isPrintingCatalog, setIsPrintingCatalog] = useState(false);
 
   const jsonInputRef = useRef<HTMLInputElement>(null);
@@ -255,7 +253,7 @@ const NipponProductMaster: React.FC = () => {
       .sort((a, b) => a.description.localeCompare(b.description));
   }, [products, searchTerm, catFilter]);
 
-  // ── Set Inventory Analysis ──────────────────────────────────────
+  // ── Set Inventory Analysis ─────────────────────────────────────────
   const setAnalysis = useMemo(() => {
     const setProducts = products.filter(p => p.isSet && p.setComponents && p.setComponents.length > 0);
     return setProducts.map(setP => {
@@ -272,7 +270,11 @@ const NipponProductMaster: React.FC = () => {
       });
       const completeSets = componentAnalysis.length > 0 ? Math.min(...componentAnalysis.map((c:any) => c.setsCanMake)) : qtyInStock;
       const bottleneck = componentAnalysis.find((c:any) => c.setsCanMake === completeSets && completeSets < 5);
-      return { product: setP, storeQty: qtyInStock, completeSets, isComplete: completeSets > 0, bottleneck, componentAnalysis, hasIssue: completeSets < 3 || componentAnalysis.some((c:any) => c.isLow) };
+      return {
+        product: setP, storeQty: qtyInStock, completeSets,
+        isComplete: completeSets > 0, bottleneck, componentAnalysis,
+        hasIssue: completeSets < 3 || componentAnalysis.some((c:any) => c.isLow)
+      };
     });
   }, [products, storeItems]);
 
@@ -286,15 +288,9 @@ const NipponProductMaster: React.FC = () => {
         >
           Material Registry
         </button>
-        <button 
-          onClick={() => setActiveTab('import')}
-          className={`px-6 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${activeTab === 'import' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-        >
-          Smart Import
-        </button>
-        <button 
-          onClick={() => setActiveTab('sets' as any)}
-          className={`px-6 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center space-x-1.5 ${(activeTab as any) === 'sets' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+        <button
+          onClick={() => setActiveTab('sets')}
+          className={`px-6 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center space-x-1.5 ${activeTab === 'sets' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
         >
           <Layers size={12}/>
           <span>Set Inventory</span>
@@ -306,12 +302,7 @@ const NipponProductMaster: React.FC = () => {
         </button>
       </div>
 
-      {activeTab === 'import' ? (
-        <NipponSmartImporter onComplete={() => {
-          setActiveTab('list');
-          refreshData();
-        }} />
-      ) : (
+      {activeTab === 'list' && (
         <>
           {/* CATALOG PRINT VIEW */}
       {isPrintingCatalog && (
@@ -446,31 +437,8 @@ const NipponProductMaster: React.FC = () => {
                                 <td className="font-black text-blue-600 uppercase">{p.modelNo || '-'}</td>
                                 <td className="font-bold text-slate-800 uppercase">
                                     <div className="flex flex-col">
-                                        <span className="flex items-center space-x-1">
-                                          <span>{p.description}</span>
-                                          {p.isSet && (
-                                            <span
-                                              className="relative cursor-pointer"
-                                              onMouseEnter={() => setHoveredSetId(p.id)}
-                                              onMouseLeave={() => setHoveredSetId(null)}
-                                              onClick={() => setSetDetailProduct(prev => prev?.id === p.id ? null : p)}
-                                            >
-                                              <span className="bg-amber-100 text-amber-700 text-[9px] font-black px-1.5 py-0.5 rounded border border-amber-200 ml-1">SET</span>
-                                              {hoveredSetId === p.id && (
-                                                <div className="absolute left-0 top-5 z-50 bg-slate-900 text-white rounded-xl p-3 shadow-2xl min-w-[220px] text-[10px]">
-                                                  <p className="font-black uppercase mb-2 text-amber-300">Set Components</p>
-                                                  {(p.setComponents || []).map((c:any, ci:number) => (
-                                                    <p key={ci} className="font-medium mb-0.5">• {c.description} × {c.qtyPerSet} {c.unit}</p>
-                                                  ))}
-                                                  {(!p.setComponents || p.setComponents.length === 0) && <p className="text-slate-400">No components defined</p>}
-                                                  <p className="mt-2 text-slate-400 italic">Click for full details</p>
-                                                </div>
-                                              )}
-                                            </span>
-                                          )}
-                                        </span>
+                                        <span>{p.description}</span>
                                         {p.subCategory && <span className="text-[9px] text-slate-400 font-medium">TYPE: {p.subCategory}</span>}
-                                        {(p as any).subDescription && <span className="text-[9px] text-slate-400 font-medium italic">{(p as any).subDescription}</span>}
                                     </div>
                                 </td>
                                 <td className="font-bold text-slate-500 text-[10px] uppercase">{getBrandNick(p.brand || '-')}</td>
@@ -554,121 +522,117 @@ const NipponProductMaster: React.FC = () => {
       </>
     )}
 
-    {/* ═══════════════════════════════════════════════════════════
-         SET INVENTORY TAB
-    ═══════════════════════════════════════════════════════════ */}
-    {(activeTab as any) === 'sets' && (
-      <div className="space-y-6 animate-in fade-in duration-300">
-        {/* Summary cards */}
-        <div className="grid grid-cols-3 gap-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Set Types</p>
-            <p className="text-3xl font-black text-slate-800 mt-1">{setAnalysis.length}</p>
-          </div>
-          <div className={`rounded-2xl border shadow-sm p-5 ${setAnalysis.filter(s=>s.isComplete).length > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'}`}>
-            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Complete Sets Available</p>
-            <p className="text-3xl font-black text-emerald-600 mt-1">{setAnalysis.filter(s=>s.isComplete).length}</p>
-          </div>
-          <div className={`rounded-2xl border shadow-sm p-5 ${setAnalysis.filter(s=>!s.isComplete).length > 0 ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200'}`}>
-            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Incomplete / At Risk</p>
-            <p className="text-3xl font-black text-rose-600 mt-1">{setAnalysis.filter(s=>!s.isComplete || s.hasIssue).length}</p>
-          </div>
-        </div>
 
-        {setAnalysis.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center">
-            <Layers size={48} className="mx-auto text-slate-200 mb-4"/>
-            <p className="text-slate-400 font-bold text-sm uppercase">No set products defined yet</p>
-            <p className="text-[10px] text-slate-300 mt-1">Add a product with unit=Set and define components</p>
+      {/* ═══════════════════════════════════════════════════════════
+           SET INVENTORY TAB
+      ═══════════════════════════════════════════════════════════ */}
+      {activeTab === 'sets' && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Set Types</p>
+              <p className="text-3xl font-black text-slate-800 mt-1">{setAnalysis.length}</p>
+            </div>
+            <div className={`rounded-2xl border shadow-sm p-5 ${setAnalysis.filter(s=>s.isComplete).length > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'}`}>
+              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Complete Sets Available</p>
+              <p className="text-3xl font-black text-emerald-600 mt-1">{setAnalysis.filter(s=>s.isComplete).length}</p>
+            </div>
+            <div className={`rounded-2xl border shadow-sm p-5 ${setAnalysis.filter(s=>!s.isComplete || s.hasIssue).length > 0 ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200'}`}>
+              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Incomplete / At Risk</p>
+              <p className="text-3xl font-black text-rose-600 mt-1">{setAnalysis.filter(s=>!s.isComplete || s.hasIssue).length}</p>
+            </div>
           </div>
-        ) : (
-          <div className="space-y-4">
-            {setAnalysis.map(sa => (
-              <div key={sa.product.id}
-                className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${!sa.isComplete ? 'border-rose-200' : sa.hasIssue ? 'border-amber-200' : 'border-emerald-200'}`}
-              >
-                {/* Set header */}
-                <div className={`px-6 py-4 flex items-center justify-between ${!sa.isComplete ? 'bg-rose-50' : sa.hasIssue ? 'bg-amber-50' : 'bg-emerald-50'}`}>
-                  <div className="flex items-center space-x-3">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${!sa.isComplete ? 'bg-rose-100' : 'bg-emerald-100'}`}>
-                      {!sa.isComplete ? <AlertCircle size={18} className="text-rose-600"/> : <CheckCircle2 size={18} className="text-emerald-600"/>}
-                    </div>
-                    <div>
-                      <p className="font-black text-slate-800 uppercase text-sm">{sa.product.description}</p>
-                      <p className="text-[10px] font-bold text-slate-500 uppercase mt-0.5">
-                        {sa.product.modelNo && <span className="mr-2">#{sa.product.modelNo}</span>}
-                        {sa.product.setComponents?.length || 0} components
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-6">
-                    <div className="text-right">
-                      <p className="text-[10px] font-black uppercase text-slate-400">Complete Sets</p>
-                      <p className={`text-2xl font-black ${sa.completeSets > 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{sa.completeSets}</p>
-                    </div>
-                    {sa.bottleneck && (
-                      <div className="bg-amber-100 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-800 font-bold max-w-[200px]">
-                        ⚠ Bottleneck: <span className="font-black">{sa.bottleneck.description}</span>
-                        <span className="block text-[10px] mt-0.5">{sa.bottleneck.currentQty} in stock (need {sa.bottleneck.qtyPerSet}/set)</span>
+
+          {setAnalysis.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center">
+              <Layers size={48} className="mx-auto text-slate-200 mb-4"/>
+              <p className="text-slate-400 font-bold text-sm uppercase">No set products defined yet</p>
+              <p className="text-[10px] text-slate-300 mt-1">Add a product with unit=Set and define its components</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {setAnalysis.map(sa => (
+                <div key={sa.product.id}
+                  className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${!sa.isComplete ? 'border-rose-200' : sa.hasIssue ? 'border-amber-200' : 'border-emerald-200'}`}
+                >
+                  <div className={`px-6 py-4 flex items-center justify-between ${!sa.isComplete ? 'bg-rose-50' : sa.hasIssue ? 'bg-amber-50' : 'bg-emerald-50'}`}>
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${!sa.isComplete ? 'bg-rose-100' : 'bg-emerald-100'}`}>
+                        {!sa.isComplete
+                          ? <AlertCircle size={18} className="text-rose-600"/>
+                          : <CheckCircle2 size={18} className="text-emerald-600"/>
+                        }
                       </div>
-                    )}
-                    <button
-                      onClick={() => setSetDetailProduct(setDetailProduct?.id === sa.product.id ? null : sa.product)}
-                      className="text-[10px] font-bold text-slate-500 hover:text-slate-800 flex items-center space-x-1 px-3 py-1.5 rounded-lg hover:bg-white transition-colors"
-                    >
-                      <ChevronDown size={12} className={`transition-transform ${setDetailProduct?.id === sa.product.id ? 'rotate-180' : ''}`}/>
-                      <span>Details</span>
-                    </button>
+                      <div>
+                        <p className="font-black text-slate-800 uppercase text-sm">{sa.product.description}</p>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-0.5">
+                          {sa.product.modelNo && <span className="mr-2">#{sa.product.modelNo}</span>}
+                          {sa.product.setComponents?.length || 0} components
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-6">
+                      <div className="text-right">
+                        <p className="text-[10px] font-black uppercase text-slate-400">Complete Sets</p>
+                        <p className={`text-2xl font-black ${sa.completeSets > 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{sa.completeSets}</p>
+                      </div>
+                      {sa.bottleneck && (
+                        <div className="bg-amber-100 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-800 font-bold max-w-[200px]">
+                          ⚠ Bottleneck: <span className="font-black">{sa.bottleneck.description}</span>
+                          <span className="block text-[10px] mt-0.5">{sa.bottleneck.currentQty} in stock (need {sa.bottleneck.qtyPerSet}/set)</span>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => setSetDetailProduct(setDetailProduct?.id === sa.product.id ? null : sa.product)}
+                        className="text-[10px] font-bold text-slate-500 hover:text-slate-800 flex items-center space-x-1 px-3 py-1.5 rounded-lg hover:bg-white transition-colors"
+                      >
+                        <ChevronDown size={12} className={`transition-transform ${setDetailProduct?.id === sa.product.id ? 'rotate-180' : ''}`}/>
+                        <span>Details</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-
-                {/* Expanded component breakdown */}
-                {setDetailProduct?.id === sa.product.id && (
-                  <div className="px-6 py-4">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="text-[10px] font-black uppercase text-slate-400 border-b">
-                          <th className="py-2 text-left">Component</th>
-                          <th className="py-2 text-right">Req/Set</th>
-                          <th className="py-2 text-right">In Stock</th>
-                          <th className="py-2 text-right">Sets Possible</th>
-                          <th className="py-2 text-center">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {sa.componentAnalysis.map((comp:any, ci:number) => (
-                          <tr key={ci} className={comp.isMissing ? 'bg-rose-50' : comp.isLow ? 'bg-amber-50' : ''}>
-                            <td className="py-2.5 font-bold text-slate-800 uppercase">{comp.description}</td>
-                            <td className="py-2.5 text-right font-bold">{comp.qtyPerSet} {comp.unit}</td>
-                            <td className={`py-2.5 text-right font-black ${comp.isMissing ? 'text-rose-600' : comp.isLow ? 'text-amber-600' : 'text-emerald-600'}`}>
-                              {comp.currentQty}
-                            </td>
-                            <td className={`py-2.5 text-right font-black ${comp.setsCanMake === 0 ? 'text-rose-600' : comp.isLow ? 'text-amber-600' : 'text-slate-800'}`}>
-                              {comp.setsCanMake}
-                            </td>
-                            <td className="py-2.5 text-center">
-                              {comp.isMissing
-                                ? <span className="bg-rose-100 text-rose-700 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">Out of Stock</span>
-                                : comp.isLow
-                                ? <span className="bg-amber-100 text-amber-700 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">Low Stock</span>
-                                : <span className="bg-emerald-100 text-emerald-700 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">OK</span>
-                              }
-                            </td>
+                  {setDetailProduct?.id === sa.product.id && (
+                    <div className="px-6 py-4">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-[10px] font-black uppercase text-slate-400 border-b">
+                            <th className="py-2 text-left">Component</th>
+                            <th className="py-2 text-right">Req/Set</th>
+                            <th className="py-2 text-right">In Stock</th>
+                            <th className="py-2 text-right">Sets Possible</th>
+                            <th className="py-2 text-center">Status</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {sa.componentAnalysis.length === 0 && (
-                      <p className="text-center text-slate-400 text-xs py-4">No components linked — go to product form to add components</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    )}
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {sa.componentAnalysis.map((comp:any, ci:number) => (
+                            <tr key={ci} className={comp.isMissing ? 'bg-rose-50' : comp.isLow ? 'bg-amber-50' : ''}>
+                              <td className="py-2.5 font-bold text-slate-800 uppercase">{comp.description}</td>
+                              <td className="py-2.5 text-right font-bold">{comp.qtyPerSet} {comp.unit}</td>
+                              <td className={`py-2.5 text-right font-black ${comp.isMissing ? 'text-rose-600' : comp.isLow ? 'text-amber-600' : 'text-emerald-600'}`}>{comp.currentQty}</td>
+                              <td className={`py-2.5 text-right font-black ${comp.setsCanMake === 0 ? 'text-rose-600' : comp.isLow ? 'text-amber-600' : 'text-slate-800'}`}>{comp.setsCanMake}</td>
+                              <td className="py-2.5 text-center">
+                                {comp.isMissing
+                                  ? <span className="bg-rose-100 text-rose-700 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">Out of Stock</span>
+                                  : comp.isLow
+                                  ? <span className="bg-amber-100 text-amber-700 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">Low Stock</span>
+                                  : <span className="bg-emerald-100 text-emerald-700 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">OK</span>
+                                }
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {sa.componentAnalysis.length === 0 && (
+                        <p className="text-center text-slate-400 text-xs py-4">No components linked — edit product to add components</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
     <NipponProductForm 
         isOpen={isModalOpen}
