@@ -175,7 +175,20 @@ export interface PurchaseOrder {
     costCenter?: string; 
     pieceId?: string; 
     specs?: string; 
-  }[]; 
+  }[];
+  // Three-Way Matching Fields
+  reqId?: string;              // Linked Requisition
+  grnRef?: string;             // GRN / MIGO document number
+  grnDate?: string;            // Date goods received
+  grnQty?: number;             // Quantity received
+  vendorInvoiceNo?: string;    // Vendor's invoice number
+  vendorInvoiceDate?: string;  // Invoice date
+  vendorInvoiceAmount?: number;// Invoice amount
+  matchStatus?: 'Pending' | '2-Way' | '3-Way' | 'Mismatch' | 'On-Hold';
+  matchNotes?: string;         // Any variance notes
+  apInvoiceId?: string;        // Posted AP journal doc ID
+  approvalLevel?: 'L1' | 'L2' | 'L3';
+  approvalHistory?: { level: string; by: string; date: string; action: string; note?: string }[];
 }
 
 export interface WarehouseSpot { 
