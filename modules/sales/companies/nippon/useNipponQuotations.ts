@@ -130,7 +130,7 @@ export const useNipponQuotations = () => {
   };
 
   // ── Set suggestion state ───────────────────────────────────────────
-  const [pendingSetSuggestion, setPendingSetSuggestion] = React.useState<{
+  const [pendingSetSuggestion, setPendingSetSuggestion] = useState<{
     index: number;
     setProduct: any;
     remainingComponents: any[];
