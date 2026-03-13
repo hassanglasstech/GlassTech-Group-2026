@@ -200,7 +200,7 @@ const NipponProductMaster: React.FC = () => {
     let allStore = InventoryService.getStore();
     let count = 0;
     for (const row of filled) {
-      const id = `NIP-${(row.modelNo.trim() || Date.now().toString()).toUpperCase().replace(/[^A-Z0-9]/g,"-")}${row.finishColor ? "-" + row.finishColor.toUpperCase().replace(/[^A-Z0-9]/g,"-") : ""}${row.direction ? "-" + row.direction.toUpperCase().replace(/[^A-Z0-9]/g,"-") : ""}`;
+      const id = `NIP-${(row.modelNo.trim() || Date.now().toString()).toUpperCase().replace(/[^A-Z0-9]/g,"-")}${row.finishColor ? "-" + row.finishColor.toUpperCase().replace(/[^A-Z0-9]/g,"-") : ""}${row.direction ? "-" + row.direction.toUpperCase().replace(/[^A-Z0-9]/g,"-") : ""}${row.tongueLength ? "-" + row.tongueLength.toString().toUpperCase().replace(/[^A-Z0-9]/g,"-") : ""}${row.spindleLength ? "-" + row.spindleLength.toString().toUpperCase().replace(/[^A-Z0-9]/g,"-") : ""}`;
       const product: Product = {
         id, company: 'Nippon',
         description: row.description.trim().toUpperCase(),
@@ -364,7 +364,7 @@ const NipponProductMaster: React.FC = () => {
 
     for (const row of excelRows) {
       if (!row.description.trim()) { skipped++; continue; }
-      const id = `NIP-${(row.modelNo.trim() || Date.now().toString()).toUpperCase().replace(/[^A-Z0-9]/g,"-")}${row.finishColor ? "-" + row.finishColor.toUpperCase().replace(/[^A-Z0-9]/g,"-") : ""}${row.direction ? "-" + row.direction.toUpperCase().replace(/[^A-Z0-9]/g,"-") : ""}`;
+      const id = `NIP-${(row.modelNo.trim() || Date.now().toString()).toUpperCase().replace(/[^A-Z0-9]/g,"-")}${row.finishColor ? "-" + row.finishColor.toUpperCase().replace(/[^A-Z0-9]/g,"-") : ""}${row.direction ? "-" + row.direction.toUpperCase().replace(/[^A-Z0-9]/g,"-") : ""}${row.tongueLength ? "-" + row.tongueLength.toString().toUpperCase().replace(/[^A-Z0-9]/g,"-") : ""}${row.spindleLength ? "-" + row.spindleLength.toString().toUpperCase().replace(/[^A-Z0-9]/g,"-") : ""}`;
       // Merge uploaded image url if available
       const imgMatch = imageMatches.find(m => m.matchedModelNo.toUpperCase() === row.modelNo.toUpperCase() && m.uploadedUrl);
       const product: Product = {
