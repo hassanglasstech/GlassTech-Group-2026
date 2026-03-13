@@ -85,7 +85,7 @@ const NipponQuotationManager: React.FC = () => {
         p.id === c.id || p.description.toUpperCase() === c.description.toUpperCase()
       );
       return {
-        id: \`SET-ADD-\${Date.now()}-\${ci}\`,
+        id: `SET-ADD-${Date.now()}-${ci}`,
         description: matchProd ? matchProd.description : c.description,
         locationCode: matchProd?.profileCode || '',
         glazingSpecs: matchProd?.brand || '',
