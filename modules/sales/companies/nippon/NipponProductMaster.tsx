@@ -24,6 +24,11 @@ const NipponProductMaster: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'list' | 'sets'>('list');
   const [setDetailProduct, setSetDetailProduct] = useState<Product | null>(null);
   const [hoveredSetId, setHoveredSetId] = useState<string | null>(null);
+  const [isAddSetOpen, setIsAddSetOpen] = useState(false);
+  const [setForm, setSetForm] = useState({
+    setNo: '', setName: '', setPrice: 0, components: [] as string[] // product ids
+  });
+  const [setSearchTerm, setSetSearchTerm] = useState('');
   const [isPrintingCatalog, setIsPrintingCatalog] = useState(false);
 
   const jsonInputRef = useRef<HTMLInputElement>(null);
@@ -32,6 +37,49 @@ const NipponProductMaster: React.FC = () => {
   useEffect(() => {
     refreshData();
   }, []);
+
+  // ── Set system helpers ───────────────────────────────────────────────
+  const generateSetNo = () => {
+    const existing = products.filter(p => p.isSet);
+    const nums = existing.map(p => {
+      const m = (p.profileCode || '').match(/SET-(\d+)/);
+      return m ? parseInt(m[1]) : 0;
+    });
+    const next = nums.length > 0 ? Math.max(...nums) + 1 : 1;
+    return 'SET-' + String(next).padStart(3, '0');
+  };
+
+  const handleSaveSet = async () => {
+    if (!setForm.setName) return alert('Set name required.');
+    if (setForm.components.length < 2) return alert('Add at least 2 components.');
+    const setNo = setForm.setNo || generateSetNo();
+    const comps = setForm.components.map(id => {
+      const p = products.find(x => x.id === id);
+      return { id, description: p?.description || id, unit: p?.unit || 'PCS', qtyPerSet: 1 };
+    });
+    const setProduct: any = {
+      id: 'NIP-' + setNo,
+      company: 'Nippon',
+      category: 'Hardware',
+      description: setForm.setName.toUpperCase(),
+      profileCode: setNo,
+      modelNo: setNo,
+      unit: 'Set',
+      basePrice: setForm.setPrice,
+      costPrice: setForm.setPrice,
+      variants: [],
+      isSet: true,
+      setComponents: comps,
+      brand: comps[0] ? (products.find(p => p.id === comps[0].id)?.brand || '') : '',
+      technicalSpecs: { Components: String(comps.length) },
+    };
+    const current = await AsyncSalesService.getProducts();
+    await AsyncSalesService.saveProducts([...current, setProduct]);
+    await refreshData();
+    setIsAddSetOpen(false);
+    setSetForm({ setNo: '', setName: '', setPrice: 0, components: [] });
+    setSetSearchTerm('');
+  };
 
   const refreshData = async () => {
     const allProds = (await AsyncSalesService.getProducts()).filter(p => p.company === company);
@@ -391,18 +439,17 @@ const NipponProductMaster: React.FC = () => {
               <table className="w-full text-left sap-table">
                   <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400 tracking-widest">
                     <tr>
-                        <th className="px-6 py-4">Internal ID</th>
-                        <th>Image</th>
+                        <th className="px-3 py-4 w-24">ID</th>
+                        <th className="w-12">Img</th>
                         <th>System</th>
-                        <th>Model No</th>
-                        <th>Description</th>
-                        <th>Brand</th>
-                        <th>Color</th>
+                        <th className="w-24">Model</th>
+                        <th className="min-w-[180px]">Description</th>
+                        <th className="w-12 text-center">Brand</th>
+                        <th className="w-20">Color</th>
                         <th>Material</th>
                         <th>Dir</th>
-                        <th>Size</th>
-                        <th>Spindle</th>
-                        <th>Category</th>
+                        <th className="w-28">Size / Spindle</th>
+                        <th className="w-20">Cat</th>
                         <th className="text-right">Unit Price</th>
                         <th className="text-right">Stock</th>
                         <th className="text-right pr-6">Action</th>
@@ -413,7 +460,7 @@ const NipponProductMaster: React.FC = () => {
                         const stock = getStockLevel(p.id);
                         return (
                             <tr key={p.id} className="hover:bg-slate-50 transition-colors text-xs group">
-                                <td className="px-6 py-3 font-mono font-bold text-slate-400 uppercase">{p.profileCode || '-'}</td>
+                                <td className="px-3 py-3 font-mono text-[10px] font-bold text-slate-400 uppercase">{p.profileCode || '-'}</td>
                                 <td className="py-3">
                                     <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center">
                                         {p.imageUrl ? (
@@ -441,12 +488,19 @@ const NipponProductMaster: React.FC = () => {
                                         {p.subCategory && <span className="text-[9px] text-slate-400 font-medium">TYPE: {p.subCategory}</span>}
                                     </div>
                                 </td>
-                                <td className="font-bold text-slate-500 text-[10px] uppercase">{getBrandNick(p.brand || '-')}</td>
+                                <td className="text-center">
+                                    <span className="bg-slate-100 text-slate-600 text-[9px] font-black px-1.5 py-0.5 rounded uppercase whitespace-nowrap" title={p.brand || ''}>
+                                        {getBrandNick(p.brand || '-')}
+                                    </span>
+                                </td>
                                 <td className="font-medium text-slate-500 text-[10px] uppercase">{p.finishColor || '-'}</td>
                                 <td className="font-medium text-slate-500 text-[10px] uppercase">{p.material || '-'}</td>
                                 <td className="font-medium text-slate-500 text-[10px] uppercase">{p.direction || '-'}</td>
-                                <td className="font-medium text-slate-500 text-[10px] uppercase">{p.tongueLength || p.thickness || '-'}</td>
-                                <td className="font-medium text-slate-500 text-[10px] uppercase">{p.spindleLength || '-'}</td>
+                                <td className="text-[9px] text-slate-500 font-medium uppercase">
+                                    {p.tongueLength || p.thickness ? <span className="block">{p.tongueLength || p.thickness}</span> : null}
+                                    {p.spindleLength ? <span className="block text-slate-400">{p.spindleLength}</span> : null}
+                                    {!p.tongueLength && !p.thickness && !p.spindleLength ? '-' : null}
+                                </td>
                                 <td className="font-bold text-slate-500 text-[10px] uppercase"><span className="bg-slate-100 px-2 py-0.5 rounded border">{p.category}</span></td>
                                 <td className="text-right font-bold text-slate-700 whitespace-nowrap">PKR {p.basePrice?.toLocaleString()}</td>
                                 <td className="text-right">
@@ -543,11 +597,21 @@ const NipponProductMaster: React.FC = () => {
             </div>
           </div>
 
+          {/* Add Set button always visible */}
+          <div className="flex justify-end">
+            <button
+              onClick={() => { setSetForm({ setNo: generateSetNo(), setName: '', setPrice: 0, components: [] }); setIsAddSetOpen(true); }}
+              className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest shadow-md flex items-center space-x-2 transition-all"
+            >
+              <Plus size={14}/><span>+ Add New Set</span>
+            </button>
+          </div>
+
           {setAnalysis.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center">
               <Layers size={48} className="mx-auto text-slate-200 mb-4"/>
-              <p className="text-slate-400 font-bold text-sm uppercase">No set products defined yet</p>
-              <p className="text-[10px] text-slate-300 mt-1">Add a product with unit=Set and define its components</p>
+              <p className="text-slate-400 font-bold text-sm uppercase">No sets defined yet</p>
+              <p className="text-[10px] text-slate-300 mt-1">Click "+ Add New Set" to create your first product set</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -633,6 +697,128 @@ const NipponProductMaster: React.FC = () => {
           )}
         </div>
       )}
+
+    {/* ── ADD SET MODAL ──────────────────────────────────────── */}
+    {isAddSetOpen && (
+      <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
+        <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
+          <div className="bg-amber-600 text-white px-7 py-5 rounded-t-2xl flex justify-between items-center">
+            <div>
+              <h3 className="text-lg font-black uppercase tracking-tight">Create Product Set</h3>
+              <p className="text-[10px] text-amber-100 mt-0.5 font-bold uppercase">Combine products into a named set</p>
+            </div>
+            <button onClick={() => setIsAddSetOpen(false)} className="hover:bg-white/10 p-2 rounded-lg"><X size={20}/></button>
+          </div>
+
+          <div className="p-6 space-y-5 overflow-y-auto flex-1">
+            {/* Set No + Name */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-slate-500">Set Number (auto)</label>
+                <input type="text" value={setForm.setNo}
+                  onChange={e => setSetForm({...setForm, setNo: e.target.value.toUpperCase()})}
+                  className="sap-input w-full font-mono font-black text-amber-700"
+                  placeholder="e.g. SET-001"/>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-slate-500">Set Price (PKR)</label>
+                <input type="number" value={setForm.setPrice || ''}
+                  onChange={e => setSetForm({...setForm, setPrice: Number(e.target.value)})}
+                  className="sap-input w-full font-black text-blue-700"
+                  placeholder="0"/>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase text-slate-500">Set Name *</label>
+              <input type="text" value={setForm.setName}
+                onChange={e => setSetForm({...setForm, setName: e.target.value})}
+                className="sap-input w-full font-bold uppercase"
+                placeholder="e.g. DOOR LOCK COMPLETE SET"/>
+            </div>
+
+            {/* Product search + add to set */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold uppercase text-slate-500">Add Components ({setForm.components.length} selected)</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={13}/>
+                <input type="text" placeholder="Search products to add..."
+                  value={setSearchTerm} onChange={e => setSetSearchTerm(e.target.value)}
+                  className="sap-input w-full pl-9 py-2 text-xs"/>
+              </div>
+              {setSearchTerm && (
+                <div className="border border-slate-200 rounded-xl max-h-40 overflow-y-auto bg-white shadow-lg">
+                  {products
+                    .filter(p => !p.isSet &&
+                      (p.description.toLowerCase().includes(setSearchTerm.toLowerCase()) ||
+                       (p.modelNo || '').toLowerCase().includes(setSearchTerm.toLowerCase())) &&
+                      !setForm.components.includes(p.id)
+                    )
+                    .slice(0, 8)
+                    .map(p => (
+                      <button key={p.id} onClick={() => {
+                        setSetForm(prev => ({...prev, components: [...prev.components, p.id]}));
+                        setSetSearchTerm('');
+                      }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-amber-50 transition-colors flex justify-between items-center border-b border-slate-50 last:border-0"
+                      >
+                        <div>
+                          <p className="text-xs font-bold text-slate-800 uppercase">{p.description}</p>
+                          <p className="text-[9px] text-slate-400">{p.modelNo} • {getBrandNick(p.brand || '-')} • PKR {p.basePrice?.toLocaleString()}</p>
+                        </div>
+                        <Plus size={14} className="text-amber-600 shrink-0 ml-2"/>
+                      </button>
+                    ))
+                  }
+                  {products.filter(p => !p.isSet && p.description.toLowerCase().includes(setSearchTerm.toLowerCase()) && !setForm.components.includes(p.id)).length === 0 && (
+                    <p className="text-center text-slate-400 text-xs py-3">No matching products</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Selected components */}
+            {setForm.components.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-slate-500">Selected Components</label>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {setForm.components.map((id, ci) => {
+                    const p = products.find(x => x.id === id);
+                    return (
+                      <div key={id} className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                        <div>
+                          <p className="text-xs font-bold text-slate-800 uppercase">{p?.description || id}</p>
+                          <p className="text-[9px] text-slate-500">{p?.modelNo} • PKR {p?.basePrice?.toLocaleString()}</p>
+                        </div>
+                        <button onClick={() => setSetForm(prev => ({...prev, components: prev.components.filter(c => c !== id)}))}
+                          className="text-rose-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50 ml-2 transition-colors">
+                          <X size={13}/>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                {setForm.setPrice === 0 && (
+                  <p className="text-[10px] text-slate-400">
+                    Suggested price: PKR {setForm.components.reduce((s, id) => {
+                      const p = products.find(x => x.id === id);
+                      return s + (p?.basePrice || 0);
+                    }, 0).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="px-6 py-4 bg-white border-t flex justify-end space-x-3 rounded-b-2xl">
+            <button onClick={() => setIsAddSetOpen(false)} className="sap-btn-ghost text-xs">Cancel</button>
+            <button onClick={handleSaveSet}
+              className="bg-amber-600 hover:bg-amber-700 text-white px-6 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest shadow-md transition-all flex items-center space-x-2">
+              <Layers size={14}/><span>Create Set</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
 
     <NipponProductForm 
         isOpen={isModalOpen}
