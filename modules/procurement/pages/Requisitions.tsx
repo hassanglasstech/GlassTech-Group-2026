@@ -284,7 +284,9 @@ const Requisitions: React.FC = () => {
       const poId = AppService.generateSequenceID('PO', company, allPOs);
       const newPO: PurchaseOrder = {
           id: poId, fromCompany: company, toVendor: vendor, date: new Date().toISOString().split('T')[0],
-          status: 'Sent', totalAmount: amount, category: category, projectId: project, items: items
+          status: 'Sent', totalAmount: amount, category: category, projectId: project, items: items,
+          reqId: sourcePRId, // Link PO back to originating REQ
+          matchStatus: 'Pending' as any,
       };
       ProductionService.savePurchaseOrders([...allPOs, newPO]);
       if (sourcePRId) {
