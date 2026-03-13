@@ -30,6 +30,9 @@ const NipponQuotationManager: React.FC = () => {
     lastSerial,
     handleAddSection,
     handleAddItem,
+    pendingSetSuggestion,
+    setPendingSetSuggestion,
+    addFullSet,
     updateItem,
     handleRemoveItem,
     handleDuplicateItem,
@@ -190,18 +193,49 @@ const NipponQuotationManager: React.FC = () => {
                   </thead>
                   <tbody className="divide-y text-xs font-medium">
                     {formData.items?.map((item, idx) => (
-                      <tr key={idx} className={item.isSection ? "bg-slate-100/80" : "hover:bg-slate-50"}>
-                        <td className="text-center text-slate-300 font-bold">{idx + 1}</td>
+                      <tr key={idx} className={
+                        (item as any).isSetHeader
+                          ? "bg-amber-50 border-l-4 border-amber-400"
+                          : (item as any).isSetMember
+                          ? "bg-amber-50/30 pl-4"
+                          : item.isSection
+                          ? "bg-slate-100/80"
+                          : "hover:bg-slate-50"
+                      }>
+                        <td className="text-center text-slate-300 font-bold">
+                          {(item as any).isSetHeader
+                            ? <span className="text-[9px] text-amber-400 font-black uppercase">SET</span>
+                            : (item.isSection && !(item as any).isSetHeader)
+                            ? ''
+                            : (() => {
+                                // Count only non-section, non-setHeader items before this index
+                                const serialNo = formData.items!.slice(0, idx).filter(
+                                  (i:any) => !i.isSection && !i.isSetHeader
+                                ).length + 1;
+                                return serialNo;
+                              })()
+                          }
+                        </td>
                         {item.isSection ? (
                           <td colSpan={7} className="py-2">
-                            <input 
-                              readOnly={isLocked} 
-                              type="text" 
-                              placeholder="Section Heading..." 
-                              className="w-full bg-transparent border-none outline-none font-black uppercase tracking-widest text-slate-700 italic placeholder:text-slate-300" 
-                              value={item.description} 
-                              onChange={e => updateItem(idx, 'description', e.target.value)} 
-                            />
+                            {(item as any).isSetHeader ? (
+                              <div className="flex items-center space-x-2">
+                                <span className="bg-amber-500 text-white text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest">SET</span>
+                                <span className="font-black uppercase tracking-widest text-amber-800 text-xs">{item.description}</span>
+                                {!isLocked && (
+                                  <button onClick={() => { const next = [...(formData.items||[])]; next.splice(idx,1); }} className="ml-auto text-[10px] text-rose-400 hover:text-rose-600 font-bold">Remove Set Header</button>
+                                )}
+                              </div>
+                            ) : (
+                              <input 
+                                readOnly={isLocked} 
+                                type="text" 
+                                placeholder="Section Heading..." 
+                                className="w-full bg-transparent border-none outline-none font-black uppercase tracking-widest text-slate-700 italic placeholder:text-slate-300" 
+                                value={item.description} 
+                                onChange={e => updateItem(idx, 'description', e.target.value)} 
+                              />
+                            )}
                           </td>
                         ) : (
                           <>
@@ -371,6 +405,85 @@ const NipponQuotationManager: React.FC = () => {
                 </div>
               </div>
             </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+      {/* ══════════════════════════════════════════════════════════
+           SET SUGGESTION MODAL — appears when set product selected
+      ══════════════════════════════════════════════════════════ */}
+      {pendingSetSuggestion && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-[500]">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in duration-200">
+            <div className="bg-amber-600 text-white px-7 py-5">
+              <h4 className="font-black uppercase tracking-tight text-base">Set Product Detected</h4>
+              <p className="text-[10px] text-amber-100 mt-0.5 font-bold uppercase">
+                {pendingSetSuggestion.setProduct.description}
+              </p>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-600 font-medium">This product is part of a set with {pendingSetSuggestion.remainingComponents.length} components:</p>
+              <div className="bg-slate-50 rounded-xl p-3 space-y-1.5 border border-slate-200">
+                {pendingSetSuggestion.remainingComponents.map((c:any, ci:number) => (
+                  <div key={ci} className="flex justify-between text-xs">
+                    <span className="font-bold text-slate-800 uppercase">{c.description}</span>
+                    <span className="text-slate-500 font-medium">{c.qtyPerSet} {c.unit}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-3 gap-3 pt-2">
+                <button
+                  onClick={() => setPendingSetSuggestion(null)}
+                  className="col-span-1 py-2.5 text-xs font-bold text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors uppercase"
+                >
+                  This Item Only
+                </button>
+                <button
+                  onClick={() => {
+                    // Add remaining components as individual lines after current
+                    const idx = pendingSetSuggestion.index;
+                    const comps = pendingSetSuggestion.remainingComponents;
+                    const allProds = products;
+                    const newLines = comps.map((c:any, ci:number) => {
+                      const matchProd = allProds.find((p:any) =>
+                        p.id === c.id || p.description.toUpperCase() === c.description.toUpperCase()
+                      );
+                      return {
+                        id: `SET-ADD-${Date.now()}-${ci}`,
+                        description: matchProd ? matchProd.description : c.description,
+                        locationCode: matchProd?.profileCode || '',
+                        glazingSpecs: matchProd?.brand || '',
+                        glassSize: c.unit || 'PCS',
+                        qty: c.qtyPerSet || 1,
+                        width: 0, height: 0, totalSqFt: 0,
+                        pricePerUnit: matchProd?.basePrice || 0,
+                        amount: (c.qtyPerSet || 1) * (matchProd?.basePrice || 0),
+                        isSetMember: true,
+                        setId: pendingSetSuggestion.setProduct.id,
+                      };
+                    });
+                    setFormData((prev:any) => {
+                      const next = [...(prev.items || [])];
+                      next.splice(idx + 1, 0, ...newLines);
+                      return { ...prev, items: next };
+                    });
+                    setPendingSetSuggestion(null);
+                  }}
+                  className="col-span-1 py-2.5 text-xs font-bold text-blue-700 border border-blue-200 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors uppercase"
+                >
+                  Add Other Items
+                </button>
+                <button
+                  onClick={() => addFullSet(pendingSetSuggestion.index, pendingSetSuggestion.setProduct, products)}
+                  className="col-span-1 py-2.5 text-xs font-bold text-white bg-amber-600 rounded-xl hover:bg-amber-700 transition-colors uppercase shadow-md"
+                >
+                  Add Full Set
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
