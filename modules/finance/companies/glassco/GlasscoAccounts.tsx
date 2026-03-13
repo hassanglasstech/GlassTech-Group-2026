@@ -14,7 +14,6 @@ import GLConfiguration from './components/GLConfiguration';
 import AgingReport from './components/AgingReport';
 import FinanceDashboardView from '../../components/FinanceDashboardView';
 import COAViewer from '../../components/COAViewer';
-import { GTK_COA, GLASSCO_COA } from '../../constants/coa';
 import { 
   Landmark, CreditCard, ListTree, BookOpen, BarChart4, 
   FilePieChart, Target, Wallet, RefreshCw, FileText, 
@@ -146,7 +145,7 @@ const GlasscoAccounts: React.FC = () => {
           {activeTab === 'payroll' && <PayrollManagement company={company} />}
           
           {/* Config */}
-          {activeTab === 'coa' && <COAViewer data={GLASSCO_COA} />}
+          {activeTab === 'coa' && <ChartOfAccounts company={company} />}
           {activeTab === 'cost_centers' && <CostCenterMaster company={company} />}
           {activeTab === 'gl_config' && <GLConfiguration company={company} />}
           {activeTab === 'recurring' && <RecurringExpenses company={company} />}
