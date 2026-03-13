@@ -16,7 +16,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   
   // Cross-Company Posting State
   const [selectedTargetCompany, setSelectedTargetCompany] = useState<Company>(company);
@@ -61,7 +61,6 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
   }, [selectedTargetCompany, isModalOpen]);
 
   const refreshData = async () => {
-    setIsLoading(true);
     const ledgerData = FinanceService.getLedger();
     const sorted = ledgerData.filter(t => t.company === company).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setTransactions(sorted);
@@ -154,7 +153,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
       }
   };
 
-  if (isLoading) return <div className="h-full flex items-center justify-center text-slate-400"><Loader2 className="animate-spin mr-2"/> Accessing Ledger DB...</div>;
+
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
