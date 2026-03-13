@@ -28,7 +28,7 @@ const NipponProductMaster: React.FC = () => {
   const [setForm, setSetForm] = useState({
     setNo: '', setName: '', setPrice: 0, components: [] as string[] // product ids
   });
-  const [setSearchTerm, setSetSearchTerm] = useState('');
+  const [compSearch, setCompSearch] = useState('');
   const [isPrintingCatalog, setIsPrintingCatalog] = useState(false);
 
   const jsonInputRef = useRef<HTMLInputElement>(null);
@@ -78,7 +78,7 @@ const NipponProductMaster: React.FC = () => {
     await refreshData();
     setIsAddSetOpen(false);
     setSetForm({ setNo: '', setName: '', setPrice: 0, components: [] });
-    setSetSearchTerm('');
+    setCompSearch('');
   };
 
   const refreshData = async () => {
@@ -742,22 +742,22 @@ const NipponProductMaster: React.FC = () => {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={13}/>
                 <input type="text" placeholder="Search products to add..."
-                  value={setSearchTerm} onChange={e => setSetSearchTerm(e.target.value)}
+                  value={compSearch} onChange={e => setCompSearch(e.target.value)}
                   className="sap-input w-full pl-9 py-2 text-xs"/>
               </div>
-              {setSearchTerm && (
+              {compSearch && (
                 <div className="border border-slate-200 rounded-xl max-h-40 overflow-y-auto bg-white shadow-lg">
                   {products
                     .filter(p => !p.isSet &&
-                      (p.description.toLowerCase().includes(setSearchTerm.toLowerCase()) ||
-                       (p.modelNo || '').toLowerCase().includes(setSearchTerm.toLowerCase())) &&
+                      (p.description.toLowerCase().includes(compSearch.toLowerCase()) ||
+                       (p.modelNo || '').toLowerCase().includes(compSearch.toLowerCase())) &&
                       !setForm.components.includes(p.id)
                     )
                     .slice(0, 8)
                     .map(p => (
                       <button key={p.id} onClick={() => {
                         setSetForm(prev => ({...prev, components: [...prev.components, p.id]}));
-                        setSetSearchTerm('');
+                        setCompSearch('');
                       }}
                         className="w-full text-left px-4 py-2.5 hover:bg-amber-50 transition-colors flex justify-between items-center border-b border-slate-50 last:border-0"
                       >
@@ -769,7 +769,7 @@ const NipponProductMaster: React.FC = () => {
                       </button>
                     ))
                   }
-                  {products.filter(p => !p.isSet && p.description.toLowerCase().includes(setSearchTerm.toLowerCase()) && !setForm.components.includes(p.id)).length === 0 && (
+                  {products.filter(p => !p.isSet && p.description.toLowerCase().includes(compSearch.toLowerCase()) && !setForm.components.includes(p.id)).length === 0 && (
                     <p className="text-center text-slate-400 text-xs py-3">No matching products</p>
                   )}
                 </div>
