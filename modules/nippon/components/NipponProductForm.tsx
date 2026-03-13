@@ -297,7 +297,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
       if (!force && duplicates.length > 0) { setShowDupWarning(true); return; }
       
       const newProduct: Product = {
-          id: editingProduct ? editingProduct.id : `NIP-${(formData.modelNo || Date.now()).toString().toUpperCase().replace(/[^A-Z0-9]/g,'-')}${formData.finishColor ? '-' + formData.finishColor.toUpperCase().replace(/[^A-Z0-9]/g,'-') : ''}${formData.direction ? '-' + formData.direction.toUpperCase().replace(/[^A-Z0-9]/g,'-') : ''}`,
+          id: editingProduct ? editingProduct.id : `NIP-${(formData.modelNo || Date.now()).toString().toUpperCase().replace(/[^A-Z0-9]/g,'-')}${formData.finishColor ? '-' + formData.finishColor.toUpperCase().replace(/[^A-Z0-9]/g,'-') : ''}${formData.direction ? '-' + formData.direction.toUpperCase().replace(/[^A-Z0-9]/g,'-') : ''}${formData.tongueLength ? '-' + formData.tongueLength.toString().toUpperCase().replace(/[^A-Z0-9]/g,'-') : ''}${formData.spindleLength ? '-' + formData.spindleLength.toString().toUpperCase().replace(/[^A-Z0-9]/g,'-') : ''}`,
           company: 'Nippon',
           category: formData.category,
           mainCategory: formData.mainCategory,
