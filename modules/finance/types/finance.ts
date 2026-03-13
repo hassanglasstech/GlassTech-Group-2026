@@ -13,7 +13,7 @@ export interface Account {
   type: 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense'; 
 }
 
-export type LedgerDocType = 'SA' | 'KR' | 'DR' | 'DZ' | 'CJ' | 'OB';
+export type LedgerDocType = 'SA' | 'KR' | 'DR' | 'DZ' | 'KZ' | 'CJ' | 'OB' | 'PV' | 'RV' | 'JV';
 
 export interface LedgerTransaction { 
   id: string; 
@@ -30,7 +30,8 @@ export interface LedgerTransaction {
     credit: number; 
     text?: string; 
     costCenterId?: string; 
-  }[]; 
+  }[];
+  reqId?: string; 
 }
 
 export interface CostCenter { 
