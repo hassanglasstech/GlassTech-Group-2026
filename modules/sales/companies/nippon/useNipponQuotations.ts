@@ -119,6 +119,60 @@ export const useNipponQuotations = () => {
       next[index] = item;
       return { ...prev, items: next };
     });
+    // ── Set suggestion: if product is part of a set, prompt user ──
+    if (prod.isSet && prod.setComponents && prod.setComponents.length > 0) {
+      setPendingSetSuggestion({
+        index,
+        setProduct: prod,
+        remainingComponents: prod.setComponents,
+      });
+    }
+  };
+
+  // ── Set suggestion state ───────────────────────────────────────────
+  const [pendingSetSuggestion, setPendingSetSuggestion] = React.useState<{
+    index: number;
+    setProduct: any;
+    remainingComponents: any[];
+  } | null>(null);
+
+  const addFullSet = (index: number, setProduct: any, allProducts: any[]) => {
+    // Find all products that belong to this set (by setId / profileCode match)
+    const setMembers = allProducts.filter(p =>
+      p.setId === setProduct.id || p.id === setProduct.id ||
+      (setProduct.setComponents || []).some((c: any) => c.id === p.id || c.description === p.description)
+    );
+    setFormData(prev => {
+      const newItems = [...(prev.items || [])];
+      const setHeading = {
+        id: `SET-HDR-${Date.now()}`,
+        description: `${setProduct.description} (SET)`,
+        isSection: true,
+        qty: 0, width: 0, height: 0, totalSqFt: 0,
+        pricePerUnit: 0, amount: 0,
+        locationCode: '', glazingSpecs: '', glassSize: '',
+        isSetHeader: true,
+        setId: setProduct.id,
+      };
+      // Replace current line with set header + members
+      const memberItems = setMembers.map((mp: any, mi: number) => ({
+        id: `SET-ITM-${Date.now()}-${mi}`,
+        description: mp.description,
+        locationCode: mp.profileCode || '',
+        glazingSpecs: mp.brand || '',
+        glassSize: mp.unit || 'PCS',
+        qty: 1,
+        width: 0, height: 0, totalSqFt: 0,
+        pricePerUnit: mp.basePrice || 0,
+        amount: mp.basePrice || 0,
+        attachedImage: mp.imageUrl,
+        setId: setProduct.id,
+        isSetMember: true,
+      }));
+      newItems.splice(index, 1, setHeading, ...memberItems);
+      return { ...prev, items: newItems };
+    });
+    setPendingSetSuggestion(null);
   };
 
   const selectProduct = (index: number, prod: any) => {
@@ -260,6 +314,9 @@ export const useNipponQuotations = () => {
     lastSerial,
     handleAddSection,
     handleAddItem,
+    pendingSetSuggestion,
+    setPendingSetSuggestion,
+    addFullSet,
     updateItem,
     handleRemoveItem,
     handleDuplicateItem,
