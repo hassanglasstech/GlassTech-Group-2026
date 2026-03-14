@@ -11,9 +11,11 @@ import { Company } from '@/modules/shared/constants';
 import { AppService } from '@/modules/shared/services/appService';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { SyncService } from '@/src/services/SyncService';
+import { getNetworkStatus, OfflineQueue } from '@/modules/shared/services/networkService';
 import { Toaster, toast } from 'sonner';
 import { useAuthStore, isOfficeHours, ROLE_DEFAULT_COMPANY, ROLE_MODULES } from '@/modules/auth/authStore';
 import { SyncService } from '@/src/services/SyncService';
+import { getNetworkStatus, OfflineQueue } from '@/modules/shared/services/networkService';
 import LoginPage from '@/modules/auth/LoginPage';
 
 // ── Lazy load modules ────────────────────────────────────────────────
@@ -315,6 +317,9 @@ const App: React.FC = () => {
                   ? <Loader2 size={18} className="animate-spin" />
                   : <Globe size={18} className={isOnline ? 'text-white' : 'text-slate-500'} />
                 }
+                {!isOnline && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-rose-500 rounded-full border border-[#354a5f]"/>
+                )}
               </button>
               <div className="relative hidden lg:block">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
