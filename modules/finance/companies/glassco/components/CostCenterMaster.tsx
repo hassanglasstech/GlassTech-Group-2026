@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Company, CostCenter } from '@/modules/shared/types';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { Plus, Search, Trash2, X, Target, Save, Info } from 'lucide-react';
@@ -19,7 +20,7 @@ const CostCenterMaster: React.FC<{ company: Company }> = ({ company }) => {
   };
 
   const handleSave = () => {
-    if (!formData.name || !formData.code) return alert("Code and Name are mandatory SAP protocols.");
+    if (!formData.name || !formData.code) return toast.error("Code and Name are mandatory SAP protocols.", { duration: 4000 });
     const newCC: CostCenter = { ...(formData as CostCenter), id: `${company}-CC-${formData.code}`, company };
     FinanceService.saveCostCenters([...FinanceService.getCostCenters(), newCC]);
     refreshData();
