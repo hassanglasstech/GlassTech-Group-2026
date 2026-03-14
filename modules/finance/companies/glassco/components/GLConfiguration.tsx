@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Company, GLConfiguration, Account } from '@/modules/shared/types';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { Save, Plus, Trash2, ArrowRight } from 'lucide-react';
@@ -20,7 +21,7 @@ const GLConfigurationPage: React.FC<{ company: Company }> = ({ company }) => {
 
   const handleSave = () => {
     if (!newConfig.subType || !newConfig.debitAccountId || !newConfig.creditAccountId) {
-      return alert("All fields are required.");
+      return toast.error("All fields are required.", { duration: 4000 });
     }
     const config: GLConfiguration = {
       id: `GLC-${Date.now()}`,
