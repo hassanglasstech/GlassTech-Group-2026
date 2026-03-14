@@ -11,10 +11,11 @@ import {
 import { useAppStore } from '../store/appStore';
 import { useAuthStore } from '@/modules/auth/authStore';
 import UserManager from '@/modules/auth/UserManager';
+import { ErrorLogViewer } from '@/modules/shared/components/ErrorBoundary';
 
 const AdminSecurity: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'command_center' | 'admin' | 'users'>('command_center');
+  const [activeTab, setActiveTab] = useState<'command_center' | 'admin' | 'users' | 'error_logs'>('command_center');
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [filterModule, setFilterModule] = useState<string>('All');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -105,7 +106,8 @@ const AdminSecurity: React.FC = () => {
           {[
             { id: 'command_center', label: 'Live Activity Feed', icon: Activity },
             { id: 'admin', label: 'Basis (DB Management)', icon: Database },
-            { id: 'users', label: 'User Roles (SU01)', icon: Users },
+            { id: 'users',      label: 'User Roles (SU01)',   icon: Users },
+            { id: 'error_logs', label: 'Error Logs',           icon: AlertTriangle },
           ].map(tab => (
             <button
               key={tab.id}
@@ -211,6 +213,12 @@ const AdminSecurity: React.FC = () => {
 
         {activeTab === 'users' && (
           <UserManager />
+        )}
+
+        {activeTab === 'error_logs' && (
+          <div className="p-6">
+            <ErrorLogViewer />
+          </div>
         )}
       </div>
     </div>
