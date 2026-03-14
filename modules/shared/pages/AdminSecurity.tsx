@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 
 import { useAppStore } from '../store/appStore';
+import { useAuthStore } from '@/modules/auth/authStore';
+import UserManager from '@/modules/auth/UserManager';
 
 const AdminSecurity: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
