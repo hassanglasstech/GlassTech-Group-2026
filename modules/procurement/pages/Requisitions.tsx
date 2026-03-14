@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Company } from '../../shared/types/core';
+import { toast } from 'sonner';
 import { Requisition, RequisitionItem, StoreItem, Product, PurchaseOrder } from '../types/inventory';
 import { CostCenter } from '../../finance/types/finance';
 import { Vendor } from '../../sales/types/crm';
@@ -79,8 +80,7 @@ const Requisitions: React.FC = () => {
     overtimeHours: 0, overtimeProject: '', overtimeEmployees: [] as string[],
     employeeName: '', siteName: '', from: '', to: '', amount: 0,
     vehicleType: '', vehicleNo: '', driver: '', purpose: '',
-    projectOrSiteName: '', qty: 0, description: '', type: '',
-    requiresCashPayment: false, glAccountHint: ''
+    projectOrSiteName: '', qty: 0, description: '', type: ''
   });
 
   const [formItems, setFormItems] = useState<RequisitionItem[]>([
@@ -136,20 +136,20 @@ const Requisitions: React.FC = () => {
 
   const handlePostPR = () => {
     if (formHeader.category !== 'HR') {
-        if (!formHeader.requisitioner || !formHeader.headerText) return alert("SAP Protocol: Requisitioner and Header Text are mandatory.");
+        if (!formHeader.requisitioner || !formHeader.headerText) return toast.error("SAP Protocol: Requisitioner and Header Text are mandatory.", { duration: 4000 });
     }
     
     const isMaterial = ['Material / Inventory', 'Maintenance / R&M', 'General Expense', 'Consumables'].includes(formHeader.subCategory);
     
     if (isMaterial) {
-        if (formItems.some(i => !i.materialDesc || !i.costCenter)) return alert("Validation Error: Item Description and Cost Center are required for all line items.");
+        if (formItems.some(i => !i.materialDesc || !i.costCenter)) return toast.error("Validation Error: Item Description and Cost Center are required for all line items.", { duration: 4000 });
     } else if (formHeader.subCategory === 'Overtime Approval') {
-        if (formHeader.overtimeEmployees.length === 0) return alert("Select at least one employee.");
-        if (!formHeader.overtimeHours) return alert("Enter overtime hours.");
+        if (formHeader.overtimeEmployees.length === 0) return toast.error("Select at least one employee.", { duration: 4000 });
+        if (!formHeader.overtimeHours) return toast.error("Enter overtime hours.", { duration: 4000 });
     } else if (formHeader.category === 'HR') {
-        if (!formHeader.employeeId) return alert("Select an employee.");
-        if (formHeader.subCategory === 'Loan Request' && !formHeader.loanAmount) return alert("Enter loan amount.");
-        if (formHeader.subCategory === 'Waive Absent' && !formHeader.absentDate) return alert("Select date.");
+        if (!formHeader.employeeId) return toast.error("Select an employee.", { duration: 4000 });
+        if (formHeader.subCategory === 'Loan Request' && !formHeader.loanAmount) return toast.error("Enter loan amount.", { duration: 4000 });
+        if (formHeader.subCategory === 'Waive Absent' && !formHeader.absentDate) return toast.error("Select date.", { duration: 4000 });
     }
 
     let totalValue = 0;
@@ -203,16 +203,13 @@ const Requisitions: React.FC = () => {
       projectOrSiteName: formHeader.projectOrSiteName,
       qty: formHeader.qty,
       description: formHeader.description,
-      type: formHeader.type,
-      requiresCashPayment: formHeader.requiresCashPayment,
-      glAccountHint: formHeader.glAccountHint,
-      paymentStatus: formHeader.requiresCashPayment ? 'Pending' : 'Not Required',
+      type: formHeader.type
     };
     InventoryService.saveRequisitions([...allReqs, newPR]);
     refreshData();
     setIsModalOpen(false);
     resetForm();
-    alert(`Success: Requisition ${newPR.id} Created.`);
+    toast.success(`Success: Requisition ${newPR.id} Created.`, { duration: 3000 });
   };
 
   const resetForm = () => {
@@ -284,9 +281,7 @@ const Requisitions: React.FC = () => {
       const poId = AppService.generateSequenceID('PO', company, allPOs);
       const newPO: PurchaseOrder = {
           id: poId, fromCompany: company, toVendor: vendor, date: new Date().toISOString().split('T')[0],
-          status: 'Sent', totalAmount: amount, category: category, projectId: project, items: items,
-          reqId: sourcePRId, // Link PO back to originating REQ
-          matchStatus: 'Pending' as any,
+          status: 'Sent', totalAmount: amount, category: category, projectId: project, items: items
       };
       ProductionService.savePurchaseOrders([...allPOs, newPO]);
       if (sourcePRId) {
@@ -299,21 +294,21 @@ const Requisitions: React.FC = () => {
   };
 
   const handleConvertToPO = () => {
-      if (!selectedPrForConversion || !selectedVendorForPO) return alert("Select a Vendor to proceed.");
+      if (!selectedPrForConversion || !selectedVendorForPO) return toast.error("Select a Vendor to proceed.", { duration: 4000 });
       const itemsPayload = selectedPrForConversion.items.map(i => ({ description: i.materialDesc, qty: i.qty, rate: i.estimatedRate, costCenter: i.costCenter }));
       const poId = createAndPostPO(selectedVendorForPO, selectedProjectForPO, selectedCostHead, selectedPrForConversion.totalValue, itemsPayload, selectedPrForConversion.id);
       setIsConvertModalOpen(false);
-      alert(`Success: Purchase Order ${poId} generated.`);
+      toast.success(`Success: Purchase Order ${poId} generated.`, { duration: 3000 });
   };
 
   const handleCreateDirectPO = () => {
-      if (!selectedVendorForPO) return alert("Select a Vendor.");
+      if (!selectedVendorForPO) return toast.error("Select a Vendor.", { duration: 4000 });
       const totalAmount = directPoItems.reduce((s, i) => s + (i.qty * i.rate), 0);
-      if (totalAmount <= 0) return alert("Total amount cannot be zero.");
+      if (totalAmount <= 0) return toast.error("Total amount cannot be zero.", { duration: 4000 });
       const poId = createAndPostPO(selectedVendorForPO, selectedProjectForPO, selectedCostHead, totalAmount, directPoItems.map(i => ({ description: i.desc, qty: i.qty, rate: i.rate })));
       setIsDirectPOOpen(false);
       setDirectPoItems([{ desc: '', qty: 1, rate: 0, amount: 0 }]);
-      alert(`Success: Direct PO ${poId} Created.`);
+      toast.success(`Success: Direct PO ${poId} Created.`, { duration: 3000 });
   };
 
   const updateDirectItem = (idx: number, field: string, val: any) => {
@@ -329,7 +324,7 @@ const Requisitions: React.FC = () => {
       setSelectedRequisitions(selectedRequisitions.filter(item => item !== id));
     } else {
       if (selectedRequisitions.length >= 4) {
-        alert("You can select up to 4 requisitions for printing on one page.");
+        toast.error("You can select up to 4 requisitions for printing on one page.", { duration: 4000 });
         return;
       }
       setSelectedRequisitions([...selectedRequisitions, id]);
@@ -337,7 +332,7 @@ const Requisitions: React.FC = () => {
   };
 
   const handlePrint = () => {
-    if (selectedRequisitions.length === 0) return alert("Select at least one requisition to print.");
+    if (selectedRequisitions.length === 0) return toast.error("Select at least one requisition to print.", { duration: 4000 });
     setShowPrintView(true);
     setTimeout(() => {
       window.print();
@@ -414,11 +409,6 @@ const Requisitions: React.FC = () => {
                         <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${r.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : r.status === 'Rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
                           {r.status}
                         </span>
-                        {r.requiresCashPayment && r.status === 'Approved' && (
-                          <span className={`ml-1 px-2 py-0.5 rounded text-[9px] font-black uppercase ${r.paymentStatus === 'Paid' ? 'bg-blue-100 text-blue-700' : r.paymentStatus === 'Partial' ? 'bg-purple-100 text-purple-700' : 'bg-rose-100 text-rose-700'}`}>
-                            {r.paymentStatus === 'Paid' ? '✓ Paid' : r.paymentStatus === 'Partial' ? 'Partial' : '⚠ Awaiting Payment'}
-                          </span>
-                        )}
                       </td>
                       <td className="px-6 py-3 text-right space-x-2" onClick={e => e.stopPropagation()}>
                         {r.status === 'Pending' && (
@@ -574,38 +564,6 @@ const Requisitions: React.FC = () => {
                     )}
                     <div className="col-span-1 space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Req. Date</label><input type="date" className="sap-input w-full font-bold" value={formHeader.date} onChange={e => setFormHeader({...formHeader, date: e.target.value})} /></div>
                  </div>
-                 {/* Financial Impact Toggle */}
-                 {formHeader.category !== 'HR' && (
-                   <div className="mt-3 p-4 rounded-2xl border border-slate-200 bg-white">
-                     <div className="flex items-center justify-between">
-                       <div>
-                         <p className="text-xs font-black uppercase text-slate-700">Requires Cash / Bank Payment?</p>
-                         <p className="text-[10px] text-slate-400 mt-0.5">Enable if this REQ needs a payment voucher from Finance</p>
-                       </div>
-                       <button
-                         type="button"
-                         onClick={() => setFormHeader({...formHeader, requiresCashPayment: !formHeader.requiresCashPayment})}
-                         className={`relative w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none ${formHeader.requiresCashPayment ? 'bg-emerald-500' : 'bg-slate-300'}`}
-                       >
-                         <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${formHeader.requiresCashPayment ? 'translate-x-6' : 'translate-x-0'}`}/>
-                       </button>
-                     </div>
-                     {formHeader.requiresCashPayment && (
-                       <div className="mt-3 grid grid-cols-2 gap-3">
-                         <div className="space-y-1">
-                           <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Suggested GL Account (Optional)</label>
-                           <input type="text" placeholder="e.g. 53211 — Office Supplies" className="sap-input w-full text-xs font-bold uppercase"
-                             value={formHeader.glAccountHint} onChange={e => setFormHeader({...formHeader, glAccountHint: e.target.value})} />
-                         </div>
-                         <div className="flex items-end pb-1">
-                           <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-[10px] text-amber-800 font-bold">
-                             ⚡ Finance will see this in their Payment Queue
-                           </div>
-                         </div>
-                       </div>
-                     )}
-                   </div>
-                 )}
                  {['Material / Inventory', 'Maintenance / R&M', 'General Expense'].includes(formHeader.subCategory) ? (
                      <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
                         <div className="p-4 bg-slate-50 border-b flex justify-between items-center"><h4 className="font-black text-slate-700 uppercase text-xs">Item Overview</h4><button onClick={addItemRow} className="text-blue-600 font-bold text-xs hover:underline">+ Add Item</button></div>
