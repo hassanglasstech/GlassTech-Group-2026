@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Project, Client, LedgerTransaction } from '../../shared/types';
 import { ProjectService } from '../services/projectService';
 import { FinanceService } from '../../finance/services/financeService';
@@ -34,11 +35,11 @@ const ProjectPortfolio: React.FC<ProjectPortfolioProps> = ({ projects, clients, 
     }, [projects]);
 
     const handleCreateProject = () => {
-        if(!newProjectForm.title) return alert("Project Title is required.");
+        if(!newProjectForm.title) return toast.error("Project Title is required.", { duration: 4000 });
         
         // Resolve Client from Search
         const matchedClient = clients.find(c => c.name.toLowerCase() === clientSearch.toLowerCase());
-        if (!matchedClient) return alert("Invalid Client: Please select a registered client from the list.");
+        if (!matchedClient) return toast.error("Invalid Client: Please select a registered client from the list.", { duration: 4000 });
         
         const totalBudget = (Number(newProjectForm.glassValue) || 0) + (Number(newProjectForm.aluminiumValue) || 0) + (Number(newProjectForm.hardwareValue) || 0) + (Number(newProjectForm.installationValue) || 0) + (Number(newProjectForm.consumablesValue) || 0);
         // Use user input for Final Value, otherwise default to budget sum
