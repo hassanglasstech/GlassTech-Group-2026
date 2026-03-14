@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Company, RecurringExpense, Account, CostCenter, LedgerTransaction } from '../../shared/types';
 import { FinanceService } from '../services/financeService';
 import { Plus, Search, RefreshCw, Trash2, X, Zap, Save, CheckCircle2 } from 'lucide-react';
@@ -23,7 +24,7 @@ const RecurringExpenses: React.FC<{ company: Company }> = ({ company }) => {
   };
 
   const postRecurringVoucher = (template: RecurringExpense) => {
-    if (template.lastPostedMonth === currentMonth) return alert("Already posted for this month.");
+    if (template.lastPostedMonth === currentMonth) return toast.error("Already posted for this month.", { duration: 4000 });
     const txId = `AUT-${Date.now().toString().slice(-6)}`;
     const tx: LedgerTransaction = {
       id: txId, company, docType: 'SA', docDate: new Date().toISOString().split('T')[0],
@@ -38,7 +39,7 @@ const RecurringExpenses: React.FC<{ company: Company }> = ({ company }) => {
     const updated = FinanceService.getRecurringExpenses().map(t => t.id === template.id ? { ...t, lastPostedMonth: currentMonth } : t);
     FinanceService.saveRecurringExpenses(updated);
     refreshData();
-    alert(`Posted: Document ${txId}`);
+    toast.success(`Posted: Document ${txId}`, { duration: 3000 });
   };
 
   return (
