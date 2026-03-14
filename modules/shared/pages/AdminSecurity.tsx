@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Company, ActivityLog } from '../types';
 import { AppService } from '../services/appService';
 import { 
@@ -13,6 +14,7 @@ import { useAuthStore } from '@/modules/auth/authStore';
 import UserManager from '@/modules/auth/UserManager';
 import { ErrorLogViewer } from '@/modules/shared/components/ErrorBoundary';
 import { getStorageHealth } from '@/modules/shared/services/utils';
+import { getNetworkStatus, OfflineQueue } from '@/modules/shared/services/networkService';
 
 const AdminSecurity: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
@@ -39,7 +41,7 @@ const AdminSecurity: React.FC = () => {
     reader.onload = (evt) => {
       const content = evt.target?.result as string;
       if (AppService.importDatabaseFromFile(content)) {
-        alert("System Restored Successfully. Application will reload.");
+        toast.success("System Restored Successfully. Application will reload.", { duration: 3000 });
         window.location.reload();
       }
     };
@@ -49,7 +51,7 @@ const AdminSecurity: React.FC = () => {
   const handleModuleReset = async (moduleName: string) => {
       if (confirm(`WARNING: Are you sure you want to delete ALL ${moduleName} data for ${company}?\n\nThis action is specific to ${company} and cannot be undone.`)) {
           await AppService.clearModuleData(moduleName as any, company);
-          alert(`${moduleName} data for ${company} has been wiped successfully.`);
+          toast.error(`${moduleName} data for ${company} has been wiped successfully.`, { duration: 4000 });
           window.location.reload();
       }
   };
@@ -65,7 +67,7 @@ const AdminSecurity: React.FC = () => {
       const year = new Date().getFullYear() - 1; // Archive last year
       if (confirm(`Archive data from ${year} and earlier?\n\nThis will move old transactions to the Archive Store to improve performance.`)) {
           const count = await AppService.archiveYearData(year);
-          alert(`Archived ${count} records successfully.`);
+          toast.error(`Archived ${count} records successfully.`, { duration: 4000 });
           refreshLogs();
       }
   };
@@ -128,6 +130,27 @@ const AdminSecurity: React.FC = () => {
         {activeTab === 'command_center' && (
             <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {/* Network Status */}
+              {(() => {
+                const net = getNetworkStatus();
+                const queued = net.queuedWrites;
+                return (
+                  <div className={`rounded-2xl border p-5 ${!net.isOnline ? 'bg-rose-50 border-rose-200' : queued > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Network</p>
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${net.isOnline ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                        {net.isOnline ? '● Online' : '○ Offline'}
+                      </span>
+                    </div>
+                    <p className="text-2xl font-black text-slate-800">{queued}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Queued writes pending sync</p>
+                    {net.connectionType !== 'unknown' && (
+                      <p className="text-[9px] text-slate-300 mt-1 uppercase font-bold">{net.connectionType}</p>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Storage Health */}
               {(() => {
                 const health = getStorageHealth();
