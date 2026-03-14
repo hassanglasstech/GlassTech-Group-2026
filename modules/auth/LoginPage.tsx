@@ -137,20 +137,15 @@ const LoginPage: React.FC = () => {
       return;
     }
 
-    // 3. Send OTP to their email
-    const { error: otpErr } = await supabase.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: false },
-    });
-
-    if (otpErr) {
-      setError('Could not send OTP. Try again.');
-      setBusy(false);
-      return;
+    // Skip OTP — Google auth is sufficient verification
+    // Go directly to device setup
+    if (!hasDeviceRegistered() && !hasRememberToken()) {
+      setStep('device_choice');
+      sessionStorage.setItem('_pending_profile', JSON.stringify(profile));
+    } else {
+      setStep('biometric');
+      sessionStorage.setItem('_pending_profile', JSON.stringify(profile));
     }
-
-    setPendingEmail(email);
-    setStep('otp');
     setBusy(false);
   };
 
