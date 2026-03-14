@@ -269,12 +269,12 @@ const App: React.FC = () => {
     }
   }, [user]);
 
-  // ── Not logged in → Show LoginPage ──────────────────────────────────
-  if (!user) return <LoginPage />;
-
   return (
     <HashRouter>
       <Toaster position="top-right" richColors />
+      {!user ? (
+        <LoginPage />
+      ) : (
       <div className="flex h-screen bg-[#eff4f9] font-['Inter'] overflow-hidden">
         <Sidebar isMobile={isMobile} />
         <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
@@ -367,6 +367,7 @@ const App: React.FC = () => {
         </main>
         <BottomNav allowedModules={user?.allowedModules?.length ? user.allowedModules : null} />
       </div>
+      )}
     </HashRouter>
   );
 };
