@@ -1,14 +1,16 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { toast } from 'sonner';
 import { Product, StoreItem } from '@/modules/shared/types';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { getBrandNick } from '@/modules/shared/utils/brandUtils';
 import { 
-  Plus, Search, Edit2, Trash2, Package, Filter, Download, Box, X,
-  FileJson, FileSpreadsheet, FileUp, UploadCloud, LayoutGrid, List, Printer, Layers, AlertCircle, CheckCircle2, ChevronDown
+  Plus, Search, Edit2, Trash2, Package, Filter, Download, Box, 
+  FileJson, FileSpreadsheet, FileUp, UploadCloud, LayoutGrid, List, Printer
 } from 'lucide-react';
 import NipponProductForm from '@/modules/nippon/components/NipponProductForm';
+import NipponSmartImporter from './components/NipponSmartImporter';
 import { NipponCatalogPrint } from '@/modules/nippon/prints/NipponCatalogPrint';
 import * as XLSX from 'xlsx';
 
@@ -21,14 +23,7 @@ const NipponProductMaster: React.FC = () => {
   const [catFilter, setCatFilter] = useState('All');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'catalog'>('table');
-  const [activeTab, setActiveTab] = useState<'list' | 'sets'>('list');
-  const [setDetailProduct, setSetDetailProduct] = useState<Product | null>(null);
-  const [hoveredSetId, setHoveredSetId] = useState<string | null>(null);
-  const [isAddSetOpen, setIsAddSetOpen] = useState(false);
-  const [setForm, setSetForm] = useState({
-    setNo: '', setName: '', setPrice: 0, components: [] as string[] // product ids
-  });
-  const [compSearch, setCompSearch] = useState('');
+  const [activeTab, setActiveTab] = useState<'list' | 'import'>('list');
   const [isPrintingCatalog, setIsPrintingCatalog] = useState(false);
 
   const jsonInputRef = useRef<HTMLInputElement>(null);
@@ -37,49 +32,6 @@ const NipponProductMaster: React.FC = () => {
   useEffect(() => {
     refreshData();
   }, []);
-
-  // ── Set system helpers ───────────────────────────────────────────────
-  const generateSetNo = () => {
-    const existing = products.filter(p => p.isSet);
-    const nums = existing.map(p => {
-      const m = (p.profileCode || '').match(/SET-(\d+)/);
-      return m ? parseInt(m[1]) : 0;
-    });
-    const next = nums.length > 0 ? Math.max(...nums) + 1 : 1;
-    return 'SET-' + String(next).padStart(3, '0');
-  };
-
-  const handleSaveSet = async () => {
-    if (!setForm.setName) return alert('Set name required.');
-    if (setForm.components.length < 2) return alert('Add at least 2 components.');
-    const setNo = setForm.setNo || generateSetNo();
-    const comps = setForm.components.map(id => {
-      const p = products.find(x => x.id === id);
-      return { id, description: p?.description || id, unit: p?.unit || 'PCS', qtyPerSet: 1 };
-    });
-    const setProduct: any = {
-      id: 'NIP-' + setNo,
-      company: 'Nippon',
-      category: 'Hardware',
-      description: setForm.setName.toUpperCase(),
-      profileCode: setNo,
-      modelNo: setNo,
-      unit: 'Set',
-      basePrice: setForm.setPrice,
-      costPrice: setForm.setPrice,
-      variants: [],
-      isSet: true,
-      setComponents: comps,
-      brand: comps[0] ? (products.find(p => p.id === comps[0].id)?.brand || '') : '',
-      technicalSpecs: { Components: String(comps.length) },
-    };
-    const current = await AsyncSalesService.getProducts();
-    await AsyncSalesService.saveProducts([...current, setProduct]);
-    await refreshData();
-    setIsAddSetOpen(false);
-    setSetForm({ setNo: '', setName: '', setPrice: 0, components: [] });
-    setCompSearch('');
-  };
 
   const refreshData = async () => {
     const allProds = (await AsyncSalesService.getProducts()).filter(p => p.company === company);
@@ -205,9 +157,9 @@ const NipponProductMaster: React.FC = () => {
         
         await AsyncSalesService.saveProducts([...otherProds, ...importedProds]);
         await refreshData();
-        alert(`Imported ${importedProds.length} products from JSON.`);
+        toast.error(`Imported ${importedProds.length} products from JSON.`, { duration: 4000 });
       } catch (err) {
-        alert("Error importing JSON. Ensure file is a valid Nippon product export.");
+        toast.error("Error importing JSON. Ensure file is a valid Nippon product export.", { duration: 4000 });
       }
     };
     reader.readAsText(file);
@@ -273,9 +225,9 @@ const NipponProductMaster: React.FC = () => {
         const otherProds = (await AsyncSalesService.getProducts()).filter(p => p.company !== company);
         await AsyncSalesService.saveProducts([...otherProds, ...newProducts]);
         await refreshData();
-        alert(`Loaded ${newProducts.length} items from Excel.`);
+        toast.error(`Loaded ${newProducts.length} items from Excel.`, { duration: 4000 });
       } catch (err) {
-        alert("Excel Import Failed. Ensure column names match the template headers.");
+        toast.error("Excel Import Failed. Ensure column names match the template headers.", { duration: 4000 });
       }
     };
     reader.readAsBinaryString(file);
@@ -301,31 +253,6 @@ const NipponProductMaster: React.FC = () => {
       .sort((a, b) => a.description.localeCompare(b.description));
   }, [products, searchTerm, catFilter]);
 
-  // ── Set Inventory Analysis ─────────────────────────────────────────
-  const setAnalysis = useMemo(() => {
-    const setProducts = products.filter(p => p.isSet && p.setComponents && p.setComponents.length > 0);
-    return setProducts.map(setP => {
-      const storeItem = storeItems.find((s:any) => s.id === setP.id || s.name === setP.description);
-      const qtyInStock = (storeItem as any)?.unrestrictedQty || (storeItem as any)?.quantity || 0;
-      const componentAnalysis = (setP.setComponents || []).map((comp:any) => {
-        const compProduct = products.find(p =>
-          p.id === comp.id || p.description.toUpperCase() === comp.description.toUpperCase()
-        );
-        const compStore = compProduct ? storeItems.find((s:any) => s.id === compProduct.id || s.name === compProduct.description) : null;
-        const compQty = (compStore as any)?.unrestrictedQty || (compStore as any)?.quantity || 0;
-        const setsCanMake = comp.qtyPerSet > 0 ? Math.floor(compQty / comp.qtyPerSet) : 0;
-        return { ...comp, currentQty: compQty, setsCanMake, isMissing: compQty === 0, isLow: compQty > 0 && setsCanMake < 3 };
-      });
-      const completeSets = componentAnalysis.length > 0 ? Math.min(...componentAnalysis.map((c:any) => c.setsCanMake)) : qtyInStock;
-      const bottleneck = componentAnalysis.find((c:any) => c.setsCanMake === completeSets && completeSets < 5);
-      return {
-        product: setP, storeQty: qtyInStock, completeSets,
-        isComplete: completeSets > 0, bottleneck, componentAnalysis,
-        hasIssue: completeSets < 3 || componentAnalysis.some((c:any) => c.isLow)
-      };
-    });
-  }, [products, storeItems]);
-
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* TABS */}
@@ -336,21 +263,20 @@ const NipponProductMaster: React.FC = () => {
         >
           Material Registry
         </button>
-        <button
-          onClick={() => setActiveTab('sets')}
-          className={`px-6 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center space-x-1.5 ${activeTab === 'sets' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+        <button 
+          onClick={() => setActiveTab('import')}
+          className={`px-6 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${activeTab === 'import' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
         >
-          <Layers size={12}/>
-          <span>Set Inventory</span>
-          {setAnalysis.filter(s => s.hasIssue).length > 0 && (
-            <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full ml-1">
-              {setAnalysis.filter(s => s.hasIssue).length}
-            </span>
-          )}
+          Smart Import
         </button>
       </div>
 
-      {activeTab === 'list' && (
+      {activeTab === 'import' ? (
+        <NipponSmartImporter onComplete={() => {
+          setActiveTab('list');
+          refreshData();
+        }} />
+      ) : (
         <>
           {/* CATALOG PRINT VIEW */}
       {isPrintingCatalog && (
@@ -439,17 +365,18 @@ const NipponProductMaster: React.FC = () => {
               <table className="w-full text-left sap-table">
                   <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400 tracking-widest">
                     <tr>
-                        <th className="px-3 py-4 w-24">ID</th>
-                        <th className="w-12">Img</th>
+                        <th className="px-6 py-4">Internal ID</th>
+                        <th>Image</th>
                         <th>System</th>
-                        <th className="w-24">Model</th>
-                        <th className="min-w-[180px]">Description</th>
-                        <th className="w-12 text-center">Brand</th>
-                        <th className="w-20">Color</th>
+                        <th>Model No</th>
+                        <th>Description</th>
+                        <th>Brand</th>
+                        <th>Color</th>
                         <th>Material</th>
                         <th>Dir</th>
-                        <th className="w-28">Size / Spindle</th>
-                        <th className="w-20">Cat</th>
+                        <th>Size</th>
+                        <th>Spindle</th>
+                        <th>Category</th>
                         <th className="text-right">Unit Price</th>
                         <th className="text-right">Stock</th>
                         <th className="text-right pr-6">Action</th>
@@ -460,7 +387,7 @@ const NipponProductMaster: React.FC = () => {
                         const stock = getStockLevel(p.id);
                         return (
                             <tr key={p.id} className="hover:bg-slate-50 transition-colors text-xs group">
-                                <td className="px-3 py-3 font-mono text-[10px] font-bold text-slate-400 uppercase">{p.profileCode || '-'}</td>
+                                <td className="px-6 py-3 font-mono font-bold text-slate-400 uppercase">{p.profileCode || '-'}</td>
                                 <td className="py-3">
                                     <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center">
                                         {p.imageUrl ? (
@@ -488,19 +415,12 @@ const NipponProductMaster: React.FC = () => {
                                         {p.subCategory && <span className="text-[9px] text-slate-400 font-medium">TYPE: {p.subCategory}</span>}
                                     </div>
                                 </td>
-                                <td className="text-center">
-                                    <span className="bg-slate-100 text-slate-600 text-[9px] font-black px-1.5 py-0.5 rounded uppercase whitespace-nowrap" title={p.brand || ''}>
-                                        {getBrandNick(p.brand || '-')}
-                                    </span>
-                                </td>
+                                <td className="font-bold text-slate-500 text-[10px] uppercase">{getBrandNick(p.brand || '-')}</td>
                                 <td className="font-medium text-slate-500 text-[10px] uppercase">{p.finishColor || '-'}</td>
                                 <td className="font-medium text-slate-500 text-[10px] uppercase">{p.material || '-'}</td>
                                 <td className="font-medium text-slate-500 text-[10px] uppercase">{p.direction || '-'}</td>
-                                <td className="text-[9px] text-slate-500 font-medium uppercase">
-                                    {p.tongueLength || p.thickness ? <span className="block">{p.tongueLength || p.thickness}</span> : null}
-                                    {p.spindleLength ? <span className="block text-slate-400">{p.spindleLength}</span> : null}
-                                    {!p.tongueLength && !p.thickness && !p.spindleLength ? '-' : null}
-                                </td>
+                                <td className="font-medium text-slate-500 text-[10px] uppercase">{p.tongueLength || p.thickness || '-'}</td>
+                                <td className="font-medium text-slate-500 text-[10px] uppercase">{p.spindleLength || '-'}</td>
                                 <td className="font-bold text-slate-500 text-[10px] uppercase"><span className="bg-slate-100 px-2 py-0.5 rounded border">{p.category}</span></td>
                                 <td className="text-right font-bold text-slate-700 whitespace-nowrap">PKR {p.basePrice?.toLocaleString()}</td>
                                 <td className="text-right">
@@ -574,255 +494,6 @@ const NipponProductMaster: React.FC = () => {
           </div>
         )}
       </>
-    )}
-
-
-      {/* ═══════════════════════════════════════════════════════════
-           SET INVENTORY TAB
-      ═══════════════════════════════════════════════════════════ */}
-      {activeTab === 'sets' && (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Set Types</p>
-              <p className="text-3xl font-black text-slate-800 mt-1">{setAnalysis.length}</p>
-            </div>
-            <div className={`rounded-2xl border shadow-sm p-5 ${setAnalysis.filter(s=>s.isComplete).length > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'}`}>
-              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Complete Sets Available</p>
-              <p className="text-3xl font-black text-emerald-600 mt-1">{setAnalysis.filter(s=>s.isComplete).length}</p>
-            </div>
-            <div className={`rounded-2xl border shadow-sm p-5 ${setAnalysis.filter(s=>!s.isComplete || s.hasIssue).length > 0 ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200'}`}>
-              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Incomplete / At Risk</p>
-              <p className="text-3xl font-black text-rose-600 mt-1">{setAnalysis.filter(s=>!s.isComplete || s.hasIssue).length}</p>
-            </div>
-          </div>
-
-          {/* Add Set button always visible */}
-          <div className="flex justify-end">
-            <button
-              onClick={() => { setSetForm({ setNo: generateSetNo(), setName: '', setPrice: 0, components: [] }); setIsAddSetOpen(true); }}
-              className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest shadow-md flex items-center space-x-2 transition-all"
-            >
-              <Plus size={14}/><span>+ Add New Set</span>
-            </button>
-          </div>
-
-          {setAnalysis.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center">
-              <Layers size={48} className="mx-auto text-slate-200 mb-4"/>
-              <p className="text-slate-400 font-bold text-sm uppercase">No sets defined yet</p>
-              <p className="text-[10px] text-slate-300 mt-1">Click "+ Add New Set" to create your first product set</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {setAnalysis.map(sa => (
-                <div key={sa.product.id}
-                  className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${!sa.isComplete ? 'border-rose-200' : sa.hasIssue ? 'border-amber-200' : 'border-emerald-200'}`}
-                >
-                  <div className={`px-6 py-4 flex items-center justify-between ${!sa.isComplete ? 'bg-rose-50' : sa.hasIssue ? 'bg-amber-50' : 'bg-emerald-50'}`}>
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${!sa.isComplete ? 'bg-rose-100' : 'bg-emerald-100'}`}>
-                        {!sa.isComplete
-                          ? <AlertCircle size={18} className="text-rose-600"/>
-                          : <CheckCircle2 size={18} className="text-emerald-600"/>
-                        }
-                      </div>
-                      <div>
-                        <p className="font-black text-slate-800 uppercase text-sm">{sa.product.description}</p>
-                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-0.5">
-                          {sa.product.modelNo && <span className="mr-2">#{sa.product.modelNo}</span>}
-                          {sa.product.setComponents?.length || 0} components
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-6">
-                      <div className="text-right">
-                        <p className="text-[10px] font-black uppercase text-slate-400">Complete Sets</p>
-                        <p className={`text-2xl font-black ${sa.completeSets > 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{sa.completeSets}</p>
-                      </div>
-                      {sa.bottleneck && (
-                        <div className="bg-amber-100 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-800 font-bold max-w-[200px]">
-                          ⚠ Bottleneck: <span className="font-black">{sa.bottleneck.description}</span>
-                          <span className="block text-[10px] mt-0.5">{sa.bottleneck.currentQty} in stock (need {sa.bottleneck.qtyPerSet}/set)</span>
-                        </div>
-                      )}
-                      <button
-                        onClick={() => setSetDetailProduct(setDetailProduct?.id === sa.product.id ? null : sa.product)}
-                        className="text-[10px] font-bold text-slate-500 hover:text-slate-800 flex items-center space-x-1 px-3 py-1.5 rounded-lg hover:bg-white transition-colors"
-                      >
-                        <ChevronDown size={12} className={`transition-transform ${setDetailProduct?.id === sa.product.id ? 'rotate-180' : ''}`}/>
-                        <span>Details</span>
-                      </button>
-                    </div>
-                  </div>
-                  {setDetailProduct?.id === sa.product.id && (
-                    <div className="px-6 py-4">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="text-[10px] font-black uppercase text-slate-400 border-b">
-                            <th className="py-2 text-left">Component</th>
-                            <th className="py-2 text-right">Req/Set</th>
-                            <th className="py-2 text-right">In Stock</th>
-                            <th className="py-2 text-right">Sets Possible</th>
-                            <th className="py-2 text-center">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {sa.componentAnalysis.map((comp:any, ci:number) => (
-                            <tr key={ci} className={comp.isMissing ? 'bg-rose-50' : comp.isLow ? 'bg-amber-50' : ''}>
-                              <td className="py-2.5 font-bold text-slate-800 uppercase">{comp.description}</td>
-                              <td className="py-2.5 text-right font-bold">{comp.qtyPerSet} {comp.unit}</td>
-                              <td className={`py-2.5 text-right font-black ${comp.isMissing ? 'text-rose-600' : comp.isLow ? 'text-amber-600' : 'text-emerald-600'}`}>{comp.currentQty}</td>
-                              <td className={`py-2.5 text-right font-black ${comp.setsCanMake === 0 ? 'text-rose-600' : comp.isLow ? 'text-amber-600' : 'text-slate-800'}`}>{comp.setsCanMake}</td>
-                              <td className="py-2.5 text-center">
-                                {comp.isMissing
-                                  ? <span className="bg-rose-100 text-rose-700 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">Out of Stock</span>
-                                  : comp.isLow
-                                  ? <span className="bg-amber-100 text-amber-700 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">Low Stock</span>
-                                  : <span className="bg-emerald-100 text-emerald-700 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">OK</span>
-                                }
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {sa.componentAnalysis.length === 0 && (
-                        <p className="text-center text-slate-400 text-xs py-4">No components linked — edit product to add components</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-    {/* ── ADD SET MODAL ──────────────────────────────────────── */}
-    {isAddSetOpen && (
-      <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
-        <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
-          <div className="bg-amber-600 text-white px-7 py-5 rounded-t-2xl flex justify-between items-center">
-            <div>
-              <h3 className="text-lg font-black uppercase tracking-tight">Create Product Set</h3>
-              <p className="text-[10px] text-amber-100 mt-0.5 font-bold uppercase">Combine products into a named set</p>
-            </div>
-            <button onClick={() => setIsAddSetOpen(false)} className="hover:bg-white/10 p-2 rounded-lg"><X size={20}/></button>
-          </div>
-
-          <div className="p-6 space-y-5 overflow-y-auto flex-1">
-            {/* Set No + Name */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-500">Set Number (auto)</label>
-                <input type="text" value={setForm.setNo}
-                  onChange={e => setSetForm({...setForm, setNo: e.target.value.toUpperCase()})}
-                  className="sap-input w-full font-mono font-black text-amber-700"
-                  placeholder="e.g. SET-001"/>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-500">Set Price (PKR)</label>
-                <input type="number" value={setForm.setPrice || ''}
-                  onChange={e => setSetForm({...setForm, setPrice: Number(e.target.value)})}
-                  className="sap-input w-full font-black text-blue-700"
-                  placeholder="0"/>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-500">Set Name *</label>
-              <input type="text" value={setForm.setName}
-                onChange={e => setSetForm({...setForm, setName: e.target.value})}
-                className="sap-input w-full font-bold uppercase"
-                placeholder="e.g. DOOR LOCK COMPLETE SET"/>
-            </div>
-
-            {/* Product search + add to set */}
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold uppercase text-slate-500">Add Components ({setForm.components.length} selected)</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={13}/>
-                <input type="text" placeholder="Search products to add..."
-                  value={compSearch} onChange={e => setCompSearch(e.target.value)}
-                  className="sap-input w-full pl-9 py-2 text-xs"/>
-              </div>
-              {compSearch && (
-                <div className="border border-slate-200 rounded-xl max-h-40 overflow-y-auto bg-white shadow-lg">
-                  {products
-                    .filter(p => !p.isSet &&
-                      (p.description.toLowerCase().includes(compSearch.toLowerCase()) ||
-                       (p.modelNo || '').toLowerCase().includes(compSearch.toLowerCase())) &&
-                      !setForm.components.includes(p.id)
-                    )
-                    .slice(0, 8)
-                    .map(p => (
-                      <button key={p.id} onClick={() => {
-                        setSetForm(prev => ({...prev, components: [...prev.components, p.id]}));
-                        setCompSearch('');
-                      }}
-                        className="w-full text-left px-4 py-2.5 hover:bg-amber-50 transition-colors flex justify-between items-center border-b border-slate-50 last:border-0"
-                      >
-                        <div>
-                          <p className="text-xs font-bold text-slate-800 uppercase">{p.description}</p>
-                          <p className="text-[9px] text-slate-400">{p.modelNo} • {getBrandNick(p.brand || '-')} • PKR {p.basePrice?.toLocaleString()}</p>
-                        </div>
-                        <Plus size={14} className="text-amber-600 shrink-0 ml-2"/>
-                      </button>
-                    ))
-                  }
-                  {products.filter(p => !p.isSet && p.description.toLowerCase().includes(compSearch.toLowerCase()) && !setForm.components.includes(p.id)).length === 0 && (
-                    <p className="text-center text-slate-400 text-xs py-3">No matching products</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Selected components */}
-            {setForm.components.length > 0 && (
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold uppercase text-slate-500">Selected Components</label>
-                <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                  {setForm.components.map((id, ci) => {
-                    const p = products.find(x => x.id === id);
-                    return (
-                      <div key={id} className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
-                        <div>
-                          <p className="text-xs font-bold text-slate-800 uppercase">{p?.description || id}</p>
-                          <p className="text-[9px] text-slate-500">{p?.modelNo} • PKR {p?.basePrice?.toLocaleString()}</p>
-                        </div>
-                        <button onClick={() => setSetForm(prev => ({...prev, components: prev.components.filter(c => c !== id)}))}
-                          className="text-rose-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50 ml-2 transition-colors">
-                          <X size={13}/>
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                {setForm.setPrice === 0 && (() => {
-                  const suggested = setForm.components.reduce((s, id) => {
-                    const p = products.find(x => x.id === id);
-                    return s + (p?.basePrice || 0);
-                  }, 0);
-                  return suggested > 0 ? (
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      Suggested price: PKR {suggested.toLocaleString()}
-                      <button onClick={() => setSetForm(f => ({...f, setPrice: suggested}))}
-                        className="ml-2 text-amber-600 font-bold hover:underline">Apply</button>
-                    </p>
-                  ) : null;
-                })()}
-              </div>
-            )}
-          </div>
-
-          <div className="px-6 py-4 bg-white border-t flex justify-end space-x-3 rounded-b-2xl">
-            <button onClick={() => setIsAddSetOpen(false)} className="sap-btn-ghost text-xs">Cancel</button>
-            <button onClick={handleSaveSet}
-              className="bg-amber-600 hover:bg-amber-700 text-white px-6 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest shadow-md transition-all flex items-center space-x-2">
-              <Layers size={14}/><span>Create Set</span>
-            </button>
-          </div>
-        </div>
-      </div>
     )}
 
     <NipponProductForm 
