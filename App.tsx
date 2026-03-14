@@ -12,10 +12,14 @@ import { AppService } from '@/modules/shared/services/appService';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { SyncService } from '@/src/services/SyncService';
 import { getNetworkStatus, OfflineQueue } from '@/modules/shared/services/networkService';
+import { DataIntegrity } from '@/modules/shared/services/dataIntegrity';
+import { checkSchemaVersion } from '@/modules/shared/services/utils';
 import { Toaster, toast } from 'sonner';
 import { useAuthStore, isOfficeHours, ROLE_DEFAULT_COMPANY, ROLE_MODULES } from '@/modules/auth/authStore';
 import { SyncService } from '@/src/services/SyncService';
 import { getNetworkStatus, OfflineQueue } from '@/modules/shared/services/networkService';
+import { DataIntegrity } from '@/modules/shared/services/dataIntegrity';
+import { checkSchemaVersion } from '@/modules/shared/services/utils';
 import LoginPage from '@/modules/auth/LoginPage';
 
 // ── Lazy load modules ────────────────────────────────────────────────
@@ -249,6 +253,9 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!user) return;
     const init = async () => {
+      // Schema version check + data integrity repair on startup
+      checkSchemaVersion();
+      DataIntegrity.autoRepairOnStartup();
       await SyncService.fetchFromCloud();
       await AppService.seedInitialData();
       AppService.checkAndTriggerAutoBackup();
