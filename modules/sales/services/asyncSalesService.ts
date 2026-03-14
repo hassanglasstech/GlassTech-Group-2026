@@ -1,6 +1,7 @@
 import { Client, Vendor } from '../types/crm';
 import { Product, Quotation, Project } from '../../shared/types';
-import { safeParse } from '../../shared/services/utils';
+import { safeParse, safeSave, safeAsync } from '../../shared/services/utils';
+import { toast } from 'sonner';
 import { supabase } from '../../../src/services/supabaseClient';
 
 const KEYS = {
@@ -21,12 +22,16 @@ export const AsyncSalesService = {
   },
   saveClients: async (data: Client[]): Promise<void> => {
     await delay(100);
-    localStorage.setItem(KEYS.CLIENTS, JSON.stringify(data));
+    safeSave(KEYS.CLIENTS, data);
   },
   
   getProducts: async (): Promise<Product[]> => {
     const { data, error } = await supabase.from('products').select('*');
-    if (error) throw error;
+    if (error) {
+      console.error('[AsyncSalesService] getProducts failed:', error.message);
+      toast.error('Failed to load products from cloud. Using local data.', { id: 'products-load', duration: 3000 });
+      return safeParse('gtk_erp_products');
+    }
     return (data ?? []).map((r: any) => ({
       id: r.id, company: r.company, category: r.category, description: r.description,
       serviceNick: r.service_nick ?? '', profileCode: r.profile_code ?? '',
@@ -42,7 +47,6 @@ export const AsyncSalesService = {
       setComponents: r.set_components ?? [], technicalSpecs: r.technical_specs ?? {},
       width: r.width ?? 0, height: r.height ?? 0,
       frameColor: r.frame_color ?? '', meshColor: r.mesh_color ?? '',
-      subDescription: r.sub_description ?? '',
     }));
   },
   saveProducts: async (data: Product[]): Promise<void> => {
@@ -61,10 +65,12 @@ export const AsyncSalesService = {
       set_components: p.setComponents ?? [], technical_specs: p.technicalSpecs ?? {},
       width: p.width ?? 0, height: p.height ?? 0,
       frame_color: p.frameColor ?? '', mesh_color: p.meshColor ?? '',
-      sub_description: (p as any).subDescription ?? '',
     }));
     const { error } = await supabase.from('products').upsert(mapped);
-    if (error) throw error;
+    if (error) {
+      console.error('[AsyncSalesService] saveProducts failed:', error.message);
+      toast.error('Cloud sync failed — data saved locally.', { id: 'products-save', duration: 3000 });
+    }
   },
   
   getQuotations: async (): Promise<Quotation[]> => {
@@ -73,7 +79,7 @@ export const AsyncSalesService = {
   },
   saveQuotations: async (data: Quotation[]): Promise<void> => {
     await delay(100);
-    localStorage.setItem(KEYS.QUOTATIONS, JSON.stringify(data));
+    safeSave(KEYS.QUOTATIONS, data);
   },
   
   getProjects: async (): Promise<Project[]> => {
@@ -82,7 +88,7 @@ export const AsyncSalesService = {
   },
   saveProjects: async (data: Project[]): Promise<void> => {
     await delay(100);
-    localStorage.setItem(KEYS.PROJECTS, JSON.stringify(data));
+    safeSave(KEYS.PROJECTS, data);
   },
   
   getVendors: async (): Promise<Vendor[]> => {
@@ -91,6 +97,6 @@ export const AsyncSalesService = {
   },
   saveVendors: async (data: Vendor[]): Promise<void> => {
     await delay(100);
-    localStorage.setItem(KEYS.VENDORS, JSON.stringify(data));
+    safeSave(KEYS.VENDORS, data);
   },
 };
