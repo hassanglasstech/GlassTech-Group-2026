@@ -237,19 +237,29 @@ const LoginPage: React.FC = () => {
     if (hasDeviceRegistered()) {
       const { success, userId } = await authenticateDevice();
       if (success && userId) {
-        const profile = await fetchProfile(userId);
-        if (profile) {
-          if (profile.timeRestricted && !isOfficeHours()) {
-            setError('Access restricted to office hours (Mon–Sat 9am–6pm PKT).');
-            clearDeviceAuth();
+        // Re-authenticate with Supabase session
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const profile = await fetchProfile(session.user.id);
+          if (profile) {
+            if (profile.timeRestricted && !isOfficeHours()) {
+              setError('Access restricted to office hours (Mon–Sat 9am–6pm PKT).');
+              clearDeviceAuth();
+              setBusy(false);
+              setStep('google');
+              return;
+            }
+            completeLogin(profile);
             setBusy(false);
-            setStep('google');
             return;
           }
-          completeLogin(profile);
-          setBusy(false);
-          return;
         }
+        // Session expired — need Google login again
+        setError('Session expired. Please sign in with Google.');
+        clearDeviceAuth();
+        setStep('google');
+        setBusy(false);
+        return;
       }
       setError('Biometric failed. Please sign in with Google.');
       clearDeviceAuth();
@@ -259,20 +269,23 @@ const LoginPage: React.FC = () => {
     }
 
     // Fallback: remember token
-    const { valid, userId } = checkRememberToken();
-    if (valid && userId) {
-      const profile = await fetchProfile(userId);
-      if (profile) {
-        if (profile.timeRestricted && !isOfficeHours()) {
-          setError('Access restricted to office hours.');
-          clearDeviceAuth();
-          setStep('google');
+    const { valid } = checkRememberToken();
+    if (valid) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const profile = await fetchProfile(session.user.id);
+        if (profile) {
+          if (profile.timeRestricted && !isOfficeHours()) {
+            setError('Access restricted to office hours.');
+            clearDeviceAuth();
+            setStep('google');
+            setBusy(false);
+            return;
+          }
+          completeLogin(profile);
           setBusy(false);
           return;
         }
-        completeLogin(profile);
-        setBusy(false);
-        return;
       }
     }
 
@@ -284,8 +297,14 @@ const LoginPage: React.FC = () => {
   };
 
   const completeLogin = (profile: UserProfile) => {
-    sessionStorage.removeItem('_pending_profile');
-    setUser(profile);
+    try {
+      sessionStorage.removeItem('_pending_profile');
+      setUser(profile);
+    } catch (err) {
+      console.error('completeLogin error:', err);
+      setError('Login failed. Please try again.');
+      setStep('google');
+    }
   };
 
   // ════════════════════════════════════════════════════════════════════
