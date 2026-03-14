@@ -1,6 +1,7 @@
 import { Client, Vendor } from '../types/crm';
 import { Product, Quotation, Project } from '../../shared/types';
 import { safeParse, safeSave, safeAsync } from '../../shared/services/utils';
+import { safeSupabase, translateError } from '../../shared/services/networkService';
 import { toast } from 'sonner';
 import { supabase } from '../../../src/services/supabaseClient';
 
@@ -26,12 +27,12 @@ export const AsyncSalesService = {
   },
   
   getProducts: async (): Promise<Product[]> => {
-    const { data, error } = await supabase.from('products').select('*');
-    if (error) {
-      console.error('[AsyncSalesService] getProducts failed:', error.message);
-      toast.error('Failed to load products from cloud. Using local data.', { id: 'products-load', duration: 3000 });
-      return safeParse('gtk_erp_products');
-    }
+    const data = await safeSupabase(
+      () => supabase.from('products').select('*'),
+      { context: 'getProducts', fallback: null, silent: false }
+    );
+    if (!data) return safeParse('gtk_erp_products');
+    {
     return (data ?? []).map((r: any) => ({
       id: r.id, company: r.company, category: r.category, description: r.description,
       serviceNick: r.service_nick ?? '', profileCode: r.profile_code ?? '',
