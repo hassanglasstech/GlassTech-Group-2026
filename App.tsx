@@ -106,6 +106,11 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
     glassco_production: 'Production',
     nippon_admin:       'Nippon Admin',
   };
+  
+  if (!user || !user.email) {
+    console.error('[Sidebar] user is null or invalid:', user);
+    return null;
+  }
 
   return (
     <>
@@ -235,7 +240,7 @@ const App: React.FC = () => {
     };
   }, []);
 
-  useSessionWatch();
+  // Session watch - only matters for time-restricted users
 
   // Run sync ONLY after user is authenticated
   useEffect(() => {
@@ -272,10 +277,11 @@ const App: React.FC = () => {
   return (
     <HashRouter>
       <Toaster position="top-right" richColors />
-      {!user ? (
+      {!user || !user.email || !user.role ? (
         <LoginPage />
       ) : (
-      <div className="flex h-screen bg-[#eff4f9] font-['Inter'] overflow-hidden">
+      <div className="flex h-screen bg-[#eff4f9] font-sans overflow-hidden"
+           data-user={user.role}>
         <Sidebar isMobile={isMobile} />
         <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
           <header className="sap-shell no-print shrink-0 z-[80] flex items-center justify-between px-3 md:px-4">
