@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#1a2535"/>
+  <rect x="80" y="80" width="160" height="160" rx="16" fill="#0a6ed1" opacity="0.9"/>
+  <rect x="272" y="80" width="160" height="160" rx="16" fill="#354a5f"/>
+  <rect x="80" y="272" width="160" height="160" rx="16" fill="#354a5f"/>
+  <rect x="272" y="272" width="160" height="160" rx="16" fill="#0a6ed1" opacity="0.6"/>
+  <text x="256" y="290" font-family="system-ui" font-size="72" font-weight="900"
+        fill="white" text-anchor="middle" dominant-baseline="middle"
+        opacity="0.15">GT</text>
+</svg>
