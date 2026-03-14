@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Requisition, RequisitionItem, Product, CostCenter } from '@/modules/shared/types';
+import { toast } from 'sonner';
 import { X, Save, Plus, Trash2, Package, Calculator, Calendar, User, Info } from 'lucide-react';
 
 interface Props {
@@ -58,8 +59,8 @@ export const RequisitionEditor: React.FC<Props> = ({
   };
 
   const handleFinalSave = (status: 'Draft' | 'Pending') => {
-    if (!data.headerText) return alert('Header text is required');
-    if (!data.items || data.items.length === 0) return alert('At least one item is required');
+    if (!data.headerText) return toast.error('Header text is required', { duration: 4000 });
+    if (!data.items || data.items.length === 0) return toast.error('At least one item is required', { duration: 4000 });
     
     onSave({
       ...data,
