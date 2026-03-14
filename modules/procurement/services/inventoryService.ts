@@ -11,13 +11,14 @@ const KEYS = {
   PURCHASE_ORDERS: 'gtk_erp_purchase_orders',
 };
 
-import { bgSaveToIDB, safeParse } from '@/modules/shared/services/utils';
+import { bgSaveToIDB, safeParse, safeSave, safeAsync } from '@/modules/shared/services/utils';
+import { toast } from 'sonner';
 
 export const InventoryService = {
   getRequisitions: (): Requisition[] => safeParse(KEYS.REQUISITIONS),
-  saveRequisitions: (data: Requisition[]) => localStorage.setItem(KEYS.REQUISITIONS, JSON.stringify(data)),
+  saveRequisitions: (data: Requisition[]) => safeSave(KEYS.REQUISITIONS, data),
   getStore: (): StoreItem[] => safeParse(KEYS.STORE),
-  saveStore: (data: StoreItem[]) => localStorage.setItem(KEYS.STORE, JSON.stringify(data)),
+  saveStore: (data: StoreItem[]) => safeSave(KEYS.STORE, data),
   getStockLedger: (): MaterialLedgerEntry[] => safeParse(KEYS.STOCK_LEDGER),
   getStockLedgerAsync: async (): Promise<MaterialLedgerEntry[]> => {
     try {
@@ -38,15 +39,15 @@ export const InventoryService = {
   },
   saveStockLedger: (data: MaterialLedgerEntry[]) => {
     const recent = data.slice(-1000);
-    localStorage.setItem(KEYS.STOCK_LEDGER, JSON.stringify(recent));
+    safeSave(KEYS.STOCK_LEDGER, recent);
     bgSaveToIDB('stockLedger', data);
   },
   getInspectionLots: (): InspectionLot[] => safeParse(KEYS.INSPECTION_LOTS),
-  saveInspectionLots: (data: InspectionLot[]) => localStorage.setItem(KEYS.INSPECTION_LOTS, JSON.stringify(data)),
+  saveInspectionLots: (data: InspectionLot[]) => safeSave(KEYS.INSPECTION_LOTS, data),
   getRemnants: (): Remnant[] => safeParse(KEYS.REMNANTS),
-  saveRemnants: (data: Remnant[]) => localStorage.setItem(KEYS.REMNANTS, JSON.stringify(data)),
+  saveRemnants: (data: Remnant[]) => safeSave(KEYS.REMNANTS, data),
   getHandlingUnits: (): HandlingUnit[] => safeParse(KEYS.HANDLING_UNITS),
-  saveHandlingUnits: (data: HandlingUnit[]) => localStorage.setItem(KEYS.HANDLING_UNITS, JSON.stringify(data)),
+  saveHandlingUnits: (data: HandlingUnit[]) => safeSave(KEYS.HANDLING_UNITS, data),
   getPurchaseOrders: (): PurchaseOrder[] => safeParse(KEYS.PURCHASE_ORDERS),
-  savePurchaseOrders: (data: PurchaseOrder[]) => localStorage.setItem(KEYS.PURCHASE_ORDERS, JSON.stringify(data)),
+  savePurchaseOrders: (data: PurchaseOrder[]) => safeSave(KEYS.PURCHASE_ORDERS, data),
 };
