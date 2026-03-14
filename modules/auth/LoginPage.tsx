@@ -237,33 +237,43 @@ const LoginPage: React.FC = () => {
   const handleSetupBiometric = async () => {
     setBusy(true);
     const profileStr = sessionStorage.getItem('_pending_profile');
-    if (!profileStr) { setBusy(false); return; }
-    const profile: UserProfile = JSON.parse(profileStr);
-
-    const ok = await registerDevice(profile.id, profile.email);
-    if (ok) {
-      completeLogin(profile);
-    } else {
-      // WebAuthn failed — offer remember device
-      setError('Biometric setup failed. Using "Remember Device" instead.');
-      saveRememberToken(profile.id);
-      completeLogin(profile);
+    if (!profileStr) { setBusy(false); setError('Session lost. Please sign in again.'); setStep('google'); return; }
+    try {
+      const profile: UserProfile = JSON.parse(profileStr);
+      const ok = await registerDevice(profile.id, profile.email);
+      if (!ok) saveRememberToken(profile.id);
+      await completeLogin(profile);
+    } catch (err) {
+      console.error('handleSetupBiometric error:', err);
+      setError('Setup failed. Please sign in again.');
+      setStep('google');
     }
     setBusy(false);
   };
 
-  const handleRememberDevice = () => {
+  const handleRememberDevice = async () => {
     const profileStr = sessionStorage.getItem('_pending_profile');
-    if (!profileStr) return;
-    const profile: UserProfile = JSON.parse(profileStr);
-    saveRememberToken(profile.id);
-    completeLogin(profile);
+    if (!profileStr) { setError('Session lost. Please sign in again.'); setStep('google'); return; }
+    try {
+      const profile: UserProfile = JSON.parse(profileStr);
+      saveRememberToken(profile.id);
+      await completeLogin(profile);
+    } catch (err) {
+      console.error('handleRememberDevice error:', err);
+      setError('Something went wrong. Please sign in again.');
+      setStep('google');
+    }
   };
 
-  const handleSkipDevice = () => {
+  const handleSkipDevice = async () => {
     const profileStr = sessionStorage.getItem('_pending_profile');
-    if (!profileStr) return;
-    completeLogin(JSON.parse(profileStr));
+    if (!profileStr) { setError('Session lost. Please sign in again.'); setStep('google'); return; }
+    try {
+      await completeLogin(JSON.parse(profileStr));
+    } catch (err) {
+      setError('Something went wrong. Please sign in again.');
+      setStep('google');
+    }
   };
 
   // ── STEP: Biometric login (returning user) ───────────────────────────
@@ -334,14 +344,20 @@ const LoginPage: React.FC = () => {
     setBusy(false);
   };
 
-  const completeLogin = (profile: UserProfile) => {
+  const completeLogin = async (profile: UserProfile) => {
     try {
       sessionStorage.removeItem('_pending_profile');
+      // Update last_login
+      await supabase.from('user_profiles')
+        .update({ last_login: new Date().toISOString() })
+        .eq('id', profile.id)
+        .then(() => {});
+      // Set user — triggers App re-render
       setUser(profile);
     } catch (err) {
       console.error('completeLogin error:', err);
-      setError('Login failed. Please try again.');
-      setStep('google');
+      // Still login even if update fails
+      setUser(profile);
     }
   };
 
