@@ -17,23 +17,58 @@ import {
 
 // ── Fetch user profile from DB ────────────────────────────────────────
 const fetchProfile = async (userId: string): Promise<UserProfile | null> => {
-  const { data, error } = await supabase
-    .from('user_profiles')
-    .select('*')
-    .eq('id', userId)
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
 
-  if (error || !data || !data.is_active) return null;
+    // Log for debugging
+    console.log('[Auth] fetchProfile:', { userId, data, error });
 
-  return {
-    id:               data.id,
-    email:            data.email,
-    fullName:         data.full_name,
-    role:             data.role as UserRole,
-    allowedCompanies: data.allowed_companies || [],
-    allowedModules:   data.allowed_modules   || [],
-    timeRestricted:   data.time_restricted   || false,
-  };
+    if (error) {
+      console.error('[Auth] Profile fetch error:', error);
+      // If RLS blocks it, try without filter (will get own row due to RLS)
+      const { data: data2, error: err2 } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .maybeSingle();
+      if (err2 || !data2) return null;
+      if (!data2.is_active) return null;
+      return {
+        id:               data2.id,
+        email:            data2.email,
+        fullName:         data2.full_name,
+        role:             data2.role as UserRole,
+        allowedCompanies: data2.allowed_companies || [],
+        allowedModules:   data2.allowed_modules   || [],
+        timeRestricted:   data2.time_restricted   || false,
+      };
+    }
+
+    if (!data) {
+      console.warn('[Auth] No profile found for:', userId);
+      return null;
+    }
+    if (!data.is_active) {
+      console.warn('[Auth] Profile inactive for:', userId);
+      return null;
+    }
+
+    return {
+      id:               data.id,
+      email:            data.email,
+      fullName:         data.full_name,
+      role:             data.role as UserRole,
+      allowedCompanies: data.allowed_companies || [],
+      allowedModules:   data.allowed_modules   || [],
+      timeRestricted:   data.time_restricted   || false,
+    };
+  } catch (err) {
+    console.error('[Auth] fetchProfile exception:', err);
+    return null;
+  }
 };
 
 // ── Card wrapper ──────────────────────────────────────────────────────
@@ -121,7 +156,10 @@ const LoginPage: React.FC = () => {
     // 1. Check profile exists and is active
     const profile = await fetchProfile(userId);
     if (!profile) {
-      setError('Access denied. Contact administrator.');
+      // Check if table exists and profile issue
+      const { data: check } = await supabase.from('user_profiles').select('count').single();
+      console.log('[Auth] Profile table check:', check);
+      setError('Profile not found. Make sure your email is registered in user_profiles table.');
       await supabase.auth.signOut();
       setBusy(false);
       setStep('google');
