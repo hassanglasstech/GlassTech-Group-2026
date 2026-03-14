@@ -6,14 +6,14 @@ import {
   Truck, Handshake, Folder, Loader2, X, LogOut, ChevronDown,
   Home, DollarSign, Settings
 } from 'lucide-react';
-import { Company } from './modules/shared/constants';
-import { AppService } from './modules/shared/services/appService';
-import { useAppStore } from './modules/shared/store/appStore';
+import { Company } from '@/modules/shared/constants';
+import { AppService } from '@/modules/shared/services/appService';
+import { useAppStore } from '@/modules/shared/store/appStore';
 import { SyncService } from '@/src/services/SyncService';
 import { Toaster, toast } from 'sonner';
 import { useAuthStore, isOfficeHours, ROLE_DEFAULT_COMPANY, ROLE_MODULES } from '@/modules/auth/authStore';
 import { SyncService } from '@/src/services/SyncService';
-import LoginPage from './modules/auth/LoginPage';
+import LoginPage from '@/modules/auth/LoginPage';
 
 // ── Lazy load modules ────────────────────────────────────────────────
 const Dashboard        = React.lazy(() => import('./modules/shared/pages/Dashboard'));
