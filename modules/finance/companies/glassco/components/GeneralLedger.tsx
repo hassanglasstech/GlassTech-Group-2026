@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { toast } from 'sonner';
 import { Company, LedgerTransaction, Account, LedgerDocType, LedgerStatus, CostCenter } from '@/modules/shared/types';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
@@ -129,7 +130,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
 
   // Save new custom template
   const handleSaveTemplate = () => {
-    if (!newTemplate.code || !newTemplate.name) return alert('Code and Name required.');
+    if (!newTemplate.code || !newTemplate.name) return toast.error('Code and Name required.', { duration: 4000 });
     const t: BusinessTransaction = {
       id: `CUSTOM-${Date.now()}`,
       ...newTemplate,
@@ -175,7 +176,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
   const isBalanced = totalDebit === totalCredit && totalDebit > 0;
 
   const handleSaveDocument = (status: LedgerStatus) => {
-    if (!isBalanced) return alert('Document is not balanced.');
+    if (!isBalanced) return toast.error('Document is not balanced.', { duration: 4000 });
     const txId = editingDocId || `${formData.docType}-${Date.now().toString().slice(-6)}`;
     const tx: LedgerTransaction = {
       id: txId,
@@ -194,7 +195,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
     refreshData();
     setIsModalOpen(false);
     resetForm();
-    alert(status === 'Posted' ? `Posted: ${txId} to ${selectedTargetCompany}.` : `Parked: ${txId}.`);
+    toast.success(status === 'Posted' ? `Posted: ${txId} to ${selectedTargetCompany}.` : `Parked: ${txId}.`, { duration: 3000 });
   };
 
   const resetForm = () => {
