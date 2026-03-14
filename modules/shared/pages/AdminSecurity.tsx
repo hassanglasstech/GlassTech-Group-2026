@@ -16,6 +16,7 @@ import { ErrorLogViewer } from '@/modules/shared/components/ErrorBoundary';
 import { getStorageHealth } from '@/modules/shared/services/utils';
 import { getNetworkStatus, OfflineQueue } from '@/modules/shared/services/networkService';
 import { DataIntegrity } from '@/modules/shared/services/dataIntegrity';
+import { Logger } from '@/modules/shared/services/logger';
 
 const AdminSecurity: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
@@ -29,8 +30,18 @@ const AdminSecurity: React.FC = () => {
   }, [company]);
 
   const refreshLogs = async () => {
-    const allLogs = await AppService.getActivityLogsAsync();
-    setLogs(allLogs.filter(l => l.company === company).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+    // Use Logger for structured logs
+    const structured = Logger.getLogs({ company, limit: 200 });
+    // Also get legacy logs
+    const legacy = await AppService.getActivityLogsAsync();
+    const legacyFiltered = legacy.filter((l: any) => l.company === company);
+    // Merge and deduplicate by id
+    const allIds = new Set(structured.map(l => l.id));
+    const merged = [
+      ...structured,
+      ...legacyFiltered.filter((l: any) => !allIds.has(l.id))
+    ].sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    setLogs(merged as any);
   };
 
   const handleManualBackup = () => AppService.exportDatabaseToFile(false);
@@ -132,6 +143,26 @@ const AdminSecurity: React.FC = () => {
         {activeTab === 'command_center' && (
             <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {/* Logger Stats */}
+              {(() => {
+                const stats = Logger.getStats();
+                return (
+                  <div className="bg-white border border-slate-200 rounded-2xl p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Activity Today</p>
+                      <button onClick={() => Logger.exportCSV()}
+                        className="text-[9px] text-blue-600 font-bold hover:underline">Export CSV</button>
+                    </div>
+                    <p className="text-3xl font-black text-slate-800">{stats.todayCount}</p>
+                    <div className="flex items-center space-x-3 mt-2">
+                      <span className="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-black">{stats.errors} errors</span>
+                      <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-black">{stats.audits} audits</span>
+                      <span className="text-[9px] text-slate-400 font-bold">{stats.total} total</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Network Status */}
               {(() => {
                 const net = getNetworkStatus();
@@ -201,12 +232,28 @@ const AdminSecurity: React.FC = () => {
                             <tbody className="divide-y">
                                 {getFilteredLogs().map(log => (
                                     <tr key={log.id} className="hover:bg-blue-50/30 transition-colors">
-                                        <td className="px-6 py-3 font-mono text-xs text-slate-500">{new Date(log.timestamp).toLocaleString()}</td>
-                                        <td className="px-6 py-3 font-bold text-slate-700 text-xs">{log.user}</td>
-                                        <td className="px-6 py-3"><span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${log.module === 'Finance' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{log.module}</span></td>
-                                        <td className="px-6 py-3 text-xs font-bold uppercase">{log.action}</td>
-                                        <td className="px-6 py-3 text-xs text-slate-600 truncate max-w-xs" title={log.description}>{log.description}</td>
-                                        <td className="px-6 py-3 text-right font-mono text-xs font-bold">{log.amount ? log.amount.toLocaleString() : '-'}</td>
+                                        <td className="px-6 py-3 font-mono text-xs text-slate-500">{new Date((log as any).timestamp).toLocaleString('en-PK')}</td>
+                                        <td className="px-6 py-3 font-bold text-slate-700 text-xs">{(log as any).user || '-'}</td>
+                                        <td className="px-6 py-3">
+                                          <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                                            (log as any).module === 'Finance' ? 'bg-emerald-100 text-emerald-700' :
+                                            (log as any).module === 'Auth' ? 'bg-purple-100 text-purple-700' :
+                                            (log as any).module === 'Sync' ? 'bg-blue-100 text-blue-700' :
+                                            (log as any).module === 'System' ? 'bg-slate-200 text-slate-600' :
+                                            'bg-slate-100 text-slate-600'
+                                          }`}>{(log as any).module}</span>
+                                        </td>
+                                        <td className="px-6 py-3">
+                                          <span className={`text-[9px] font-black uppercase ${
+                                            (log as any).level === 'error' ? 'text-rose-600' :
+                                            (log as any).level === 'warn'  ? 'text-amber-600' :
+                                            (log as any).level === 'audit' ? 'text-blue-600' :
+                                            (log as any).level === 'success' ? 'text-emerald-600' :
+                                            'text-slate-500'
+                                          }`}>{(log as any).action}</span>
+                                        </td>
+                                        <td className="px-6 py-3 text-xs text-slate-600 truncate max-w-xs" title={(log as any).description}>{(log as any).description}</td>
+                                        <td className="px-6 py-3 text-right font-mono text-xs font-bold">{(log as any).amount ? (log as any).amount.toLocaleString() : '-'}</td>
                                     </tr>
                                 ))}
                             </tbody>
