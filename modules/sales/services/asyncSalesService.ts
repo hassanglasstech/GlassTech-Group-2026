@@ -2,6 +2,7 @@ import { Client, Vendor } from '../types/crm';
 import { Product, Quotation, Project } from '../../shared/types';
 import { safeParse, safeSave } from '../../shared/services/utils';
 import { toast } from 'sonner';
+import { Logger } from '@/modules/shared/services/logger';
 import { supabase } from '../../../src/services/supabaseClient';
 
 const KEYS = {
@@ -74,6 +75,7 @@ export const AsyncSalesService = {
     }));
     const { error } = await supabase.from('products').upsert(mapped);
     if (error) {
+      Logger.error('Sales', 'saveProducts failed', error);
       console.error('[AsyncSalesService] saveProducts:', error.message);
       toast.error('Cloud save failed — data saved locally.', { id: 'save-products', duration: 3000 });
     }
