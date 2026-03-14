@@ -10,15 +10,10 @@ import {
 } from 'lucide-react';
 
 import { useAppStore } from '../store/appStore';
-import { useAuthStore } from '@/modules/auth/authStore';
-import UserManager from '@/modules/auth/UserManager';
-import { ErrorLogViewer } from '@/modules/shared/components/ErrorBoundary';
-import { getStorageHealth } from '@/modules/shared/services/utils';
-import { getNetworkStatus, OfflineQueue } from '@/modules/shared/services/networkService';
 
 const AdminSecurity: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'command_center' | 'admin' | 'users' | 'error_logs'>('command_center');
+  const [activeTab, setActiveTab] = useState<'command_center' | 'admin' | 'users'>('command_center');
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [filterModule, setFilterModule] = useState<string>('All');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -109,8 +104,7 @@ const AdminSecurity: React.FC = () => {
           {[
             { id: 'command_center', label: 'Live Activity Feed', icon: Activity },
             { id: 'admin', label: 'Basis (DB Management)', icon: Database },
-            { id: 'users',      label: 'User Roles (SU01)',   icon: Users },
-            { id: 'error_logs', label: 'Error Logs',           icon: AlertTriangle },
+            { id: 'users', label: 'User Roles (SU01)', icon: Users },
           ].map(tab => (
             <button
               key={tab.id}
@@ -130,52 +124,6 @@ const AdminSecurity: React.FC = () => {
         {activeTab === 'command_center' && (
             <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              {/* Network Status */}
-              {(() => {
-                const net = getNetworkStatus();
-                const queued = net.queuedWrites;
-                return (
-                  <div className={`rounded-2xl border p-5 ${!net.isOnline ? 'bg-rose-50 border-rose-200' : queued > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Network</p>
-                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${net.isOnline ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                        {net.isOnline ? '● Online' : '○ Offline'}
-                      </span>
-                    </div>
-                    <p className="text-2xl font-black text-slate-800">{queued}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Queued writes pending sync</p>
-                    {net.connectionType !== 'unknown' && (
-                      <p className="text-[9px] text-slate-300 mt-1 uppercase font-bold">{net.connectionType}</p>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* Storage Health */}
-              {(() => {
-                const health = getStorageHealth();
-                return (
-                  <div className={`rounded-2xl border p-5 ${!health.isHealthy ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200'}`}>
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Storage Health</p>
-                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${health.isHealthy ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                        {health.isHealthy ? '✓ Healthy' : '⚠ Warning'}
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-slate-500">ERP Data</span>
-                        <span className="font-black text-slate-800">{health.erpKB} KB</span>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-2">
-                        <div className={`h-2 rounded-full transition-all ${health.usedPercent > 80 ? 'bg-rose-500' : health.usedPercent > 60 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                          style={{ width: `${Math.min(health.usedPercent, 100)}%` }}/>
-                      </div>
-                      <p className="text-[10px] text-slate-400">{health.usedPercent}% of 5MB used ({health.totalKB} KB total)</p>
-                    </div>
-                  </div>
-                );
-              })()}
                     <div className="bg-white p-6 rounded-2xl border shadow-sm">
                         <div className="flex justify-between items-start">
                             <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Actions Today</p><p className="text-3xl font-black text-slate-800 mt-1">{stats.totalToday}</p></div>
@@ -257,16 +205,6 @@ const AdminSecurity: React.FC = () => {
                   <button onClick={handleFactoryReset} className="bg-rose-600 text-white px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-rose-700 transition-all flex items-center space-x-2"><Trash2 size={16}/> <span>Wipe All Data</span></button>
                </div>
             </div>
-          </div>
-        )}
-
-        {activeTab === 'users' && (
-          <UserManager />
-        )}
-
-        {activeTab === 'error_logs' && (
-          <div className="p-6">
-            <ErrorLogViewer />
           </div>
         )}
       </div>
