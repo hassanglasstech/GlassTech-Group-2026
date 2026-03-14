@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { toast } from 'sonner';
 import { GatePass, ProductionPiece, TemperingDispatch, Quotation, Client } from '@/modules/shared/types';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { ShieldCheck, Package, CheckCircle2, ScanLine } from 'lucide-react';
@@ -51,7 +52,7 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ gatePasses, pieces
         refreshData();
         setSelectedPassForCheck(null);
         setVerifiedPieces(new Set());
-        alert("Authorization Successful: Pieces updated in Job Cards.");
+        toast.success("Authorization Successful: Pieces updated in Job Cards.", { duration: 3000 });
     };
 
     const getVerifyGroups = useMemo(() => {
