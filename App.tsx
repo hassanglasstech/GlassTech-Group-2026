@@ -237,14 +237,18 @@ const App: React.FC = () => {
 
   useSessionWatch();
 
+  // Run sync ONLY after user is authenticated
   useEffect(() => {
+    if (!user) return;
     const init = async () => {
       await SyncService.fetchFromCloud();
       await AppService.seedInitialData();
       AppService.checkAndTriggerAutoBackup();
     };
     init();
+  }, [user?.id]); // only when user changes
 
+  useEffect(() => {
     const handleResize = () => {
       const mobile = window.innerWidth < 1024;
       setIsMobile(mobile);
@@ -253,7 +257,7 @@ const App: React.FC = () => {
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, []); // resize listener always active
 
   // Set default company based on role on first login
   useEffect(() => {
