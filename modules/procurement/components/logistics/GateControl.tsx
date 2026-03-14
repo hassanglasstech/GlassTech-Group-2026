@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Company, GatePass, TemperingDispatch } from '@/modules/shared/types';
+import { toast } from 'sonner';
 import { AppService } from '@/modules/shared/services/appService';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { Truck, MoveRight, Printer, X, ShieldCheck, Wallet } from 'lucide-react';
@@ -38,8 +39,8 @@ export const GateControl: React.FC<GateControlProps> = ({ company, gatePasses, d
     };
 
     const handleSaveGatePass = () => {
-        if (!gateForm.vehicleNo || !gateForm.driverName) return alert("Validation Error: Vehicle and Driver name are mandatory.");
-        if (gateForm.type === 'Inward' && !gateForm.fromVendor && !gateForm.linkedDispatchId) return alert("Validation Error: Source Vendor or Linked Dispatch is required for Inward Entry.");
+        if (!gateForm.vehicleNo || !gateForm.driverName) return toast.error("Validation Error: Vehicle and Driver name are mandatory.", { duration: 4000 });
+        if (gateForm.type === 'Inward' && !gateForm.fromVendor && !gateForm.linkedDispatchId) return toast.error("Validation Error: Source Vendor or Linked Dispatch is required for Inward Entry.", { duration: 4000 });
     
         const prefix = gateForm.type === 'Inward' ? 'GP-IN' : 'GP-OUT';
         const allGPs = ProductionService.getGatePasses();
