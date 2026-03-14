@@ -13,7 +13,8 @@ const KEYS = {
   GL_CONFIG: 'gtk_erp_gl_config',
 };
 
-import { bgSaveToIDB, safeParse } from '../../shared/services/utils';
+import { bgSaveToIDB, safeParse, safeSave, safeAsync } from '../../shared/services/utils';
+import { toast } from 'sonner';
 
 export const FinanceService = {
   getAccounts: (): Account[] => safeParse(KEYS.ACCOUNTS),
@@ -26,7 +27,7 @@ export const FinanceService = {
         const local = FinanceService.getAccounts();
         if (accounts.length > local.length) {
           console.log("FinanceService: Restoring accounts from IndexedDB...");
-          localStorage.setItem(KEYS.ACCOUNTS, JSON.stringify(accounts));
+          safeSave(KEYS.ACCOUNTS, accounts);
           return accounts;
         }
       }
@@ -38,7 +39,7 @@ export const FinanceService = {
 
   saveAccounts: (data: Account[]) => {
     try {
-      localStorage.setItem(KEYS.ACCOUNTS, JSON.stringify(data));
+      safeSave(KEYS.ACCOUNTS, data);
       bgSaveToIDB('accounts', data);
     } catch (e) {
       console.error("FinanceService: Failed to save accounts to localStorage", e);
@@ -186,21 +187,21 @@ export const FinanceService = {
   },
   saveLedger: (data: LedgerTransaction[]) => {
     const recent = data.slice(-1000); 
-    localStorage.setItem(KEYS.LEDGER, JSON.stringify(recent));
+    safeSave(KEYS.LEDGER, recent);
     bgSaveToIDB('ledger', data);
   },
   getCostCenters: (): CostCenter[] => safeParse(KEYS.COST_CENTERS),
-  saveCostCenters: (data: CostCenter[]) => localStorage.setItem(KEYS.COST_CENTERS, JSON.stringify(data)),
+  saveCostCenters: (data: CostCenter[]) => safeSave(KEYS.COST_CENTERS, data),
   getPettyCashEntries: (): PettyCashEntry[] => safeParse(KEYS.PETTY_CASH),
-  savePettyCashEntries: (data: PettyCashEntry[]) => localStorage.setItem(KEYS.PETTY_CASH, JSON.stringify(data)),
+  savePettyCashEntries: (data: PettyCashEntry[]) => safeSave(KEYS.PETTY_CASH, data),
   getRecurringExpenses: (): RecurringExpense[] => safeParse(KEYS.RECURRING_EXPENSES),
-  saveRecurringExpenses: (data: RecurringExpense[]) => localStorage.setItem(KEYS.RECURRING_EXPENSES, JSON.stringify(data)),
+  saveRecurringExpenses: (data: RecurringExpense[]) => safeSave(KEYS.RECURRING_EXPENSES, data),
   getFinancialEvents: (): FinancialEvent[] => safeParse(KEYS.FINANCIAL_EVENTS),
-  saveFinancialEvents: (data: FinancialEvent[]) => localStorage.setItem(KEYS.FINANCIAL_EVENTS, JSON.stringify(data)),
+  saveFinancialEvents: (data: FinancialEvent[]) => safeSave(KEYS.FINANCIAL_EVENTS, data),
   getMappingRules: (): FinancialMappingRule[] => safeParse(KEYS.MAPPING_RULES),
-  saveMappingRules: (data: FinancialMappingRule[]) => localStorage.setItem(KEYS.MAPPING_RULES, JSON.stringify(data)),
+  saveMappingRules: (data: FinancialMappingRule[]) => safeSave(KEYS.MAPPING_RULES, data),
   getGLConfig: (): GLConfiguration[] => safeParse(KEYS.GL_CONFIG),
-  saveGLConfig: (data: GLConfiguration[]) => localStorage.setItem(KEYS.GL_CONFIG, JSON.stringify(data)),
+  saveGLConfig: (data: GLConfiguration[]) => safeSave(KEYS.GL_CONFIG, data),
   recordTransaction: (tx: LedgerTransaction) => {
     const all = FinanceService.getLedger();
     FinanceService.saveLedger([...all, tx]);
