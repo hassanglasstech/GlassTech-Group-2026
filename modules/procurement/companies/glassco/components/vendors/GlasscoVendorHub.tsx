@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Company, TemperingDispatch, ProductionPiece, PieceFault, Vendor, Quotation, VendorRate } from '../../../../../shared/types';
+import { toast } from 'sonner';
 import { ProductionService } from '../../../../../production/services/productionService';
 import { SalesService } from '../../../../../sales/services/salesService';
 import { 
@@ -117,7 +118,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
   };
 
   const handleSaveVendor = () => {
-      if (!newVendorForm.name) return alert("Vendor Name is required");
+      if (!newVendorForm.name) return toast.error("Vendor Name is required", { duration: 4000 });
       
       let updatedVendors = [...vendors];
       if (editingId) {
