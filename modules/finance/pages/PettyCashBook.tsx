@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { toast } from 'sonner';
 import { Company, PettyCashEntry, CostCenter, Account, LedgerTransaction, Requisition } from '../../shared/types';
 import { FinanceService } from '../services/financeService';
 import { InventoryService } from '../../procurement/services/inventoryService';
@@ -119,9 +120,9 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
   );
 
   const handlePostEntry = (entryOrForm: Partial<PettyCashEntry>, isNew: boolean) => {
-    if (!entryOrForm.description || !entryOrForm.amount) return alert('Amount and Description required.');
-    if (!isNew && !entryOrForm.glAccountId && !formData.glAccountId) return alert('Please map a GL Account to approve this entry.');
-    if (!mainCashAccount) return alert('System Error: Main Cash GL not found. Setup Chart of Accounts first.');
+    if (!entryOrForm.description || !entryOrForm.amount) return toast.error('Amount and Description required.', { duration: 4000 });
+    if (!isNew && !entryOrForm.glAccountId && !formData.glAccountId) return toast.error('Please map a GL Account to approve this entry.', { duration: 4000 });
+    if (!mainCashAccount) return toast.error('System Error: Main Cash GL not found. Setup Chart of Accounts first.', { duration: 4000 });
 
     const glId      = isNew ? entryOrForm.glAccountId : formData.glAccountId;
     const bizTrans  = isNew ? entryOrForm.businessTransaction : formData.businessTransaction;
@@ -181,7 +182,7 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
     setIsModalOpen(false);
     setFormData({ amount: 0, description: '', costCenterId: '', glAccountId: '', businessTransaction: '', referenceDoc: '' });
     setLinkedReqId('');
-    alert('Cash Entry Posted Successfully.');
+    toast.success('Cash Entry Posted Successfully.', { duration: 3000 });
   };
 
   const getFilteredGLAccounts = (bizTransCode: string) => {
