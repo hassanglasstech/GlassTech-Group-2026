@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { toast } from 'sonner';
 import { Company, LedgerTransaction, Account, LedgerDocType, LedgerStatus, CostCenter } from '@/modules/shared/types';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { 
@@ -15,7 +16,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   
   // Cross-Company Posting State
   const [selectedTargetCompany, setSelectedTargetCompany] = useState<Company>(company);
@@ -60,6 +61,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
   }, [selectedTargetCompany, isModalOpen]);
 
   const refreshData = async () => {
+    setIsLoading(true);
     const ledgerData = FinanceService.getLedger();
     const sorted = ledgerData.filter(t => t.company === company).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setTransactions(sorted);
@@ -101,7 +103,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
   const isBalanced = totalDebit === totalCredit && totalDebit > 0;
 
   const handleSaveDocument = async (status: LedgerStatus) => {
-    if (!isBalanced) return alert("System Error: Document is not balanced.");
+    if (!isBalanced) return toast.error("System Error: Document is not balanced.", { duration: 4000 });
     const txId = editingDocId || `${formData.docType}-${Date.now().toString().slice(-6)}`;
     
     const tx: LedgerTransaction = {
@@ -124,7 +126,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
     refreshData();
     setIsModalOpen(false);
     resetForm();
-    alert(status === 'Posted' ? `Success: Document ${txId} Posted to ${selectedTargetCompany} Ledger.` : `Document ${txId} Parked successfully.`);
+    toast.success(status === 'Posted' ? `Success: Document ${txId} Posted to ${selectedTargetCompany} Ledger.` : `Document ${txId} Parked successfully.`, { duration: 3000 });
   };
 
   const resetForm = () => {
@@ -152,7 +154,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
       }
   };
 
-
+  if (isLoading) return <div className="h-full flex items-center justify-center text-slate-400"><Loader2 className="animate-spin mr-2"/> Accessing Ledger DB...</div>;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
