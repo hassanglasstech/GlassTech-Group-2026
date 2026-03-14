@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Company, WarehouseSpot, ProductionPiece } from '@/modules/shared/types';
 import { toast } from 'sonner';
+import { Company, WarehouseSpot, ProductionPiece } from '@/modules/shared/types';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { 
   Warehouse, LayoutGrid, Plus, X, Trash2, MapPin, 
