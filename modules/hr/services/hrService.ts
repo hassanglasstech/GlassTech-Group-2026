@@ -12,11 +12,13 @@ import { toast } from 'sonner';
 
 export const HRService = {
   getEmployees: (): Employee[] => safeParse(KEYS.EMPLOYEES),
-  saveEmployees: (data: Employee[]) => safeSave(KEYS.EMPLOYEES, data),
+  saveEmployees: (data: Employee[]) => safeSave(KEYS.EMPLOYEES, data);
+    Logger.action('HR', 'SAVE_EMPLOYEES', `${data.length} employees saved`),
   getAttendance: (): AttendanceRecord[] => safeParse(KEYS.ATTENDANCE),
   saveAttendance: (data: AttendanceRecord[]) => safeSave(KEYS.ATTENDANCE, data),
   getLoans: (): LoanAdvance[] => safeParse(KEYS.LOANS),
   saveLoans: (data: LoanAdvance[]) => safeSave(KEYS.LOANS, data),
   getPayroll: (): Payroll[] => safeParse(KEYS.PAYROLL),
-  savePayroll: (data: Payroll[]) => safeSave(KEYS.PAYROLL, data),
+  savePayroll: (data: Payroll[]) => safeSave(KEYS.PAYROLL, data);
+    Logger.action('HR', 'SAVE_PAYROLL', `Payroll updated for ${data.length} records`),
 };
