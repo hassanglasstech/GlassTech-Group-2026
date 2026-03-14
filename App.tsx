@@ -302,20 +302,17 @@ const App: React.FC = () => {
               <button
                 onClick={async () => {
                   setIsSyncing(true);
-                  const res = await SyncService.syncAll();
+                  await SyncService.syncAll();
                   setIsSyncing(false);
                 }}
                 disabled={isSyncing}
                 className="relative hover:bg-white/10 p-2 rounded-full text-white transition-colors"
-                title={`Sync to Cloud | Last: ${SyncService.getStatus().lastSync === 'Never' ? 'Never' : new Date(SyncService.getStatus().lastSync).toLocaleTimeString()}`}
+                title="Sync to Cloud"
               >
                 {isSyncing
                   ? <Loader2 size={18} className="animate-spin" />
                   : <Globe size={18} className={isOnline ? 'text-white' : 'text-slate-500'} />
                 }
-                {SyncService.getStatus().pendingChanges > 0 && !isSyncing && (
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-amber-400 rounded-full border border-[#354a5f]" title="Pending sync"/>
-                )}
               </button>
               <div className="relative hidden lg:block">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
