@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Company, PurchaseOrder, Project, Client } from '../types';
 import { InventoryService } from '../../procurement/services/inventoryService';
 import { SalesService } from '../../sales/services/salesService';
@@ -112,12 +113,12 @@ const IntercompanyHub: React.FC = () => {
 
       refreshData();
       setIsReconcileOpen(false);
-      alert("Order Accepted & Project Consumption Updated.");
+      toast.success("Order Accepted & Project Consumption Updated.", { duration: 3000 });
   };
 
   const handleConfirmReconciliation = () => {
       if (!selectedPO) return;
-      if (!selectedExistingProjectId) return alert("Please select a project to link.");
+      if (!selectedExistingProjectId) return toast.error("Please select a project to link.", { duration: 4000 });
       
       processAcceptance(selectedPO, selectedExistingProjectId);
   };
@@ -132,7 +133,7 @@ const IntercompanyHub: React.FC = () => {
     });
     InventoryService.savePurchaseOrders(updated);
     refreshData();
-    alert(`Order ${id} marked as ${newStatus}.`);
+    toast.error(`Order ${id} marked as ${newStatus}.`, { duration: 4000 });
   };
 
   return (
