@@ -1,65 +1,104 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Glasstech Factory 2026 ERP</title>
-    <link rel="stylesheet" href="index.css">
+
+    <!-- ── PWA / Mobile essential meta tags ─────────────────────── -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="GT ERP">
+    <meta name="theme-color" content="#354a5f">
+    <meta name="description" content="Glasstech Group ERP System">
+
+    <title>Glasstech ERP 2026</title>
+
+    <!-- ── PWA manifest + icons ─────────────────────────────────── -->
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/svg+xml" href="/icon.svg">
+    <link rel="apple-touch-icon" href="/icon.svg">
+
+    <!-- ── Fonts ─────────────────────────────────────────────────── -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
+
+    <link rel="stylesheet" href="/index.css">
+
     <style>
+      /* ── Safe area insets (iPhone notch / home bar) ─────────── */
+      :root {
+        --safe-top:    env(safe-area-inset-top,    0px);
+        --safe-right:  env(safe-area-inset-right,  0px);
+        --safe-bottom: env(safe-area-inset-bottom, 0px);
+        --safe-left:   env(safe-area-inset-left,   0px);
+      }
+      body {
+        padding-top:    var(--safe-top);
+        padding-bottom: var(--safe-bottom);
+      }
+
+      /* ── Print styles ───────────────────────────────────────── */
       @media print {
-        @page {
-          size: A4;
-          margin: 0; /* This removes the default browser headers and footers */
-        }
-        .no-print { display: none !important; }
-        .print-only { display: block !important; }
-        body, html { 
-          height: auto !important; 
-          overflow: visible !important; 
-          background: white !important;
-          margin: 0 !important;
-          padding: 0 !important;
-        }
-        #root { 
-          height: auto !important; 
-          overflow: visible !important; 
-        }
-        /* Re-add content margin so printer doesn't cut off text */
-        .print-content-wrapper {
-          padding: 15mm !important;
-        }
+        @page { size: A4; margin: 0; }
+        .no-print  { display: none !important; }
+        .print-only{ display: block !important; }
+        body, html { height: auto !important; overflow: visible !important; background: white !important; margin: 0 !important; padding: 0 !important; }
+        #root       { height: auto !important; overflow: visible !important; }
+        .print-content-wrapper { padding: 15mm !important; }
       }
       .print-only { display: none; }
-      
-      /* SAP Global Scrollbar */
+
+      /* ── Scrollbar ──────────────────────────────────────────── */
       ::-webkit-scrollbar { width: 8px; height: 8px; }
       ::-webkit-scrollbar-track { background: #eff4f9; }
       ::-webkit-scrollbar-thumb { background: #bccad6; border-radius: 4px; }
       ::-webkit-scrollbar-thumb:hover { background: #9db2c3; }
+
+      /* ── Prevent text resize on orientation change ──────────── */
+      html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+      /* ── Prevent tap highlight on all elements ──────────────── */
+      * { -webkit-tap-highlight-color: transparent; }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react-router-dom": "https://esm.sh/react-router-dom@^7.11.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "xlsx": "https://esm.sh/xlsx@0.18.5",
-    "pdfjs-dist": "https://esm.sh/pdfjs-dist@3.11.174",
-    "idb": "https://esm.sh/idb@8.0.0"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
+
+    <script type="importmap">
+    {
+      "imports": {
+        "react":           "https://esm.sh/react@^19.2.3",
+        "react-dom/":      "https://esm.sh/react-dom@^19.2.3/",
+        "react/":          "https://esm.sh/react@^19.2.3/",
+        "react-router-dom":"https://esm.sh/react-router-dom@^7.11.0",
+        "lucide-react":    "https://esm.sh/lucide-react@^0.562.0",
+        "xlsx":            "https://esm.sh/xlsx@0.18.5",
+        "pdfjs-dist":      "https://esm.sh/pdfjs-dist@3.11.174",
+        "idb":             "https://esm.sh/idb@8.0.0"
+      }
+    }
+    </script>
 </head>
 <body class="text-[#32363a] h-screen overflow-hidden antialiased">
     <div id="root" class="h-full"></div>
-<script type="module" src="/index.tsx"></script>
+    <script type="module" src="/index.tsx"></script>
+
+    <!-- ── Register Service Worker ──────────────────────────────── -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => {
+              console.log('[PWA] Service Worker registered:', reg.scope);
+              // Listen for background sync messages
+              navigator.serviceWorker.addEventListener('message', (e) => {
+                if (e.data?.type === 'SYNC_NOW') {
+                  window.dispatchEvent(new CustomEvent('gt-sync-now'));
+                }
+              });
+            })
+            .catch(err => console.warn('[PWA] SW registration failed:', err));
+        });
+      }
+    </script>
 </body>
 </html>
