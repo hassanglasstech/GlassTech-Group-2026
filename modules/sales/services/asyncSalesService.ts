@@ -1,7 +1,6 @@
 import { Client, Vendor } from '../types/crm';
 import { Product, Quotation, Project } from '../../shared/types';
-import { safeParse, safeSave, safeAsync } from '../../shared/services/utils';
-import { safeSupabase, translateError } from '../../shared/services/networkService';
+import { safeParse, safeSave } from '../../shared/services/utils';
 import { toast } from 'sonner';
 import { supabase } from '../../../src/services/supabaseClient';
 
@@ -27,13 +26,14 @@ export const AsyncSalesService = {
   },
   
   getProducts: async (): Promise<Product[]> => {
-    const data = await safeSupabase(
-      () => supabase.from('products').select('*'),
-      { context: 'getProducts', fallback: null, silent: false }
-    );
-    if (!data) return safeParse('gtk_erp_products');
-    {
-    return (data ?? []).map((r: any) => ({
+    try {
+      const { data, error } = await supabase.from('products').select('*');
+      if (error) {
+        console.error('[AsyncSalesService] getProducts:', error.message);
+        toast.error('Cloud sync failed — using local products.', { id: 'get-products', duration: 3000 });
+        return safeParse('gtk_erp_products');
+      }
+      return (data ?? []).map((r: any) => ({
       id: r.id, company: r.company, category: r.category, description: r.description,
       serviceNick: r.service_nick ?? '', profileCode: r.profile_code ?? '',
       thickness: r.thickness ?? '', sheetSize: r.sheet_size ?? '',
@@ -49,6 +49,11 @@ export const AsyncSalesService = {
       width: r.width ?? 0, height: r.height ?? 0,
       frameColor: r.frame_color ?? '', meshColor: r.mesh_color ?? '',
     }));
+    } catch (err: any) {
+      console.error('[AsyncSalesService] getProducts exception:', err.message);
+      toast.error('Failed to load products.', { id: 'get-products-err', duration: 3000 });
+      return safeParse('gtk_erp_products');
+    }
   },
   saveProducts: async (data: Product[]): Promise<void> => {
     const mapped = data.map((p: any) => ({
@@ -69,8 +74,8 @@ export const AsyncSalesService = {
     }));
     const { error } = await supabase.from('products').upsert(mapped);
     if (error) {
-      console.error('[AsyncSalesService] saveProducts failed:', error.message);
-      toast.error('Cloud sync failed — data saved locally.', { id: 'products-save', duration: 3000 });
+      console.error('[AsyncSalesService] saveProducts:', error.message);
+      toast.error('Cloud save failed — data saved locally.', { id: 'save-products', duration: 3000 });
     }
   },
   
