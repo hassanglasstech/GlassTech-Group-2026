@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { toast } from 'sonner';
 import { Company, PurchaseOrder, Requisition, LedgerTransaction, Account } from '@/modules/shared/types';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { ProductionService } from '@/modules/production/services/productionService';
@@ -81,7 +82,7 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
 
   // ── GRN Confirm ───────────────────────────────────────────────────────────
   const handleConfirmGRN = () => {
-    if (!grnForm.grnRef || !grnForm.grnDate) return alert('GRN Reference and Date required.');
+    if (!grnForm.grnRef || !grnForm.grnDate) return toast.error('GRN Reference and Date required.', { duration: 4000 });
     if (!selectedPO) return;
     const all = ProductionService.getPurchaseOrders();
     const updated = all.map(p => p.id === selectedPO.id
@@ -94,12 +95,12 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
     refreshData();
     setSelectedPO(prev => prev ? { ...prev, ...grnForm, status: 'GRN Done' as any } : null);
     setActiveStep('invoice');
-    alert(`✓ GRN ${grnForm.grnRef} recorded for ${selectedPO.id}.`);
+    toast.error(`✓ GRN ${grnForm.grnRef} recorded for ${selectedPO.id}.`, { duration: 4000 });
   };
 
   // ── Invoice Register ──────────────────────────────────────────────────────
   const handleRegisterInvoice = () => {
-    if (!invForm.vendorInvoiceNo || !invForm.vendorInvoiceAmount) return alert('Invoice number and amount required.');
+    if (!invForm.vendorInvoiceNo || !invForm.vendorInvoiceAmount) return toast.error('Invoice number and amount required.', { duration: 4000 });
     if (!selectedPO) return;
     const tolerance = 0.02;
     const diff = Math.abs(invForm.vendorInvoiceAmount - selectedPO.totalAmount);
@@ -116,10 +117,10 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
     setSelectedPO(fresh);
     refreshData();
     if (matchSt === 'Mismatch') {
-      alert(`⚠ MISMATCH: Invoice PKR ${invForm.vendorInvoiceAmount.toLocaleString()} vs PO PKR ${selectedPO.totalAmount.toLocaleString()}.\nPO placed On Hold. Review required.`);
+      toast.error(`⚠ MISMATCH: Invoice PKR ${invForm.vendorInvoiceAmount.toLocaleString(, { duration: 4000 })} vs PO PKR ${selectedPO.totalAmount.toLocaleString()}.\nPO placed On Hold. Review required.`);
       setActiveStep('match');
     } else {
-      alert(`✓ 3-Way Match successful. PO ${selectedPO.id} status → Matched.`);
+      toast.error(`✓ 3-Way Match successful. PO ${selectedPO.id} status → Matched.`, { duration: 4000 });
       setActiveStep('approval');
     }
   };
@@ -141,10 +142,10 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
     setSelectedPO(prev => prev ? { ...prev, approvalHistory: newHistory, status: newStatus as any } : null);
     refreshData();
     if (action === 'Approved') {
-      alert(`✓ Approved by ${lvl.label}. Payment Voucher can now be raised.`);
+      toast.error(`✓ Approved by ${lvl.label}. Payment Voucher can now be raised.`, { duration: 4000 });
       setActiveStep('payment');
     } else {
-      alert(`${action}: PO placed On Hold.`);
+      toast.error(`${action}: PO placed On Hold.`, { duration: 4000 });
       setIsModalOpen(false);
     }
   };
@@ -152,12 +153,12 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
   // ── Post AP Payment ───────────────────────────────────────────────────────
   const handlePostPayment = () => {
     if (!selectedPO) return;
-    if (!payGLId) return alert('Select Bank / Cash GL account for payment.');
+    if (!payGLId) return toast.error('Select Bank / Cash GL account for payment.', { duration: 4000 });
 
     const payableAcc = accounts.find(a =>
       a.name.includes('PAYABLE') || a.code.startsWith('211')
     );
-    if (!payableAcc) return alert('Accounts Payable GL not found. Check COA setup.');
+    if (!payableAcc) return toast.error('Accounts Payable GL not found. Check COA setup.', { duration: 4000 });
 
     const txId = `KZ-${Date.now().toString().slice(-6)}`;
     const ledgerTx: LedgerTransaction = {
@@ -194,7 +195,7 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
 
     refreshData();
     setIsModalOpen(false);
-    alert(`✓ Payment Voucher ${txId} parked. AP Ledger entry created.\nFinance to review and post.`);
+    toast.error(`✓ Payment Voucher ${txId} parked. AP Ledger entry created.\nFinance to review and post.`, { duration: 4000 });
   };
 
   // ── Handle Hold Override ──────────────────────────────────────────────────
