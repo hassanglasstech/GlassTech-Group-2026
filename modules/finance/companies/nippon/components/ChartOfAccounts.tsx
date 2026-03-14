@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { toast } from 'sonner';
 import { Company, Account, LedgerTransaction } from '@/modules/shared/types';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { 
@@ -51,7 +52,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
     if (!confirm("This will merge missing 5-Level COA accounts into your current list. Continue?")) return;
     FinanceService.seedDefaultCOA();
     refreshData();
-    alert("5-Level COA accounts have been merged.");
+    toast.error("5-Level COA accounts have been merged.", { duration: 4000 });
   };
 
   const handleClearAndReseed = () => {
@@ -59,7 +60,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
     FinanceService.saveAccounts([]); // Clear
     FinanceService.seedDefaultCOA(); // Seed
     refreshData();
-    alert("Chart of Accounts has been completely reset to 5-Level defaults.");
+    toast.error("Chart of Accounts has been completely reset to 5-Level defaults.", { duration: 4000 });
   };
 
   const loadOpeningBalances = () => {
@@ -102,7 +103,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
     });
 
     if (Math.abs(totalDebit - totalCredit) > 0.01) {
-        return alert(`Imbalance Error!\nTotal Debit: ${totalDebit}\nTotal Credit: ${totalCredit}\nDifference: ${totalDebit - totalCredit}`);
+        return toast.error(`Imbalance Error!\nTotal Debit: ${totalDebit}\nTotal Credit: ${totalCredit}\nDifference: ${totalDebit - totalCredit}`, { duration: 4000 });
     }
 
     // 1. Remove ANY existing OB for this company (to overwrite)
@@ -126,7 +127,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
 
     FinanceService.saveLedger(cleanedLedger);
     setIsOBModalOpen(false);
-    alert("Opening Balances Posted Successfully.");
+    toast.success("Opening Balances Posted Successfully.", { duration: 3000 });
   };
 
   const updateOBEntry = (accId: string, field: 'debit' | 'credit', value: string) => {
@@ -177,12 +178,12 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
   };
 
   const handleSaveAccount = () => {
-    if (!newAccName) return alert("Account name is required.");
+    if (!newAccName) return toast.error("Account name is required.", { duration: 4000 });
     let finalParentId = addSelections.l4 || addSelections.l3 || addSelections.l2 || addSelections.l1;
     let finalLevel = addSelections.l4 ? 5 : addSelections.l3 ? 4 : addSelections.l2 ? 3 : 2;
 
     const parent = accounts.find(a => a.id === finalParentId);
-    if (!parent) return alert("Select a valid parent category.");
+    if (!parent) return toast.error("Select a valid parent category.", { duration: 4000 });
 
     const newAcc: Account = {
       id: `${company}-ACC-${Date.now()}`,
@@ -206,11 +207,11 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
     // Allows deletion at ANY level selected (L5 down to L1)
     let targetId = delSelections.l5 || delSelections.l4 || delSelections.l3 || delSelections.l2 || delSelections.l1;
     
-    if (!targetId) return alert("Select a node to delete.");
+    if (!targetId) return toast.error("Select a node to delete.", { duration: 4000 });
     
     // Safety check: Cannot delete if it has children
     if (accounts.some(a => a.parentId === targetId)) {
-        return alert("Constraint Error: This node has sub-accounts. Please delete all children first.");
+        return toast.error("Constraint Error: This node has sub-accounts. Please delete all children first.", { duration: 4000 });
     }
     
     if (!window.confirm(`CRITICAL: Confirm permanent deletion of this account?`)) return;
@@ -275,7 +276,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
           const existingAccounts = FinanceService.getAccounts().filter(a => a.company !== company);
           FinanceService.saveAccounts([...existingAccounts, ...currentCompanyAccounts]);
           refreshData();
-          alert('Accounts imported successfully from JSON!');
+          toast.error('Accounts imported successfully from JSON!', { duration: 4000 });
         } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
           const workbook = XLSX.read(content, { type: 'binary' });
           const sheetName = workbook.SheetNames[0];
@@ -298,12 +299,12 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
           const existingAccounts = FinanceService.getAccounts().filter(a => a.company !== company);
           FinanceService.saveAccounts([...existingAccounts, ...currentCompanyAccounts]);
           refreshData();
-          alert('Accounts imported successfully from Excel!');
+          toast.error('Accounts imported successfully from Excel!', { duration: 4000 });
         } else {
-          alert('Unsupported file type. Please upload a JSON or Excel file.');
+          toast.error('Unsupported file type. Please upload a JSON or Excel file.', { duration: 4000 });
         }
       } catch (error: any) {
-        alert(`Error importing file: ${error.message}`);
+        toast.error(`Error importing file: ${error.message}`, { duration: 4000 });
         console.error("Import error:", error);
       }
     };
@@ -313,7 +314,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
     } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
       reader.readAsBinaryString(file);
     } else {
-      alert('Unsupported file type. Please upload a JSON or Excel file.');
+      toast.error('Unsupported file type. Please upload a JSON or Excel file.', { duration: 4000 });
     }
   };
 
@@ -326,7 +327,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
   };
 
   const handleUpdateAccount = () => {
-    if (!editingAccount || !editName) return alert("Account Name is required.");
+    if (!editingAccount || !editName) return toast.error("Account Name is required.", { duration: 4000 });
     
     const updated = { ...editingAccount, name: editName, code: editCode };
     const all = FinanceService.getAccounts();
