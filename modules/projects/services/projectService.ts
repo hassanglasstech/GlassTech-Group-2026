@@ -1,5 +1,6 @@
 import { Project } from '../../shared/types';
-import { safeParse } from '../../shared/services/utils';
+import { safeParse, safeSave } from '../../shared/services/utils';
+import { toast } from 'sonner';
 
 const KEYS = {
   PROJECTS: 'gtk_erp_projects',
@@ -7,5 +8,5 @@ const KEYS = {
 
 export const ProjectService = {
   getProjects: (): Project[] => safeParse(KEYS.PROJECTS),
-  saveProjects: (data: Project[]) => localStorage.setItem(KEYS.PROJECTS, JSON.stringify(data)),
+  saveProjects: (data: Project[]) => safeSave(KEYS.PROJECTS, data),
 };
