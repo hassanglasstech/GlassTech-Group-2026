@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Company, WarehouseSpot, ProductionPiece } from '@/modules/shared/types';
+import { toast } from 'sonner';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { 
   Warehouse, LayoutGrid, Plus, X, Trash2, MapPin, 
@@ -26,7 +27,7 @@ const NipponWarehouseModule: React.FC<{ company: Company }> = ({ company }) => {
   };
 
   const handleSaveSpot = () => {
-    if (!newSpot.code) return alert("Code is required.");
+    if (!newSpot.code) return toast.error("Code is required.", { duration: 4000 });
     const spot: WarehouseSpot = {
       id: `SPOT-${Date.now()}`,
       company,
@@ -40,7 +41,7 @@ const NipponWarehouseModule: React.FC<{ company: Company }> = ({ company }) => {
   };
 
   const handleDeleteSpot = (id: string) => {
-    if (pieces.some(p => p.spotId === id)) return alert("Cannot delete: Pieces are currently assigned to this spot.");
+    if (pieces.some(p => p.spotId === id)) return toast.error("Cannot delete: Pieces are currently assigned to this spot.", { duration: 4000 });
     ProductionService.saveWarehouseSpots(ProductionService.getWarehouseSpots().filter(s => s.id !== id));
     refreshData();
   };
