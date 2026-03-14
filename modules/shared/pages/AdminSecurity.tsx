@@ -206,6 +206,10 @@ const AdminSecurity: React.FC = () => {
             </div>
           </div>
         )}
+
+        {activeTab === 'users' && (
+          <UserManager />
+        )}
       </div>
     </div>
   );
