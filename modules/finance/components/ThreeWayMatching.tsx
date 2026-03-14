@@ -117,7 +117,7 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
     setSelectedPO(fresh);
     refreshData();
     if (matchSt === 'Mismatch') {
-      toast.error(`⚠ MISMATCH: Invoice PKR ${invForm.vendorInvoiceAmount.toLocaleString(, { duration: 4000 })} vs PO PKR ${selectedPO.totalAmount.toLocaleString()}.\nPO placed On Hold. Review required.`);
+      toast.error(`⚠ MISMATCH: Invoice PKR ${invForm.vendorInvoiceAmount.toLocaleString()}} vs PO PKR ${selectedPO.totalAmount.toLocaleString()}.\nPO placed On Hold. Review required.`, { duration: 4000 });
       setActiveStep('match');
     } else {
       toast.error(`✓ 3-Way Match successful. PO ${selectedPO.id} status → Matched.`, { duration: 4000 });
