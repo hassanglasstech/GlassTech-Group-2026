@@ -1,21 +1,31 @@
-
 @import "./modules/glassco/core/GlasscoPrintTemplate.css";
 
+/* ══════════════════════════════════════════════════════════
+   GLASSTECH ERP — Global Styles
+   Mobile-first responsive design
+══════════════════════════════════════════════════════════ */
+
 :root {
-  --sap-blue: #0a6ed1;
-  --sap-blue-hover: #0854a0;
-  --sap-shell-color: #354a5f;
-  --sap-background: #eff4f9;
-  --sap-tile-bg: #ffffff;
-  --sap-border: #d9d9d9;
-  --sap-text: #32363a;
+  --sap-blue:           #0a6ed1;
+  --sap-blue-hover:     #0854a0;
+  --sap-shell-color:    #354a5f;
+  --sap-background:     #eff4f9;
+  --sap-tile-bg:        #ffffff;
+  --sap-border:         #d9d9d9;
+  --sap-text:           #32363a;
   --sap-secondary-text: #6a6d70;
-  --sap-success: #107e3e;
-  --sap-error: #bb0000;
-  --sap-warning: #e9730c;
-  --sap-info: #0a6ed1;
-  --sap-header-bg: #ffffff;
+  --sap-success:        #107e3e;
+  --sap-error:          #bb0000;
+  --sap-warning:        #e9730c;
+  --sap-info:           #0a6ed1;
+  --sap-header-bg:      #ffffff;
+
+  /* Bottom nav height — used everywhere for safe spacing */
+  --bottom-nav-height:  64px;
 }
+
+/* ── Base ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
 
 body {
   margin: 0;
@@ -23,49 +33,59 @@ body {
   background-color: var(--sap-background);
   color: var(--sap-text);
   -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
 }
 
-/* Custom Scrollbar for SAP look */
+/* ── Remove number spinners ──────────────────────────────────────── */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }
+
+/* ── Scrollbars ──────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #bccad6; border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: #9db2c3; }
 
-/* Remove Spinners from Number Inputs (Requested Feature) */
-input[type=number]::-webkit-inner-spin-button, 
-input[type=number]::-webkit-outer-spin-button { 
-  -webkit-appearance: none; 
-  margin: 0; 
-}
-input[type=number] {
-  -moz-appearance: textfield;
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── SAP Shell ───────────────────────────────────────────────────── */
+.sap-shell {
+  background-color: var(--sap-shell-color);
+  height: 3.5rem;
+  color: white;
 }
 
-/* SAP Fiori Tile Styling */
+/* ── SAP Tile ────────────────────────────────────────────────────── */
 .sap-tile {
   background: var(--sap-tile-bg);
   border: 1px solid var(--sap-border);
-  box-shadow: 0 0 0.125rem 0 rgba(0,0,0,0.05);
+  box-shadow: 0 0 0.125rem rgba(0,0,0,0.05);
   border-radius: 1rem;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  padding: 1.25rem;
-  width: 11rem;
-  height: 11rem;
+  padding: 1rem;
+  /* Mobile: smaller tiles */
+  width: 9rem;
+  height: 9rem;
   position: relative;
+}
+@media (min-width: 640px) {
+  .sap-tile { width: 11rem; height: 11rem; padding: 1.25rem; }
 }
 
 .sap-tile:hover {
-  background-color: #ffffff;
   box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
   border-color: var(--sap-blue);
   transform: translateY(-4px);
 }
+.sap-tile:active { transform: scale(0.97); }
 
 .sap-tile-title {
-  font-size: 0.95rem;
+  font-size: 0.8rem;
   font-weight: 800;
   color: var(--sap-text);
   line-height: 1.2;
@@ -76,15 +96,15 @@ input[type=number] {
   overflow: hidden;
   text-transform: uppercase;
 }
+@media (min-width: 640px) { .sap-tile-title { font-size: 0.95rem; } }
 
 .sap-tile-subtitle {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: var(--sap-secondary-text);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-
 .sap-tile-icon {
   margin-top: auto;
   align-self: flex-end;
@@ -92,93 +112,91 @@ input[type=number] {
   opacity: 0.8;
 }
 
-/* SAP Shell Bar */
-.sap-shell {
-  background-color: var(--sap-shell-color);
-  height: 3.5rem;
-  color: white;
-}
-
-/* Global Responsive Spacing */
-.sap-content-container {
-  padding: 1rem;
-}
-@media (min-width: 768px) {
-  .sap-content-container {
-    padding: 2rem;
-  }
-}
-
-/* Responsive Table Handling */
+/* ── Tables — horizontal scroll on mobile ───────────────────────── */
 .sap-table-container {
   width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  border-radius: 0.75rem;
 }
 
 .sap-table {
   width: 100%;
-  min-width: 600px; /* Force scroll on small screens if needed */
+  border-collapse: collapse;
+  min-width: 500px; /* triggers scroll on small screens */
 }
 
-/* Horizontal Scrollable Tabs */
-.sap-scroll-container {
-  display: flex;
-  overflow-x: auto;
+.sap-table thead th {
+  font-size: 0.625rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #64748b;
+  padding: 0.75rem 1rem;
   white-space: nowrap;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 4px;
-  gap: 0.5rem;
-}
-.sap-scroll-container::-webkit-scrollbar {
-  display: none;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
 }
 
-/* Standard Buttons */
+.sap-table tbody td {
+  padding: 0.625rem 1rem;
+  font-size: 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.sap-table tbody tr:last-child td { border-bottom: none; }
+.sap-table tbody tr:hover { background: #f8fafc; }
+
+/* Mobile table: smaller padding */
+@media (max-width: 640px) {
+  .sap-table thead th { padding: 0.5rem 0.75rem; font-size: 0.55rem; }
+  .sap-table tbody td { padding: 0.5rem 0.75rem; }
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────── */
 .sap-btn-primary {
   background-color: var(--sap-blue);
   color: white;
+  border: none;
   border-radius: 0.75rem;
-  padding: 0.6rem 1.25rem;
+  padding: 0.625rem 1.25rem;
   font-weight: 700;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   transition: all 0.2s;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  /* Mobile: larger touch target */
+  min-height: 44px;
 }
+.sap-btn-primary:hover  { background-color: var(--sap-blue-hover); }
+.sap-btn-primary:active { transform: scale(0.97); }
 
 .sap-btn-ghost {
   background-color: transparent;
   color: #64748b;
   border: 1px solid #e2e8f0;
   border-radius: 0.75rem;
-  padding: 0.6rem 1.25rem;
+  padding: 0.625rem 1.25rem;
   font-weight: 700;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   transition: all 0.2s;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  min-height: 44px;
 }
+.sap-btn-ghost:hover  { background-color: #f1f5f9; color: #334155; }
+.sap-btn-ghost:active { transform: scale(0.97); }
 
-.sap-btn-ghost:hover {
-  background-color: #f1f5f9;
-  color: #334155;
-}
-
-.sap-btn-primary:active { transform: scale(0.95); }
-
-/* Hide scrollbars for clean UI */
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-/* Input Fields */
+/* ── Input Fields ────────────────────────────────────────────────── */
 .sap-input {
   background-color: #f8fafc;
   border: 1px solid #e2e8f0;
@@ -187,16 +205,127 @@ input[type=number] {
   font-size: 0.875rem;
   outline: none;
   transition: all 0.2s;
+  /* Mobile: prevent zoom on focus (font-size >= 16px) */
+  font-size: max(16px, 0.875rem);
+  min-height: 44px;
+  width: 100%;
 }
 .sap-input:focus {
   background-color: white;
   border-color: var(--sap-blue);
-  box-shadow: 0 0 0 3px rgba(10, 110, 209, 0.1);
+  box-shadow: 0 0 0 3px rgba(10,110,209,0.1);
+}
+/* Desktop: normal font size */
+@media (min-width: 768px) {
+  .sap-input { font-size: 0.875rem; min-height: unset; }
 }
 
-/* Print Specific Styles */
-@media print {
-  .print-hidden {
-    display: none !important;
+/* ── Object Header (used in forms) ──────────────────────────────── */
+.sap-object-header {
+  background: var(--sap-shell-color);
+  color: white;
+  padding: 1.25rem 1.5rem;
+}
+
+/* ── Scroll container (tabs) ─────────────────────────────────────── */
+.sap-scroll-container {
+  display: flex;
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 4px;
+  gap: 0.5rem;
+}
+.sap-scroll-container::-webkit-scrollbar { display: none; }
+
+/* ── Content area padding (accounts for bottom nav on mobile) ───── */
+.sap-content-container {
+  padding: 0.75rem;
+  padding-bottom: calc(0.75rem + var(--bottom-nav-height));
+}
+@media (min-width: 1024px) {
+  .sap-content-container {
+    padding: 2rem;
+    padding-bottom: 2rem; /* no bottom nav on desktop */
   }
+}
+
+/* ── Mobile bottom nav (shown below 1024px) ──────────────────────── */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--bottom-nav-height);
+  background: #2f3e4d;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  z-index: 200;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  height: 100%;
+  color: #94a3b8;
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: color 0.2s;
+  text-decoration: none;
+  gap: 2px;
+}
+.bottom-nav-item.active { color: #60a5fa; }
+.bottom-nav-item:active { transform: scale(0.92); }
+
+/* ── Modal full-screen on mobile ─────────────────────────────────── */
+@media (max-width: 640px) {
+  .modal-fullscreen-mobile {
+    position: fixed !important;
+    inset: 0 !important;
+    border-radius: 0 !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    margin: 0 !important;
+  }
+}
+
+/* ── Card spacing on mobile ──────────────────────────────────────── */
+.space-y-6 { gap: 1.5rem; }
+@media (max-width: 640px) {
+  .mobile-compact > * + * { margin-top: 0.75rem; }
+}
+
+/* ── Prevent horizontal overflow globally ────────────────────────── */
+#root { overflow-x: hidden; }
+
+/* ── Touch action for swipeable areas ───────────────────────────── */
+.swipeable { touch-action: pan-x; }
+
+/* ── Print ───────────────────────────────────────────────────────── */
+@media print {
+  .print-hidden { display: none !important; }
+  .no-print     { display: none !important; }
+  .bottom-nav   { display: none !important; }
+}
+
+/* ── Animate in utility ──────────────────────────────────────────── */
+.animate-in { animation: fadeIn 0.3s ease; }
+.fade-in    { animation: fadeIn 0.3s ease; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+.zoom-in { animation: zoomIn 0.2s ease; }
+@keyframes zoomIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1);    }
 }
