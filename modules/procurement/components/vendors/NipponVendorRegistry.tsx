@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Company, Vendor } from '@/modules/shared/types';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { Plus, Search, MapPin, Calendar, Phone, Save, X, Edit2, Trash2, Building } from 'lucide-react';
@@ -34,7 +35,7 @@ const NipponVendorRegistry: React.FC = () => {
   };
 
   const handleSave = () => {
-    if (!formData.name) return alert("Company Name is required.");
+    if (!formData.name) return toast.error("Company Name is required.", { duration: 4000 });
 
     const newVendor: Vendor = {
       ...(formData as Vendor),
