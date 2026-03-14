@@ -1,4 +1,5 @@
 import React, { useState, useEffect, Suspense } from 'react';
+import { GlobalErrorBoundary, ModuleErrorBoundary } from '@/modules/shared/components/ErrorBoundary';
 import { HashRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, ShoppingBag, Landmark, ShieldCheck,
@@ -275,6 +276,7 @@ const App: React.FC = () => {
   }, [user]);
 
   return (
+    <GlobalErrorBoundary>
     <HashRouter>
       <Toaster position="top-right" richColors />
       {!user || !user.email || !user.role ? (
@@ -350,21 +352,20 @@ const App: React.FC = () => {
                 </div>
               }>
                 <Routes>
-                  <Route path="/"             element={<Dashboard company={selectedCompany} />} />
-                  <Route path="/hr/*"          element={<HRModule />} />
-                  <Route path="/sales/*"       element={<SalesCRM />} />
-                  <Route path="/inventory"     element={<InventoryModule />} />
-                  <Route path="/logistics"     element={<LogisticsModule />} />
-                  <Route path="/vendors"       element={<VendorHub />} />
-                  <Route path="/projects/*"    element={<ProjectsModule />} />
-                  <Route path="/production"    element={<ProductionModule />} />
-                  <Route path="/hub/*"         element={<IntercompanyHub />} />
-                  <Route path="/requisitions"  element={<Requisitions />} />
-                  <Route path="/accounts/*"    element={<AccountsModule />} />
-                  <Route path="/admin"         element={<AdminSecurity />} />
+                  <Route path="/"             element={<ModuleErrorBoundary moduleName="Dashboard"><Dashboard company={selectedCompany} /></ModuleErrorBoundary>} />
+                  <Route path="/hr/*"          element={<ModuleErrorBoundary moduleName="HR"><HRModule /></ModuleErrorBoundary>} />
+                  <Route path="/sales/*"       element={<ModuleErrorBoundary moduleName="Sales"><SalesCRM /></ModuleErrorBoundary>} />
+                  <Route path="/inventory"     element={<ModuleErrorBoundary moduleName="Inventory"><InventoryModule /></ModuleErrorBoundary>} />
+                  <Route path="/logistics"     element={<ModuleErrorBoundary moduleName="Logistics"><LogisticsModule /></ModuleErrorBoundary>} />
+                  <Route path="/vendors"       element={<ModuleErrorBoundary moduleName="Vendors"><VendorHub /></ModuleErrorBoundary>} />
+                  <Route path="/projects/*"    element={<ModuleErrorBoundary moduleName="Projects"><ProjectsModule /></ModuleErrorBoundary>} />
+                  <Route path="/production"    element={<ModuleErrorBoundary moduleName="Production"><ProductionModule /></ModuleErrorBoundary>} />
+                  <Route path="/hub/*"         element={<ModuleErrorBoundary moduleName="Supply Hub"><IntercompanyHub /></ModuleErrorBoundary>} />
+                  <Route path="/requisitions"  element={<ModuleErrorBoundary moduleName="Procurement"><Requisitions /></ModuleErrorBoundary>} />
+                  <Route path="/accounts/*"    element={<ModuleErrorBoundary moduleName="Finance"><AccountsModule /></ModuleErrorBoundary>} />
+                  <Route path="/admin"         element={<ModuleErrorBoundary moduleName="Admin"><AdminSecurity /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />
-                </Routes>
-              </Suspense>
+                </Routes>              </Suspense>
             </div>
           </div>
         </main>
@@ -372,6 +373,7 @@ const App: React.FC = () => {
       </div>
       )}
     </HashRouter>
+    </GlobalErrorBoundary>
   );
 };
 
