@@ -132,7 +132,7 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
       FinanceService.saveLedger([...currentLedger, ...newLedgerEntries]);
       
       // 5. Visual Feedback
-      toast.success(`Success: Invoice ${txId} Generated & Revenue Booked (PKR ${totalRevenue.toLocaleString(, { duration: 3000 })}).${mirrorMsg}`);
+      toast.success(`Success: Invoice ${txId} Generated & Revenue Booked (PKR ${totalRevenue.toLocaleString()}).${mirrorMsg}`, { duration: 3000 });
   };
 
   return (
