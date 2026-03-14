@@ -103,3 +103,49 @@ export const getStorageHealth = () => {
     return { totalKeys: 0, erpKeys: 0, totalKB: 0, erpKB: 0, usedPercent: 0, isHealthy: true };
   }
 };
+
+// ── Schema version management ─────────────────────────────────────────
+const SCHEMA_VERSION_KEY = 'gt_schema_version';
+const CURRENT_SCHEMA_VERSION = 3; // increment when data shape changes
+
+export const checkSchemaVersion = (): boolean => {
+  try {
+    const stored = parseInt(localStorage.getItem(SCHEMA_VERSION_KEY) || '0');
+    if (stored < CURRENT_SCHEMA_VERSION) {
+      console.log(`[Schema] Version mismatch: stored=${stored}, current=${CURRENT_SCHEMA_VERSION}`);
+      localStorage.setItem(SCHEMA_VERSION_KEY, String(CURRENT_SCHEMA_VERSION));
+      return false; // schema changed
+    }
+    return true;
+  } catch {
+    return true;
+  }
+};
+
+// ── Null-safe deep get ────────────────────────────────────────────────
+export const deepGet = (obj: any, path: string, fallback: any = null): any => {
+  try {
+    return path.split('.').reduce((acc, key) => acc?.[key], obj) ?? fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+// ── Ensure array helper ───────────────────────────────────────────────
+export const ensureArray = <T>(val: any): T[] => {
+  if (Array.isArray(val)) return val;
+  if (val === null || val === undefined) return [];
+  return [val];
+};
+
+// ── Ensure number helper ──────────────────────────────────────────────
+export const ensureNumber = (val: any, fallback = 0): number => {
+  const n = Number(val);
+  return isNaN(n) ? fallback : n;
+};
+
+// ── Ensure string helper ──────────────────────────────────────────────
+export const ensureString = (val: any, fallback = ''): string => {
+  if (val === null || val === undefined) return fallback;
+  return String(val);
+};
