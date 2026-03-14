@@ -1,5 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import { toast } from 'sonner';
 import { Company, Quotation, Client, ProductionPiece, PieceStatus, TemperingDispatch, GatePass, WarehouseSpot, PieceFault } from '@/modules/shared/types';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { SalesService } from '@/modules/sales/services/salesService';
@@ -160,7 +161,7 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
   };
 
   const togglePieceToDispatch = (pieceId: string) => {
-    if (!activeDispatchIdForLoading) return alert("Selection Error: Choose an active Trip ID first.");
+    if (!activeDispatchIdForLoading) return toast.error("Selection Error: Choose an active Trip ID first.", { duration: 4000 });
     const targetTrip = dispatches.find(d => d.id === activeDispatchIdForLoading);
     if (!targetTrip) return;
 
@@ -196,7 +197,7 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
   };
 
   const handleInwardPiece = (pieceId: string) => {
-    if (!activeInwardDispatchId) return alert("Audit Error: Select an Inward Dispatch Trip first.");
+    if (!activeInwardDispatchId) return toast.error("Audit Error: Select an Inward Dispatch Trip first.", { duration: 4000 });
     const piece = pieces.find(p => p.id === pieceId);
     if (!piece) return;
 
@@ -236,8 +237,8 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
   };
 
   const executeDirectDelivery = () => {
-    if (!directDeliveryForm.vehicleNo || !directDeliveryForm.siteName) return alert("Validation: Vehicle and Site Name required.");
-    if (selectedPiecesForDelivery.size === 0) return alert("No pieces selected.");
+    if (!directDeliveryForm.vehicleNo || !directDeliveryForm.siteName) return toast.error("Validation: Vehicle and Site Name required.", { duration: 4000 });
+    if (selectedPiecesForDelivery.size === 0) return toast.error("No pieces selected.", { duration: 4000 });
 
     const newChallan: TemperingDispatch = {
       id: `CHL-SITE-${Date.now().toString().slice(-5)}`,
@@ -265,7 +266,7 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
     setIsDirectDeliveryModalOpen(false);
     setSelectedPiecesForDelivery(new Set());
     setDirectDeliveryForm({ vehicleNo: '', driverName: '', siteName: '' });
-    alert(`Direct Delivery Challan ${newChallan.id} Created. Pieces marked Delivered.`);
+    toast.error(`Direct Delivery Challan ${newChallan.id} Created. Pieces marked Delivered.`, { duration: 4000 });
   };
 
   const handleRecordFault = () => {
@@ -285,7 +286,7 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
     }
     setSelectedPieceForFault(null);
     setFaultForm({ description: '', disposal: 'Recut' });
-    alert("Quality Fault Decision Recorded.");
+    toast.success("Quality Fault Decision Recorded.", { duration: 3000 });
   };
 
   const inwardAuditablePieces = useMemo(() => {
