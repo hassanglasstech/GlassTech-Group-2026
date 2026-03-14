@@ -10,10 +10,16 @@ import {
 } from 'lucide-react';
 
 import { useAppStore } from '../store/appStore';
+import { useAuthStore } from '@/modules/auth/authStore';
+import UserManager from '@/modules/auth/UserManager';
+import { ErrorLogViewer } from '@/modules/shared/components/ErrorBoundary';
+import { getStorageHealth } from '@/modules/shared/services/utils';
+import { getNetworkStatus, OfflineQueue } from '@/modules/shared/services/networkService';
+import { DataIntegrity } from '@/modules/shared/services/dataIntegrity';
 
 const AdminSecurity: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'command_center' | 'admin' | 'users'>('command_center');
+  const [activeTab, setActiveTab] = useState<'command_center' | 'admin' | 'users' | 'error_logs' | 'data_health'>('command_center');
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [filterModule, setFilterModule] = useState<string>('All');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -104,7 +110,9 @@ const AdminSecurity: React.FC = () => {
           {[
             { id: 'command_center', label: 'Live Activity Feed', icon: Activity },
             { id: 'admin', label: 'Basis (DB Management)', icon: Database },
-            { id: 'users', label: 'User Roles (SU01)', icon: Users },
+            { id: 'users',      label: 'User Roles (SU01)',   icon: Users },
+            { id: 'error_logs',  label: 'Error Logs',      icon: AlertTriangle },
+            { id: 'data_health', label: 'Data Integrity',  icon: ShieldCheck },
           ].map(tab => (
             <button
               key={tab.id}
@@ -124,6 +132,52 @@ const AdminSecurity: React.FC = () => {
         {activeTab === 'command_center' && (
             <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {/* Network Status */}
+              {(() => {
+                const net = getNetworkStatus();
+                const queued = net.queuedWrites;
+                return (
+                  <div className={`rounded-2xl border p-5 ${!net.isOnline ? 'bg-rose-50 border-rose-200' : queued > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Network</p>
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${net.isOnline ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                        {net.isOnline ? '● Online' : '○ Offline'}
+                      </span>
+                    </div>
+                    <p className="text-2xl font-black text-slate-800">{queued}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Queued writes pending sync</p>
+                    {net.connectionType !== 'unknown' && (
+                      <p className="text-[9px] text-slate-300 mt-1 uppercase font-bold">{net.connectionType}</p>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Storage Health */}
+              {(() => {
+                const health = getStorageHealth();
+                return (
+                  <div className={`rounded-2xl border p-5 ${!health.isHealthy ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200'}`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Storage Health</p>
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${health.isHealthy ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                        {health.isHealthy ? '✓ Healthy' : '⚠ Warning'}
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-500">ERP Data</span>
+                        <span className="font-black text-slate-800">{health.erpKB} KB</span>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-2">
+                        <div className={`h-2 rounded-full transition-all ${health.usedPercent > 80 ? 'bg-rose-500' : health.usedPercent > 60 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                          style={{ width: `${Math.min(health.usedPercent, 100)}%` }}/>
+                      </div>
+                      <p className="text-[10px] text-slate-400">{health.usedPercent}% of 5MB used ({health.totalKB} KB total)</p>
+                    </div>
+                  </div>
+                );
+              })()}
                     <div className="bg-white p-6 rounded-2xl border shadow-sm">
                         <div className="flex justify-between items-start">
                             <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Actions Today</p><p className="text-3xl font-black text-slate-800 mt-1">{stats.totalToday}</p></div>
@@ -205,6 +259,96 @@ const AdminSecurity: React.FC = () => {
                   <button onClick={handleFactoryReset} className="bg-rose-600 text-white px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-rose-700 transition-all flex items-center space-x-2"><Trash2 size={16}/> <span>Wipe All Data</span></button>
                </div>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'users' && (
+          <UserManager />
+        )}
+
+        {activeTab === 'error_logs' && (
+          <div className="p-6">
+            <ErrorLogViewer />
+          </div>
+        )}
+
+        {activeTab === 'data_health' && (
+          <div className="p-6 space-y-5">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <h3 className="font-black text-slate-800 uppercase text-sm">Data Integrity</h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">Scan and repair localStorage data</p>
+              </div>
+              <div className="flex space-x-2">
+                <button onClick={() => { setScanning(true); setTimeout(() => { setScanReport(DataIntegrity.scan()); setScanning(false); }, 100); }}
+                  disabled={scanning}
+                  className="bg-slate-900 hover:bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase flex items-center space-x-2 transition-all">
+                  {scanning ? <><RefreshCw size={13} className="animate-spin"/><span>Scanning...</span></> : <><ShieldCheck size={13}/><span>Run Scan</span></>}
+                </button>
+                <button onClick={() => { const r = DataIntegrity.repair(); toast.success(`Repaired ${r.fixed} issues.`, { duration: 3000 }); setScanReport(DataIntegrity.scan()); }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase flex items-center space-x-2 transition-all">
+                  <span>Auto Repair</span>
+                </button>
+                <button onClick={DataIntegrity.exportReport}
+                  className="border border-slate-200 hover:bg-slate-50 text-slate-600 px-4 py-2 rounded-xl text-xs font-black uppercase flex items-center space-x-2 transition-all">
+                  <Download size={13}/><span>Export</span>
+                </button>
+              </div>
+            </div>
+
+            {scanReport ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-white border border-slate-200 rounded-2xl p-5">
+                    <p className="text-[10px] font-black uppercase text-slate-400">Total Records</p>
+                    <p className="text-3xl font-black text-slate-800 mt-1">{scanReport.totalRecords}</p>
+                  </div>
+                  <div className={`rounded-2xl border p-5 ${scanReport.issues.length > 0 ? 'bg-rose-50 border-rose-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                    <p className="text-[10px] font-black uppercase text-slate-400">Issues Found</p>
+                    <p className={`text-3xl font-black mt-1 ${scanReport.issues.length > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>{scanReport.issues.length}</p>
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-2xl p-5">
+                    <p className="text-[10px] font-black uppercase text-slate-400">Collections Scanned</p>
+                    <p className="text-3xl font-black text-slate-800 mt-1">{Object.keys(scanReport.collections).length}</p>
+                  </div>
+                </div>
+
+                {scanReport.issues.length === 0 ? (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-8 text-center">
+                    <p className="text-emerald-700 font-black text-base">✓ All data is healthy</p>
+                    <p className="text-emerald-600 text-xs mt-1">No integrity issues found</p>
+                  </div>
+                ) : (
+                  <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                    <table className="w-full text-left sap-table">
+                      <thead className="bg-slate-50 border-b">
+                        <tr>
+                          <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-400">Collection</th>
+                          <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-400">Type</th>
+                          <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-400">Issue</th>
+                          <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-400">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {scanReport.issues.slice(0, 50).map((issue: any, i: number) => (
+                          <tr key={i} className="hover:bg-slate-50">
+                            <td className="px-4 py-2.5 text-xs font-bold text-slate-700">{issue.collection}</td>
+                            <td className="px-4 py-2.5"><span className="text-[9px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-black uppercase">{issue.type}</span></td>
+                            <td className="px-4 py-2.5 text-[10px] text-slate-500">{issue.message}</td>
+                            <td className="px-4 py-2.5"><span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${issue.repaired ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{issue.repaired ? 'Repaired' : 'Manual'}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-12 text-center">
+                <ShieldCheck size={40} className="mx-auto text-slate-200 mb-3"/>
+                <p className="text-slate-400 font-bold text-sm">Click "Run Scan" to check data integrity</p>
+              </div>
+            )}
           </div>
         )}
       </div>
