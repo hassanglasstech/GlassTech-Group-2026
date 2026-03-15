@@ -18,8 +18,21 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const AsyncSalesService = {
   getClients: async (): Promise<Client[]> => {
-    await delay(100);
-    return safeParse(KEYS.CLIENTS);
+    try {
+      const { data, error } = await supabase.from('clients').select('*');
+      if (error) {
+        console.error('[AsyncSalesService] getClients:', error.message);
+        return safeParse(KEYS.CLIENTS);
+      }
+      if (data && data.length > 0) {
+        safeSave(KEYS.CLIENTS, data);
+        return data as Client[];
+      }
+      return safeParse(KEYS.CLIENTS);
+    } catch (err: any) {
+      console.error('[AsyncSalesService] getClients exception:', err.message);
+      return safeParse(KEYS.CLIENTS);
+    }
   },
   saveClients: async (data: Client[]): Promise<void> => {
     await delay(100);
@@ -82,8 +95,32 @@ export const AsyncSalesService = {
   },
   
   getQuotations: async (): Promise<Quotation[]> => {
-    await delay(100);
-    return safeParse(KEYS.QUOTATIONS);
+    try {
+      const { data, error } = await supabase.from('quotations').select('*');
+      if (error) {
+        console.error('[AsyncSalesService] getQuotations:', error.message);
+        return safeParse(KEYS.QUOTATIONS);
+      }
+      if (data && data.length > 0) {
+        // Map snake_case to camelCase
+        const mapped = data.map((r: any) => ({
+          id: r.id, company: r.company, date: r.date,
+          dueDate: r.due_date, clientId: r.client_id,
+          projectName: r.project_name, subject: r.subject,
+          items: r.items || [], serviceCharges: r.service_charges,
+          discountPercent: r.discount_percent, discountAmount: r.discount_amount,
+          status: r.status, orderNo: r.order_no,
+          isAlreadyDispatched: r.is_already_dispatched,
+          manualRef: r.manual_ref,
+        }));
+        safeSave(KEYS.QUOTATIONS, mapped);
+        return mapped;
+      }
+      return safeParse(KEYS.QUOTATIONS);
+    } catch (err: any) {
+      console.error('[AsyncSalesService] getQuotations exception:', err.message);
+      return safeParse(KEYS.QUOTATIONS);
+    }
   },
   saveQuotations: async (data: Quotation[]): Promise<void> => {
     await delay(100);
@@ -91,8 +128,20 @@ export const AsyncSalesService = {
   },
   
   getProjects: async (): Promise<Project[]> => {
-    await delay(100);
-    return safeParse(KEYS.PROJECTS);
+    try {
+      const { data, error } = await supabase.from('projects').select('*');
+      if (error) {
+        console.error('[AsyncSalesService] getProjects:', error.message);
+        return safeParse(KEYS.PROJECTS);
+      }
+      if (data && data.length > 0) {
+        safeSave(KEYS.PROJECTS, data);
+        return data as Project[];
+      }
+      return safeParse(KEYS.PROJECTS);
+    } catch (err: any) {
+      return safeParse(KEYS.PROJECTS);
+    }
   },
   saveProjects: async (data: Project[]): Promise<void> => {
     await delay(100);
