@@ -353,7 +353,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                <div className="flex flex-col md:flex-row md:space-x-12 items-center">
                    <div>
                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Gross Subtotal</p>
-                       <p className="text-3xl font-black tracking-tight">PKR {totalAmount.toLocaleString()}</p>
+                       <p className="text-3xl font-black tracking-tight">PKR {(Number(totalAmount) || 0).toLocaleString()}</p>
                    </div>
                    <div className="h-10 w-px bg-slate-700 hidden md:block"></div>
                    <div>
