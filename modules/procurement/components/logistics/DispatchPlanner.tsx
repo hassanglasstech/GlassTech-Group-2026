@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from 'react';
-import { toast } from 'sonner';
 import { Company, TemperingDispatch, ProductionPiece, Quotation, Client, PettyCashEntry, Vendor } from '@/modules/shared/types';
 import { AppService } from '@/modules/shared/services/appService';
 import { ProductionService } from '@/modules/production/services/productionService';
@@ -79,7 +78,7 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
     const temperingVendors = useMemo(() => vendors.filter(v => v.type === 'Tempering'), [vendors]);
 
     const handleAddStop = () => {
-        if (!newStop.plantName || !newStop.serviceType) return toast.error("Destination and Service Type required.", { duration: 4000 });
+        if (!newStop.plantName || !newStop.serviceType) return alert("Destination and Service Type required.");
         const stop: PlannedStop = { id: `STOP-${Date.now()}`, plantName: newStop.plantName.toUpperCase(), serviceType: newStop.serviceType as any, pickLocation: tripHeader.originLocation, selectedPieceIds: [], expectedReturnDate: newStop.expectedReturnDate };
         setStops([...stops, stop]);
         setNewStop({ plantName: '', serviceType: 'Site Delivery', pickLocation: tripHeader.originLocation, selectedPieceIds: [], expectedReturnDate: '' });
@@ -89,7 +88,7 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
     const handleRemoveStop = (id: string) => setStops(stops.filter(s => s.id !== id));
 
     const handleFinalizeTrip = () => {
-        if (stops.length === 0) return toast.error("Please add at least one drop/destination.", { duration: 4000 });
+        if (stops.length === 0) return alert("Please add at least one drop/destination.");
         const today = new Date().toISOString().split('T')[0];
         const isFuture = tripHeader.date > today;
         const initialStatus = isFuture ? 'Scheduled' : 'Ready to Dispatch';
@@ -109,7 +108,7 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
         refreshData();
         setIsPlannerOpen(false);
         resetForm();
-        toast.error(`Trip ${tripId} Created. Go to 'Destination Trip Loading' in Production to assign pieces.`, { duration: 4000 });
+        alert(`Trip ${tripId} Created. Go to 'Destination Trip Loading' in Production to assign pieces.`);
     };
 
     const resetForm = () => { setTripHeader({ date: new Date().toISOString().split('T')[0], time: '09:00', originLocation: 'Factory' }); setStops([]); };
@@ -205,7 +204,7 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
 
     const handlePrintVoucher = (group: { id: string, stops: TemperingDispatch[], driver: string }) => {
         const totalFare = group.stops.reduce((s, stop) => s + (stop.totalCharges || 0), 0);
-        if (totalFare <= 0) return toast.error("No charges recorded for this trip.", { duration: 4000 });
+        if (totalFare <= 0) return alert("No charges recorded for this trip.");
 
         const dummyEntry: PettyCashEntry = {
             id: `PV-${Date.now().toString().slice(-6)}`,
@@ -337,7 +336,7 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
                                        title="Print Driver Payment Voucher"
                                    >
                                        <Receipt size={12}/>
-                                       <span className="text-[10px] font-black uppercase">Fare: {totalFare.toLocaleString()}</span>
+                                       <span className="text-[10px] font-black uppercase">Fare: {(Number(totalFare) || 0).toLocaleString()}</span>
                                    </button>
                                )}
                                <div className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase ${isArrived ? 'bg-blue-100 text-blue-700' : isDeparted ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
