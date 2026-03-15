@@ -41,7 +41,8 @@ const InventoryModule: React.FC = () => {
         setHUs(InventoryService.getHandlingUnits());
         
         // Async Load Stock Ledger
-        const allLedger = await InventoryService.getStockLedgerAsync();
+        // Defer heavy IDB load - don't block initial render
+        let allLedger: any[] = InventoryService.getStockLedger(); // sync first
         setLedger(allLedger.filter(l => l.company === company).sort((a,b) => b.timestamp.localeCompare(a.timestamp)));
         
         setIsLoading(false);
@@ -52,8 +53,8 @@ const InventoryModule: React.FC = () => {
   const refreshSync = () => {
       // Helper for modal updates that might update sync stores
       setItems(InventoryService.getStore().filter(i => i.company === company));
-      // Re-trigger async load
-      InventoryService.getStockLedgerAsync().then(all => {
+      // Load full IDB data after render
+      setTimeout(() => InventoryService.getStockLedgerAsync().then(all => {
           setLedger(all.filter(l => l.company === company).sort((a,b) => b.timestamp.localeCompare(a.timestamp)));
       });
   };
@@ -147,4 +148,4 @@ const InventoryModule: React.FC = () => {
   );
 };
 
-export default React.memo(InventoryModule);
+export default InventoryModule;
