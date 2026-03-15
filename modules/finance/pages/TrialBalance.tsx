@@ -79,16 +79,16 @@ const TrialBalance: React.FC<{ company: Company }> = ({ company }) => {
               <tr key={acc.id} className="hover:bg-blue-50/30 transition-colors">
                 <td className="px-6 py-4 font-mono text-xs text-slate-500">{acc.code}</td>
                 <td className="px-6 py-4 font-bold text-slate-800 text-sm">{acc.name}</td>
-                <td className="px-6 py-4 text-right font-black text-slate-900">{acc.debit > 0 ? acc.debit.toLocaleString() : '-'}</td>
-                <td className="px-6 py-4 text-right font-black text-blue-600">{acc.credit > 0 ? acc.credit.toLocaleString() : '-'}</td>
+                <td className="px-6 py-4 text-right font-black text-slate-900">{acc.debit > 0 ? (Number(acc.debit) || 0).toLocaleString() : '-'}</td>
+                <td className="px-6 py-4 text-right font-black text-blue-600">{acc.credit > 0 ? (Number(acc.credit) || 0).toLocaleString() : '-'}</td>
               </tr>
             ))}
           </tbody>
           <tfoot className="bg-slate-50">
             <tr>
               <td colSpan={2} className="px-6 py-6 font-black text-slate-900 uppercase text-xs tracking-widest">Calculated Equilibrium</td>
-              <td className="px-6 py-6 text-right font-black text-xl text-slate-900">PKR {totals.debit.toLocaleString()}</td>
-              <td className="px-6 py-6 text-right font-black text-xl text-blue-700">PKR {totals.credit.toLocaleString()}</td>
+              <td className="px-6 py-6 text-right font-black text-xl text-slate-900">PKR {(Number(totals.debit) || 0).toLocaleString()}</td>
+              <td className="px-6 py-6 text-right font-black text-xl text-blue-700">PKR {(Number(totals.credit) || 0).toLocaleString()}</td>
             </tr>
           </tfoot>
         </table>
