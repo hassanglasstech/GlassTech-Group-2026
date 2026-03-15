@@ -56,7 +56,7 @@ const InventoryModule: React.FC = () => {
       // Load full IDB data after render
       setTimeout(() => InventoryService.getStockLedgerAsync().then(all => {
           setLedger(all.filter(l => l.company === company).sort((a,b) => b.timestamp.localeCompare(a.timestamp)));
-      });
+      }), 100);
   };
 
   const tabs = [
