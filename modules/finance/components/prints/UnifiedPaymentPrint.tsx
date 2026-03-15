@@ -124,14 +124,14 @@ export const UnifiedPaymentPrint: React.FC<Props> = ({ data, company, partyName 
                                     </div>
                                 </td>
                                 <td className="text-center font-mono font-bold text-slate-600">{data.glAccountId || '-'}</td>
-                                <td className="text-right font-black text-lg">{data.amount.toLocaleString()}</td>
+                                <td className="text-right font-black text-lg">{(Number(data.amount) || 0).toLocaleString()}</td>
                             </tr>
                             {/* Filler rows to push footer down if needed, or keep compact */}
                         </tbody>
                         <tfoot className={`bg-slate-50 border-t-2 ${borderColor}`}>
                             <tr>
                                 <td colSpan={3} className="text-right font-black uppercase text-[10px] tracking-widest py-3">Total Amount</td>
-                                <td className={`text-right font-black text-xl ${themeColor} py-3`}>{data.amount.toLocaleString()}</td>
+                                <td className={`text-right font-black text-xl ${themeColor} py-3`}>{(Number(data.amount) || 0).toLocaleString()}</td>
                             </tr>
                         </tfoot>
                     </table>
@@ -140,7 +140,7 @@ export const UnifiedPaymentPrint: React.FC<Props> = ({ data, company, partyName 
                         <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Amount in Words:</p>
                         <p className="text-xs font-black text-slate-800 italic uppercase">
                             {/* Placeholder for number-to-words logic */}
-                            PKR {data.amount.toLocaleString()} Only
+                            PKR {(Number(data.amount) || 0).toLocaleString()} Only
                         </p>
                     </div>
                 </div>
