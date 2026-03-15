@@ -480,7 +480,7 @@ const SalesOrders: React.FC = () => {
                                                 </div>
                                                 <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tight">{stats.completed} / {stats.total} Pieces Dispatched</p>
                                             </td>
-                                            <td className="px-6 py-4 text-right font-black text-slate-900">{totalAmount.toLocaleString()}</td>
+                                            <td className="px-6 py-4 text-right font-black text-slate-900">{(Number(totalAmount) || 0).toLocaleString()}</td>
                                             <td className="px-6 py-4 text-center">
                                                 <button className="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow hover:bg-blue-600 transition-all">Open Details</button>
                                             </td>
@@ -565,7 +565,7 @@ const SalesOrders: React.FC = () => {
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-end">
                                         <p className="text-[10px] font-black text-slate-400 uppercase">Total Order Value</p>
-                                        <p className="text-lg font-black text-slate-900">PKR {orderValue.toLocaleString()}</p>
+                                        <p className="text-lg font-black text-slate-900">PKR {(Number(orderValue) || 0).toLocaleString()}</p>
                                     </div>
 
                                     <div className="space-y-1.5">
@@ -595,7 +595,7 @@ const SalesOrders: React.FC = () => {
                                     <div className={`p-4 rounded-2xl border flex justify-between items-center transition-all ${balance <= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
                                         <span className="text-[10px] font-black uppercase text-slate-500">Net Balance Due:</span>
                                         <span className={`text-lg font-black ${balance <= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                                            {balance <= 0 ? 'PAID' : `PKR ${balance.toLocaleString()}`}
+                                            {balance <= 0 ? 'PAID' : `PKR ${(Number(balance) || 0).toLocaleString()}`}
                                         </span>
                                     </div>
                                 </div>
