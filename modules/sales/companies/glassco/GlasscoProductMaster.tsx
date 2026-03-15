@@ -327,7 +327,7 @@ const GlasscoProductMaster: React.FC = () => {
               <td className="font-bold text-slate-500 text-[10px] uppercase">{p.finishColor || 'N/A'}</td>
               <td className="text-[10px] font-bold text-slate-600 uppercase">{p.category === 'Glass' ? (p.sheetSize || 'Standard') : p.unit}</td>
               <td className="text-right">
-                  <span className={`text-sm font-black ${stock > 0 ? 'text-emerald-600' : 'text-rose-400'}`}>{stock.toLocaleString()}</span>
+                  <span className={`text-sm font-black ${stock > 0 ? 'text-emerald-600' : 'text-rose-400'}`}>{(Number(stock) || 0).toLocaleString()}</span>
                   <span className="text-[9px] text-slate-400 ml-1 uppercase">{p.unit}</span>
               </td>
               <td className="pr-4">
