@@ -231,19 +231,13 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                                             </thead>
                                             <tbody className="divide-y divide-slate-200">
                                                 {chunk.map((item, idx) => {
-                                                    if (!item.isSection && !(item as any).isSetHeader) serialNum++;
+                                                    if (!item.isSection) serialNum++;
                                                     
                                                     if (item.isSection) {
-                                                        const isSetHdr = !!(item as any).isSetHeader;
                                                         return (
-                                                            <tr key={idx} className={isSetHdr ? "bg-amber-50 border-y border-amber-200" : "bg-slate-100 border-y border-slate-300"}>
-                                                                <td colSpan={8} className={isSetHdr ? "py-1.5 px-4 font-black uppercase text-amber-800 text-[9px] tracking-widest" : "py-1.5 px-4 font-black uppercase tracking-widest text-slate-700 italic text-[9px]"}>
-                                                                    {isSetHdr ? (
-                                                                        <span className="flex items-center gap-2">
-                                                                            <span className="bg-amber-500 text-white text-[8px] px-1.5 py-0.5 rounded font-black uppercase">SET</span>
-                                                                            {item.description}
-                                                                        </span>
-                                                                    ) : item.description}
+                                                            <tr key={idx} className="bg-slate-100 border-y border-slate-300">
+                                                                <td colSpan={8} className="py-1.5 px-4 font-black uppercase tracking-widest text-slate-700 italic text-[9px]">
+                                                                    {item.description}
                                                                 </td>
                                                             </tr>
                                                         );
@@ -265,8 +259,7 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                                                                 )}
                                                             </td>
                                                             <td className="py-2 px-2">
-                                                                <p className={`font-black text-slate-800 uppercase leading-tight text-[10px] whitespace-pre-wrap ${(item as any).isSetMember ? 'pl-4 text-slate-600' : ''}`}>
-                                                                    {(item as any).isSetMember && <span className="text-amber-400 mr-1">└</span>}
+                                                                <p className="font-black text-slate-800 uppercase leading-tight text-[10px] whitespace-pre-wrap">
                                                                     {item.description?.replace(/^PCS\s+/i, '')}
                                                                 </p>
                                                             </td>
@@ -317,17 +310,17 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                         <div className="w-[35%] space-y-1">
                             <div className="flex justify-between text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
                                 <span>Gross:</span>
-                                <span>PKR {subTotal.toLocaleString()}</span>
+                                <span>PKR {(Number(subTotal) || 0).toLocaleString()}</span>
                             </div>
                             {discountAmount > 0 && (
                                 <div className="flex justify-between text-[9px] font-bold text-rose-600 uppercase tracking-tighter">
                                     <span>Disc {quote.discountPercent ? `${quote.discountPercent}%` : ''}:</span>
-                                    <span>- {discountAmount.toLocaleString()}</span>
+                                    <span>- {(Number(discountAmount) || 0).toLocaleString()}</span>
                                 </div>
                             )}
                             <div className="flex justify-between items-end pt-1 border-t border-slate-200">
                                 <span className="text-[10px] font-black uppercase text-slate-900 tracking-tighter">Net:</span>
-                                <span className="text-lg font-black text-slate-900">PKR {netAmount.toLocaleString()}</span>
+                                <span className="text-lg font-black text-slate-900">PKR {(Number(netAmount) || 0).toLocaleString()}</span>
                             </div>
                         </div>
                     </div>
