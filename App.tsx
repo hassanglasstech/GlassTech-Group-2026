@@ -253,10 +253,8 @@ const App: React.FC = () => {
 
   // Session watch - only matters for time-restricted users
 
-  // Install console override once on app load
-  useEffect(() => {
-    installConsoleOverride();
-  }, []);
+  // Console override disabled - causes performance issues on 404 floods
+  // installConsoleOverride(); // re-enable when 404s are fixed
 
   // Run sync ONLY after user is authenticated
   useEffect(() => {
