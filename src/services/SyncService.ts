@@ -169,13 +169,18 @@ export const SyncService = {
   },
 
   // Called after any local save — queues for Supabase push
+  // Debounced: prevents rapid-fire sync on fast user input
   markDirty: (table: string) => {
     const localKey = TABLE_MAP[table];
     if (!localKey) return;
     addPending(table, localKey);
-    // If online, push immediately in background
+    // Debounce: wait 2 seconds before pushing (prevents spam)
     if (isOnline) {
-      setTimeout(() => SyncService.pushTable(table), 500);
+      const debounceKey = `_debounce_${table}`;
+      clearTimeout((SyncService as any)[debounceKey]);
+      (SyncService as any)[debounceKey] = setTimeout(() => {
+        SyncService.pushTable(table);
+      }, 2000);
     }
   },
 
