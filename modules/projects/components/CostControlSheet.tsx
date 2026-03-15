@@ -36,7 +36,7 @@ const CostControlSheet: React.FC<CostControlSheetProps> = ({ project, client, pu
                         </div>
                         <div className="bg-white p-6 rounded-2xl border shadow-sm">
                             <p className="text-[10px] font-black text-slate-400 uppercase">Consumed Actuals</p>
-                            <p className="text-2xl font-black text-rose-600">PKR {(totalConsumed ?? 0).toLocaleString()}</p>
+                            <p className="text-2xl font-black text-rose-600">PKR {(Number(totalConsumed) || 0).toLocaleString()}</p>
                         </div>
                         <div className="bg-white p-6 rounded-2xl border shadow-sm col-span-2">
                             <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Category Consumption</p>
@@ -71,11 +71,11 @@ const CostControlSheet: React.FC<CostControlSheetProps> = ({ project, client, pu
                             </div>
                             <div>
                                 <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Total Actual Cost</p>
-                                <p className="text-3xl font-black text-rose-600">PKR {(totalConsumed ?? 0).toLocaleString()}</p>
+                                <p className="text-3xl font-black text-rose-600">PKR {(Number(totalConsumed) || 0).toLocaleString()}</p>
                             </div>
                             <div>
                                 <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Net Estimated Profit</p>
-                                <p className={`text-3xl font-black ${profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>PKR {(profit ?? 0).toLocaleString()}</p>
+                                <p className={`text-3xl font-black ${profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>PKR {(Number(profit) || 0).toLocaleString()}</p>
                                 <p className={`text-xs font-bold mt-1 ${profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{margin.toFixed(1)}% Margin</p>
                             </div>
                         </div>
