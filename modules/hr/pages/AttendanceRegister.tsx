@@ -725,7 +725,7 @@ const AttendanceRegister: React.FC = () => {
                               </div>
                               <div className="text-right">
                                   <p className="text-[8px] font-black uppercase text-slate-400">System Calculated</p>
-                                  <p className="text-sm font-black text-slate-700">{editingSummary.systemLoanDeduction.toLocaleString()}</p>
+                                  <p className="text-sm font-black text-slate-700">{(Number(editingSummary.systemLoanDeduction) || 0).toLocaleString()}</p>
                               </div>
                           </div>
                           
