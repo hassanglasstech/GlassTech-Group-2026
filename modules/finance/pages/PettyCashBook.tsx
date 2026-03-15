@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { toast } from 'sonner';
 import { Company, PettyCashEntry, CostCenter, Account, LedgerTransaction, Requisition } from '../../shared/types';
 import { FinanceService } from '../services/financeService';
 import { InventoryService } from '../../procurement/services/inventoryService';
@@ -91,16 +90,16 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
   }, [accounts]);
 
   const handlePostEntry = (entryOrForm: Partial<PettyCashEntry>, isNew: boolean) => {
-    if (!entryOrForm.description || !entryOrForm.amount) return toast.error("Amount and Description required.", { duration: 4000 });
+    if (!entryOrForm.description || !entryOrForm.amount) return alert("Amount and Description required.");
     
     // For Parked entry approval, we need to ensure GL is selected
-    if (!isNew && !entryOrForm.glAccountId && !formData.glAccountId) return toast.error("Please map a GL Account to approve this Factory entry.", { duration: 4000 });
+    if (!isNew && !entryOrForm.glAccountId && !formData.glAccountId) return alert("Please map a GL Account to approve this Factory entry.");
 
     const glId = isNew ? entryOrForm.glAccountId : formData.glAccountId;
     const bizTrans = isNew ? entryOrForm.businessTransaction : formData.businessTransaction;
     const ccId = isNew ? entryOrForm.costCenterId : formData.costCenterId;
 
-    if (!mainCashAccount) return toast.error("System Error: Main Cash GL not found.", { duration: 4000 });
+    if (!mainCashAccount) return alert("System Error: Main Cash GL not found.");
 
     // Ledger Posting
     const debitLine = entryOrForm.type === 'Receipt' 
@@ -149,7 +148,7 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
     setIsModalOpen(false);
     setFormData({ amount: 0, description: '', costCenterId: '', glAccountId: '', businessTransaction: '', referenceDoc: '' });
     setLinkedReqId('');
-    toast.success("Cash Entry Posted Successfully.", { duration: 3000 });
+    alert("Cash Entry Posted Successfully.");
   };
 
   const getFilteredGLAccounts = (bizTransCode: string) => {
@@ -180,7 +179,7 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
         <div className="bg-[#354a5f] text-white p-6 rounded shadow-sm relative overflow-hidden">
            <div className="absolute top-0 right-0 p-4 opacity-10"><Wallet size={80} /></div>
            <p className="text-[10px] font-bold uppercase text-blue-200 tracking-widest mb-1">Cash Balance (FBCJ)</p>
-           <p className="text-3xl font-black">PKR {currentBalance.toLocaleString()}</p>
+           <p className="text-3xl font-black">PKR {(Number(currentBalance) || 0).toLocaleString()}</p>
         </div>
         {/* ... (Other stat cards) ... */}
       </div>
