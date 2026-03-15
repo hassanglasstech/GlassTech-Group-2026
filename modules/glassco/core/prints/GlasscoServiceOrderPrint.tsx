@@ -141,7 +141,7 @@ export const GlasscoServiceOrderPrint: React.FC<Props> = ({ po }) => {
                                         <td className="py-3 px-2 text-center font-black text-sm">{summary.totalQty}</td>
                                         <td className="py-3 px-2 text-center font-black text-sm">{summary.totalSqFt.toFixed(2)}</td>
                                         <td></td>
-                                        <td className="py-3 px-2 text-right font-black text-sm text-rose-600">PKR {summary.totalAmount.toLocaleString()}</td>
+                                        <td className="py-3 px-2 text-right font-black text-sm text-rose-600">PKR {(Number(summary.totalAmount) || 0).toLocaleString()}</td>
                                     </tr>
                                 </tfoot>
                             </table>
