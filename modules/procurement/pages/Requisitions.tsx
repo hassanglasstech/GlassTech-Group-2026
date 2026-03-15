@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { toast } from 'sonner';
 import { Company } from '../../shared/types/core';
 import { Requisition, RequisitionItem, StoreItem, Product, PurchaseOrder } from '../types/inventory';
 import { CostCenter } from '../../finance/types/finance';
@@ -136,20 +135,20 @@ const Requisitions: React.FC = () => {
 
   const handlePostPR = () => {
     if (formHeader.category !== 'HR') {
-        if (!formHeader.requisitioner || !formHeader.headerText) return toast.error("SAP Protocol: Requisitioner and Header Text are mandatory.", { duration: 4000 });
+        if (!formHeader.requisitioner || !formHeader.headerText) return alert("SAP Protocol: Requisitioner and Header Text are mandatory.");
     }
     
     const isMaterial = ['Material / Inventory', 'Maintenance / R&M', 'General Expense', 'Consumables'].includes(formHeader.subCategory);
     
     if (isMaterial) {
-        if (formItems.some(i => !i.materialDesc || !i.costCenter)) return toast.error("Validation Error: Item Description and Cost Center are required for all line items.", { duration: 4000 });
+        if (formItems.some(i => !i.materialDesc || !i.costCenter)) return alert("Validation Error: Item Description and Cost Center are required for all line items.");
     } else if (formHeader.subCategory === 'Overtime Approval') {
-        if (formHeader.overtimeEmployees.length === 0) return toast.error("Select at least one employee.", { duration: 4000 });
-        if (!formHeader.overtimeHours) return toast.error("Enter overtime hours.", { duration: 4000 });
+        if (formHeader.overtimeEmployees.length === 0) return alert("Select at least one employee.");
+        if (!formHeader.overtimeHours) return alert("Enter overtime hours.");
     } else if (formHeader.category === 'HR') {
-        if (!formHeader.employeeId) return toast.error("Select an employee.", { duration: 4000 });
-        if (formHeader.subCategory === 'Loan Request' && !formHeader.loanAmount) return toast.error("Enter loan amount.", { duration: 4000 });
-        if (formHeader.subCategory === 'Waive Absent' && !formHeader.absentDate) return toast.error("Select date.", { duration: 4000 });
+        if (!formHeader.employeeId) return alert("Select an employee.");
+        if (formHeader.subCategory === 'Loan Request' && !formHeader.loanAmount) return alert("Enter loan amount.");
+        if (formHeader.subCategory === 'Waive Absent' && !formHeader.absentDate) return alert("Select date.");
     }
 
     let totalValue = 0;
@@ -209,7 +208,7 @@ const Requisitions: React.FC = () => {
     refreshData();
     setIsModalOpen(false);
     resetForm();
-    toast.success(`Success: Requisition ${newPR.id} Created.`, { duration: 3000 });
+    alert(`Success: Requisition ${newPR.id} Created.`);
   };
 
   const resetForm = () => {
@@ -294,21 +293,21 @@ const Requisitions: React.FC = () => {
   };
 
   const handleConvertToPO = () => {
-      if (!selectedPrForConversion || !selectedVendorForPO) return toast.error("Select a Vendor to proceed.", { duration: 4000 });
+      if (!selectedPrForConversion || !selectedVendorForPO) return alert("Select a Vendor to proceed.");
       const itemsPayload = selectedPrForConversion.items.map(i => ({ description: i.materialDesc, qty: i.qty, rate: i.estimatedRate, costCenter: i.costCenter }));
       const poId = createAndPostPO(selectedVendorForPO, selectedProjectForPO, selectedCostHead, selectedPrForConversion.totalValue, itemsPayload, selectedPrForConversion.id);
       setIsConvertModalOpen(false);
-      toast.success(`Success: Purchase Order ${poId} generated.`, { duration: 3000 });
+      alert(`Success: Purchase Order ${poId} generated.`);
   };
 
   const handleCreateDirectPO = () => {
-      if (!selectedVendorForPO) return toast.error("Select a Vendor.", { duration: 4000 });
+      if (!selectedVendorForPO) return alert("Select a Vendor.");
       const totalAmount = directPoItems.reduce((s, i) => s + (i.qty * i.rate), 0);
-      if (totalAmount <= 0) return toast.error("Total amount cannot be zero.", { duration: 4000 });
+      if (totalAmount <= 0) return alert("Total amount cannot be zero.");
       const poId = createAndPostPO(selectedVendorForPO, selectedProjectForPO, selectedCostHead, totalAmount, directPoItems.map(i => ({ description: i.desc, qty: i.qty, rate: i.rate })));
       setIsDirectPOOpen(false);
       setDirectPoItems([{ desc: '', qty: 1, rate: 0, amount: 0 }]);
-      toast.success(`Success: Direct PO ${poId} Created.`, { duration: 3000 });
+      alert(`Success: Direct PO ${poId} Created.`);
   };
 
   const updateDirectItem = (idx: number, field: string, val: any) => {
@@ -324,7 +323,7 @@ const Requisitions: React.FC = () => {
       setSelectedRequisitions(selectedRequisitions.filter(item => item !== id));
     } else {
       if (selectedRequisitions.length >= 4) {
-        toast.error("You can select up to 4 requisitions for printing on one page.", { duration: 4000 });
+        alert("You can select up to 4 requisitions for printing on one page.");
         return;
       }
       setSelectedRequisitions([...selectedRequisitions, id]);
@@ -332,7 +331,7 @@ const Requisitions: React.FC = () => {
   };
 
   const handlePrint = () => {
-    if (selectedRequisitions.length === 0) return toast.error("Select at least one requisition to print.", { duration: 4000 });
+    if (selectedRequisitions.length === 0) return alert("Select at least one requisition to print.");
     setShowPrintView(true);
     setTimeout(() => {
       window.print();
@@ -723,8 +722,8 @@ const Requisitions: React.FC = () => {
                                                         <div className="flex justify-between text-xs"><span className="text-slate-500">Net Salary:</span> <span className="font-bold">PKR {(emp?.salary.basic || 0).toLocaleString()}</span></div>
                                                         <div className="border-t my-2"></div>
                                                         <div className="flex justify-between text-xs"><span className="text-slate-500">Active Loans:</span> <span className="font-bold">{empLoans.length}</span></div>
-                                                        <div className="flex justify-between text-xs"><span className="text-slate-500">Total Loan Amount:</span> <span className="font-bold">PKR {totalLoan.toLocaleString()}</span></div>
-                                                        <div className="flex justify-between text-xs"><span className="text-slate-500">Remaining Balance:</span> <span className="font-bold text-red-600">PKR {remaining.toLocaleString()}</span></div>
+                                                        <div className="flex justify-between text-xs"><span className="text-slate-500">Total Loan Amount:</span> <span className="font-bold">PKR {(Number(totalLoan) || 0).toLocaleString()}</span></div>
+                                                        <div className="flex justify-between text-xs"><span className="text-slate-500">Remaining Balance:</span> <span className="font-bold text-red-600">PKR {(Number(remaining) || 0).toLocaleString()}</span></div>
                                                         {lastLoan && (
                                                             <div className="mt-2 pt-2 border-t border-dashed">
                                                                 <p className="text-[9px] font-black uppercase text-slate-400">Last Loan</p>
