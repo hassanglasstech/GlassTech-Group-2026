@@ -13,4 +13,4 @@ const LogisticsModule: React.FC = () => {
   return <GlasscoLogistics />;
 };
 
-export default LogisticsModule;
+export default React.memo(LogisticsModule);
