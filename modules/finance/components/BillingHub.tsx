@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect } from 'react';
-import { toast } from 'sonner';
 import { Company, Quotation, ProductionPiece, LedgerTransaction } from '../../shared/types';
 import { FinanceService } from '../services/financeService';
 import { SalesService } from '../../sales/services/salesService';
@@ -43,7 +42,7 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
       const revenueAcc = myAccounts.find(a => a.name.includes('SALES') || a.code.startsWith('411')) || myAccounts.find(a => a.type === 'Revenue');
 
       if (!receivableAcc || !revenueAcc) {
-          return toast.error(`Error: Setup Chart of Accounts for ${company} first (Need Receivables & Sales accounts).`, { duration: 4000 });
+          return alert(`Error: Setup Chart of Accounts for ${company} first (Need Receivables & Sales accounts).`);
       }
 
       // 3. Create Ledger Transaction (Sender)
@@ -114,7 +113,7 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
       FinanceService.saveLedger([...currentLedger, ...newLedgerEntries]);
       
       // 5. Visual Feedback
-      toast.success(`Success: Invoice ${txId} Generated & Revenue Booked (PKR ${totalRevenue.toLocaleString()}).${mirrorMsg}`, { duration: 3000 });
+      alert(`Success: Invoice ${txId} Generated & Revenue Booked (PKR ${(Number(totalRevenue) || 0).toLocaleString()}).${mirrorMsg}`);
   };
 
   return (
