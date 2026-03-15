@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { toast } from 'sonner';
 import { Product, StoreItem } from '@/modules/shared/types';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
@@ -157,9 +156,9 @@ const NipponProductMaster: React.FC = () => {
         
         await AsyncSalesService.saveProducts([...otherProds, ...importedProds]);
         await refreshData();
-        toast.error(`Imported ${importedProds.length} products from JSON.`, { duration: 4000 });
+        alert(`Imported ${importedProds.length} products from JSON.`);
       } catch (err) {
-        toast.error("Error importing JSON. Ensure file is a valid Nippon product export.", { duration: 4000 });
+        alert("Error importing JSON. Ensure file is a valid Nippon product export.");
       }
     };
     reader.readAsText(file);
@@ -225,9 +224,9 @@ const NipponProductMaster: React.FC = () => {
         const otherProds = (await AsyncSalesService.getProducts()).filter(p => p.company !== company);
         await AsyncSalesService.saveProducts([...otherProds, ...newProducts]);
         await refreshData();
-        toast.error(`Loaded ${newProducts.length} items from Excel.`, { duration: 4000 });
+        alert(`Loaded ${newProducts.length} items from Excel.`);
       } catch (err) {
-        toast.error("Excel Import Failed. Ensure column names match the template headers.", { duration: 4000 });
+        alert("Excel Import Failed. Ensure column names match the template headers.");
       }
     };
     reader.readAsBinaryString(file);
@@ -424,7 +423,7 @@ const NipponProductMaster: React.FC = () => {
                                 <td className="font-bold text-slate-500 text-[10px] uppercase"><span className="bg-slate-100 px-2 py-0.5 rounded border">{p.category}</span></td>
                                 <td className="text-right font-bold text-slate-700 whitespace-nowrap">PKR {p.basePrice?.toLocaleString()}</td>
                                 <td className="text-right">
-                                    <span className={`text-sm font-black ${stock > 0 ? 'text-emerald-600' : 'text-rose-400'}`}>{stock.toLocaleString()}</span>
+                                    <span className={`text-sm font-black ${stock > 0 ? 'text-emerald-600' : 'text-rose-400'}`}>{(Number(stock) || 0).toLocaleString()}</span>
                                     <span className="text-[9px] text-slate-400 ml-1 uppercase">{p.unit}</span>
                                 </td>
                                 <td className="pr-6 text-right">
