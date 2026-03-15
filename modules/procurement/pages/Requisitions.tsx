@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { toast } from 'sonner';
 import { Company } from '../../shared/types/core';
 import { Requisition, RequisitionItem, StoreItem, Product, PurchaseOrder } from '../types/inventory';
 import { CostCenter } from '../../finance/types/finance';
@@ -19,6 +18,7 @@ import {
   Zap, Briefcase, Warehouse, XCircle, ArrowRight, DollarSign, Building, Folder, ShoppingCart, Truck, Tag
 } from 'lucide-react';
 
+import { toast } from 'sonner';
 import { useAppStore } from '../../shared/store/appStore';
 
 import RequisitionPrint from '../components/RequisitionPrint';
@@ -92,18 +92,26 @@ const Requisitions: React.FC = () => {
   }, [company]);
 
   const refreshData = () => {
+    // Load critical data first (what user sees immediately)
     const allReqs = InventoryService.getRequisitions();
     const relevantReqs = allReqs.filter(r => r && (r.company === company || r.targetCompany === company));
-    
     setRequisitions(relevantReqs.sort((a,b) => b.id.localeCompare(a.id)));
     setPurchaseOrders(ProductionService.getPurchaseOrders().filter(p => p.fromCompany === company).sort((a,b) => b.date.localeCompare(a.date)));
-    setStoreItems(InventoryService.getStore().filter(s => s.company === company || s.company === 'Factory'));
-    setProducts(SalesService.getProducts().filter(p => p.company === company || p.company === 'Factory'));
-    setCostCenters(FinanceService.getCostCenters().filter(c => c.company === company));
-    setVendors(SalesService.getVendors());
-    setProjects(ProjectService.getProjects().filter(p => p.company === company && p.status === 'Active'));
-    setEmployees(HRService.getEmployees().filter(e => e.company === company));
-    setLoans(HRService.getLoans().filter(l => l.status === 'Active'));
+
+    // Load secondary data in next tick - don't block UI
+    setTimeout(() => {
+      setStoreItems(InventoryService.getStore().filter(s => s.company === company || s.company === 'Factory'));
+      setProducts(SalesService.getProducts().filter(p => p.company === company || p.company === 'Factory'));
+      setCostCenters(FinanceService.getCostCenters().filter(c => c.company === company));
+      setVendors(SalesService.getVendors());
+    }, 0);
+
+    // Load form data last
+    setTimeout(() => {
+      setProjects(ProjectService.getProjects().filter(p => p.company === company && p.status === 'Active'));
+      setEmployees(HRService.getEmployees().filter(e => e.company === company));
+      setLoans(HRService.getLoans().filter(l => l.status === 'Active'));
+    }, 50);
   };
 
   const addItemRow = () => {
@@ -209,7 +217,7 @@ const Requisitions: React.FC = () => {
     refreshData();
     setIsModalOpen(false);
     resetForm();
-    toast.success(`Success: Requisition ${newPR.id} Created.`, { duration: 3000 });
+    toast.error(`Success: Requisition ${newPR.id} Created.`, { duration: 4000 });
   };
 
   const resetForm = () => {
@@ -260,7 +268,7 @@ const Requisitions: React.FC = () => {
   };
 
   const handleAddNewSubCategory = (cat: string) => {
-    const name = prompt(`Enter new sub-category for ${cat}:`);
+    const name = window.prompt(`Enter new sub-category for ${cat}:`);
     if (!name) return;
     const updated = { ...customSubCategories, [cat]: [...(customSubCategories[cat] || []), name] };
     setCustomSubCategories(updated);
@@ -298,7 +306,7 @@ const Requisitions: React.FC = () => {
       const itemsPayload = selectedPrForConversion.items.map(i => ({ description: i.materialDesc, qty: i.qty, rate: i.estimatedRate, costCenter: i.costCenter }));
       const poId = createAndPostPO(selectedVendorForPO, selectedProjectForPO, selectedCostHead, selectedPrForConversion.totalValue, itemsPayload, selectedPrForConversion.id);
       setIsConvertModalOpen(false);
-      toast.success(`Success: Purchase Order ${poId} generated.`, { duration: 3000 });
+      toast.error(`Success: Purchase Order ${poId} generated.`, { duration: 4000 });
   };
 
   const handleCreateDirectPO = () => {
@@ -308,7 +316,7 @@ const Requisitions: React.FC = () => {
       const poId = createAndPostPO(selectedVendorForPO, selectedProjectForPO, selectedCostHead, totalAmount, directPoItems.map(i => ({ description: i.desc, qty: i.qty, rate: i.rate })));
       setIsDirectPOOpen(false);
       setDirectPoItems([{ desc: '', qty: 1, rate: 0, amount: 0 }]);
-      toast.success(`Success: Direct PO ${poId} Created.`, { duration: 3000 });
+      toast.error(`Success: Direct PO ${poId} Created.`, { duration: 4000 });
   };
 
   const updateDirectItem = (idx: number, field: string, val: any) => {
@@ -914,4 +922,4 @@ const Requisitions: React.FC = () => {
   );
 };
 
-export default React.memo(Requisitions);
+export default Requisitions;
