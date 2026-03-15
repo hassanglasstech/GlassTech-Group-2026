@@ -13,4 +13,4 @@ const AccountsModule: React.FC = () => {
   return <GlasscoAccounts />;
 };
 
-export default AccountsModule;
+export default React.memo(AccountsModule);
