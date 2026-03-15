@@ -16,4 +16,4 @@ const VendorHub: React.FC = () => {
   return <GlasscoVendorHub company={company} />;
 };
 
-export default VendorHub;
+export default React.memo(VendorHub);
