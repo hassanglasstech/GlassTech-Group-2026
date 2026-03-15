@@ -106,11 +106,11 @@ const Requisitions: React.FC = () => {
       setVendors(SalesService.getVendors());
     }, 0);
 
-    // Load form data last
+    // Load form data - employees needed immediately for HR category
+    setEmployees(HRService.getEmployees().filter(e => e.company === company));
+    setLoans(HRService.getLoans().filter(l => l.status === 'Active'));
     setTimeout(() => {
       setProjects(ProjectService.getProjects().filter(p => p.company === company && p.status === 'Active'));
-      setEmployees(HRService.getEmployees().filter(e => e.company === company));
-      setLoans(HRService.getLoans().filter(l => l.status === 'Active'));
     }, 50);
   };
 
@@ -410,7 +410,7 @@ const Requisitions: React.FC = () => {
                       </td>
                       <td className="px-6 py-3 font-black text-blue-600">{r.id}</td>
                       <td className="px-6 py-3 text-xs font-bold uppercase text-slate-500">{r.category || 'N/A'}</td>
-                      <td className="px-6 py-3 text-xs font-bold uppercase text-slate-800">{r.subCategory || r.reqType || 'N/A'}</td>
+                      <td className="px-6 py-3 text-xs font-bold uppercase text-slate-800">{r?.subCategory || r?.reqType || 'N/A'}</td>
                       <td className="px-6 py-3 text-xs font-bold uppercase text-slate-600 truncate max-w-[200px]">{r.headerText}</td>
                       <td className="px-6 py-3 font-black">PKR {(r.totalValue || 0).toLocaleString()}</td>
                       <td className="px-6 py-3">
@@ -461,7 +461,7 @@ const Requisitions: React.FC = () => {
                               <td className="px-6 py-3">
                                 <div className="flex flex-col">
                                     <span className="text-[9px] font-black uppercase text-slate-400">{r.category}</span>
-                                    <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[9px] font-black uppercase w-fit">{r.subCategory || r.reqType}</span>
+                                    <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[9px] font-black uppercase w-fit">{r?.subCategory || r?.reqType || "N/A"}</span>
                                 </div>
                               </td>
                               <td className="px-6 py-3 text-xs font-bold text-slate-600 uppercase">{r.requisitioner || 'HR SYSTEM'}</td>
@@ -699,8 +699,8 @@ const Requisitions: React.FC = () => {
                                                     className="rounded text-blue-600 focus:ring-blue-500"
                                                 />
                                                 <div className="text-xs">
-                                                    <p className="font-bold text-slate-700">{emp.personal.name}</p>
-                                                    <p className="text-[10px] text-slate-400">{emp.work.designation}</p>
+                                                    <p className="font-bold text-slate-700">{emp?.personal?.name || ""}</p>
+                                                    <p className="text-[10px] text-slate-400">{emp?.work?.designation || ""}</p>
                                                 </div>
                                             </label>
                                         ))}
@@ -713,7 +713,7 @@ const Requisitions: React.FC = () => {
                                     <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Select Employee</label>
                                     <select className="sap-input w-full font-bold uppercase" value={formHeader.employeeId} onChange={e => setFormHeader({...formHeader, employeeId: e.target.value})}>
                                         <option value="">-- Select Employee --</option>
-                                        {employees.map(e => <option key={e.id} value={e.id}>{e.personal.name} ({e.work.designation})</option>)}
+                                        {employees.map(e => <option key={e.id} value={e.id}>{e?.personal?.name || "Unknown"} ({e?.work?.designation || ""})</option>)}
                                     </select>
                                     {formHeader.employeeId && (
                                         <div className="mt-4 p-4 bg-slate-50 rounded-xl border space-y-2">
@@ -727,8 +727,8 @@ const Requisitions: React.FC = () => {
                                                 
                                                 return (
                                                     <>
-                                                        <div className="flex justify-between text-xs"><span className="text-slate-500">Basic Salary:</span> <span className="font-bold">PKR {emp?.salary.basic.toLocaleString()}</span></div>
-                                                        <div className="flex justify-between text-xs"><span className="text-slate-500">Net Salary:</span> <span className="font-bold">PKR {(emp?.salary.basic || 0).toLocaleString()}</span></div>
+                                                        <div className="flex justify-between text-xs"><span className="text-slate-500">Basic Salary:</span> <span className="font-bold">PKR {(emp?.salary?.basic || 0).toLocaleString()}</span></div>
+                                                        <div className="flex justify-between text-xs"><span className="text-slate-500">Net Salary:</span> <span className="font-bold">PKR {(emp?.salary?.basic || 0).toLocaleString()}</span></div>
                                                         <div className="border-t my-2"></div>
                                                         <div className="flex justify-between text-xs"><span className="text-slate-500">Active Loans:</span> <span className="font-bold">{empLoans.length}</span></div>
                                                         <div className="flex justify-between text-xs"><span className="text-slate-500">Total Loan Amount:</span> <span className="font-bold">PKR {totalLoan.toLocaleString()}</span></div>
@@ -736,7 +736,7 @@ const Requisitions: React.FC = () => {
                                                         {lastLoan && (
                                                             <div className="mt-2 pt-2 border-t border-dashed">
                                                                 <p className="text-[9px] font-black uppercase text-slate-400">Last Loan</p>
-                                                                <div className="flex justify-between text-xs"><span className="text-slate-500">{lastLoan.date}:</span> <span className="font-bold">PKR {lastLoan.amount.toLocaleString()}</span></div>
+                                                                <div className="flex justify-between text-xs"><span className="text-slate-500">{lastLoan.date}:</span> <span className="font-bold">PKR {(lastLoan?.amount || 0).toLocaleString()}</span></div>
                                                             </div>
                                                         )}
                                                     </>
