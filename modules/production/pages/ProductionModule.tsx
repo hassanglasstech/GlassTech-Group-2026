@@ -22,4 +22,4 @@ const ProductionModule: React.FC = () => {
   return <GlasscoProduction />;
 };
 
-export default ProductionModule;
+export default React.memo(ProductionModule);
