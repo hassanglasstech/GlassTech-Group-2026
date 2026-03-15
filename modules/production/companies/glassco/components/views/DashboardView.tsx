@@ -20,7 +20,7 @@ const DashboardView: React.FC = () => {
       </div>
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <h3 className="text-sm font-semibold text-slate-500 uppercase">Overtime Cost</h3>
-        <p className="text-3xl font-bold text-red-600">PKR {metrics.overtimeCost.toLocaleString()}</p>
+        <p className="text-3xl font-bold text-red-600">PKR {(Number(metrics.overtimeCost) || 0).toLocaleString()}</p>
       </div>
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <h3 className="text-sm font-semibold text-slate-500 uppercase">Efficiency Gap</h3>
