@@ -151,23 +151,23 @@ const FinancialStatements: React.FC<{ company: Company }> = ({ company }) => {
             <section>
               <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-2"><h3 className="text-sm font-black uppercase text-slate-700">Operating Revenue</h3></div>
               <div className="space-y-4">
-                 <div className="flex justify-between text-sm font-medium text-slate-600"><span>Gross Sales & Services</span><span>PKR {stats.rev.toLocaleString()}</span></div>
-                 <div className="flex justify-between font-black text-slate-900 text-lg border-t-2 border-slate-900 pt-4 mt-4"><span>TOTAL INCOME</span><span>PKR {stats.rev.toLocaleString()}</span></div>
+                 <div className="flex justify-between text-sm font-medium text-slate-600"><span>Gross Sales & Services</span><span>PKR {(Number(stats.rev) || 0).toLocaleString()}</span></div>
+                 <div className="flex justify-between font-black text-slate-900 text-lg border-t-2 border-slate-900 pt-4 mt-4"><span>TOTAL INCOME</span><span>PKR {(Number(stats.rev) || 0).toLocaleString()}</span></div>
               </div>
             </section>
 
             <section>
               <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-2"><h3 className="text-sm font-black uppercase text-rose-600">Administrative Expenditure</h3></div>
               <div className="space-y-4">
-                 <div className="flex justify-between text-sm font-medium text-slate-600"><span>Cost of Goods Sold / Materials</span><span>(PKR {stats.exp.toLocaleString()})</span></div>
-                 <div className="flex justify-between font-black text-rose-700 text-lg border-t-2 border-slate-900 pt-4 mt-4"><span>TOTAL OPERATING EXPENSES</span><span>(PKR {stats.exp.toLocaleString()})</span></div>
+                 <div className="flex justify-between text-sm font-medium text-slate-600"><span>Cost of Goods Sold / Materials</span><span>(PKR {(Number(stats.exp) || 0).toLocaleString()})</span></div>
+                 <div className="flex justify-between font-black text-rose-700 text-lg border-t-2 border-slate-900 pt-4 mt-4"><span>TOTAL OPERATING EXPENSES</span><span>(PKR {(Number(stats.exp) || 0).toLocaleString()})</span></div>
               </div>
             </section>
 
             <div className="mt-20 p-10 bg-slate-50 border-y-4 border-slate-900 flex justify-between items-center">
                <div><p className="text-2xl font-black text-slate-900 uppercase">Net Result (EBIT)</p></div>
                <p className={`text-4xl font-black ${stats.netProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                  PKR {stats.netProfit.toLocaleString()}
+                  PKR {(Number(stats.netProfit) || 0).toLocaleString()}
                </p>
             </div>
           </div>
@@ -177,13 +177,13 @@ const FinancialStatements: React.FC<{ company: Company }> = ({ company }) => {
           <div className="grid grid-cols-2 gap-16 animate-in fade-in">
             <div className="space-y-8">
                <h3 className="text-sm font-black uppercase text-[#0a6ed1] border-b border-blue-100 pb-2">Total Assets</h3>
-               <div className="flex justify-between font-black text-xl text-slate-900"><span>Non-Current & Current Assets</span><span>PKR {stats.assets.toLocaleString()}</span></div>
+               <div className="flex justify-between font-black text-xl text-slate-900"><span>Non-Current & Current Assets</span><span>PKR {(Number(stats.assets) || 0).toLocaleString()}</span></div>
             </div>
             <div className="space-y-8">
                <h3 className="text-sm font-black uppercase text-slate-900 border-b border-slate-200 pb-2">Liabilities & Equity</h3>
                <div className="space-y-4">
-                  <div className="flex justify-between text-sm font-bold text-slate-600"><span>Share Capital & Reserves</span><span>PKR {stats.equity.toLocaleString()}</span></div>
-                  <div className="flex justify-between text-sm font-bold text-slate-600"><span>Total Liabilities</span><span>PKR {stats.liab.toLocaleString()}</span></div>
+                  <div className="flex justify-between text-sm font-bold text-slate-600"><span>Share Capital & Reserves</span><span>PKR {(Number(stats.equity) || 0).toLocaleString()}</span></div>
+                  <div className="flex justify-between text-sm font-bold text-slate-600"><span>Total Liabilities</span><span>PKR {(Number(stats.liab) || 0).toLocaleString()}</span></div>
                   <div className="flex justify-between font-black text-xl text-slate-900 border-t border-slate-900 pt-4"><span>EQUITY & LIABILITIES</span><span>PKR {(stats.equity + stats.liab).toLocaleString()}</span></div>
                </div>
             </div>
@@ -195,13 +195,13 @@ const FinancialStatements: React.FC<{ company: Company }> = ({ company }) => {
              <section className="space-y-4">
                 <h3 className="text-sm font-black uppercase text-slate-700 border-b-2 border-slate-900 pb-2">Operating Activities</h3>
                 <div className="pl-4 space-y-3">
-                   <div className="flex justify-between text-sm font-bold text-slate-800"><span>Net Profit / (Loss)</span><span>{stats.netProfit.toLocaleString()}</span></div>
+                   <div className="flex justify-between text-sm font-bold text-slate-800"><span>Net Profit / (Loss)</span><span>{(Number(stats.netProfit) || 0).toLocaleString()}</span></div>
                    <div className="text-[10px] font-black uppercase text-slate-400 mt-2">Adjustments for Working Capital:</div>
-                   <div className="flex justify-between text-sm text-slate-600"><span>(Increase)/Dec in Inventory</span><span>{stats.cf.details.inventory.toLocaleString()}</span></div>
-                   <div className="flex justify-between text-sm text-slate-600"><span>(Increase)/Dec in Receivables</span><span>{stats.cf.details.receivables.toLocaleString()}</span></div>
-                   <div className="flex justify-between text-sm text-slate-600"><span>Increase/(Dec) in Payables</span><span>{stats.cf.details.payables.toLocaleString()}</span></div>
+                   <div className="flex justify-between text-sm text-slate-600"><span>(Increase)/Dec in Inventory</span><span>{(Number(stats.cf.details.inventory) || 0).toLocaleString()}</span></div>
+                   <div className="flex justify-between text-sm text-slate-600"><span>(Increase)/Dec in Receivables</span><span>{(Number(stats.cf.details.receivables) || 0).toLocaleString()}</span></div>
+                   <div className="flex justify-between text-sm text-slate-600"><span>Increase/(Dec) in Payables</span><span>{(Number(stats.cf.details.payables) || 0).toLocaleString()}</span></div>
                    <div className={`flex justify-between text-base font-black border-t pt-2 ${stats.cf.operating >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                      <span>Net Cash from Operations</span><span>{stats.cf.operating.toLocaleString()}</span>
+                      <span>Net Cash from Operations</span><span>{(Number(stats.cf.operating) || 0).toLocaleString()}</span>
                    </div>
                 </div>
              </section>
@@ -209,9 +209,9 @@ const FinancialStatements: React.FC<{ company: Company }> = ({ company }) => {
              <section className="space-y-4">
                 <h3 className="text-sm font-black uppercase text-slate-700 border-b-2 border-slate-900 pb-2">Investing Activities</h3>
                 <div className="pl-4 space-y-3">
-                   <div className="flex justify-between text-sm text-slate-600"><span>Purchase of Fixed Assets (PPE)</span><span>{stats.cf.details.ppe.toLocaleString()}</span></div>
+                   <div className="flex justify-between text-sm text-slate-600"><span>Purchase of Fixed Assets (PPE)</span><span>{(Number(stats.cf.details.ppe) || 0).toLocaleString()}</span></div>
                    <div className={`flex justify-between text-base font-black border-t pt-2 ${stats.cf.investing >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                      <span>Net Cash from Investing</span><span>{stats.cf.investing.toLocaleString()}</span>
+                      <span>Net Cash from Investing</span><span>{(Number(stats.cf.investing) || 0).toLocaleString()}</span>
                    </div>
                 </div>
              </section>
@@ -219,9 +219,9 @@ const FinancialStatements: React.FC<{ company: Company }> = ({ company }) => {
              <section className="space-y-4">
                 <h3 className="text-sm font-black uppercase text-slate-700 border-b-2 border-slate-900 pb-2">Financing Activities</h3>
                 <div className="pl-4 space-y-3">
-                   <div className="flex justify-between text-sm text-slate-600"><span>Capital Injection & Loans</span><span>{stats.cf.details.equity.toLocaleString()}</span></div>
+                   <div className="flex justify-between text-sm text-slate-600"><span>Capital Injection & Loans</span><span>{(Number(stats.cf.details.equity) || 0).toLocaleString()}</span></div>
                    <div className={`flex justify-between text-base font-black border-t pt-2 ${stats.cf.financing >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                      <span>Net Cash from Financing</span><span>{stats.cf.financing.toLocaleString()}</span>
+                      <span>Net Cash from Financing</span><span>{(Number(stats.cf.financing) || 0).toLocaleString()}</span>
                    </div>
                 </div>
              </section>
@@ -229,7 +229,7 @@ const FinancialStatements: React.FC<{ company: Company }> = ({ company }) => {
              <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 mt-8">
                 <div className="flex justify-between items-center mb-2">
                    <span className="text-xs font-bold text-slate-500 uppercase">Net Increase / (Decrease) in Cash</span>
-                   <span className={`text-xl font-black ${stats.cf.netChange >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{stats.cf.netChange.toLocaleString()}</span>
+                   <span className={`text-xl font-black ${stats.cf.netChange >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{(Number(stats.cf.netChange) || 0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-4">
                    <span className="text-xs font-bold text-slate-500 uppercase">Opening Cash Balance</span>
@@ -237,7 +237,7 @@ const FinancialStatements: React.FC<{ company: Company }> = ({ company }) => {
                 </div>
                 <div className="flex justify-between items-center">
                    <span className="text-sm font-black text-slate-900 uppercase">Closing Cash & Bank Balance</span>
-                   <span className="text-2xl font-black text-blue-700">PKR {stats.cf.closingCash.toLocaleString()}</span>
+                   <span className="text-2xl font-black text-blue-700">PKR {(Number(stats.cf.closingCash) || 0).toLocaleString()}</span>
                 </div>
              </div>
           </div>
