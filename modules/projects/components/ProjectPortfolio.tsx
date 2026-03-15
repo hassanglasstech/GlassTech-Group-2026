@@ -84,7 +84,7 @@ const ProjectPortfolio: React.FC<ProjectPortfolioProps> = ({ projects, clients, 
             <div className="space-y-1 mb-3">
                 <div className="flex justify-between items-end text-[10px] uppercase font-bold">
                     <span className={isOverBudget ? 'text-rose-600' : 'text-slate-500'}>{label}</span>
-                    <div className="text-right"><span className={`${isOverBudget ? 'text-rose-600' : 'text-slate-800'}`}>{(actual ?? 0).toLocaleString()}</span><span className="text-slate-400 mx-1">/</span><span className="text-slate-400">{(budget ?? 0).toLocaleString()}</span></div>
+                    <div className="text-right"><span className={`${isOverBudget ? 'text-rose-600' : 'text-slate-800'}`}>{(Number(actual) || 0).toLocaleString()}</span><span className="text-slate-400 mx-1">/</span><span className="text-slate-400">{(Number(budget) || 0).toLocaleString()}</span></div>
                 </div>
                 <div className="h-2 bg-slate-100 rounded-full overflow-hidden flex"><div className={`h-full transition-all duration-500 ${barColor}`} style={{ width: `${percentage}%` }}></div></div>
             </div>
@@ -105,7 +105,7 @@ const ProjectPortfolio: React.FC<ProjectPortfolioProps> = ({ projects, clients, 
         // NOTE: This is an estimation based on description matching.
         return relevantTxs.reduce((sum, tx) => {
             // Only count if it looks like a receipt (Credit > 0)
-            const creditSum = (tx.details || []).reduce((s: number, d: any) => s + (d.credit || 0), 0);
+            const creditSum = (tx.details || []).reduce((s, d) => s + d.credit, 0);
             return sum + creditSum;
         }, 0);
     };
@@ -149,15 +149,15 @@ const ProjectPortfolio: React.FC<ProjectPortfolioProps> = ({ projects, clients, 
                             </div>
                             <div className="space-y-3 pt-4 border-t border-slate-100">
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><p className="text-[9px] font-black text-slate-400 uppercase">Consumed Cost</p><p className="text-lg font-black text-rose-600">PKR {(totalConsumed ?? 0).toLocaleString()}</p></div>
+                                    <div><p className="text-[9px] font-black text-slate-400 uppercase">Consumed Cost</p><p className="text-lg font-black text-rose-600">PKR {(Number(totalConsumed) || 0).toLocaleString()}</p></div>
                                     <div className="text-right">
                                         <p className="text-[9px] font-black text-slate-400 uppercase flex items-center justify-end gap-1"><Wallet size={10}/> Received</p>
-                                        <p className="text-lg font-black text-emerald-600">PKR {(received ?? 0).toLocaleString()}</p>
+                                        <p className="text-lg font-black text-emerald-600">PKR {(Number(received) || 0).toLocaleString()}</p>
                                     </div>
                                 </div>
                                 <div className="flex justify-between items-center bg-slate-100 p-2 rounded-lg">
                                     <span className="text-[10px] font-black text-slate-500 uppercase">Contract Value</span>
-                                    <span className="text-sm font-black text-slate-900">PKR {(revenue ?? 0).toLocaleString()}</span>
+                                    <span className="text-sm font-black text-slate-900">PKR {(Number(revenue) || 0).toLocaleString()}</span>
                                 </div>
                                 {totalConsumed > revenue && <div className="bg-rose-50 border border-rose-100 p-2 rounded-lg flex items-center justify-center gap-2 text-rose-700"><AlertTriangle size={12}/><span className="text-[10px] font-black uppercase">Loss Alert</span></div>}
                             </div>
