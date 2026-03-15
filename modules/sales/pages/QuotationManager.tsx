@@ -445,7 +445,7 @@ const QuotationManager: React.FC = () => {
             <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center">
               <div className="text-2xl font-black text-slate-800 tracking-tight">
                 <span className="text-sm text-slate-500 font-bold uppercase mr-2">Total</span>
-                Rs {subTotal.toLocaleString()}
+                Rs {(Number(subTotal) || 0).toLocaleString()}
               </div>
               <div className="flex space-x-3">
                 {!isLocked && <button onClick={() => handleSave(false)} className="sap-btn-light"><Save size={16} className="mr-2"/> Save Draft</button>}
