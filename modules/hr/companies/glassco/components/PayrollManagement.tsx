@@ -229,7 +229,7 @@ const PayrollManagement: React.FC = () => {
                         <div className="flex justify-between"><span>Basic Salary</span><span className="font-black">{pay.basicPay.toLocaleString()}</span></div>
                         <div className="flex justify-between"><span>Allowances</span><span className="font-black">{pay.allowances.toLocaleString()}</span></div>
                         <div className="flex justify-between text-indigo-600 font-bold"><span>Overtime ({pay.overtimeHours}h)</span><span className="font-black">{pay.overtimePay.toLocaleString()}</span></div>
-                        <div className="flex justify-between border-t-2 border-slate-100 pt-2 font-black text-slate-900 text-sm"><span>Gross Earnings</span><span>{totalEarnings.toLocaleString()}</span></div>
+                        <div className="flex justify-between border-t-2 border-slate-100 pt-2 font-black text-slate-900 text-sm"><span>Gross Earnings</span><span>{(Number(totalEarnings) || 0).toLocaleString()}</span></div>
                     </div>
                 </div>
                 <div className="space-y-4">
@@ -244,7 +244,7 @@ const PayrollManagement: React.FC = () => {
                             <span>Loan/Adv Recovery {pay.loanWaived && <span className="text-[8px] font-black uppercase text-rose-600 ml-1">(Seth Waived)</span>}</span>
                             <span className="font-black">{(pay.loanDeduction + pay.advanceDeduction).toLocaleString()}</span>
                         </div>
-                        <div className="flex justify-between border-t-2 border-slate-100 pt-2 font-black text-slate-900 text-sm"><span>Total Recoveries</span><span>{totalDeductions.toLocaleString()}</span></div>
+                        <div className="flex justify-between border-t-2 border-slate-100 pt-2 font-black text-slate-900 text-sm"><span>Total Recoveries</span><span>{(Number(totalDeductions) || 0).toLocaleString()}</span></div>
                     </div>
                 </div>
             </div>
@@ -327,16 +327,16 @@ const PayrollManagement: React.FC = () => {
                   
                   {viewTab === 'cumulative' && (
                     <>
-                      <td className="px-6 py-4 text-right font-bold text-slate-600">{grossSalary.toLocaleString()}</td>
+                      <td className="px-6 py-4 text-right font-bold text-slate-600">{(Number(grossSalary) || 0).toLocaleString()}</td>
                       <td className="px-6 py-4 text-right font-bold text-rose-400">
                         <div className="flex flex-col items-end">
-                            <span>-{salaryDeds.toLocaleString()}</span>
+                            <span>-{(Number(salaryDeds) || 0).toLocaleString()}</span>
                             {pay.allowedAbsentCount! > 0 && <span className="text-[8px] text-emerald-600 font-black uppercase">Seth Allowed: {pay.allowedAbsentCount} Days</span>}
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right font-bold text-rose-600">
                         <div className="flex flex-col items-end">
-                            <span className={pay.loanWaived ? 'line-through opacity-30' : ''}>-{financialDeds.toLocaleString()}</span>
+                            <span className={pay.loanWaived ? 'line-through opacity-30' : ''}>-{(Number(financialDeds) || 0).toLocaleString()}</span>
                             {pay.loanWaived && <span className="text-[8px] text-rose-500 font-black uppercase flex items-center gap-1"><Ban size={8}/> Seth Waived</span>}
                         </div>
                       </td>
@@ -348,7 +348,7 @@ const PayrollManagement: React.FC = () => {
                     <>
                       <td className="px-6 py-4 text-right font-bold text-slate-600">{pay.basicPay.toLocaleString()}</td>
                       <td className="px-6 py-4 text-right font-bold text-slate-600">{pay.allowances.toLocaleString()}</td>
-                      <td className="px-6 py-4 text-right font-black text-blue-800">{grossSalary.toLocaleString()}</td>
+                      <td className="px-6 py-4 text-right font-black text-blue-800">{(Number(grossSalary) || 0).toLocaleString()}</td>
                     </>
                   )}
                   {viewTab === 'overtime' && (
