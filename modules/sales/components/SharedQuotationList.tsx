@@ -106,7 +106,7 @@ export const SharedQuotationList: React.FC<SharedQuotationListProps> = ({
                   <td className="font-black text-blue-600">{q.orderNo || q.id}</td>
                   <td className="font-bold text-slate-700">{client?.name || 'Unknown'}</td>
                   <td className="font-medium text-slate-500 text-xs">{q.date}</td>
-                  <td className="font-black text-right">PKR {total.toLocaleString()}</td>
+                  <td className="font-black text-right">PKR {(Number(total) || 0).toLocaleString()}</td>
                   <td className="text-right">
                     <div className="flex items-center justify-end space-x-1">
                       {q.status !== 'Approved' && (
