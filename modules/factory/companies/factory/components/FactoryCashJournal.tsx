@@ -68,7 +68,7 @@ const FactoryCashJournal: React.FC<FactoryCashJournalProps> = ({ cashEntries, re
                                 <td className="text-xs font-mono text-slate-500">{e.date}</td>
                                 <td><span className="bg-slate-100 px-2 py-1 rounded text-[10px] font-black uppercase text-slate-600">{e.targetCompany}</span></td>
                                 <td className="text-xs font-bold uppercase text-slate-800">{e.description}</td>
-                                <td className={`text-right font-black text-xs ${e.type === 'Receipt' ? 'text-emerald-600' : 'text-rose-600'}`}>{e.amount.toLocaleString()}</td>
+                                <td className={`text-right font-black text-xs ${e.type === 'Receipt' ? 'text-emerald-600' : 'text-rose-600'}`}>{(Number(e.amount) || 0).toLocaleString()}</td>
                                 <td><span className="text-[10px] font-bold uppercase bg-amber-50 text-amber-700 px-2 py-1 rounded border border-amber-100">{e.status}</span></td>
                             </tr>
                         ))}
