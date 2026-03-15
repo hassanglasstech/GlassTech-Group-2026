@@ -22,4 +22,4 @@ const ProjectsModule: React.FC = () => {
   );
 };
 
-export default ProjectsModule;
+export default React.memo(ProjectsModule);
