@@ -141,7 +141,7 @@ const NipponSalesPipeline: React.FC<{ company: Company }> = ({ company }) => {
                                         <td className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">{q.date}</td>
                                         <td className="px-6 py-4 font-black text-slate-800 uppercase text-xs">{clientName}</td>
                                         <td className="px-6 py-4 text-[10px] text-slate-500 font-bold uppercase">{q.projectName || '-'}</td>
-                                        <td className="px-6 py-4 text-right font-black text-slate-900">{totalAmount.toLocaleString()}</td>
+                                        <td className="px-6 py-4 text-right font-black text-slate-900">{(Number(totalAmount) || 0).toLocaleString()}</td>
                                         <td className="px-6 py-4 text-center">
                                             <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
                                                 q.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
