@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect } from 'react';
-import { toast } from 'sonner';
 import { Company, PurchaseOrder, Project, Client } from '../types';
 import { InventoryService } from '../../procurement/services/inventoryService';
 import { SalesService } from '../../sales/services/salesService';
@@ -105,7 +104,7 @@ const IntercompanyHub: React.FC = () => {
           // Add Timeline Event
           project.timeline.push({
               date: new Date().toISOString().split('T')[0],
-              event: `Intercompany PO ${po.id} Accepted. Charged ${amount.toLocaleString()} to ${cat} Budget.`,
+              event: `Intercompany PO ${po.id} Accepted. Charged ${(Number(amount) || 0).toLocaleString()} to ${cat} Budget.`,
               type: 'info'
           });
           ProjectService.saveProjects(allProjects); // Save mutation
@@ -113,12 +112,12 @@ const IntercompanyHub: React.FC = () => {
 
       refreshData();
       setIsReconcileOpen(false);
-      toast.success("Order Accepted & Project Consumption Updated.", { duration: 3000 });
+      alert("Order Accepted & Project Consumption Updated.");
   };
 
   const handleConfirmReconciliation = () => {
       if (!selectedPO) return;
-      if (!selectedExistingProjectId) return toast.error("Please select a project to link.", { duration: 4000 });
+      if (!selectedExistingProjectId) return alert("Please select a project to link.");
       
       processAcceptance(selectedPO, selectedExistingProjectId);
   };
@@ -133,7 +132,7 @@ const IntercompanyHub: React.FC = () => {
     });
     InventoryService.savePurchaseOrders(updated);
     refreshData();
-    toast.error(`Order ${id} marked as ${newStatus}.`, { duration: 4000 });
+    alert(`Order ${id} marked as ${newStatus}.`);
   };
 
   return (
