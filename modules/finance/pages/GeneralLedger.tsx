@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { toast } from 'sonner';
 import { Company, LedgerTransaction, Account, LedgerDocType, LedgerStatus, CostCenter } from '../../shared/types';
 import { FinanceService } from '../services/financeService';
 import { 
@@ -99,12 +98,12 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
   // Reset pagination on search/tab change
   useEffect(() => setCurrentPage(1), [searchTerm, activeTab]);
 
-  const totalDebit = formData.details.reduce((sum, d) => sum + (Number(d.debit) || 0), 0);
-  const totalCredit = formData.details.reduce((sum, d) => sum + (Number(d.credit) || 0), 0);
+  const totalDebit = (formData.details || []).reduce((sum, d) => sum + (Number(d.debit) || 0), 0);
+  const totalCredit = (formData.details || []).reduce((sum, d) => sum + (Number(d.credit) || 0), 0);
   const isBalanced = totalDebit === totalCredit && totalDebit > 0;
 
   const handleSaveDocument = async (status: LedgerStatus) => {
-    if (!isBalanced) return toast.error("System Error: Document is not balanced.", { duration: 4000 });
+    if (!isBalanced) return alert("System Error: Document is not balanced.");
     const txId = editingDocId || `${formData.docType}-${Date.now().toString().slice(-6)}`;
     
     const tx: LedgerTransaction = {
@@ -127,7 +126,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
     refreshData();
     setIsModalOpen(false);
     resetForm();
-    toast.success(status === 'Posted' ? `Success: Document ${txId} Posted to ${selectedTargetCompany} Ledger.` : `Document ${txId} Parked successfully.`, { duration: 3000 });
+    alert(status === 'Posted' ? `Success: Document ${txId} Posted to ${selectedTargetCompany} Ledger.` : `Document ${txId} Parked successfully.`);
   };
 
   const resetForm = () => {
@@ -322,12 +321,12 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
                               </thead>
                               <tbody className="divide-y divide-slate-100">
                                   {transactions.filter(t => t.description.includes('Automated') || t.description.includes('Approved') || t.description.includes('PAYROLL')).slice(0, 10).map(tx => {
-                                      const totalValue = tx.details.reduce((sum, d) => sum + d.debit, 0);
+                                      const totalValue = (tx.details || []).reduce((sum, d) => sum + d.debit, 0);
                                       return (
                                           <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
                                               <td className="px-6 py-4 text-xs text-slate-500">{tx.date}</td>
                                               <td className="px-6 py-4 font-bold text-slate-900 text-xs uppercase">{tx.description}</td>
-                                              <td className="px-6 py-4 text-right font-black text-blue-600 text-xs">{totalValue.toLocaleString()}</td>
+                                              <td className="px-6 py-4 text-right font-black text-blue-600 text-xs">{(Number(totalValue) || 0).toLocaleString()}</td>
                                           </tr>
                                       );
                                   })}
