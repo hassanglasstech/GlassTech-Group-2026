@@ -15,6 +15,7 @@ const KEYS = {
 
 import { bgSaveToIDB, safeParse, safeSave, safeAsync } from '../../shared/services/utils';
 import { toast } from 'sonner';
+import { Logger } from '@/modules/shared/services/logger';
 
 export const FinanceService = {
   getAccounts: (): Account[] => safeParse(KEYS.ACCOUNTS),
@@ -40,6 +41,7 @@ export const FinanceService = {
   saveAccounts: (data: Account[]) => {
     try {
       safeSave(KEYS.ACCOUNTS, data);
+    Logger.action('Finance', 'SAVE_ACCOUNTS', `COA updated: ${data.length} accounts`);
       bgSaveToIDB('accounts', data);
     } catch (e) {
       console.error("FinanceService: Failed to save accounts to localStorage", e);
@@ -188,6 +190,7 @@ export const FinanceService = {
   saveLedger: (data: LedgerTransaction[]) => {
     const recent = data.slice(-1000); 
     safeSave(KEYS.LEDGER, recent);
+      Logger.action('Finance', 'SAVE_LEDGER', `Ledger updated: ${recent.length} entries`);
     bgSaveToIDB('ledger', data);
   },
   getCostCenters: (): CostCenter[] => safeParse(KEYS.COST_CENTERS),

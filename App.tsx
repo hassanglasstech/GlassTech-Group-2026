@@ -12,10 +12,16 @@ import { AppService } from '@/modules/shared/services/appService';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { SyncService } from '@/src/services/SyncService';
 import { getNetworkStatus, OfflineQueue } from '@/modules/shared/services/networkService';
+import { DataIntegrity } from '@/modules/shared/services/dataIntegrity';
+import { checkSchemaVersion } from '@/modules/shared/services/utils';
+import { Logger, setLogContext, installConsoleOverride } from '@/modules/shared/services/logger';
 import { Toaster, toast } from 'sonner';
 import { useAuthStore, isOfficeHours, ROLE_DEFAULT_COMPANY, ROLE_MODULES } from '@/modules/auth/authStore';
 import { SyncService } from '@/src/services/SyncService';
 import { getNetworkStatus, OfflineQueue } from '@/modules/shared/services/networkService';
+import { DataIntegrity } from '@/modules/shared/services/dataIntegrity';
+import { checkSchemaVersion } from '@/modules/shared/services/utils';
+import { Logger, setLogContext, installConsoleOverride } from '@/modules/shared/services/logger';
 import LoginPage from '@/modules/auth/LoginPage';
 
 // ── Lazy load modules ────────────────────────────────────────────────
@@ -245,10 +251,18 @@ const App: React.FC = () => {
 
   // Session watch - only matters for time-restricted users
 
+  // Install console override once on app load
+  useEffect(() => {
+    installConsoleOverride();
+  }, []);
+
   // Run sync ONLY after user is authenticated
   useEffect(() => {
     if (!user) return;
     const init = async () => {
+      // Schema version check + data integrity repair on startup
+      checkSchemaVersion();
+      DataIntegrity.autoRepairOnStartup();
       await SyncService.fetchFromCloud();
       await AppService.seedInitialData();
       AppService.checkAndTriggerAutoBackup();
@@ -270,6 +284,9 @@ const App: React.FC = () => {
   // Set default company based on role on first login
   useEffect(() => {
     if (user) {
+      // Set logger context
+      setLogContext(user.fullName || user.email, user.allowedCompanies[0] || 'GTK');
+      Logger.auth('LOGIN', user.email);
       const defaultCompany = ROLE_DEFAULT_COMPANY[user.role];
       if (defaultCompany && !user.allowedCompanies.includes(selectedCompany)) {
         setSelectedCompany(defaultCompany as Company);
@@ -331,7 +348,7 @@ const App: React.FC = () => {
               </button>
               {/* User badge */}
               <div className="flex items-center space-x-2 cursor-pointer hover:bg-white/10 p-1 rounded-lg border border-white/5"
-                onClick={() => { signOut(); toast.success('Logged out.'); }}>
+                onClick={() => { Logger.auth('LOGOUT', user?.email || ''); signOut(); toast.success('Logged out.'); }}>
                 <div className="w-7 h-7 rounded-lg bg-blue-500 flex items-center justify-center font-bold text-[10px] shadow-lg">
                   {user.fullName?.slice(0, 2).toUpperCase() || user.email.slice(0, 2).toUpperCase()}
                 </div>
