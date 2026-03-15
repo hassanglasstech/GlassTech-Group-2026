@@ -100,6 +100,10 @@ const pushTable = async (table: string, localKey: string): Promise<boolean> => {
     );
     return true;
   } catch (err: any) {
+    if (String(err).includes('404') || String(err).includes('does not exist')) {
+      console.info(`[Sync] Table ${table} not in Supabase yet — skipping push`);
+      return true;
+    }
     console.warn(`[Sync] Push failed for ${table}:`, translateError(err));
     return false;
   }
@@ -107,20 +111,28 @@ const pushTable = async (table: string, localKey: string): Promise<boolean> => {
 
 const pullTable = async (table: string, localKey: string): Promise<boolean> => {
   try {
-    const data = await withRetry(
-      async () => {
-        const { data, error } = await supabase.from(table).select('*');
-        if (error) throw error;
-        return data;
-      },
-      { context: `Pull:${table}`, maxRetries: 2, delayMs: 1000 }
-    );
+    const { data, error } = await supabase.from(table).select('*');
+    
+    // 404 = table doesn't exist in Supabase yet — skip silently
+    if (error) {
+      if (error.code === '42P01' || error.message?.includes('does not exist') || 
+          String(error).includes('404')) {
+        console.info(`[Sync] Table ${table} not in Supabase yet — skipping`);
+        return true; // not a failure
+      }
+      console.warn(`[Sync] Pull failed for ${table}:`, error.message);
+      return false;
+    }
     if (data && data.length > 0) {
       localStorage.setItem(localKey, JSON.stringify(data));
     }
     return true;
   } catch (err: any) {
-    console.warn(`[Sync] Pull failed for ${table}:`, translateError(err));
+    // Silently skip 404s
+    if (String(err).includes('404') || String(err).includes('not found')) {
+      return true;
+    }
+    console.warn(`[Sync] Pull failed for ${table}:`, err?.message);
     return false;
   }
 };
