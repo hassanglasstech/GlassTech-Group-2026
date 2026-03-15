@@ -83,4 +83,4 @@ const SalesCRM: React.FC = () => {
   );
 };
 
-export default SalesCRM;
+export default React.memo(SalesCRM);
