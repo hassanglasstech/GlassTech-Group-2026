@@ -306,17 +306,17 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                         <div className="w-[35%] space-y-1">
                             <div className="flex justify-between text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
                                 <span>Gross:</span>
-                                <span>PKR {subTotal.toLocaleString()}</span>
+                                <span>PKR {(Number(subTotal) || 0).toLocaleString()}</span>
                             </div>
                             {discountAmount > 0 && (
                                 <div className="flex justify-between text-[9px] font-bold text-rose-600 uppercase tracking-tighter">
                                     <span>Disc {quote.discountPercent ? `${quote.discountPercent}%` : ''}:</span>
-                                    <span>- {discountAmount.toLocaleString()}</span>
+                                    <span>- {(Number(discountAmount) || 0).toLocaleString()}</span>
                                 </div>
                             )}
                             <div className="flex justify-between items-end pt-1 border-t border-slate-200">
                                 <span className="text-[10px] font-black uppercase text-slate-900 tracking-tighter">Net:</span>
-                                <span className="text-lg font-black text-slate-900">PKR {netAmount.toLocaleString()}</span>
+                                <span className="text-lg font-black text-slate-900">PKR {(Number(netAmount) || 0).toLocaleString()}</span>
                             </div>
                         </div>
                     </div>
