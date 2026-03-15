@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect } from 'react';
-import { toast } from 'sonner';
 import { Company, RecurringExpense, Account, CostCenter, LedgerTransaction } from '../../shared/types';
 import { FinanceService } from '../services/financeService';
 import { Plus, Search, RefreshCw, Trash2, X, Zap, Save, CheckCircle2 } from 'lucide-react';
@@ -24,7 +23,7 @@ const RecurringExpenses: React.FC<{ company: Company }> = ({ company }) => {
   };
 
   const postRecurringVoucher = (template: RecurringExpense) => {
-    if (template.lastPostedMonth === currentMonth) return toast.error("Already posted for this month.", { duration: 4000 });
+    if (template.lastPostedMonth === currentMonth) return alert("Already posted for this month.");
     const txId = `AUT-${Date.now().toString().slice(-6)}`;
     const tx: LedgerTransaction = {
       id: txId, company, docType: 'SA', docDate: new Date().toISOString().split('T')[0],
@@ -39,7 +38,7 @@ const RecurringExpenses: React.FC<{ company: Company }> = ({ company }) => {
     const updated = FinanceService.getRecurringExpenses().map(t => t.id === template.id ? { ...t, lastPostedMonth: currentMonth } : t);
     FinanceService.saveRecurringExpenses(updated);
     refreshData();
-    toast.success(`Posted: Document ${txId}`, { duration: 3000 });
+    alert(`Posted: Document ${txId}`);
   };
 
   return (
@@ -66,7 +65,7 @@ const RecurringExpenses: React.FC<{ company: Company }> = ({ company }) => {
                    <h4 className="text-base font-bold text-slate-800 uppercase leading-none">{t.name}</h4>
                 </div>
                 <div className="text-right">
-                   <p className="text-sm font-black text-indigo-600">PKR {t.amount.toLocaleString()}</p>
+                   <p className="text-sm font-black text-indigo-600">PKR {(Number(t.amount) || 0).toLocaleString()}</p>
                 </div>
              </div>
 
