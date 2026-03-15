@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useTransition } from 'react';
 import { GlobalErrorBoundary, ModuleErrorBoundary } from '@/modules/shared/components/ErrorBoundary';
 import { HashRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import {
@@ -164,7 +164,8 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
           {navItems.map(item => {
             const isActive = location.pathname.startsWith(item.path === '/' ? '____' : item.path) || (item.path === '/' && location.pathname === '/');
             return (
-              <Link key={item.path} to={item.path} onClick={() => isMobile && toggleSidebar()}
+              <Link key={item.path} to={item.path}
+                onClick={() => { if (isMobile) toggleSidebar(); }}
                 className={`flex items-center h-12 px-4 transition-all ${isActive ? 'bg-[#1a2b3c] border-l-4 border-blue-500 text-blue-200 shadow-inner' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}>
                 <item.icon size={20} className="shrink-0" />
                 {(isSidebarOpen || isMobile) && <span className="ml-4 font-medium text-xs whitespace-nowrap uppercase tracking-wide">{item.name}</span>}
@@ -236,6 +237,7 @@ const App: React.FC = () => {
   const { user, signOut } = useAuthStore();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
@@ -318,6 +320,12 @@ const App: React.FC = () => {
               <span className="text-[10px] font-black text-blue-200 uppercase tracking-widest bg-blue-500/20 px-2 py-1 rounded whitespace-nowrap">
                 {selectedCompany} UNIT
               </span>
+              {isPending && (
+                <span className="flex items-center space-x-1.5 text-[10px] text-blue-300 font-bold">
+                  <Loader2 size={12} className="animate-spin"/>
+                  <span>Loading...</span>
+                </span>
+              )}
             </div>
             <div className="flex items-center space-x-2 md:space-x-4">
               <button
@@ -365,12 +373,18 @@ const App: React.FC = () => {
               ⚡ Offline Mode — Changes saved locally, will sync when connected
             </div>
           )}
-          <div className="flex-1 overflow-y-auto scroll-smooth pb-16 lg:pb-0">
+          <div className={`flex-1 overflow-y-auto scroll-smooth pb-16 lg:pb-0 transition-opacity duration-150 ${isPending ? 'opacity-60 pointer-events-none' : 'opacity-100'}`}>
             <div className="p-3 md:p-8 max-w-[1600px] mx-auto min-h-full flex flex-col">
               <Suspense fallback={
-                <div className="h-full flex flex-col items-center justify-center text-slate-400 animate-pulse">
-                  <Loader2 size={48} className="animate-spin text-blue-500 mb-4" />
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em]">Loading Module...</p>
+                <div className="h-full flex flex-col space-y-4 p-6 animate-pulse">
+                  <div className="h-10 bg-slate-100 rounded-xl w-1/3"/>
+                  <div className="grid grid-cols-4 gap-4">
+                    {[...Array(4)].map((_,i) => (
+                      <div key={i} className="h-24 bg-slate-100 rounded-2xl"/>
+                    ))}
+                  </div>
+                  <div className="h-64 bg-slate-100 rounded-2xl"/>
+                  <div className="h-40 bg-slate-100 rounded-2xl"/>
                 </div>
               }>
                 <Routes>
