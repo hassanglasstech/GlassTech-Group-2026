@@ -7,7 +7,7 @@ import { ProductionService } from '../../production/services/productionService';
 import { InventoryService } from '../../procurement/services/inventoryService';
 import { FinanceService } from '../../finance/services/financeService';
 import { useNavigate } from 'react-router-dom';
-import { Users, Clock, Landmark, Factory, Briefcase, Warehouse, ShoppingBag, Globe, ShieldCheck, TrendingUp, AlertTriangle, Activity, Calendar, Truck, Loader2, DollarSign, FileCheck, Bell } from 'lucide-react';
+import { Users, Clock, Landmark, Factory, Briefcase, Warehouse, ShoppingBag, Globe, ShieldCheck, TrendingUp, AlertTriangle, Activity, Calendar, Truck, Loader2 } from 'lucide-react';
 
 import { useAppStore } from '../store/appStore';
 
@@ -53,23 +53,6 @@ const Dashboard: React.FC = () => {
     const currentMonth = today.slice(0, 7);
 
     const activeStaff = employees.length;
-
-    // Three-way matching / approval stats
-    let allPOs: any[] = [];
-    try {
-      const { ProductionService } = require('../../production/services/productionService');
-      allPOs = ProductionService.getPurchaseOrders().filter((p: any) => p.fromCompany === company);
-    } catch {}
-    let allPendingReqs: any[] = [];
-    try {
-      const { InventoryService: IS } = require('../../procurement/services/inventoryService');
-      allPendingReqs = IS.getRequisitions().filter((r: any) =>
-        r.company === company && r.requiresCashPayment && r.paymentStatus !== 'Paid' && r.status === 'Approved'
-      );
-    } catch {}
-    const pendingApprovalPOs = allPOs.filter((p: any) => p.status === 'Matched');
-    const mismatchPOs        = allPOs.filter((p: any) => p.matchStatus === 'Mismatch');
-    const awaitingPaymentPOs = allPOs.filter((p: any) => p.status === 'Payment Pending');
     
     const monthSales = quotations
       .filter(q => q.status === 'Approved' && q.date.startsWith(currentMonth))
@@ -161,48 +144,6 @@ const Dashboard: React.FC = () => {
                   <div><p className="text-xs font-black text-rose-800 uppercase">Material Shortage</p><p className="text-[10px] text-rose-600 font-medium">{stats.lowStockCount} items below safety levels.</p></div>
                </div>
             )}
-            {stats.pendingApprovalPOs?.length > 0 && (
-               <div className="p-3 md:p-4 bg-indigo-50 border-l-4 border-indigo-500 rounded-xl flex items-start space-x-3 cursor-pointer hover:bg-indigo-100 transition-colors" onClick={() => navigate('/procurement')}>
-                  <ShieldCheck className="text-indigo-600 shrink-0" size={16}/>
-                  <div>
-                    <p className="text-xs font-black text-indigo-800 uppercase">Approval Required</p>
-                    <p className="text-[10px] text-indigo-600 font-medium">{stats.pendingApprovalPOs.length} PO(s) matched and awaiting payment approval.</p>
-                  </div>
-               </div>
-            )}
-            {stats.mismatchPOs?.length > 0 && (
-               <div className="p-3 md:p-4 bg-rose-50 border-l-4 border-rose-600 rounded-xl flex items-start space-x-3 cursor-pointer hover:bg-rose-100 transition-colors" onClick={() => navigate('/procurement')}>
-                  <AlertTriangle className="text-rose-600 shrink-0" size={16}/>
-                  <div>
-                    <p className="text-xs font-black text-rose-800 uppercase">Invoice Mismatch</p>
-                    <p className="text-[10px] text-rose-600 font-medium">{stats.mismatchPOs.length} PO(s) have invoice vs. PO amount variance.</p>
-                  </div>
-               </div>
-            )}
-            {stats.awaitingPaymentPOs?.length > 0 && (
-               <div className="p-3 md:p-4 bg-emerald-50 border-l-4 border-emerald-500 rounded-xl flex items-start space-x-3 cursor-pointer hover:bg-emerald-100 transition-colors" onClick={() => navigate('/finance')}>
-                  <DollarSign className="text-emerald-600 shrink-0" size={16}/>
-                  <div>
-                    <p className="text-xs font-black text-emerald-800 uppercase">Payment Ready</p>
-                    <p className="text-[10px] text-emerald-600 font-medium">{stats.awaitingPaymentPOs.length} PO(s) approved — ready for payment voucher.</p>
-                  </div>
-               </div>
-            )}
-            {stats.allPendingReqs?.length > 0 && (
-               <div className="p-3 md:p-4 bg-amber-50 border-l-4 border-amber-500 rounded-xl flex items-start space-x-3 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => navigate('/finance')}>
-                  <Bell className="text-amber-600 shrink-0" size={16}/>
-                  <div>
-                    <p className="text-xs font-black text-amber-800 uppercase">REQ Payment Queue</p>
-                    <p className="text-[10px] text-amber-600 font-medium">{stats.allPendingReqs.length} requisition(s) awaiting cash payment from Finance.</p>
-                  </div>
-               </div>
-            )}
-            {!stats.pendingApprovalPOs?.length && !stats.mismatchPOs?.length && !stats.awaitingPaymentPOs?.length && !stats.allPendingReqs?.length && !stats.lowStockCount && (
-              <div className="p-3 md:p-4 bg-emerald-50 border-l-4 border-emerald-400 rounded-xl flex items-start space-x-3">
-                 <FileCheck className="text-emerald-600 shrink-0" size={16}/>
-                 <div><p className="text-xs font-black text-emerald-800 uppercase">All Clear</p><p className="text-[10px] text-emerald-600 font-medium">No pending approvals or payment actions.</p></div>
-              </div>
-            )}
             <div className="p-3 md:p-4 bg-blue-50 border-l-4 border-blue-500 rounded-xl flex items-start space-x-3">
                <Activity className="text-blue-600 shrink-0" size={16}/>
                <div><p className="text-xs font-black text-blue-800 uppercase">System Maintenance</p><p className="text-[10px] text-blue-600 font-medium">Optimization runs nightly at 02:00 AM.</p></div>
@@ -241,4 +182,4 @@ const Dashboard: React.FC = () => {
   );
 };
 
-export default Dashboard;
+export default React.memo(Dashboard);
