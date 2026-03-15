@@ -64,4 +64,4 @@ const HRModule: React.FC = () => {
   );
 };
 
-export default HRModule;
+export default React.memo(HRModule);
