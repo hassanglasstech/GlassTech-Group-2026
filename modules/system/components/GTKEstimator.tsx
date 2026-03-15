@@ -289,11 +289,11 @@ const GTKEstimator: React.FC<GTKEstimatorProps> = ({ isOpen, onClose, products, 
                             <div className="flex justify-between items-end mb-6">
                                 <div>
                                     <p className="text-xs font-black uppercase text-slate-400">Unit Selling Price</p>
-                                    <p className="text-4xl font-black text-slate-800">PKR {recipeCalc.unitPrice.toLocaleString()}</p>
+                                    <p className="text-4xl font-black text-slate-800">PKR {(Number(recipeCalc.unitPrice) || 0).toLocaleString()}</p>
                                 </div>
                                 <div className="text-right">
                                     <p className="text-xs font-black uppercase text-emerald-600 mb-1">Total Line Value</p>
-                                    <p className="text-2xl font-black text-emerald-600">PKR {recipeCalc.total.toLocaleString()}</p>
+                                    <p className="text-2xl font-black text-emerald-600">PKR {(Number(recipeCalc.total) || 0).toLocaleString()}</p>
                                 </div>
                             </div>
                             <button onClick={handleAdd} disabled={recipeCalc.total === 0} className="w-full py-4 bg-slate-900 text-white rounded-xl font-black uppercase text-sm tracking-widest shadow-xl hover:bg-orange-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2">
