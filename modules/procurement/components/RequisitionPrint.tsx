@@ -92,7 +92,7 @@ const RequisitionPrint: React.FC<Props> = ({ data, company }) => {
                             <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Employee</p><p className="text-lg font-black text-slate-900 uppercase">{data.employeeName}</p></div>
                         )}
                         {data.loanAmount ? (
-                            <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Requested Amount</p><p className="text-lg font-black text-slate-900 uppercase">PKR {data.loanAmount.toLocaleString()}</p></div>
+                            <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Requested Amount</p><p className="text-lg font-black text-slate-900 uppercase">PKR {(Number(data.loanAmount) || 0).toLocaleString()}</p></div>
                         ) : null}
                         {data.absentDate && (
                             <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Absent Date</p><p className="text-lg font-black text-slate-900 uppercase">{data.absentDate}</p></div>
@@ -107,7 +107,7 @@ const RequisitionPrint: React.FC<Props> = ({ data, company }) => {
                 <div className="flex justify-end mb-12">
                     <div className="w-64 border-2 border-black p-4 rounded-xl bg-slate-50 text-right">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Requisition Value</p>
-                        <p className="text-2xl font-black text-slate-900">PKR {data.totalValue.toLocaleString()}</p>
+                        <p className="text-2xl font-black text-slate-900">PKR {(Number(data.totalValue) || 0).toLocaleString()}</p>
                     </div>
                 </div>
 
