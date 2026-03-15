@@ -124,7 +124,7 @@ const AgingReport: React.FC<{ company: Company }> = ({ company }) => {
          </div>
          <div className="flex flex-col items-end z-10">
             <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Total {reportType} Exposure</p>
-            <p className={`text-4xl font-black ${reportType === 'Receivable' ? 'text-emerald-400' : 'text-rose-400'}`}>PKR {totals.balance.toLocaleString()}</p>
+            <p className={`text-4xl font-black ${reportType === 'Receivable' ? 'text-emerald-400' : 'text-rose-400'}`}>PKR {(Number(totals.balance) || 0).toLocaleString()}</p>
          </div>
       </div>
 
@@ -198,7 +198,7 @@ const AgingReport: React.FC<{ company: Company }> = ({ company }) => {
                            <p className="font-black text-slate-800 text-sm uppercase">{row.name}</p>
                            <p className="text-[10px] font-bold text-slate-400 font-mono">{row.code}</p>
                         </td>
-                        <td className="px-6 py-4 text-right font-black text-slate-900 text-base">{row.balance.toLocaleString()}</td>
+                        <td className="px-6 py-4 text-right font-black text-slate-900 text-base">{(Number(row.balance) || 0).toLocaleString()}</td>
                         <td className="px-6 py-4 text-right text-emerald-700 bg-emerald-50/30 font-bold">{row.buckets['0-30'] > 0 ? row.buckets['0-30'].toLocaleString() : '-'}</td>
                         <td className="px-6 py-4 text-right text-amber-700 bg-amber-50/30 font-bold">{row.buckets['31-60'] > 0 ? row.buckets['31-60'].toLocaleString() : '-'}</td>
                         <td className="px-6 py-4 text-right text-orange-700 bg-orange-50/30 font-bold">{row.buckets['61-90'] > 0 ? row.buckets['61-90'].toLocaleString() : '-'}</td>
@@ -220,11 +220,11 @@ const AgingReport: React.FC<{ company: Company }> = ({ company }) => {
             <tfoot className="bg-slate-100 border-t border-slate-200">
                <tr>
                   <td className="px-6 py-4 font-black text-xs uppercase text-slate-600">Grand Total</td>
-                  <td className="px-6 py-4 text-right font-black text-sm text-slate-900">{totals.balance.toLocaleString()}</td>
-                  <td className="px-6 py-4 text-right font-black text-emerald-700">{totals.b30.toLocaleString()}</td>
-                  <td className="px-6 py-4 text-right font-black text-amber-700">{totals.b60.toLocaleString()}</td>
-                  <td className="px-6 py-4 text-right font-black text-orange-700">{totals.b90.toLocaleString()}</td>
-                  <td className="px-6 py-4 text-right font-black text-rose-700">{totals.bPlus.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-right font-black text-sm text-slate-900">{(Number(totals.balance) || 0).toLocaleString()}</td>
+                  <td className="px-6 py-4 text-right font-black text-emerald-700">{(Number(totals.b30) || 0).toLocaleString()}</td>
+                  <td className="px-6 py-4 text-right font-black text-amber-700">{(Number(totals.b60) || 0).toLocaleString()}</td>
+                  <td className="px-6 py-4 text-right font-black text-orange-700">{(Number(totals.b90) || 0).toLocaleString()}</td>
+                  <td className="px-6 py-4 text-right font-black text-rose-700">{(Number(totals.bPlus) || 0).toLocaleString()}</td>
                   <td></td>
                </tr>
             </tfoot>
