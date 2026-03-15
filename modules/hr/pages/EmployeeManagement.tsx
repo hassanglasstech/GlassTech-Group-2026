@@ -288,7 +288,7 @@ const EmployeeManagement: React.FC = () => {
                   <td className="px-6 py-4">
                     <div>
                       <p className="text-sm font-black text-slate-900">PKR {(emp.salary.basic + emp.salary.houseRent + emp.salary.conveyance + emp.salary.specialAllowance).toLocaleString()}</p>
-                      <p className="text-[10px] text-slate-400 font-medium tracking-tight">Base: {emp.salary.basic.toLocaleString()}</p>
+                      <p className="text-[10px] text-slate-400 font-medium tracking-tight">Base: {(Number(emp.salary.basic) || 0).toLocaleString()}</p>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
