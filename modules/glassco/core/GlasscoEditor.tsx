@@ -47,9 +47,8 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
 
     const getThicknesses = (category: string, subCategory: string) => {
         const filtered = glassMaster.filter(p => 
-            (p.glassType === category || p.glass_type === category) && 
-            (p.subCategory === subCategory || p.sub_category === subCategory || 
-             (subCategory === 'Standard' && !p.subCategory && !p.sub_category))
+            p.glassType === category && 
+            (p.subCategory === subCategory || (subCategory === 'Standard' && !p.subCategory))
         );
         const thicknesses = Array.from(new Set(filtered.map(p => p.thickness).filter(Boolean))) as string[];
         return thicknesses.sort((a, b) => parseInt(a) - parseInt(b));
@@ -57,9 +56,8 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
 
     const getColors = (category: string, subCategory: string, thickness: string) => {
         const filtered = glassMaster.filter(p => 
-            (p.glassType === category || p.glass_type === category) && 
-            (p.subCategory === subCategory || p.sub_category === subCategory ||
-             (subCategory === 'Standard' && !p.subCategory && !p.sub_category)) &&
+            p.glassType === category && 
+            (p.subCategory === subCategory || (subCategory === 'Standard' && !p.subCategory)) &&
             p.thickness === thickness
         );
         const colors = Array.from(new Set(filtered.map(p => p.finishColor).filter(Boolean))) as string[];
@@ -147,11 +145,11 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                     </button>
                     
                     <button onClick={() => onSave('draft')} className="bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 px-4 py-2 rounded-xl text-xs font-black uppercase shadow-sm transition-all flex items-center gap-2">
-                        <Save size={14}/> Save Draft (No #)
+                        <Save size={14}/> Save Draft (9000+)
                     </button>
                     
                     <button onClick={() => onSave('save')} className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow-md transition-all flex items-center gap-2">
-                        <FileText size={14}/> Generate Quotation #
+                        <FileText size={14}/> Save Quotation (2428+)
                     </button>
                     
                     <button onClick={() => onSave('approve')} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow-md transition-all flex items-center gap-2">
