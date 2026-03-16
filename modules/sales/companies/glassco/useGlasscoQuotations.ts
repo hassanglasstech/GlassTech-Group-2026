@@ -40,7 +40,8 @@ export const useGlasscoQuotations = () => {
       let max = 0;
       all.forEach(q => {
           const refId = q.orderNo || q.id;
-          if (refId.startsWith('DRF-')) return;
+          // Only count formal IDs (QT or SO) for the main serial count
+          if (!refId || refId.startsWith('DRF-')) return;
           const parts = refId.split('-');
           const num = parseInt(parts[parts.length - 1]);
           if (!isNaN(num) && num > max) max = num;
@@ -96,18 +97,24 @@ export const useGlasscoQuotations = () => {
             finalId = `DRF-GLS-${mmyy}-${(maxSeq + 1).toString().padStart(4, '0')}`;
         }
     } 
-    else if (action === 'save') {
+    else if (action === 'save' || action === 'approve') {
         if (!hasFormalId) {
+            // If it's a draft being saved/approved, generate a new formal ID
             let maxSeq = 2427;
             all.forEach(q => {
                 const refId = q.orderNo || q.id;
-                if (refId && !refId.startsWith('DRF-')) {
+                if (refId && (refId.startsWith('QT-GLS-') || refId.startsWith('SO-GLS-'))) {
                     const parts = refId.split('-');
                     const num = parseInt(parts[parts.length - 1]);
                     if (!isNaN(num) && num > maxSeq) maxSeq = num;
                 }
             });
-            finalId = `QT-GLS-${mmyy}-${(maxSeq + 1).toString().padStart(4, '0')}`;
+            const nextSeq = (maxSeq + 1).toString().padStart(4, '0');
+            const prefix = action === 'approve' ? 'SO-GLS' : 'QT-GLS';
+            finalId = `${prefix}-${mmyy}-${nextSeq}`;
+        } else if (action === 'approve' && finalId.startsWith('QT-')) {
+            // If it's already a formal Quotation being approved, just change prefix to SO
+            finalId = finalId.replace('QT-', 'SO-');
         }
     }
 
