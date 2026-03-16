@@ -90,12 +90,24 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                         visibility: visible;
                     }
                     .print-only {
-                        position: absolute;
+                        position: fixed;
                         left: 0;
                         top: 0;
                         width: 100%;
+                        height: auto;
                         background: white;
                         z-index: 99999;
+                    }
+                    @media print {
+                        .print-only {
+                            position: static !important;
+                            width: 100% !important;
+                            height: auto !important;
+                        }
+                        html, body {
+                            height: auto !important;
+                            overflow: visible !important;
+                        }
                     }
                     .print-container { 
                         width: 100% !important; 
@@ -299,23 +311,23 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                         <div className="w-[35%] space-y-1">
                             <div className="flex justify-between text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
                                 <span>Gross:</span>
-                                <span>PKR {(Number(subTotal) || 0).toLocaleString()}</span>
+                                <span>PKR {subTotal.toLocaleString()}</span>
                             </div>
                             {(quote.discountAmount || quote.discountPercent) > 0 && (
                                 <div className="flex justify-between text-[9px] font-bold text-indigo-600 uppercase tracking-tighter">
                                     <span>Disc:</span>
-                                    <span>- {(Number(discountAmount) || 0).toLocaleString()}</span>
+                                    <span>- {discountAmount.toLocaleString()}</span>
                                 </div>
                             )}
                             <div className="flex justify-between items-end pt-1 border-t border-slate-200">
                                 <span className="text-[10px] font-black uppercase text-slate-900 tracking-tighter">Net:</span>
-                                <span className="text-lg font-black text-slate-900">PKR {(Number(netAmount) || 0).toLocaleString()}</span>
+                                <span className="text-lg font-black text-slate-900">PKR {netAmount.toLocaleString()}</span>
                             </div>
                             {advanceAmount > 0 && (
                                 <>
                                     <div className="flex justify-between text-[9px] font-bold text-emerald-600 uppercase tracking-tighter">
                                         <span>Advance:</span>
-                                        <span>- {(Number(advanceAmount) || 0).toLocaleString()}</span>
+                                        <span>- {advanceAmount.toLocaleString()}</span>
                                     </div>
                                     <div className="flex justify-between items-end pt-1 border-t border-slate-200">
                                         <span className="text-[10px] font-black uppercase text-rose-600 tracking-tighter">Balance:</span>
