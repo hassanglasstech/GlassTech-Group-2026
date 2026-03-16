@@ -9,8 +9,7 @@ import * as XLSX from 'xlsx';
 import { useAppStore } from '../../shared/store/appStore';
 import { toast } from 'sonner';
 
-const PayrollManagement: React.FC = () => {
-  const company = useAppStore(state => state.selectedCompany);
+const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [payrolls, setPayrolls] = useState<(Payroll & { isSalaryPaid?: boolean, isOvertimePaid?: boolean, allowedAbsentCount?: number, loanWaived?: boolean })[]>([]);
