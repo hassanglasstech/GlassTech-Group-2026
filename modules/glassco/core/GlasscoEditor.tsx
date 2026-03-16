@@ -21,7 +21,7 @@ interface GlasscoEditorProps {
 }
 
 export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
-    formData, clients, products, isMM, setIsMM, lastSerial = 2349, onClose,
+    formData, clients, products, isMM, setIsMM, lastSerial = 2427, onClose,
     onUpdateItem, onAddItem, onAddSection, onDuplicateItem, onRemoveItem, onSave
 }) => {
     const totalAmount = (formData.items || []).reduce((s, i) => s + i.amount, 0);
@@ -194,16 +194,12 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                         <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Order Date</label>
                         <input type="date" className="sap-input w-full font-bold h-10 border-slate-300" value={formData.date} onChange={e => handleUpdateItemWithLogic(-1, 'date', e.target.value)} />
                     </div>
-                    <div className={`space-y-1 col-span-1 transition-all relative group ${isBackdated && !formData.orderNo ? 'opacity-100' : 'opacity-30'}`}>
+                    <div className="space-y-1 col-span-1 opacity-100 relative group">
                         <div className="absolute -top-4 left-1 text-[9px] font-black text-blue-600 uppercase bg-blue-50 px-1.5 rounded border border-blue-100 transition-opacity whitespace-nowrap shadow-sm">Last: {lastSerial}</div>
-                        <label className="text-[10px] font-black uppercase text-indigo-600 tracking-widest ml-1">Serial #</label>
-                        <input 
-                            type="text" 
-                            placeholder={String(lastSerial + 1)} 
-                            className="sap-input w-full font-black h-10 border-indigo-200 bg-indigo-50" 
-                            value={formData.manualSerial || ''} 
-                            onChange={e => handleUpdateItemWithLogic(-1, 'manualSerial', e.target.value)} 
-                        />
+                        <label className="text-[10px] font-black uppercase text-indigo-600 tracking-widest ml-1">Next Serial</label>
+                        <div className="sap-input w-full font-black h-10 border-indigo-200 bg-indigo-50 flex items-center justify-center text-indigo-700">
+                            {lastSerial + 1}
+                        </div>
                     </div>
                     <div className="space-y-1 col-span-1">
                         <label className="text-[10px] font-black uppercase text-indigo-600 tracking-widest ml-1">Discount (PKR)</label>
