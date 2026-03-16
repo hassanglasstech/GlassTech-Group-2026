@@ -14,15 +14,9 @@ interface JobCardProps {
 const JobCard: React.FC<JobCardProps> = ({ piece, jobOrder, spot, onBinClick, actionRenderer }) => {
   const item = jobOrder?.items[piece.itemIndex];
   
-  // Display ID: last 4 digits of orderNo + piece serial number
-  const orderRef = jobOrder?.orderNo || jobOrder?.id || piece.orderId || '';
-  // Extract last 4 numeric digits from order ref
-  const numericOnly = orderRef.replace(/[^0-9]/g, '');
-  const orderNumeric = numericOnly.slice(-4) || orderRef.slice(-4);
-  // Piece serial: extract number from piece.id
-  const pieceSerial = piece.id.replace(/[^0-9]/g, '').slice(-2) || 
-                      (piece.id.includes('/') ? piece.id.split('/').pop()?.split('-')[0] : '') || '1';
-  const displayId = `${orderNumeric}/${pieceSerial}`;
+  // Clean Display ID: Extract the base numeric sequence (e.g., 2307) and the piece number
+  // Format: OrderNumeric/PieceNumber
+  const displayId = piece.id;
 
   return (
     <div className={`bg-white p-4 rounded-xl border-2 shadow-sm relative group transition-all flex flex-col justify-between text-center border-slate-200 hover:border-blue-300`}>
@@ -38,20 +32,9 @@ const JobCard: React.FC<JobCardProps> = ({ piece, jobOrder, spot, onBinClick, ac
        <div className="my-4">
            {item && (
                 <p className={`text-3xl font-black leading-none mb-2 text-slate-800`}>
-                  {(item.inputUnit === 'MM' || item.mmW || item.mmH) ? (
-                    <>
-                      {item.mmW || Math.round((item.width || 0) * 25.4)}
-                      <span className="text-lg text-slate-400 mx-1">x</span>
-                      {item.mmH || Math.round((item.height || 0) * 25.4)}
-                      <span className="text-sm text-slate-400 ml-1">mm</span>
-                    </>
-                  ) : (
-                    <>
-                      {item.inchW}{item.sootW ? <span className="text-xl">.{item.sootW}</span> : ''}
-                      <span className="text-lg text-slate-400 mx-1">x</span>
-                      {item.inchH}{item.sootH ? <span className="text-xl">.{item.sootH}</span> : ''}
-                    </>
-                  )}
+                    {item.inchW}{item.sootW ? <span className="text-xl">.{item.sootW}</span> : ''} 
+                    <span className="text-lg text-slate-400 mx-1">x</span> 
+                    {item.inchH}{item.sootH ? <span className="text-xl">.{item.sootH}</span> : ''}
                 </p>
            )}
            <p className="text-[10px] font-bold text-slate-500 uppercase leading-tight">{piece.specs}</p>
