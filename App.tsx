@@ -19,7 +19,7 @@ import { Toaster, toast } from 'sonner';
 import { useAuthStore, isOfficeHours, ROLE_DEFAULT_COMPANY, ROLE_MODULES } from '@/modules/auth/authStore';
 import LoginPage from '@/modules/auth/LoginPage';
 
-import NotificationCenter from '@/modules/shared/components/NotificationCenter';
+import NotificationCenter from './modules/shared/components/NotificationCenter';
 
 // ── Lazy load modules ────────────────────────────────────────────────
 const Dashboard        = React.lazy(() => import('./modules/shared/pages/Dashboard'));
@@ -370,7 +370,7 @@ const App: React.FC = () => {
                 </div>
               }>
                 <Routes>
-                  <Route path="/"             element={<ModuleErrorBoundary moduleName="Dashboard"><Dashboard company={selectedCompany} /></ModuleErrorBoundary>} />
+                  <Route path="/"             element={<ModuleErrorBoundary moduleName="Dashboard"><Dashboard /></ModuleErrorBoundary>} />
                   <Route path="/hr/*"          element={<ModuleErrorBoundary moduleName="HR"><HRModule /></ModuleErrorBoundary>} />
                   <Route path="/sales/*"       element={<ModuleErrorBoundary moduleName="Sales"><SalesCRM /></ModuleErrorBoundary>} />
                   <Route path="/inventory"     element={<ModuleErrorBoundary moduleName="Inventory"><InventoryModule /></ModuleErrorBoundary>} />
