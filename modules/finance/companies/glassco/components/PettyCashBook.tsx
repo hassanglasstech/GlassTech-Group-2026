@@ -2,8 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Company, PettyCashEntry, CostCenter, Account, LedgerTransaction, Requisition } from '@/modules/shared/types';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
-import { Plus, Search, ArrowUpRight, ArrowDownLeft, X, Save, Wallet, Check, AlertTriangle, Fingerprint, Printer } from 'lucide-react';
+import { Plus, Search, ArrowUpRight, ArrowDownLeft, X, Save, Wallet, Check, AlertTriangle, Fingerprint, Printer, Bookmark } from 'lucide-react';
 import { UnifiedPaymentPrint } from '@/modules/finance/components/prints/UnifiedPaymentPrint';
+import { FinancialMappingRule } from '@/modules/finance/types/finance';
+import { toast } from 'sonner';
 
 const BUSINESS_TRANSACTIONS = [
     // RECEIPTS
@@ -28,6 +30,7 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
   const [entries, setEntries] = useState<PettyCashEntry[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [mappingRules, setMappingRules] = useState<FinancialMappingRule[]>([]);
   const [authorizedReqs, setAuthorizedReqs] = useState<Requisition[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -52,6 +55,7 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
     setEntries(filtered.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
     setCostCenters(FinanceService.getCostCenters().filter(cc => cc.company === company));
     setAccounts(FinanceService.getAccounts().filter(a => a.company === company && a.level === 5));
+    setMappingRules(FinanceService.getMappingRules().filter(r => r.company === company));
 
     // Fetch Authorized Requisitions for Linking (Expense/Maintenance/General/Overtime)
     const allReqs = InventoryService.getRequisitions().filter(Boolean);
@@ -67,16 +71,48 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
       const req = authorizedReqs.find(r => r.id === reqId);
       if (req) {
           setLinkedReqId(reqId);
+          
+          // Try to find a mapping rule for this subCategory or category
+          const rule = mappingRules.find(r => 
+            r.keyword.toLowerCase() === req.subCategory?.toLowerCase() || 
+            r.keyword.toLowerCase() === req.category?.toLowerCase()
+          );
+
           setFormData(prev => ({
               ...prev,
               amount: req.totalValue,
               description: `REQ: ${req.headerText} (${req.requisitioner})`,
-              referenceDoc: req.id
+              referenceDoc: req.id,
+              glAccountId: rule?.targetGlId || prev.glAccountId,
+              costCenterId: rule?.targetCostCenterId || prev.costCenterId
           }));
+          
+          if (rule) {
+            toast.info("Applied mapping rule for this requisition type.");
+          }
       } else {
           setLinkedReqId('');
           setFormData(prev => ({ ...prev, referenceDoc: '' }));
       }
+  };
+
+  const saveAsTemplate = () => {
+    if (!formData.description || !formData.glAccountId) {
+      return alert("Description and GL Account are required to save a template");
+    }
+
+    const newRule: FinancialMappingRule = {
+      id: `RULE-${Date.now()}`,
+      company,
+      keyword: formData.description.split(':')[0].trim().replace('REQ: ', ''),
+      targetGlId: formData.glAccountId,
+      targetCostCenterId: formData.costCenterId
+    };
+
+    const updatedRules = [...mappingRules, newRule];
+    FinanceService.saveMappingRules(updatedRules);
+    setMappingRules(updatedRules);
+    alert("Payment treatment saved as template!");
   };
 
   const currentBalance = useMemo(() => entries.filter(e => e.status === 'Posted').reduce((acc, curr) => curr.type === 'Receipt' ? acc + curr.amount : acc - curr.amount, 0), [entries]);
@@ -180,7 +216,6 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
            <p className="text-[10px] font-bold uppercase text-blue-200 tracking-widest mb-1">Cash Balance (FBCJ)</p>
            <p className="text-3xl font-black">PKR {(Number(currentBalance) || 0).toLocaleString()}</p>
         </div>
-        {/* ... (Other stat cards) ... */}
       </div>
 
       <div className="bg-white border border-slate-200 p-4 shadow-sm flex justify-between items-center no-print">
@@ -308,28 +343,53 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
                          </select>
                       </div>
                       <div className="space-y-1">
-                         <label className="text-[10px] font-bold uppercase text-slate-500">GL Account</label>
+                         <label className="text-[10px] font-bold uppercase text-slate-500">GL Account (5-Level COA)</label>
                          <select 
                             className="sap-input w-full font-bold" 
                             value={formData.glAccountId} 
                             onChange={e => setFormData({...formData, glAccountId: e.target.value})}
                          >
                             <option value="">-- Map to GL --</option>
-                            {getFilteredGLAccounts(formData.businessTransaction || '').map(a => (
+                            {getFilteredGLAccounts(formData.businessTransaction || '').sort((a,b) => a.code.localeCompare(b.code)).map(a => (
                                 <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>
                             ))}
                          </select>
                       </div>
                    </div>
+
+                   <div className="grid grid-cols-2 gap-6">
+                      <div className="space-y-1">
+                         <label className="text-[10px] font-bold uppercase text-slate-500">Cost Centre</label>
+                         <select 
+                            className="sap-input w-full font-bold" 
+                            value={formData.costCenterId} 
+                            onChange={e => setFormData({...formData, costCenterId: e.target.value})}
+                          >
+                            <option value="">-- Select Cost Centre --</option>
+                            {costCenters.map(cc => (
+                                <option key={cc.id} value={cc.id}>[{cc.code}] {cc.name}</option>
+                            ))}
+                         </select>
+                      </div>
+                      <div className="space-y-1">
+                         <label className="text-[10px] font-bold uppercase text-slate-500">Amount</label>
+                         <input type="number" disabled={!!formData.id} value={formData.amount} onChange={e => setFormData({...formData, amount: Number(e.target.value)})} className="sap-input w-full font-black text-lg" />
+                      </div>
+                   </div>
                    
-                   <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Amount</label><input type="number" disabled={!!formData.id} value={formData.amount} onChange={e => setFormData({...formData, amount: Number(e.target.value)})} className="sap-input w-full font-black text-lg" /></div>
                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Description</label><input type="text" disabled={!!formData.id} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="sap-input w-full font-bold uppercase" /></div>
                </div>
             </div>
 
-            <div className="px-8 py-4 bg-white border-t flex justify-end space-x-3 shrink-0">
-               <button onClick={() => setIsModalOpen(false)} className="sap-btn-ghost">Discard</button>
-               <button onClick={() => handlePostEntry(formData, !formData.id)} className="sap-btn-primary flex items-center space-x-2"><Save size={14}/><span>{formData.status === 'Parked' ? 'Accept & Post' : 'Post Entry'}</span></button>
+            <div className="px-8 py-4 bg-white border-t flex justify-between items-center shrink-0">
+               <button onClick={saveAsTemplate} className="flex items-center space-x-2 text-slate-500 hover:text-blue-600 text-[10px] font-black uppercase transition-colors">
+                  <Bookmark size={14} />
+                  <span>Save as Template</span>
+               </button>
+               <div className="flex space-x-3">
+                  <button onClick={() => setIsModalOpen(false)} className="sap-btn-ghost">Discard</button>
+                  <button onClick={() => handlePostEntry(formData, !formData.id)} className="sap-btn-primary flex items-center space-x-2"><Save size={14}/><span>{formData.status === 'Parked' ? 'Accept & Post' : 'Post Entry'}</span></button>
+               </div>
             </div>
           </div>
         </div>
