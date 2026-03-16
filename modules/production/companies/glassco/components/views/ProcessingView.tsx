@@ -22,6 +22,15 @@ const ProcessingView: React.FC = () => {
         const jobData = getJobDetails(selectedJobId, filterFn);
         const relevantPieces = pieces.filter(p => p.orderId === selectedJobId && filterFn(p));
         
+        // Sort by piece number ascending (e.g. 2428/1, 2428/2, 2428/10)
+        relevantPieces.sort((a, b) => {
+          const getNum = (id: string) => {
+            const part = id.split('/').pop() || '0';
+            return parseInt(part.replace(/[^0-9]/g, '')) || 0;
+          };
+          return getNum(a.id) - getNum(b.id);
+        });
+        
         if (relevantPieces.length === 0) { setSelectedJobId(null); return null; }
 
         return (
