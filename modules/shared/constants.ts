@@ -71,11 +71,13 @@ export const LoanStatus = {
 export type LoanStatus = typeof LoanStatus[keyof typeof LoanStatus];
 
 export const RequisitionStatus = {
+  DRAFT: 'Draft',
   PENDING: 'Pending',
   APPROVED: 'Approved',
   CONVERTED_TO_PO: 'Converted to PO',
   REJECTED: 'Rejected',
-  COMPLETED: 'Completed'
+  COMPLETED: 'Completed',
+  PAID: 'Paid'
 } as const;
 export type RequisitionStatus = typeof RequisitionStatus[keyof typeof RequisitionStatus];
 
