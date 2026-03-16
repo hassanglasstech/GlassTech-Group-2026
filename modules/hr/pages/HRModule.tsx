@@ -54,14 +54,14 @@ const HRModule: React.FC = () => {
       </div>
 
       <div className="mt-4">
-        {activeTab === 'registry' && <EmployeeManagement />}
-        {activeTab === 'attendance' && <AttendanceRegister />}
-        {activeTab === 'loans' && <LoanManagement />}
-        {activeTab === 'payroll' && <PayrollManagement />}
+        {activeTab === 'registry' && <EmployeeManagement company={company} />}
+        {activeTab === 'attendance' && <AttendanceRegister company={company} />}
+        {activeTab === 'loans' && <LoanManagement company={company} />}
+        {activeTab === 'payroll' && <PayrollManagement company={company} />}
         {activeTab === 'history' && <OldDisbursements />}
       </div>
     </div>
   );
 };
 
-export default React.memo(HRModule);
+export default HRModule;
