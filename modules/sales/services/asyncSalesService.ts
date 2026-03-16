@@ -52,9 +52,11 @@ export const AsyncSalesService = {
       serviceNick: r.service_nick ?? '', profileCode: r.profile_code ?? '',
       thickness: r.thickness ?? '', sheetSize: r.sheet_size ?? '',
       costPrice: r.cost_price ?? 0, basePrice: r.base_price ?? 0,
+      temperingPrice: r.tempering_price ?? 0,
       unit: r.unit ?? 'PCS', variants: r.variants ?? [],
       modelNo: r.model_no ?? '', brand: r.brand ?? '',
       mainCategory: r.main_category ?? '', subCategory: r.sub_category ?? '',
+      glassType: r.glass_type ?? '',
       finishColor: r.finish_color ?? '', material: r.material ?? '',
       direction: r.direction ?? '', tongueLength: r.tongue_length ?? '',
       spindleLength: r.spindle_length ?? '', imageUrl: r.image_url ?? '',
@@ -62,6 +64,7 @@ export const AsyncSalesService = {
       setComponents: r.set_components ?? [], technicalSpecs: r.technical_specs ?? {},
       width: r.width ?? 0, height: r.height ?? 0,
       frameColor: r.frame_color ?? '', meshColor: r.mesh_color ?? '',
+      subDescription: r.sub_description ?? '',
     }));
     } catch (err: any) {
       console.error('[AsyncSalesService] getProducts exception:', err.message);
