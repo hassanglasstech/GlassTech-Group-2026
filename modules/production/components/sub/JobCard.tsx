@@ -32,9 +32,20 @@ const JobCard: React.FC<JobCardProps> = ({ piece, jobOrder, spot, onBinClick, ac
        <div className="my-4">
            {item && (
                 <p className={`text-3xl font-black leading-none mb-2 text-slate-800`}>
-                    {item.inchW}{item.sootW ? <span className="text-xl">.{item.sootW}</span> : ''} 
-                    <span className="text-lg text-slate-400 mx-1">x</span> 
-                    {item.inchH}{item.sootH ? <span className="text-xl">.{item.sootH}</span> : ''}
+                  {(item.inputUnit === 'MM' || item.mmW || item.mmH) ? (
+                    <>
+                      {item.mmW || Math.round((item.width || 0) * 25.4)}
+                      <span className="text-lg text-slate-400 mx-1">x</span>
+                      {item.mmH || Math.round((item.height || 0) * 25.4)}
+                      <span className="text-sm text-slate-400 ml-1">mm</span>
+                    </>
+                  ) : (
+                    <>
+                      {item.inchW}{item.sootW ? <span className="text-xl">.{item.sootW}</span> : ''}
+                      <span className="text-lg text-slate-400 mx-1">x</span>
+                      {item.inchH}{item.sootH ? <span className="text-xl">.{item.sootH}</span> : ''}
+                    </>
+                  )}
                 </p>
            )}
            <p className="text-[10px] font-bold text-slate-500 uppercase leading-tight">{piece.specs}</p>
