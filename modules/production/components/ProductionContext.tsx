@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
 import { Company, Quotation, Client, ProductionPiece, PieceStatus, TemperingDispatch, GatePass, WarehouseSpot, PieceFault } from '@/modules/shared/types';
@@ -106,7 +105,7 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
 
     const companyPieces = (company as string) === 'Factory' 
       ? allPieces 
-      : allPieces.filter(p => p.orderId.includes(companyCode));
+      : allPieces.filter(p => p.orderId?.includes(companyCode));
 
     setPieces(companyPieces);
     setJobOrders(SalesService.getQuotations().filter(q => q.company === company && q.status === 'Approved'));
@@ -296,7 +295,7 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
     return pieces.filter(p => {
       if (p.status !== 'Dispatched') return false;
       const outgoingTrip = dispatches.find(d => d.id === p.dispatchId);
-      if (outgoingTrip && outgoingTrip.plantName.includes(inwardTrip.pickLocation!)) return true;
+      if (outgoingTrip && outgoingTrip.plantName?.includes(inwardTrip.pickLocation!)) return true;
       return false;
     });
   }, [pieces, activeInwardDispatchId, dispatches]);
@@ -309,7 +308,7 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
     const delivered = pieces.filter(p => p.status === 'Delivered').length;
     const defects = pieces.filter(p => p.status === 'Returned' || p.status === 'QC-Failed' || p.status === 'Broken').length;
     const typeMap: Record<string, number> = {};
-    pieces.forEach(p => { const type = p.specs.split('(')[0].split('|')[1]?.trim() || 'Unknown'; typeMap[type] = (typeMap[type] || 0) + 1; });
+    pieces.forEach(p => { const type = p.specs?.split('(')[0].split('|')[1]?.trim() || 'Unknown'; typeMap[type] = (typeMap[type] || 0) + 1; });
     const sortedTypes = Object.entries(typeMap).sort((a,b) => b[1] - a[1]).slice(0, 5);
     return { total, cut, qcPassed, tempered, delivered, defects, sortedTypes };
   }, [pieces]);
