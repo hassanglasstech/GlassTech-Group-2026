@@ -47,8 +47,9 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
 
     const getThicknesses = (category: string, subCategory: string) => {
         const filtered = glassMaster.filter(p => 
-            p.glassType === category && 
-            (p.subCategory === subCategory || (subCategory === 'Standard' && !p.subCategory))
+            (p.glassType === category || p.glass_type === category) && 
+            (p.subCategory === subCategory || p.sub_category === subCategory || 
+             (subCategory === 'Standard' && !p.subCategory && !p.sub_category))
         );
         const thicknesses = Array.from(new Set(filtered.map(p => p.thickness).filter(Boolean))) as string[];
         return thicknesses.sort((a, b) => parseInt(a) - parseInt(b));
@@ -56,8 +57,9 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
 
     const getColors = (category: string, subCategory: string, thickness: string) => {
         const filtered = glassMaster.filter(p => 
-            p.glassType === category && 
-            (p.subCategory === subCategory || (subCategory === 'Standard' && !p.subCategory)) &&
+            (p.glassType === category || p.glass_type === category) && 
+            (p.subCategory === subCategory || p.sub_category === subCategory ||
+             (subCategory === 'Standard' && !p.subCategory && !p.sub_category)) &&
             p.thickness === thickness
         );
         const colors = Array.from(new Set(filtered.map(p => p.finishColor).filter(Boolean))) as string[];
@@ -353,7 +355,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                <div className="flex flex-col md:flex-row md:space-x-12 items-center">
                    <div>
                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Gross Subtotal</p>
-                       <p className="text-3xl font-black tracking-tight">PKR {(Number(totalAmount) || 0).toLocaleString()}</p>
+                       <p className="text-3xl font-black tracking-tight">PKR {totalAmount.toLocaleString()}</p>
                    </div>
                    <div className="h-10 w-px bg-slate-700 hidden md:block"></div>
                    <div>
