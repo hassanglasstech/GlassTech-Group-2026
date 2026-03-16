@@ -26,10 +26,15 @@ export const calculateAutoRate = (size: string, type: string, subType: string, s
         if (pType !== sType) return false;
         
         const pSub = normalize(p.subCategory || 'standard');
-        if (pSub !== sSubType) return false;
+        const normPSub = (pSub === '' || pSub === 'n/a') ? 'standard' : pSub;
+        const normSSub = (sSubType === '' || sSubType === 'n/a') ? 'standard' : sSubType;
+        if (normPSub !== normSSub) return false;
         
         const pColor = normalize(p.finishColor || 'clear');
-        if (pColor !== sColor) return false;
+        // N/A and empty both mean 'clear' (no special color)
+        const normPColor = (pColor === 'n/a' || pColor === '' || pColor === 'na') ? 'clear' : pColor;
+        const normSColor = (sColor === 'n/a' || sColor === '' || sColor === 'na') ? 'clear' : sColor;
+        if (normPColor !== normSColor) return false;
         
         return true;
     });
