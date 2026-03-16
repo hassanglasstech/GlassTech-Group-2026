@@ -83,9 +83,30 @@ const TABLE_MAP: Record<string, string> = {
 // Most tables store data as-is (JSON columns or flat).
 // We upsert the raw localStorage array directly.
 
+// Map nested app employee → flat Supabase structure
+const flattenEmployee = (e: any) => ({
+  id:               e.id,
+  company:          e.company,
+  name:             e.personal?.name || '',
+  cnic:             e.personal?.cnic || '',
+  phone:            e.personal?.phone || '',
+  address:          e.personal?.address || '',
+  designation:      e.work?.designation || '',
+  department:       e.work?.department || '',
+  grade:            e.work?.grade || '',
+  join_date:        e.work?.joinDate || null,
+  employee_code:    e.work?.employeeCode || '',
+  basic:            e.salary?.basic || 0,
+  house_rent:       e.salary?.houseRent || 0,
+  conveyance:       e.salary?.conveyance || 0,
+  special_allowance: e.salary?.specialAllowance || 0,
+});
+
 const pushTable = async (table: string, localKey: string): Promise<boolean> => {
-  const data = safeParse(localKey);
-  if (!data || data.length === 0) return true;
+  const rawData = safeParse(localKey);
+  if (!rawData || rawData.length === 0) return true;
+  // Map nested employees → flat for Supabase
+  const data = table === 'employees' ? rawData.map(flattenEmployee) : rawData;
   
   try {
     await withRetry(
@@ -109,6 +130,15 @@ const pushTable = async (table: string, localKey: string): Promise<boolean> => {
   }
 };
 
+// Map flat Supabase employee → nested app structure
+const mapEmployee = (r: any) => ({
+  id:        r.id,
+  company:   r.company,
+  personal:  { name: r.name || '', cnic: r.cnic || '', phone: r.phone || '', address: r.address || '' },
+  work:      { designation: r.designation || '', department: r.department || '', grade: r.grade || '', joinDate: r.join_date || '', employeeCode: r.employee_code || '' },
+  salary:    { basic: Number(r.basic) || 0, houseRent: Number(r.house_rent) || 0, conveyance: Number(r.conveyance) || 0, specialAllowance: Number(r.special_allowance) || 0 },
+});
+
 const pullTable = async (table: string, localKey: string): Promise<boolean> => {
   try {
     const { data, error } = await supabase.from(table).select('*');
@@ -124,7 +154,9 @@ const pullTable = async (table: string, localKey: string): Promise<boolean> => {
       return false;
     }
     if (data && data.length > 0) {
-      localStorage.setItem(localKey, JSON.stringify(data));
+      // Map employees flat → nested structure
+      const mapped = table === 'employees' ? data.map(mapEmployee) : data;
+      localStorage.setItem(localKey, JSON.stringify(mapped));
     }
     return true;
   } catch (err: any) {
