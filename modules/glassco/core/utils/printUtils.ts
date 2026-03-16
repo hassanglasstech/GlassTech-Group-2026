@@ -46,10 +46,12 @@ export const formatServices = (services: string[]) => {
 
 export const formatGlassSize = (item: any) => {
     if (item.isSection) return '';
-    if (item.mmW || item.mmH) {
-        return `${item.mmW || 0} x ${item.mmH || 0}`;
+    if (item.inputUnit === 'MM' || item.mmW || item.mmH) {
+        const w = item.mmW || Math.round((item.width || 0) * 25.4);
+        const h = item.mmH || Math.round((item.height || 0) * 25.4);
+        return `${w} x ${h} mm`;
     }
-    return `${item.inchW || 0}.${item.sootW || 0} x ${item.inchH || 0}.${item.sootH || 0}`;
+    return `${item.inchW || 0}.${item.sootW || 0}" x ${item.inchH || 0}.${item.sootH || 0}"`;
 };
 
 export const formatBillingSize = (item: any) => {
