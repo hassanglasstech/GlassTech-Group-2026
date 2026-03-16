@@ -80,11 +80,11 @@ export const AsyncSalesService = {
       cost_price: p.costPrice ?? 0, base_price: p.basePrice ?? 0,
       unit: p.unit ?? 'PCS', variants: p.variants ?? [],
       model_no: p.modelNo ?? '', brand: p.brand ?? '',
-      main_category: p.mainCategory ?? '', sub_category: p.subCategory ?? '',
+      main_category: p.mainCategory ?? '', sub_category: p.sub_category ?? '',
       finish_color: p.finishColor ?? '', material: p.material ?? '',
       direction: p.direction ?? '', tongue_length: p.tongueLength ?? '',
-      spindle_length: p.spindleLength ?? '', image_url: p.imageUrl ?? '',
-      hs_code: p.hsCode ?? '', is_set: p.isSet ?? false,
+      spindle_length: p.spindle_length ?? '', image_url: p.imageUrl ?? '',
+      hs_code: p.hs_code ?? '', is_set: p.isSet ?? false,
       set_components: p.setComponents ?? [], technical_specs: p.technicalSpecs ?? {},
       width: p.width ?? 0, height: p.height ?? 0,
       frame_color: p.frameColor ?? '', mesh_color: p.meshColor ?? '',
@@ -126,8 +126,42 @@ export const AsyncSalesService = {
     }
   },
   saveQuotations: async (data: Quotation[]): Promise<void> => {
-    await delay(100);
-    safeSave(KEYS.QUOTATIONS, data);
+    try {
+      // Map camelCase to snake_case for Supabase
+      const mapped = data.map((q: any) => ({
+        id: q.id,
+        company: q.company,
+        date: q.date,
+        due_date: q.dueDate,
+        client_id: q.clientId,
+        project_name: q.projectName,
+        subject: q.subject,
+        items: q.items || [],
+        service_charges: q.serviceCharges || 0,
+        discount_percent: q.discountPercent || 0,
+        discount_amount: q.discountAmount || 0,
+        status: q.status,
+        order_no: q.orderNo,
+        is_already_dispatched: q.isAlreadyDispatched || false,
+        manual_ref: q.manualRef || '',
+      }));
+
+      if (supabase) {
+        const { error } = await supabase.from('quotations').upsert(mapped);
+        if (error) {
+          console.error('[AsyncSalesService] Supabase Error:', error.message);
+          toast.error('Cloud sync failed — saved locally.', { id: 'sync-err' });
+        } else {
+          toast.success('Synced to Cloud', { id: 'sync-success' });
+        }
+      }
+      
+      // Always save locally as backup
+      safeSave(KEYS.QUOTATIONS, data);
+    } catch (err: any) {
+      console.error('[AsyncSalesService] saveQuotations exception:', err.message);
+      safeSave(KEYS.QUOTATIONS, data);
+    }
   },
   
   getProjects: async (): Promise<Project[]> => {
