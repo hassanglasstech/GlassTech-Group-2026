@@ -84,6 +84,64 @@ const TABLE_MAP: Record<string, string> = {
 // We upsert the raw localStorage array directly.
 
 
+const pushTable = async (table: string, localKey: string): Promise<boolean> => {
+  const rawData = safeParse(localKey);
+  if (!rawData || rawData.length === 0) return true;
+  // Apply table-specific mapper (camelCase → snake_case)
+  const data = applyMapper(table, rawData);
+  
+  try {
+    await withRetry(
+      async () => {
+        const { error } = await supabase.from(table).upsert(data, {
+          onConflict: 'id',
+          ignoreDuplicates: false,
+        });
+        if (error) throw error;
+      },
+      { context: `Sync:${table}`, maxRetries: 2, delayMs: 1500 }
+    );
+    return true;
+  } catch (err: any) {
+    if (String(err).includes('404') || String(err).includes('does not exist')) {
+      console.info(`[Sync] Table ${table} not in Supabase yet — skipping push`);
+      return true;
+    }
+    console.warn(`[Sync] Push failed for ${table}:`, translateError(err));
+    return false;
+  }
+};
+
+// Map flat Supabase employee → nested app structure
+const mapEmployee = (r: any) => ({
+  id:        r.id,
+  company:   r.company,
+  personal:  { name: r.name || '', cnic: r.cnic || '', phone: r.phone || '', address: r.address || '' },
+  work:      { designation: r.designation || '', department: r.department || '', grade: r.grade || '', joinDate: r.join_date || '', employeeCode: r.employee_code || '' },
+  salary:    { basic: Number(r.basic) || 0, houseRent: Number(r.house_rent) || 0, conveyance: Number(r.conveyance) || 0, specialAllowance: Number(r.special_allowance) || 0 },
+});
+
+
+// Map nested app employee → flat Supabase structure
+const flattenEmployee = (e: any) => ({
+  id:               e.id,
+  company:          e.company,
+  name:             e.personal?.name || '',
+  cnic:             e.personal?.cnic || '',
+  phone:            e.personal?.phone || '',
+  address:          e.personal?.address || '',
+  designation:      e.work?.designation || '',
+  department:       e.work?.department || '',
+  grade:            e.work?.grade || '',
+  join_date:        e.work?.joinDate || null,
+  employee_code:    e.work?.employeeCode || '',
+  basic:            e.salary?.basic || 0,
+  house_rent:       e.salary?.houseRent || 0,
+  conveyance:       e.salary?.conveyance || 0,
+  special_allowance: e.salary?.specialAllowance || 0,
+});
+
+
 // ── Table-specific mappers: localStorage (camelCase) → Supabase (snake_case) ──
 const TABLE_MAPPERS: Record<string, (row: any) => any> = {
 
@@ -259,62 +317,6 @@ const applyMapper = (table: string, data: any[]): any[] => {
     catch { return row; }
   });
 };
-
-// Map nested app employee → flat Supabase structure
-const flattenEmployee = (e: any) => ({
-  id:               e.id,
-  company:          e.company,
-  name:             e.personal?.name || '',
-  cnic:             e.personal?.cnic || '',
-  phone:            e.personal?.phone || '',
-  address:          e.personal?.address || '',
-  designation:      e.work?.designation || '',
-  department:       e.work?.department || '',
-  grade:            e.work?.grade || '',
-  join_date:        e.work?.joinDate || null,
-  employee_code:    e.work?.employeeCode || '',
-  basic:            e.salary?.basic || 0,
-  house_rent:       e.salary?.houseRent || 0,
-  conveyance:       e.salary?.conveyance || 0,
-  special_allowance: e.salary?.specialAllowance || 0,
-});
-
-const pushTable = async (table: string, localKey: string): Promise<boolean> => {
-  const rawData = safeParse(localKey);
-  if (!rawData || rawData.length === 0) return true;
-  // Apply table-specific mapper (camelCase → snake_case)
-  const data = applyMapper(table, rawData);
-  
-  try {
-    await withRetry(
-      async () => {
-        const { error } = await supabase.from(table).upsert(data, {
-          onConflict: 'id',
-          ignoreDuplicates: false,
-        });
-        if (error) throw error;
-      },
-      { context: `Sync:${table}`, maxRetries: 2, delayMs: 1500 }
-    );
-    return true;
-  } catch (err: any) {
-    if (String(err).includes('404') || String(err).includes('does not exist')) {
-      console.info(`[Sync] Table ${table} not in Supabase yet — skipping push`);
-      return true;
-    }
-    console.warn(`[Sync] Push failed for ${table}:`, translateError(err));
-    return false;
-  }
-};
-
-// Map flat Supabase employee → nested app structure
-const mapEmployee = (r: any) => ({
-  id:        r.id,
-  company:   r.company,
-  personal:  { name: r.name || '', cnic: r.cnic || '', phone: r.phone || '', address: r.address || '' },
-  work:      { designation: r.designation || '', department: r.department || '', grade: r.grade || '', joinDate: r.join_date || '', employeeCode: r.employee_code || '' },
-  salary:    { basic: Number(r.basic) || 0, houseRent: Number(r.house_rent) || 0, conveyance: Number(r.conveyance) || 0, specialAllowance: Number(r.special_allowance) || 0 },
-});
 
 const pullTable = async (table: string, localKey: string): Promise<boolean> => {
   try {
