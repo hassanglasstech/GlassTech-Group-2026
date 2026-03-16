@@ -45,7 +45,7 @@ export const useGlasscoQuotations = () => {
           const num = parseInt(parts[parts.length - 1]);
           if (!isNaN(num) && num > max) max = num;
       });
-      return max || 2349;
+      return max || 2427;
   }, [allQuotations]);
 
   const refreshData = async () => {
@@ -86,7 +86,7 @@ export const useGlasscoQuotations = () => {
         if (!hasFormalId && !hasDraftId) {
             const prefix = `DRF-GLS-${mmyy}-`;
             const existingDrafts = all.filter(q => q.id.startsWith(prefix));
-            let maxSeq = 9000;
+            let maxSeq = 9025;
             existingDrafts.forEach(q => {
                 const seq = parseInt(q.id.split('-').pop() || '0', 10);
                 if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
@@ -96,20 +96,15 @@ export const useGlasscoQuotations = () => {
     } 
     else if (action === 'save') {
         if (!hasFormalId) {
-            let nextSeq;
-            if (dataToSave.manualSerial) {
-                nextSeq = parseInt(String(dataToSave.manualSerial));
-            } else {
-                let maxSeq = 0;
-                all.forEach(q => {
-                    const refId = q.orderNo || q.id;
-                    if (refId.startsWith('DRF-')) return;
-                    const parts = refId.split('-');
-                    const num = parseInt(parts[parts.length - 1]);
-                    if (!isNaN(num) && num > maxSeq) maxSeq = num;
-                });
-                nextSeq = Math.max(maxSeq + 1, 2350);
-            }
+            let maxSeq = 0;
+            all.forEach(q => {
+                const refId = q.orderNo || q.id;
+                if (refId.startsWith('DRF-')) return;
+                const parts = refId.split('-');
+                const num = parseInt(parts[parts.length - 1]);
+                if (!isNaN(num) && num > maxSeq) maxSeq = num;
+            });
+            const nextSeq = Math.max(maxSeq + 1, 2428);
             finalId = `QT-GLS-${mmyy}-${nextSeq.toString().padStart(4, '0')}`;
         }
     }
@@ -183,17 +178,6 @@ export const useGlasscoQuotations = () => {
     if (formData.status === 'Approved' && index !== -1) return;
 
     if (index === -1) {
-        if (field === 'manualSerial' && value) {
-            const all = await AsyncSalesService.getQuotations();
-            const duplicate = all.find(q => 
-                q.id !== formData.id && 
-                (q.id.endsWith(`-${value}`) || q.orderNo?.endsWith(`-${value}`))
-            );
-            if (duplicate) {
-                const clientName = clients.find(c => c.id === duplicate.clientId)?.name || 'another client';
-                toast.warning(`Serial ${value} already used by ${clientName}`, { duration: 4000 });
-            }
-        }
         setFormData(prev => ({ ...prev, [field]: value }));
         return;
     }
