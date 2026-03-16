@@ -85,10 +85,11 @@ export const useGlasscoQuotations = () => {
 
     if (action === 'draft') {
         if (!hasFormalId && !hasDraftId) {
+            // New Draft: Start from 9026
             let maxSeq = 9025;
             all.forEach(q => {
-                const refId = q.orderNo || q.id;
-                if (refId && refId.startsWith('DRF-GLS-')) {
+                const refId = q.id || '';
+                if (refId.startsWith('DRF-GLS-')) {
                     const parts = refId.split('-');
                     const num = parseInt(parts[parts.length - 1]);
                     if (!isNaN(num) && num > maxSeq) maxSeq = num;
@@ -99,11 +100,12 @@ export const useGlasscoQuotations = () => {
     } 
     else if (action === 'save' || action === 'approve') {
         if (!hasFormalId) {
-            // If it's a draft being saved/approved, generate a new formal ID
+            // New Formal Quotation/Sales Order: Start from 2428
             let maxSeq = 2427;
             all.forEach(q => {
-                const refId = q.orderNo || q.id;
-                if (refId && (refId.startsWith('QT-GLS-') || refId.startsWith('SO-GLS-'))) {
+                const refId = q.orderNo || q.id || '';
+                // Only look at formal IDs to determine the next number
+                if (refId.startsWith('QT-GLS-') || refId.startsWith('SO-GLS-')) {
                     const parts = refId.split('-');
                     const num = parseInt(parts[parts.length - 1]);
                     if (!isNaN(num) && num > maxSeq) maxSeq = num;
@@ -113,7 +115,7 @@ export const useGlasscoQuotations = () => {
             const prefix = action === 'approve' ? 'SO-GLS' : 'QT-GLS';
             finalId = `${prefix}-${mmyy}-${nextSeq}`;
         } else if (action === 'approve' && finalId.startsWith('QT-')) {
-            // If it's already a formal Quotation being approved, just change prefix to SO
+            // Transitioning existing QT to SO: Keep the same number
             finalId = finalId.replace('QT-', 'SO-');
         }
     }
