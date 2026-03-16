@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Company, Client, Quotation, QuotationItem, Product, ProductionPiece, PieceStatus } from '@/modules/shared/types';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
+import { toast } from 'sonner';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { calculateAutoRate, calculateLineItemTotal } from '@/modules/glassco/core/GlasscoUtils';
 import * as XLSX from 'xlsx';
@@ -65,7 +66,7 @@ export const useGlasscoQuotations = () => {
 
   const handleSaveQuotation = async (action: 'draft' | 'save' | 'approve', directData?: Quotation) => {
     const dataToSave = directData || formData;
-    if (!dataToSave.clientId) return alert("Client is required.");
+    if (!dataToSave.clientId) { toast.error("Client is required.", { duration: 4000 }); return; }
     
     const all = await AsyncSalesService.getQuotations();
     const originalId = dataToSave.id;
@@ -112,7 +113,7 @@ export const useGlasscoQuotations = () => {
     let finalOrderNo = dataToSave.orderNo;
     if (action === 'approve') {
         if (!finalId || finalId.startsWith('DRF-')) {
-            alert("Please Save Quotation first before approving.");
+            toast.error("Please Save first before approving.", { duration: 4000 });
             return;
         }
         finalOrderNo = finalId.replace('QT-', 'SO-');
@@ -128,7 +129,10 @@ export const useGlasscoQuotations = () => {
 
     if (action === 'approve') {
         const currentPieces = ProductionService.getProductionPieces();
-        const numericPart = finalOrderNo?.split('-').pop() || '';
+        // Use last 4 digits of orderNo for piece ID
+        const orderRef = finalOrderNo || finalId || '';
+        const numericOnly = orderRef.replace(/[^0-9]/g, '');
+        const numericPart = numericOnly.slice(-4) || orderRef.slice(-4) || '0000';
         
         finalQuo.items.forEach((item, idx) => {
             if (item.isSection) return;
@@ -164,10 +168,10 @@ export const useGlasscoQuotations = () => {
     if (action === 'approve') {
         setIsEditorOpen(false);
         setTimeout(() => refreshData(), 200);
-        alert(`Approved as ${finalOrderNo}`);
+        toast.success(`Approved as ${finalOrderNo}`, { duration: 3000 });
     } else {
         refreshData();
-        alert(`${action === 'save' ? 'Quotation' : 'Draft'} Saved: ${finalId}`);
+        toast.success(`Saved: ${finalId}`, { duration: 3000 });
     }
   };
 
@@ -183,7 +187,7 @@ export const useGlasscoQuotations = () => {
             );
             if (duplicate) {
                 const clientName = clients.find(c => c.id === duplicate.clientId)?.name || 'another client';
-                alert(`Warning: Serial Number ${value} is already in use by ${clientName}.`);
+                toast.warning(`Serial ${value} already used by ${clientName}`, { duration: 4000 });
             }
         }
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -387,16 +391,16 @@ export const useGlasscoQuotations = () => {
           if (!next.some(existing => existing.id === data.id)) {
             next.push({ ...data, company });
           } else {
-            alert("Quotation with this ID already exists.");
+            toast.error("Quotation with this ID already exists.", { duration: 4000 });
             return;
           }
         }
         
         await AsyncSalesService.saveQuotations(next);
         await refreshData();
-        alert("Import Successful");
+        toast.success("Import Successful", { duration: 3000 });
       } catch (err) {
-        alert("Invalid JSON file");
+        toast.error("Invalid JSON file", { duration: 4000 });
       }
     };
     reader.readAsText(file);
@@ -462,9 +466,9 @@ export const useGlasscoQuotations = () => {
 
         await AsyncSalesService.saveQuotations([...all, newQuo]);
         await refreshData();
-        alert("Excel Quotation Imported as Draft");
+        toast.success("Excel Quotation Imported as Draft", { duration: 3000 });
       } catch (err) {
-        alert("Error reading Excel file. Ensure it matches the exported format.");
+        toast.error("Error reading Excel file", { duration: 4000 });
       }
     };
     reader.readAsArrayBuffer(file);
