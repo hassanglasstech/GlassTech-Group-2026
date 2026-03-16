@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Bell, X, CheckCircle, Info, AlertCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/appStore';
 
 interface Notification {
@@ -10,9 +11,11 @@ interface Notification {
     message: string;
     isRead: boolean;
     date: string;
+    link?: string;
 }
 
 const NotificationCenter: React.FC = () => {
+    const navigate = useNavigate();
     const [isOpen, setIsOpen] = useState(false);
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const { selectedCompany } = useAppStore();
@@ -45,6 +48,14 @@ const NotificationCenter: React.FC = () => {
         const remaining = allNotifs.filter(n => n.targetCompany !== selectedCompany);
         localStorage.setItem('gtk_notifications', JSON.stringify(remaining));
         setNotifications([]);
+    };
+
+    const handleNotificationClick = (n: Notification) => {
+        markAsRead(n.id);
+        if (n.link) {
+            navigate(n.link);
+            setIsOpen(false);
+        }
     };
 
     return (
@@ -81,7 +92,7 @@ const NotificationCenter: React.FC = () => {
                                 notifications.map(n => (
                                     <div 
                                         key={n.id} 
-                                        onClick={() => markAsRead(n.id)}
+                                        onClick={() => handleNotificationClick(n)}
                                         className={`p-4 border-b border-slate-100 cursor-pointer transition-colors hover:bg-slate-50 ${!n.isRead ? 'bg-blue-50/30' : ''}`}
                                     >
                                         <div className="flex items-start space-x-3">
