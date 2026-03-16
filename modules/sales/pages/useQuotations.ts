@@ -164,24 +164,24 @@ export const useQuotations = () => {
         const currentPieces = ProductionService.getProductionPieces();
         const numericPart = finalQuo.orderNo?.split('-').pop() || '';
         
+        const newPieces: ProductionPiece[] = [];
+        let globalSerialCounter = 1;
+
         finalQuo.items.forEach((item, idx) => {
-            const newPieces: ProductionPiece[] = [];
-            let serialCounter = 1;
-            
             for (let i = 0; i < item.qty; i++) {
                 newPieces.push({
-                    id: `${numericPart}/${idx + 1}/${serialCounter}`,
+                    id: `${numericPart}/${globalSerialCounter}`,
                     orderId: finalQuo.orderNo!,
                     itemIndex: idx,
                     specs: `${item.width}x${item.height} ${item.glassSize || '5mm'} ${item.glassType || 'Plain'}`,
                     status: 'Cut',
                     lastUpdated: new Date().toISOString(), isRevised: false
                 });
-                serialCounter++;
+                globalSerialCounter++;
             }
-            const others = currentPieces.filter(p => !p.id.startsWith(`${numericPart}/`));
-            ProductionService.saveProductionPieces([...others, ...newPieces]);
         });
+        const others = currentPieces.filter(p => !p.id.startsWith(`${numericPart}/`));
+        ProductionService.saveProductionPieces([...others, ...newPieces]);
     }
 
     await AsyncSalesService.saveQuotations([...all.filter(x => x.id !== finalQuo.id), finalQuo]);
