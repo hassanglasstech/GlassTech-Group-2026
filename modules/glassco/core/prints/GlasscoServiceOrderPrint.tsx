@@ -10,7 +10,7 @@ export const GlasscoServiceOrderPrint: React.FC<Props> = ({ po }) => {
     const summary = useMemo(() => {
         return {
             totalQty: po.items.reduce((acc, i) => acc + (i.qty || 0), 0),
-            totalSqFt: po.items.reduce((acc, i) => acc + (i.sqFt || 0), 0),
+            totalSqFt: po.items.reduce((acc, i: any) => acc + (i.sqFt || 0), 0),
             totalAmount: po.totalAmount
         };
     }, [po.items]);
@@ -80,7 +80,7 @@ export const GlasscoServiceOrderPrint: React.FC<Props> = ({ po }) => {
                         const groupedItems: { orderId: string, items: any[] }[] = [];
                         const orderMap = new Map<string, any[]>();
                         
-                        po.items.forEach(item => {
+                        po.items.forEach((item: any) => {
                             const oId = item.orderId || 'General';
                             if (!orderMap.has(oId)) {
                                 orderMap.set(oId, []);
@@ -141,7 +141,7 @@ export const GlasscoServiceOrderPrint: React.FC<Props> = ({ po }) => {
                                         <td className="py-3 px-2 text-center font-black text-sm">{summary.totalQty}</td>
                                         <td className="py-3 px-2 text-center font-black text-sm">{summary.totalSqFt.toFixed(2)}</td>
                                         <td></td>
-                                        <td className="py-3 px-2 text-right font-black text-sm text-rose-600">PKR {summary.totalAmount.toLocaleString()}</td>
+                                        <td className="py-3 px-2 text-right font-black text-sm text-rose-600">PKR {(Number(summary.totalAmount) || 0).toLocaleString()}</td>
                                     </tr>
                                 </tfoot>
                             </table>
