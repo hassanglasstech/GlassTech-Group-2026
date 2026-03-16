@@ -147,25 +147,26 @@ export const useGlasscoQuotations = () => {
         const numericOnly = orderRef.replace(/[^0-9]/g, '');
         const numericPart = numericOnly.slice(-4) || orderRef.slice(-4) || '0000';
         
+        const newPieces: ProductionPiece[] = [];
+        let globalSerialCounter = 1;
+        
         finalQuo.items.forEach((item, idx) => {
             if (item.isSection) return;
-            const newPieces: ProductionPiece[] = [];
-            let serialCounter = 1;
             
             for (let i = 0; i < item.qty; i++) {
                 newPieces.push({
-                    id: `${numericPart}/${idx + 1}/${serialCounter}`,
+                    id: `${numericPart}/${globalSerialCounter}`,
                     orderId: finalOrderNo!,
                     itemIndex: idx,
                     specs: `${item.width}x${item.height} ${item.glassSize || '5mm'} ${item.glassType || 'Plain'}`,
                     status: (finalQuo.isAlreadyDispatched ? 'Delivered' : 'Cut') as any,
                     lastUpdated: new Date().toISOString(), isRevised: false
                 });
-                serialCounter++;
+                globalSerialCounter++;
             }
-            const others = currentPieces.filter(p => !p.id.startsWith(`${numericPart}/`));
-            ProductionService.saveProductionPieces([...others, ...newPieces]);
         });
+        const others = currentPieces.filter(p => !p.id.startsWith(`${numericPart}/`));
+        ProductionService.saveProductionPieces([...others, ...newPieces]);
     }
 
     const filteredList = all.filter(x => {
