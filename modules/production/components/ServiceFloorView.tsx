@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { ProductionPiece } from '@/modules/shared/types';
 import { Sparkles, Hammer, Drill, CheckCircle2, Circle } from 'lucide-react';
@@ -11,7 +10,7 @@ interface ServiceFloorViewProps {
 const ServiceFloorView: React.FC<ServiceFloorViewProps> = ({ pieces, onUpdateStatus }) => {
     const [activeService, setActiveService] = useState<'Polishing' | 'Grinding' | 'Notching' | 'Holes'>('Polishing');
 
-    const filteredPieces = pieces.filter(p => p.status === 'Service-Pending' && p.pendingServices?.includes(activeService));
+    const filteredPieces = (pieces || []).filter(p => p.status === 'Service-Pending' && p.pendingServices?.includes(activeService));
 
     const handleServiceDone = (piece: ProductionPiece) => {
         const remaining = (piece.pendingServices || []).filter(s => s !== activeService);
