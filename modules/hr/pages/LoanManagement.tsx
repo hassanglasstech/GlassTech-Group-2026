@@ -9,8 +9,7 @@ import * as XLSX from 'xlsx';
 import { useAppStore } from '../../shared/store/appStore';
 import { toast } from 'sonner';
 
-const LoanManagement: React.FC = () => {
-  const company = useAppStore(state => state.selectedCompany);
+const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loans, setLoans] = useState<LoanAdvance[]>([]);
   const [authorizedReqs, setAuthorizedReqs] = useState<Requisition[]>([]);
