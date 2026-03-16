@@ -84,28 +84,30 @@ export const useGlasscoQuotations = () => {
 
     if (action === 'draft') {
         if (!hasFormalId && !hasDraftId) {
-            const prefix = `DRF-GLS-${mmyy}-`;
-            const existingDrafts = all.filter(q => q.id.startsWith(prefix));
             let maxSeq = 9025;
-            existingDrafts.forEach(q => {
-                const seq = parseInt(q.id.split('-').pop() || '0', 10);
-                if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+            all.forEach(q => {
+                const refId = q.orderNo || q.id;
+                if (refId && refId.startsWith('DRF-GLS-')) {
+                    const parts = refId.split('-');
+                    const num = parseInt(parts[parts.length - 1]);
+                    if (!isNaN(num) && num > maxSeq) maxSeq = num;
+                }
             });
-            finalId = `${prefix}${(maxSeq + 1).toString().padStart(4, '0')}`;
+            finalId = `DRF-GLS-${mmyy}-${(maxSeq + 1).toString().padStart(4, '0')}`;
         }
     } 
     else if (action === 'save') {
         if (!hasFormalId) {
-            let maxSeq = 0;
+            let maxSeq = 2427;
             all.forEach(q => {
                 const refId = q.orderNo || q.id;
-                if (refId.startsWith('DRF-')) return;
-                const parts = refId.split('-');
-                const num = parseInt(parts[parts.length - 1]);
-                if (!isNaN(num) && num > maxSeq) maxSeq = num;
+                if (refId && !refId.startsWith('DRF-')) {
+                    const parts = refId.split('-');
+                    const num = parseInt(parts[parts.length - 1]);
+                    if (!isNaN(num) && num > maxSeq) maxSeq = num;
+                }
             });
-            const nextSeq = Math.max(maxSeq + 1, 2428);
-            finalId = `QT-GLS-${mmyy}-${nextSeq.toString().padStart(4, '0')}`;
+            finalId = `QT-GLS-${mmyy}-${(maxSeq + 1).toString().padStart(4, '0')}`;
         }
     }
 
