@@ -32,7 +32,7 @@ const FactoryProduction: React.FC = () => {
       setGatePasses(ProductionService.getGatePasses().filter(g => g.company === 'Factory'));
 
       const allReqs = InventoryService.getRequisitions().filter(Boolean);
-      setRequisitions(allReqs.filter(r => r.company === 'Factory').reverse());
+      setRequisitions(allReqs.filter(r => r.company === 'Factory' || r.targetCompany === 'Factory').reverse());
   };
 
   return (
