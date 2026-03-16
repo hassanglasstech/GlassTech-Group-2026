@@ -318,6 +318,152 @@ const applyMapper = (table: string, data: any[]): any[] => {
   });
 };
 
+// ── Pull mappers: Supabase (snake_case) → app (camelCase) ────────────
+const PULL_MAPPERS: Record<string, (row: any) => any> = {
+
+  store_items: (r: any) => ({
+    id:                 r.id,
+    company:            r.company,
+    name:               r.name,
+    category:           r.category,
+    quantity:           Number(r.quantity) || 0,
+    unrestrictedQty:    Number(r.unrestricted_qty) || 0,
+    qiQty:              Number(r.qi_qty) || 0,
+    blockedQty:         Number(r.blocked_qty) || 0,
+    reservedQty:        Number(r.reserved_qty) || 0,
+    consignmentQty:     Number(r.consignment_qty) || 0,
+    unit:               r.unit || 'PCS',
+    altUnit:            r.alt_unit || '',
+    conversionFactor:   Number(r.conversion_factor) || 1,
+    minLevel:           Number(r.min_level) || 0,
+    reorderPoint:       Number(r.reorder_point) || 0,
+    movingAveragePrice: Number(r.moving_average_price) || 0,
+    totalValue:         Number(r.total_value) || 0,
+    storageBin:         r.storage_bin || '',
+    lastMovementDate:   r.last_movement_date || '',
+  }),
+
+  products: (r: any) => ({
+    id:             r.id,
+    company:        r.company,
+    category:       r.category,
+    description:    r.description,
+    basePrice:      Number(r.base_price) || 0,
+    temperingPrice: Number(r.tempering_price) || 0,
+    costPrice:      Number(r.cost_price) || 0,
+    unit:           r.unit || 'PCS',
+    variants:       r.variants || [],
+    glassType:      r.glass_type || '',
+    mainCategory:   r.main_category || '',
+    subCategory:    r.sub_category || '',
+    thickness:      r.thickness || '',
+    sheetSize:      r.sheet_size || '',
+    serviceNick:    r.service_nick || '',
+    brand:          r.brand || '',
+    modelNo:        r.model_no || '',
+    finishColor:    r.finish_color || '',
+    material:       r.material || '',
+    imageUrl:       r.image_url || '',
+    direction:      r.direction || '',
+    tongueLength:   r.tongue_length || '',
+    spindleLength:  r.spindle_length || '',
+    profileCode:    r.profile_code || '',
+    systemSubClass: r.system_sub_class || '',
+    profileRole:    r.profile_role || '',
+    technicalSpecs: r.technical_specs || {},
+    width:          Number(r.width) || 0,
+    height:         Number(r.height) || 0,
+    frameColor:     r.frame_color || '',
+    meshColor:      r.mesh_color || '',
+    isSet:          r.is_set || false,
+    setComponents:  r.set_components || [],
+    hsCode:         r.hs_code || '',
+    subDescription: r.sub_description || '',
+  }),
+
+  accounts: (r: any) => ({
+    id:            r.id,
+    company:       r.company,
+    code:          r.code,
+    name:          r.name,
+    level:         r.level,
+    parentId:      r.parent_id || r.parentId || null,
+    type:          r.type || '',
+    normalBalance: r.normal_balance || 'Dr',
+    balance:       Number(r.balance) || 0,
+    isActive:      r.is_active ?? true,
+  }),
+
+  clients: (r: any) => ({
+    id:            r.id,
+    company:       r.company,
+    name:          r.name,
+    contactPerson: r.contact_person || '',
+    email:         r.email || '',
+    phone:         r.phone || '',
+    address:       r.address || '',
+    ntn:           r.ntn || '',
+    creditLimit:   Number(r.credit_limit) || 0,
+    status:        r.status || 'Active',
+  }),
+
+  quotations: (r: any) => ({
+    id:                   r.id,
+    company:              r.company,
+    date:                 r.date,
+    dueDate:              r.due_date,
+    clientId:             r.client_id,
+    projectName:          r.project_name || '',
+    subject:              r.subject || '',
+    items:                r.items || [],
+    serviceCharges:       Number(r.service_charges) || 0,
+    discountPercent:      Number(r.discount_percent) || 0,
+    discountAmount:       Number(r.discount_amount) || 0,
+    status:               r.status || 'Draft',
+    orderNo:              r.order_no || '',
+    isAlreadyDispatched:  r.is_already_dispatched || false,
+    manualRef:            r.manual_ref || '',
+  }),
+
+  requisitions: (r: any) => ({
+    id:            r.id,
+    company:       r.company,
+    date:          r.date,
+    headerText:    r.header_text || '',
+    requisitioner: r.requisitioner || '',
+    priority:      r.priority || 'Normal',
+    reqType:       r.req_type || '',
+    category:      r.category || '',
+    subCategory:   r.sub_category || '',
+    status:        r.status || 'Pending',
+    items:         r.items || [],
+    employeeId:    r.employee_id || '',
+    targetCompany: r.target_company || '',
+  }),
+
+  purchase_orders: (r: any) => ({
+    id:          r.id,
+    fromCompany: r.from_company || '',
+    toCompany:   r.to_company || '',
+    date:        r.date,
+    status:      r.status || 'Draft',
+    vendor:      r.vendor || '',
+    items:       r.items || [],
+    totalAmount: Number(r.total_amount) || 0,
+    category:    r.category || '',
+    projectId:   r.project_id || '',
+  }),
+};
+
+const applyPullMapper = (table: string, data: any[]): any[] => {
+  const mapper = PULL_MAPPERS[table];
+  if (!mapper) return data;
+  return data.map(row => {
+    try { return mapper(row); }
+    catch { return row; }
+  });
+};
+
 const pullTable = async (table: string, localKey: string): Promise<boolean> => {
   try {
     const { data, error } = await supabase.from(table).select('*');
@@ -333,8 +479,9 @@ const pullTable = async (table: string, localKey: string): Promise<boolean> => {
       return false;
     }
     if (data && data.length > 0) {
-      // Map employees flat → nested structure
-      const mapped = table === 'employees' ? data.map(mapEmployee) : data;
+      // Apply pull mapper: snake_case → camelCase + nested structure
+      let mapped = table === 'employees' ? data.map(mapEmployee) : data;
+      mapped = applyPullMapper(table, mapped);
       localStorage.setItem(localKey, JSON.stringify(mapped));
     }
     return true;
