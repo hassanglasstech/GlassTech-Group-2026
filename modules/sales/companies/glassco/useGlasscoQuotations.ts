@@ -44,7 +44,8 @@ export const useGlasscoQuotations = () => {
           if (!refId || refId.startsWith('DRF-')) return;
           const parts = refId.split('-');
           const num = parseInt(parts[parts.length - 1]);
-          if (!isNaN(num) && num > max) max = num;
+          // Strictly formal range: below 9000
+          if (!isNaN(num) && num > max && num < 9000) max = num;
       });
       return max || 2427;
   }, [allQuotations]);
@@ -72,8 +73,8 @@ export const useGlasscoQuotations = () => {
     const dataToSave = directData || formData;
     if (!dataToSave.clientId) { toast.error("Client is required.", { duration: 4000 }); return; }
     
-    // Refresh all quotations to get the absolute latest serial
-    const all = await AsyncSalesService.getQuotations();
+    // Refresh all quotations to get the absolute latest serial for this company
+    const all = (await AsyncSalesService.getQuotations()).filter(q => q.company === company);
     const originalId = dataToSave.id;
     let finalId = originalId;
     
@@ -91,8 +92,10 @@ export const useGlasscoQuotations = () => {
                 const refId = q.id || '';
                 if (refId.startsWith('DRF-GLS-')) {
                     const parts = refId.split('-');
-                    const num = parseInt(parts[parts.length - 1]);
-                    if (!isNaN(num) && num > maxSeq) maxSeq = num;
+                    const lastPart = parts[parts.length - 1];
+                    const num = parseInt(lastPart);
+                    // Draft range: 9000 and above
+                    if (!isNaN(num) && num > maxSeq && num >= 9000) maxSeq = num;
                 }
             });
             finalId = `DRF-GLS-${mmyy}-${(maxSeq + 1).toString().padStart(4, '0')}`;
@@ -100,15 +103,19 @@ export const useGlasscoQuotations = () => {
     } 
     else if (action === 'save' || action === 'approve') {
         if (!hasFormalId) {
-            // New Formal Quotation/Sales Order: Start from 2428
+            // New Formal Quotation/Sales Order (even if it was a draft): Start from 2428
             let maxSeq = 2427;
             all.forEach(q => {
                 const refId = q.orderNo || q.id || '';
                 // Only look at formal IDs to determine the next number
                 if (refId.startsWith('QT-GLS-') || refId.startsWith('SO-GLS-')) {
                     const parts = refId.split('-');
-                    const num = parseInt(parts[parts.length - 1]);
-                    if (!isNaN(num) && num > maxSeq) maxSeq = num;
+                    const lastPart = parts[parts.length - 1];
+                    // Handle revisions like -R1
+                    const baseNum = lastPart.split('-')[0];
+                    const num = parseInt(baseNum);
+                    // Formal range: below 9000
+                    if (!isNaN(num) && num > maxSeq && num < 9000) maxSeq = num;
                 }
             });
             const nextSeq = (maxSeq + 1).toString().padStart(4, '0');
@@ -122,10 +129,6 @@ export const useGlasscoQuotations = () => {
 
     let finalOrderNo = dataToSave.orderNo;
     if (action === 'approve') {
-        if (!finalId || finalId.startsWith('DRF-')) {
-            toast.error("Please Save first before approving.", { duration: 4000 });
-            return;
-        }
         finalOrderNo = finalId.replace('QT-', 'SO-');
     }
 
