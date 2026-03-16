@@ -92,13 +92,11 @@ const Requisitions: React.FC = () => {
   }, [company]);
 
   const refreshData = () => {
-    // Load critical data first (what user sees immediately)
     const allReqs = InventoryService.getRequisitions();
     const relevantReqs = allReqs.filter(r => r && (r.company === company || r.targetCompany === company));
     setRequisitions(relevantReqs.sort((a,b) => b.id.localeCompare(a.id)));
     setPurchaseOrders(ProductionService.getPurchaseOrders().filter(p => p.fromCompany === company).sort((a,b) => b.date.localeCompare(a.date)));
 
-    // Load secondary data in next tick - don't block UI
     setTimeout(() => {
       setStoreItems(InventoryService.getStore().filter(s => s.company === company || s.company === 'Factory'));
       setProducts(SalesService.getProducts().filter(p => p.company === company || p.company === 'Factory'));
@@ -106,7 +104,6 @@ const Requisitions: React.FC = () => {
       setVendors(SalesService.getVendors());
     }, 0);
 
-    // Load form data - employees needed immediately for HR category
     setEmployees(HRService.getEmployees().filter(e => e.company === company));
     setLoans(HRService.getLoans().filter(l => l.status === 'Active'));
     setTimeout(() => {
@@ -185,8 +182,6 @@ const Requisitions: React.FC = () => {
       items: isMaterial ? formItems : [], 
       totalValue, 
       status: 'Pending',
-      
-      // HR Fields
       employeeId: formHeader.employeeId,
       loanAmount: formHeader.loanAmount,
       loanPurpose: formHeader.loanPurpose,
@@ -197,8 +192,6 @@ const Requisitions: React.FC = () => {
       overtimeHours: formHeader.overtimeHours,
       overtimeProject: formHeader.overtimeProject,
       overtimeEmployees: formHeader.overtimeEmployees,
-
-      // New Fields
       employeeName: formHeader.employeeName,
       siteName: formHeader.siteName,
       from: formHeader.from,
@@ -213,11 +206,27 @@ const Requisitions: React.FC = () => {
       description: formHeader.description,
       type: formHeader.type
     };
+
     InventoryService.saveRequisitions([...allReqs, newPR]);
+    
+    // NEW NOTIFICATION SYSTEM: Send to Factory
+    if (company !== 'Factory') {
+      const notification = {
+          id: Date.now().toString(),
+          targetCompany: 'Factory',
+          title: `New Requisition from ${company}`,
+          message: `PR #${newPR.id} needs approval. Value: PKR ${newPR.totalValue}`,
+          isRead: false,
+          date: new Date().toISOString()
+      };
+      const existingNotifs = JSON.parse(localStorage.getItem('gtk_notifications') || '[]');
+      localStorage.setItem('gtk_notifications', JSON.stringify([...existingNotifs, notification]));
+    }
+
     refreshData();
     setIsModalOpen(false);
     resetForm();
-    toast.error(`Success: Requisition ${newPR.id} Created.`, { duration: 4000 });
+    toast.success(`Success: Requisition ${newPR.id} Created and Sent to Factory.`, { duration: 4000 });
   };
 
   const resetForm = () => {
@@ -249,7 +258,23 @@ const Requisitions: React.FC = () => {
     const all = InventoryService.getRequisitions().filter(Boolean);
     const updated = all.map(r => r.id === id ? { ...r, status: 'Approved' as const, approvedBy: 'Authorized User' } : r);
     InventoryService.saveRequisitions(updated);
+
+    // NEW NOTIFICATION SYSTEM: Send back to Branch
+    if (company === 'Factory' && pr.company !== 'Factory') {
+        const notification = {
+            id: Date.now().toString(),
+            targetCompany: pr.company,
+            title: `Requisition Approved!`,
+            message: `Factory approved PR #${pr.id}. You can now process the payment.`,
+            isRead: false,
+            date: new Date().toISOString()
+        };
+        const existingNotifs = JSON.parse(localStorage.getItem('gtk_notifications') || '[]');
+        localStorage.setItem('gtk_notifications', JSON.stringify([...existingNotifs, notification]));
+    }
+
     refreshData();
+    toast.success(`Requisition Approved Successfully!`);
   };
 
   const handleDisapprove = (id: string) => {
@@ -265,6 +290,63 @@ const Requisitions: React.FC = () => {
     const all = InventoryService.getRequisitions().filter(Boolean);
     InventoryService.saveRequisitions(all.filter(r => r.id !== id));
     refreshData();
+  };
+
+  // NEW JIT LEDGER LOGIC: Auto-Account Creation
+  const handlePaymentVoucher = (req: Requisition) => {
+    if (req.status !== 'Approved') {
+        return toast.error("Only approved requisitions can be paid.");
+    }
+
+    if (req.category === 'HR' && (req.subCategory === 'Loan Request' || req.subCategory === 'Salary Advance')) {
+        const CONTROL_ACCOUNT = '11410'; 
+        let allAccounts = FinanceService.getChartOfAccounts ? FinanceService.getChartOfAccounts() : JSON.parse(localStorage.getItem('gtk_chart_of_accounts') || '[]');
+        
+        let empAccount = allAccounts.find((acc: any) => acc.entityId === req.employeeId && acc.parentCode === CONTROL_ACCOUNT);
+
+        if (!empAccount) {
+            const existingLoanAccounts = allAccounts.filter((acc: any) => acc.parentCode === CONTROL_ACCOUNT);
+            const nextNumber = existingLoanAccounts.length + 1;
+            const newAccountCode = `${CONTROL_ACCOUNT}-${String(nextNumber).padStart(3, '0')}`;
+
+            empAccount = {
+                id: `ACC-${Date.now()}`,
+                code: newAccountCode,
+                name: `Advance - Emp #${req.employeeId}`,
+                level: 5,
+                parentCode: CONTROL_ACCOUNT,
+                entityId: req.employeeId,
+                company: company
+            };
+            
+            allAccounts = [...allAccounts, empAccount];
+            localStorage.setItem('gtk_chart_of_accounts', JSON.stringify(allAccounts));
+            toast.success(`Auto-created Ledger Account: [${newAccountCode}] for Employee`);
+        }
+
+        const journalEntry = {
+            id: `JV-${Date.now()}`,
+            date: new Date().toISOString().split('T')[0],
+            referenceId: req.id, 
+            entries: [
+                { accountId: empAccount.id, debit: req.loanAmount, credit: 0 }, 
+                { accountId: 'BANK_ACCOUNT_ID', debit: 0, credit: req.loanAmount } 
+            ],
+            narration: `Payment for ${req.subCategory} against PR #${req.id}`
+        };
+
+        const existingJVs = JSON.parse(localStorage.getItem('gtk_journal_entries') || '[]');
+        localStorage.setItem('gtk_journal_entries', JSON.stringify([...existingJVs, journalEntry]));
+        
+        const allReqs = InventoryService.getRequisitions().filter(Boolean);
+        const updatedReqs = allReqs.map(r => r.id === req.id ? { ...r, status: 'Paid' } : r);
+        InventoryService.saveRequisitions(updatedReqs);
+        
+        refreshData();
+        toast.success(`Payment Voucher Posted Successfully to Account ${empAccount.code}`);
+    } else {
+        toast.info("Payment voucher UI for standard materials will open here.");
+    }
   };
 
   const handleAddNewSubCategory = (cat: string) => {
@@ -414,7 +496,7 @@ const Requisitions: React.FC = () => {
                       <td className="px-6 py-3 text-xs font-bold uppercase text-slate-600 truncate max-w-[200px]">{r.headerText}</td>
                       <td className="px-6 py-3 font-black">PKR {(r.totalValue || 0).toLocaleString()}</td>
                       <td className="px-6 py-3">
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${r.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : r.status === 'Rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${r.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : r.status === 'Rejected' ? 'bg-red-100 text-red-700' : r.status === 'Paid' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>
                           {r.status}
                         </span>
                       </td>
@@ -426,7 +508,7 @@ const Requisitions: React.FC = () => {
                           </>
                         )}
                         <button onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 size={16}/></button>
-                        <button className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Payment Voucher"><DollarSign size={16}/></button>
+                        <button onClick={() => handlePaymentVoucher(r)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Payment Voucher"><DollarSign size={16}/></button>
                       </td>
                     </tr>
                   );
@@ -885,7 +967,6 @@ const Requisitions: React.FC = () => {
         </div>
       )}
 
-      {/* PO Modals remain the same... */}
       {isConvertModalOpen && selectedPrForConversion && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
               <div className="bg-white rounded-[2.5rem] w-full max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
