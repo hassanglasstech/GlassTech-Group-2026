@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Company } from '../../shared/types/core';
+import { RequisitionStatus } from '../../shared/constants';
 import { Requisition, RequisitionItem, StoreItem, Product, PurchaseOrder } from '../types/inventory';
 import { CostCenter } from '../../finance/types/finance';
 import { Vendor } from '../../sales/types/crm';
@@ -21,7 +22,7 @@ import {
 import { toast } from 'sonner';
 import { useAppStore } from '../../shared/store/appStore';
 
-import RequisitionPrint from '../components/RequisitionPrint';
+import RequisitionPrint from '@/components/RequisitionPrint';
 
 const Requisitions: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
@@ -172,6 +173,7 @@ const Requisitions: React.FC = () => {
     const newPR: Requisition = {
       id: prId,
       company, 
+      targetCompany: company === 'Factory' ? undefined : 'Factory',
       date: formHeader.date, 
       headerText: formHeader.headerText.toUpperCase(),
       requisitioner: formHeader.requisitioner, 
@@ -298,54 +300,77 @@ const Requisitions: React.FC = () => {
         return toast.error("Only approved requisitions can be paid.");
     }
 
-    if (req.category === 'HR' && (req.subCategory === 'Loan Request' || req.subCategory === 'Salary Advance')) {
-        const CONTROL_ACCOUNT = '11410'; 
-        let allAccounts = FinanceService.getChartOfAccounts ? FinanceService.getChartOfAccounts() : JSON.parse(localStorage.getItem('gtk_chart_of_accounts') || '[]');
-        
-        let empAccount = allAccounts.find((acc: any) => acc.entityId === req.employeeId && acc.parentCode === CONTROL_ACCOUNT);
-
-        if (!empAccount) {
-            const existingLoanAccounts = allAccounts.filter((acc: any) => acc.parentCode === CONTROL_ACCOUNT);
-            const nextNumber = existingLoanAccounts.length + 1;
-            const newAccountCode = `${CONTROL_ACCOUNT}-${String(nextNumber).padStart(3, '0')}`;
-
-            empAccount = {
-                id: `ACC-${Date.now()}`,
-                code: newAccountCode,
-                name: `Advance - Emp #${req.employeeId}`,
-                level: 5,
-                parentCode: CONTROL_ACCOUNT,
-                entityId: req.employeeId,
-                company: company
-            };
+    try {
+        // 1. Get/Create the Debit Account
+        let debitAccount;
+        if (req.category === 'HR' && (req.subCategory === 'Loan Request' || req.subCategory === 'Salary Advance')) {
+            // Use the automated mapping logic from FinanceService
+            const assets = FinanceService.ensureAccount(company as any, 'ASSETS', 1, null, 'Asset', '10');
+            const currentAssets = FinanceService.ensureAccount(company as any, 'CURRENT ASSETS', 2, assets.id, 'Asset', '11');
+            const loansAdvances = FinanceService.ensureAccount(company as any, 'LOANS & ADVANCES', 3, currentAssets.id, 'Asset', '114');
+            const empLoansControl = FinanceService.ensureAccount(company as any, 'EMPLOYEE LOANS CONTROL', 4, loansAdvances.id, 'Asset', '1141');
             
-            allAccounts = [...allAccounts, empAccount];
-            localStorage.setItem('gtk_chart_of_accounts', JSON.stringify(allAccounts));
-            toast.success(`Auto-created Ledger Account: [${newAccountCode}] for Employee`);
+            debitAccount = FinanceService.ensureAccount(
+                company as any, 
+                req.employeeName || `EMP-${req.employeeId}`, 
+                5, 
+                empLoansControl.id, 
+                'Asset', 
+                '11410'
+            );
+        } else {
+            // For other categories, debit an expense account
+            const expenses = FinanceService.ensureAccount(company as any, 'EXPENSES', 1, null, 'Expense', '50');
+            const opExpenses = FinanceService.ensureAccount(company as any, 'OPERATING EXPENSES', 2, expenses.id, 'Expense', '52');
+            const adminExpenses = FinanceService.ensureAccount(company as any, 'ADMIN EXPENSES', 3, opExpenses.id, 'Expense', '521');
+            const procurement = FinanceService.ensureAccount(company as any, 'PROCUREMENT & MATERIALS', 4, adminExpenses.id, 'Expense', '5214');
+            
+            debitAccount = FinanceService.ensureAccount(
+                company as any, 
+                req.subCategory || 'GENERAL PROCUREMENT', 
+                5, 
+                procurement.id, 
+                'Expense', 
+                '52140'
+            );
         }
 
-        const journalEntry = {
-            id: `JV-${Date.now()}`,
+        // 2. Get/Create the Credit Account (Bank/Cash)
+        const assets = FinanceService.ensureAccount(company as any, 'ASSETS', 1, null, 'Asset', '10');
+        const currentAssets = FinanceService.ensureAccount(company as any, 'CURRENT ASSETS', 2, assets.id, 'Asset', '11');
+        const cashBank = FinanceService.ensureAccount(company as any, 'CASH & BANK', 3, currentAssets.id, 'Asset', '111');
+        const cashAtBank = FinanceService.ensureAccount(company as any, 'CASH AT BANK', 4, cashBank.id, 'Asset', '1112');
+        const creditAccount = FinanceService.ensureAccount(company as any, 'MAIN BANK ACCOUNT', 5, cashAtBank.id, 'Asset', '11120');
+
+        // 3. Record the Transaction
+        const tx: any = {
+            id: `PV-${Date.now()}`,
+            company: company as any,
+            docType: 'PV',
+            docDate: new Date().toISOString().split('T')[0],
             date: new Date().toISOString().split('T')[0],
-            referenceId: req.id, 
-            entries: [
-                { accountId: empAccount.id, debit: req.loanAmount, credit: 0 }, 
-                { accountId: 'BANK_ACCOUNT_ID', debit: 0, credit: req.loanAmount } 
-            ],
-            narration: `Payment for ${req.subCategory} against PR #${req.id}`
+            description: `Payment for PR #${req.id}: ${req.headerText}`,
+            referenceId: req.id,
+            status: 'Posted',
+            details: [
+                { accountId: debitAccount.id, debit: req.totalValue || req.loanAmount || 0, credit: 0, text: `Debit: ${req.subCategory}` },
+                { accountId: creditAccount.id, debit: 0, credit: req.totalValue || req.loanAmount || 0, text: `Credit: Bank Payment` }
+            ]
         };
 
-        const existingJVs = JSON.parse(localStorage.getItem('gtk_journal_entries') || '[]');
-        localStorage.setItem('gtk_journal_entries', JSON.stringify([...existingJVs, journalEntry]));
-        
+        FinanceService.recordTransaction(tx);
+
+        // 4. Update Requisition Status
         const allReqs = InventoryService.getRequisitions().filter(Boolean);
-        const updatedReqs = allReqs.map(r => r.id === req.id ? { ...r, status: 'Paid' } : r);
+        const updatedReqs = allReqs.map(r => r.id === req.id ? { ...r, status: 'Paid' as any } : r);
         InventoryService.saveRequisitions(updatedReqs);
         
         refreshData();
-        toast.success(`Payment Voucher Posted Successfully to Account ${empAccount.code}`);
-    } else {
-        toast.info("Payment voucher UI for standard materials will open here.");
+        toast.success(`Payment Voucher Posted Successfully! Account: ${debitAccount.code}`);
+
+    } catch (error) {
+        console.error("Payment Voucher Error:", error);
+        toast.error("Failed to process payment voucher.");
     }
   };
 
@@ -801,7 +826,7 @@ const Requisitions: React.FC = () => {
                                         <div className="mt-4 p-4 bg-slate-50 rounded-xl border space-y-2">
                                             {(() => {
                                                 const emp = employees.find(e => e.id === formHeader.employeeId);
-                                                const empLoans = loans.filter(l => l.employeeId === formHeader.employeeId && l.status === 'Approved');
+                                                const empLoans = loans.filter(l => l.employeeId === formHeader.employeeId && l.status === 'Active');
                                                 const totalLoan = empLoans.reduce((sum, l) => sum + l.amount, 0);
                                                 const repaid = empLoans.reduce((sum, l) => sum + l.repaymentAmount, 0);
                                                 const remaining = totalLoan - repaid;
