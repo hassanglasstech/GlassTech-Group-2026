@@ -13,6 +13,7 @@ import { FinanceService } from '../../finance/services/financeService';
 import { AppService } from '../../shared/services/appService';
 import { ProjectService } from '../../projects/services/projectService';
 import { HRService } from '../../hr/services/hrService';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Plus, Search, CheckCircle2, ClipboardList, ShieldCheck,
   Check, Hash, User, ShieldAlert, FileText, Save, Trash2, 
@@ -26,6 +27,8 @@ import RequisitionPrint from '@/components/RequisitionPrint';
 
 const Requisitions: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'requests' | 'approvals' | 'orders'>('requests');
   const [requisitions, setRequisitions] = useState<Requisition[]>([]);
   const [selectedRequisitions, setSelectedRequisitions] = useState<string[]>([]);
@@ -91,6 +94,17 @@ const Requisitions: React.FC = () => {
   useEffect(() => {
     refreshData();
   }, [company]);
+
+  useEffect(() => {
+    const reqId = searchParams.get('id');
+    if (reqId) {
+      const found = requisitions.find(r => r.id === reqId);
+      if (found) {
+        setViewingRequisition(found);
+        if (found.status === 'Pending') setActiveTab('approvals');
+      }
+    }
+  }, [searchParams, requisitions]);
 
   const refreshData = () => {
     const allReqs = InventoryService.getRequisitions();
@@ -219,7 +233,8 @@ const Requisitions: React.FC = () => {
           title: `New Requisition from ${company}`,
           message: `PR #${newPR.id} needs approval. Value: PKR ${newPR.totalValue}`,
           isRead: false,
-          date: new Date().toISOString()
+          date: new Date().toISOString(),
+          link: `/requisitions?id=${newPR.id}`
       };
       const existingNotifs = JSON.parse(localStorage.getItem('gtk_notifications') || '[]');
       localStorage.setItem('gtk_notifications', JSON.stringify([...existingNotifs, notification]));
@@ -269,7 +284,8 @@ const Requisitions: React.FC = () => {
             title: `Requisition Approved!`,
             message: `Factory approved PR #${pr.id}. You can now process the payment.`,
             isRead: false,
-            date: new Date().toISOString()
+            date: new Date().toISOString(),
+            link: `/requisitions?id=${pr.id}`
         };
         const existingNotifs = JSON.parse(localStorage.getItem('gtk_notifications') || '[]');
         localStorage.setItem('gtk_notifications', JSON.stringify([...existingNotifs, notification]));
@@ -526,14 +542,16 @@ const Requisitions: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-6 py-3 text-right space-x-2" onClick={e => e.stopPropagation()}>
-                        {r.status === 'Pending' && (
+                        {r.status === 'Pending' && company === 'Factory' && (
                           <>
                             <button onClick={() => handleApprove(r.id)} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Approve"><Check size={16}/></button>
                             <button onClick={() => handleDisapprove(r.id)} className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg" title="Disapprove"><XCircle size={16}/></button>
                           </>
                         )}
                         <button onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 size={16}/></button>
-                        <button onClick={() => handlePaymentVoucher(r)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Payment Voucher"><DollarSign size={16}/></button>
+                        {company !== 'Factory' && r.status === 'Approved' && (
+                          <button onClick={() => handlePaymentVoucher(r)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Payment Voucher"><DollarSign size={16}/></button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -577,7 +595,7 @@ const Requisitions: React.FC = () => {
                               </td>
                               <td className="px-6 py-3 font-black">{(r.totalValue || 0).toLocaleString()}</td>
                               <td className="px-6 py-3 text-right">
-                                  {r.status === 'Pending' && <button onClick={() => handleApprove(r.id)} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase hover:bg-emerald-700">Release</button>}
+                                  {r.status === 'Pending' && company === 'Factory' && <button onClick={() => handleApprove(r.id)} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase hover:bg-emerald-700">Release</button>}
                                   {r.status === 'Approved' && (r.subCategory === 'Material / Inventory' || r.reqType === 'Material') && <button onClick={() => openConversionModal(r)} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase hover:bg-blue-700">Create PO</button>}
                               </td>
                           </tr>
