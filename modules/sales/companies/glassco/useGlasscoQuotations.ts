@@ -9,6 +9,7 @@ import * as XLSX from 'xlsx';
 export const useGlasscoQuotations = () => {
   const company = 'Glassco';
   const [quotations, setQuotations] = useState<Quotation[]>([]);
+  const [allQuotations, setAllQuotations] = useState<Quotation[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -35,7 +36,7 @@ export const useGlasscoQuotations = () => {
   useEffect(() => { refreshData(); }, []);
 
   const lastSerial = useMemo(() => {
-      const all = quotations.filter(q => q.company === company);
+      const all = allQuotations.filter(q => q.company === company);
       let max = 0;
       all.forEach(q => {
           const refId = q.orderNo || q.id;
@@ -45,10 +46,12 @@ export const useGlasscoQuotations = () => {
           if (!isNaN(num) && num > max) max = num;
       });
       return max || 2349;
-  }, [quotations]);
+  }, [allQuotations]);
 
   const refreshData = async () => {
     const all = await AsyncSalesService.getQuotations();
+    setAllQuotations(all);
+
     const drafts = all.filter(q => {
         if (q.company !== company) return false;
         if (q.status === 'Approved') return false;
@@ -68,6 +71,7 @@ export const useGlasscoQuotations = () => {
     const dataToSave = directData || formData;
     if (!dataToSave.clientId) { toast.error("Client is required.", { duration: 4000 }); return; }
     
+    // Refresh all quotations to get the absolute latest serial
     const all = await AsyncSalesService.getQuotations();
     const originalId = dataToSave.id;
     let finalId = originalId;
@@ -92,9 +96,9 @@ export const useGlasscoQuotations = () => {
     } 
     else if (action === 'save') {
         if (!hasFormalId) {
+            let nextSeq;
             if (dataToSave.manualSerial) {
-                const paddedSerial = dataToSave.manualSerial.toString().padStart(4, '0');
-                finalId = `QT-GLS-${mmyy}-${paddedSerial}`;
+                nextSeq = parseInt(String(dataToSave.manualSerial));
             } else {
                 let maxSeq = 0;
                 all.forEach(q => {
@@ -104,9 +108,9 @@ export const useGlasscoQuotations = () => {
                     const num = parseInt(parts[parts.length - 1]);
                     if (!isNaN(num) && num > maxSeq) maxSeq = num;
                 });
-                const nextSeq = Math.max(maxSeq + 1, 2350);
-                finalId = `QT-GLS-${mmyy}-${nextSeq.toString().padStart(4, '0')}`;
+                nextSeq = Math.max(maxSeq + 1, 2350);
             }
+            finalId = `QT-GLS-${mmyy}-${nextSeq.toString().padStart(4, '0')}`;
         }
     }
 
