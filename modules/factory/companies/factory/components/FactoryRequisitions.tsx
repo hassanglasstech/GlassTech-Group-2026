@@ -47,32 +47,28 @@ const FactoryRequisitions: React.FC<FactoryRequisitionsProps> = ({ requisitions,
 
     const handleApproveRequisition = (req: Requisition) => {
         if (!req) return;
-        if (!window.confirm(`Approve ${req.reqType} for ${req.targetCompany}? This will create a PARKED voucher in their ledger.`)) return;
+        if (!window.confirm(`Approve ${req.reqType || req.subCategory} for ${req.company}?`)) return;
 
         const allReqs = InventoryService.getRequisitions().filter(Boolean);
         const updatedReqs = allReqs.map(r => r.id === req.id ? { ...r, status: 'Approved' as const } : r);
         InventoryService.saveRequisitions(updatedReqs);
 
-        if (req.targetCompany) {
-            const tx: LedgerTransaction = {
-                id: `JV-${req.id}`,
-                company: req.targetCompany,
-                docType: 'SA',
-                docDate: new Date().toISOString().split('T')[0],
-                date: new Date().toISOString().split('T')[0],
-                description: `FAC-REQ: ${req.headerText} (${req.reqType})`,
-                referenceId: req.id,
-                status: 'Parked',
-                details: [
-                    { accountId: 'PENDING_GL_DR', debit: req.totalValue, credit: 0, text: `Approved by Factory (${req.reqType})` },
-                    { accountId: 'PENDING_GL_CR', debit: 0, credit: req.totalValue, text: 'Payable / Cash' }
-                ]
+        // Send notification back to the originating company
+        if (req.company !== 'Factory') {
+            const notification = {
+                id: Date.now().toString(),
+                targetCompany: req.company,
+                title: `Requisition Approved by Factory`,
+                message: `PR #${req.id} has been approved. You can now process the payment.`,
+                isRead: false,
+                date: new Date().toISOString()
             };
-            FinanceService.recordTransaction(tx);
+            const existingNotifs = JSON.parse(localStorage.getItem('gtk_notifications') || '[]');
+            localStorage.setItem('gtk_notifications', JSON.stringify([...existingNotifs, notification]));
         }
 
         refreshData();
-        toast.success("Approved & Posted to Target Ledger (Parked).");
+        toast.success("Requisition Approved Successfully!");
     };
 
     return (
@@ -95,12 +91,12 @@ const FactoryRequisitions: React.FC<FactoryRequisitionsProps> = ({ requisitions,
             <div className="col-span-8 bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
                 <div className="p-6 border-b bg-slate-50"><h4 className="font-black uppercase text-xs text-slate-500">Central Approval Desk</h4></div>
                 <table className="w-full text-left sap-table">
-                    <thead><tr><th>Ref ID</th><th>Beneficiary</th><th>Category</th><th>Description</th><th className="text-right">Value</th><th>Action</th></tr></thead>
+                    <thead><tr><th>Ref ID</th><th>From Company</th><th>Category</th><th>Description</th><th className="text-right">Value</th><th>Action</th></tr></thead>
                     <tbody>
                         {requisitions.filter(Boolean).map(r => (
                             <tr key={r.id}>
                                 <td className="font-black text-indigo-600">{r.id}</td>
-                                <td><span className="bg-slate-100 px-2 py-1 rounded text-[10px] font-black uppercase text-slate-600">{r.targetCompany}</span></td>
+                                <td><span className="bg-slate-100 px-2 py-1 rounded text-[10px] font-black uppercase text-slate-600">{r.company}</span></td>
                                 <td><span className="text-[10px] font-bold uppercase text-slate-500">{r.reqType?.toUpperCase() || 'N/A'}</span></td>
                                 <td className="text-xs font-bold uppercase text-slate-800">{r.headerText}</td>
                                 <td className="text-right font-black text-xs">{r.totalValue?.toLocaleString() || '0'}</td>
