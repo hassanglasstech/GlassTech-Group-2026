@@ -17,7 +17,7 @@ const DispatchView: React.FC = () => {
   const renderGrid = (filterFn: (p: any) => boolean, renderAction: (p: any) => React.ReactNode) => {
     if (selectedJobId) {
         const jobData = getJobDetails(selectedJobId, filterFn);
-        const relevantPieces = pieces.filter(p => p.orderId === selectedJobId && filterFn(p));
+        const relevantPieces = (pieces || []).filter(p => p.orderId === selectedJobId && filterFn(p));
         if (relevantPieces.length === 0) { setSelectedJobId(null); return null; }
 
         return (
@@ -42,7 +42,7 @@ const DispatchView: React.FC = () => {
         );
     }
 
-    const uniqueIds = Array.from(new Set<string>(pieces.filter(filterFn).map(p => p.orderId)));
+    const uniqueIds = Array.from(new Set<string>((pieces || []).filter(filterFn).map(p => p.orderId)));
     if (uniqueIds.length === 0) return <div className="py-20 text-center text-slate-300 font-black uppercase text-xs italic">No jobs pending here.</div>;
 
     return (
@@ -115,7 +115,7 @@ const DispatchView: React.FC = () => {
                     <table className="w-full text-left sap-table">
                         <thead><tr><th>Piece ID</th><th>Status</th><th>Operation</th></tr></thead>
                         <tbody>
-                            {pieces.filter(p => ['Delivered', 'Tempered', 'QC-Passed'].includes(p.status)).map(p => (
+                            {(pieces || []).filter(p => p.status && ['Delivered', 'Tempered', 'QC-Passed'].includes(p.status)).map(p => (
                                 <tr key={p.id}>
                                     <td className="font-black text-blue-600">{p.id}</td>
                                     <td><span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold uppercase">{p.status}</span></td>
