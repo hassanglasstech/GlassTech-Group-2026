@@ -105,7 +105,7 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
 
     const companyPieces = (company as string) === 'Factory' 
       ? allPieces 
-      : allPieces.filter(p => p.orderId?.includes(companyCode));
+      : allPieces.filter(p => p && p.orderId?.includes(companyCode));
 
     setPieces(companyPieces);
     setJobOrders(SalesService.getQuotations().filter(q => q.company === company && q.status === 'Approved'));
