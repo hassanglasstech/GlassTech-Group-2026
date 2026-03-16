@@ -155,7 +155,7 @@ const TABLE_MAPPERS: Record<string, (row: any) => any> = {
     cost_price:       p.costPrice ?? p.cost_price ?? 0,
     unit:             p.unit ?? 'PCS',
     variants:         p.variants ?? [],
-    glass_type:       p.glassType ?? p.glass_type ?? '',
+    glass_type:       p.glassType ?? p.glass_type ?? null,
     main_category:    p.mainCategory ?? p.main_category ?? '',
     sub_category:     p.subCategory ?? p.sub_category ?? '',
     thickness:        p.thickness ?? '',
@@ -280,7 +280,7 @@ const TABLE_MAPPERS: Record<string, (row: any) => any> = {
 
   requisitions: (r: any) => ({
     id:              r.id,
-    company:         r.company,
+    company:         r.company || 'GTK',
     date:            r.date,
     header_text:     r.headerText ?? r.header_text ?? '',
     requisitioner:   r.requisitioner ?? '',
@@ -296,7 +296,7 @@ const TABLE_MAPPERS: Record<string, (row: any) => any> = {
 
   purchase_orders: (p: any) => ({
     id:           p.id,
-    from_company: p.fromCompany ?? p.from_company ?? '',
+    from_company: p.fromCompany ?? p.from_company ?? 'GTK',
     to_company:   p.toCompany ?? p.to_company ?? '',
     date:         p.date ?? null,
     status:       p.status ?? 'Draft',
