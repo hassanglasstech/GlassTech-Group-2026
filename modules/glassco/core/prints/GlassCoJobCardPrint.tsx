@@ -10,6 +10,11 @@ interface Props {
 
 export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces, products }) => {
     let jobPieces = pieces.filter(p => p.orderId === quote.orderNo);
+    // Sort ascending by piece number
+    jobPieces.sort((a, b) => {
+        const getNum = (id: string) => parseInt((id.split('/').pop() || '0').replace(/[^0-9]/g, '')) || 0;
+        return getNum(a.id) - getNum(b.id);
+    });
     
     // If no pieces found (e.g. Draft/Quotation), generate virtual pieces for preview
     if (jobPieces.length === 0) {
@@ -23,7 +28,7 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
                  const suffixes = isDG ? ['A', 'B'] : [''];
                  suffixes.forEach(sfx => {
                      jobPieces.push({
-                         id: `${quote.manualSerial || 'DRAFT'}/${serialCounter}${sfx}`,
+                         id: `${(quote.orderNo || quote.id || '').replace(/[^0-9]/g,'').slice(-4) || (quote.manualSerial || '0')}/${serialCounter}${sfx}`,
                          orderId: quote.orderNo || quote.id,
                          itemIndex: idx,
                          specs: `${item.glassSize || ''} ${item.glassType || ''} ${sfx}`.trim(),
@@ -71,7 +76,7 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
                         visibility: visible;
                     }
                     .print-only {
-                        position: absolute;
+                        position: fixed;
                         left: 0;
                         top: 0;
                         width: 100%;
@@ -80,6 +85,17 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
                         padding: 15mm !important;
                         box-sizing: border-box !important;
                         display: block !important;
+                    }
+                    @media print {
+                        .print-only {
+                            position: static !important;
+                            width: 100% !important;
+                            height: auto !important;
+                        }
+                        html, body {
+                            height: auto !important;
+                            overflow: visible !important;
+                        }
                     }
                     /* Ensure table borders print crisp */
                     table { border-collapse: collapse !important; width: 100%; }
