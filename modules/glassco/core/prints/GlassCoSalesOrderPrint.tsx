@@ -90,24 +90,12 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                         visibility: visible;
                     }
                     .print-only {
-                        position: fixed;
+                        position: absolute;
                         left: 0;
                         top: 0;
                         width: 100%;
-                        height: auto;
                         background: white;
                         z-index: 99999;
-                    }
-                    @media print {
-                        .print-only {
-                            position: static !important;
-                            width: 100% !important;
-                            height: auto !important;
-                        }
-                        html, body {
-                            height: auto !important;
-                            overflow: visible !important;
-                        }
                     }
                     .print-container { 
                         width: 100% !important; 
@@ -208,10 +196,10 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                 {/* Main Items Table */}
                 <div className="mt-2">
                     {(() => {
-                        let serialNum = 0;
-                        const MAX_ROWS = 16;
+                        const MAX_ROWS = 25;
                         const chunks: any[][] = [];
                         let currentChunk: any[] = [];
+                        let serialNum = 0;
 
                         quote.items.forEach((item, index) => {
                             currentChunk.push(item);
@@ -282,6 +270,70 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                                         })}
                                     </tbody>
                                 </table>
+                                {chunkIdx === chunks.length - 1 && (
+                                    <div className="mt-4 pt-2 border-t border-slate-900 break-inside-avoid">
+                                        <div className="flex justify-between items-start">
+                                            <div className="w-[60%]">
+                                                <h4 className="text-[8px] font-black uppercase tracking-widest text-slate-900 mb-1 border-b border-slate-100 pb-0.5">Terms of Production</h4>
+                                                <ul className="text-[7.5px] space-y-0.5 text-slate-600 font-bold leading-tight">
+                                                    <li className="flex items-start space-x-1">
+                                                        <span className="text-slate-300">•</span>
+                                                        <span>Industrial 6-inch rounding protocol applies.</span>
+                                                    </li>
+                                                    <li className="flex items-start space-x-1">
+                                                        <span className="text-slate-300">•</span>
+                                                        <span>No modifications after cutting process begins.</span>
+                                                    </li>
+                                                    <li className="flex items-start space-x-1">
+                                                        <span className="text-rose-500">•</span>
+                                                        <span className="text-slate-900">Balance payment required before dispatch.</span>
+                                                    </li>
+                                                </ul>
+                                            </div>
+
+                                            <div className="w-[35%] space-y-1">
+                                                <div className="flex justify-between text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
+                                                    <span>Gross:</span>
+                                                    <span>PKR {(Number(subTotal) || 0).toLocaleString()}</span>
+                                                </div>
+                                                {(quote.discountAmount || quote.discountPercent) > 0 && (
+                                                    <div className="flex justify-between text-[9px] font-bold text-indigo-600 uppercase tracking-tighter">
+                                                        <span>Disc:</span>
+                                                        <span>- {(Number(discountAmount) || 0).toLocaleString()}</span>
+                                                    </div>
+                                                )}
+                                                <div className="flex justify-between items-end pt-1 border-t border-slate-200">
+                                                    <span className="text-[10px] font-black uppercase text-slate-900 tracking-tighter">Net:</span>
+                                                    <span className="text-lg font-black text-slate-900">PKR {(Number(netAmount) || 0).toLocaleString()}</span>
+                                                </div>
+                                                {advanceAmount > 0 && (
+                                                    <>
+                                                        <div className="flex justify-between text-[9px] font-bold text-emerald-600 uppercase tracking-tighter">
+                                                            <span>Advance:</span>
+                                                            <span>- {(Number(advanceAmount) || 0).toLocaleString()}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-end pt-1 border-t border-slate-200">
+                                                            <span className="text-[10px] font-black uppercase text-rose-600 tracking-tighter">Balance:</span>
+                                                            <span className="text-lg font-black text-rose-600">PKR {(netAmount - advanceAmount).toLocaleString()}</span>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-6 grid grid-cols-3 gap-4">
+                                            <div className="border-t border-slate-900 pt-1 text-center text-[7px] font-black uppercase text-slate-400">Verification</div>
+                                            <div className="border-t border-slate-900 pt-1 text-center text-[7px] font-black uppercase text-slate-400">Accounts</div>
+                                            <div className="border-t border-slate-900 pt-1 text-center text-[7px] font-black uppercase text-slate-900">Authorized</div>
+                                        </div>
+
+                                        <div className="mt-4 text-center">
+                                            <p className="text-[7px] font-black uppercase tracking-[0.2em] text-slate-300 italic">
+                                                Computer generated sales document. Valid for Production Floor.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         ));
                     })()}
@@ -311,23 +363,23 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                         <div className="w-[35%] space-y-1">
                             <div className="flex justify-between text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
                                 <span>Gross:</span>
-                                <span>PKR {subTotal.toLocaleString()}</span>
+                                <span>PKR {(Number(subTotal) || 0).toLocaleString()}</span>
                             </div>
                             {(quote.discountAmount || quote.discountPercent) > 0 && (
                                 <div className="flex justify-between text-[9px] font-bold text-indigo-600 uppercase tracking-tighter">
                                     <span>Disc:</span>
-                                    <span>- {discountAmount.toLocaleString()}</span>
+                                    <span>- {(Number(discountAmount) || 0).toLocaleString()}</span>
                                 </div>
                             )}
                             <div className="flex justify-between items-end pt-1 border-t border-slate-200">
                                 <span className="text-[10px] font-black uppercase text-slate-900 tracking-tighter">Net:</span>
-                                <span className="text-lg font-black text-slate-900">PKR {netAmount.toLocaleString()}</span>
+                                <span className="text-lg font-black text-slate-900">PKR {(Number(netAmount) || 0).toLocaleString()}</span>
                             </div>
                             {advanceAmount > 0 && (
                                 <>
                                     <div className="flex justify-between text-[9px] font-bold text-emerald-600 uppercase tracking-tighter">
                                         <span>Advance:</span>
-                                        <span>- {advanceAmount.toLocaleString()}</span>
+                                        <span>- {(Number(advanceAmount) || 0).toLocaleString()}</span>
                                     </div>
                                     <div className="flex justify-between items-end pt-1 border-t border-slate-200">
                                         <span className="text-[10px] font-black uppercase text-rose-600 tracking-tighter">Balance:</span>
