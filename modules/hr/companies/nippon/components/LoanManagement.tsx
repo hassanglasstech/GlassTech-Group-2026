@@ -6,6 +6,7 @@ import { InventoryService } from '@/modules/procurement/services/inventoryServic
 import { Plus, Search, CheckCircle, Clock, Banknote, HandCoins, X, AlertCircle, FileUp, Download, Calendar, Edit2, Trash2, Fingerprint } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import { SidePanel } from '@/modules/shared/components/SidePanel';
 
 const LoanManagement: React.FC = () => {
   const company = 'Nippon';
@@ -209,8 +210,8 @@ const LoanManagement: React.FC = () => {
                       <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${loan.type === 'Loan' ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{loan.type}</span>
                       {loan.requisitionId && <span className="ml-2 inline-flex items-center text-[8px] font-bold text-emerald-600 bg-emerald-50 px-1 rounded border border-emerald-100"><Fingerprint size={8}/> PR LINKED</span>}
                   </td>
-                  <td className="px-6 py-4 font-black text-slate-900">PKR {(Number(loan.amount) || 0).toLocaleString()}</td>
-                  <td className="px-6 py-4 font-bold text-slate-600">PKR {(Number(loan.repaymentAmount) || 0).toLocaleString()}</td>
+                  <td className="px-6 py-4 font-black text-slate-900">PKR {loan.amount.toLocaleString()}</td>
+                  <td className="px-6 py-4 font-bold text-slate-600">PKR {loan.repaymentAmount.toLocaleString()}</td>
                   <td className="px-6 py-4">
                     {loan.status === 'Active' ? 
                       <div className="flex items-center space-x-1.5 text-amber-600 font-black uppercase text-[10px] bg-amber-50 px-2 py-1 rounded-lg border border-amber-100 w-fit"><Clock size={12} /><span>Deduction Active</span></div> : 
@@ -232,8 +233,7 @@ const LoanManagement: React.FC = () => {
         </table>
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[110] animate-in zoom-in duration-200">
+      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Loan/Advance" subtitle="HR Finance - Nippon" width="md">
           <div className="bg-white rounded-[2.5rem] w-full max-w-xl shadow-2xl flex flex-col border border-white/20 overflow-hidden">
             <div className={`px-10 py-8 text-white flex justify-between items-center ${modalType === 'Loan' ? 'bg-slate-900' : 'bg-blue-600'}`}>
               <div className="flex items-center space-x-4"><div className="p-3 bg-white/10 rounded-2xl shadow-inner">{modalType === 'Loan' ? <Banknote size={28} /> : <HandCoins size={28} />}</div><div><h3 className="text-2xl font-black tracking-tighter uppercase">{editingId ? 'Edit Entry' : (modalType === 'Loan' ? 'Issuance of Loan' : 'Salary Advance')}</h3><p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">Financial Ledger Entry</p></div></div>
