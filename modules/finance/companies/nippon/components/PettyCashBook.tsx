@@ -178,7 +178,7 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
         <div className="bg-[#354a5f] text-white p-6 rounded shadow-sm relative overflow-hidden">
            <div className="absolute top-0 right-0 p-4 opacity-10"><Wallet size={80} /></div>
            <p className="text-[10px] font-bold uppercase text-blue-200 tracking-widest mb-1">Cash Balance (FBCJ)</p>
-           <p className="text-3xl font-black">PKR {(Number(currentBalance) || 0).toLocaleString()}</p>
+           <p className="text-3xl font-black">PKR {currentBalance.toLocaleString()}</p>
         </div>
         {/* ... (Other stat cards) ... */}
       </div>
@@ -249,8 +249,8 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
           <UnifiedPaymentPrint data={printingEntry} company={company} partyName="Authorized Personnel" />
       )}
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[450]">
+      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Details" width="lg">
+        <div className="p-6 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[450]">
           <div className="bg-white rounded w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-300 animate-in zoom-in duration-300">
             <div className="sap-object-header flex justify-between items-start shrink-0">
                <div>
