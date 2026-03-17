@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Employee, Account } from '@/modules/shared/types';
 import { HRService } from '@/modules/hr/services/hrService';
@@ -5,6 +6,7 @@ import { FinanceService } from '@/modules/finance/services/financeService';
 import { UserPlus, Search, Edit2, Trash2, X, Briefcase, Wallet, UserCircle, FileUp, Download, Layers } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import { SidePanel } from '@/modules/shared/components/SidePanel';
 
 const EmployeeManagement: React.FC = () => {
   const company = 'Glassco';
@@ -88,19 +90,19 @@ const EmployeeManagement: React.FC = () => {
 
   const handleExportExcel = () => {
     const dataToExport = employees.map(emp => ({
-      'Name':             emp.personal?.name ?? '',
-      'EmployeeCode':     emp.work?.employeeCode ?? '',
-      'CNIC':             emp.personal?.cnic ?? '',
-      'Phone':            emp.personal?.phone ?? '',
-      'Address':          emp.personal?.address ?? '',
-      'Designation':      emp.work?.designation ?? '',
-      'Department':       emp.work?.department ?? '',
-      'Grade':            emp.work?.grade ?? '',
-      'JoinDate':         emp.work?.joinDate ?? '',
-      'Basic':            emp.salary?.basic ?? 0,
-      'HouseRent':        emp.salary?.houseRent ?? 0,
-      'Conveyance':       emp.salary?.conveyance ?? 0,
-      'SpecialAllowance': emp.salary?.specialAllowance ?? 0
+      'Name': emp.personal.name,
+      'EmployeeCode': emp.work.employeeCode,
+      'CNIC': emp.personal.cnic,
+      'Phone': emp.personal.phone,
+      'Address': emp.personal.address,
+      'Designation': emp.work.designation,
+      'Department': emp.work.department,
+      'Grade': emp.work.grade,
+      'JoinDate': emp.work.joinDate,
+      'Basic': emp.salary.basic,
+      'HouseRent': emp.salary.houseRent,
+      'Conveyance': emp.salary.conveyance,
+      'SpecialAllowance': emp.salary.specialAllowance
     }));
 
     const ws = XLSX.utils.json_to_sheet(dataToExport);
@@ -202,8 +204,8 @@ const EmployeeManagement: React.FC = () => {
   };
 
   const filteredEmployees = employees.filter(e => 
-    e.personal?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    e.work?.employeeCode?.toLowerCase().includes(searchTerm.toLowerCase())
+    e.personal.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    e.work.employeeCode.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -263,29 +265,29 @@ const EmployeeManagement: React.FC = () => {
                   <td className="px-6 py-4">
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm border border-blue-200">
-                        {emp.personal?.name?.charAt(0) ?? '?'}
+                        {emp.personal.name.charAt(0)}
                       </div>
                       <div>
-                        <p className="font-bold text-slate-900 leading-tight">{emp.personal?.name ?? '—'}</p>
-                        <p className="text-[11px] text-slate-400 font-semibold">{emp.personal?.cnic ?? '—'}</p>
+                        <p className="font-bold text-slate-900 leading-tight">{emp.personal.name}</p>
+                        <p className="text-[11px] text-slate-400 font-semibold">{emp.personal.cnic}</p>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     <div>
-                      <p className="text-sm font-bold text-slate-700">{emp.work?.designation ?? '—'}</p>
-                      <p className="text-[11px] text-blue-600 font-bold uppercase tracking-tight">{emp.work?.employeeCode ?? '—'} <span className="text-slate-300 mx-1">|</span> {emp.work?.department ?? '—'}</p>
+                      <p className="text-sm font-bold text-slate-700">{emp.work.designation}</p>
+                      <p className="text-[11px] text-blue-600 font-bold uppercase tracking-tight">{emp.work.employeeCode} <span className="text-slate-300 mx-1">|</span> {emp.work.department}</p>
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     <span className="px-2.5 py-1 bg-slate-100 text-slate-700 text-[10px] font-black uppercase rounded-lg border border-slate-200">
-                      {emp.work?.grade || 'N/A'}
+                      {emp.work.grade || 'N/A'}
                     </span>
                   </td>
                   <td className="px-6 py-4">
                     <div>
-                      <p className="text-sm font-black text-slate-900">PKR {((Number(emp.salary?.basic) || 0) + (Number(emp.salary?.houseRent) || 0) + (Number(emp.salary?.conveyance) || 0) + (Number(emp.salary?.specialAllowance) || 0)).toLocaleString()}</p>
-                      <p className="text-[10px] text-slate-400 font-medium tracking-tight">Base: {(Number(emp.salary?.basic) || 0).toLocaleString()}</p>
+                      <p className="text-sm font-black text-slate-900">PKR {(emp.salary.basic + emp.salary.houseRent + emp.salary.conveyance + emp.salary.specialAllowance).toLocaleString()}</p>
+                      <p className="text-[10px] text-slate-400 font-medium tracking-tight">Base: {emp.salary.basic.toLocaleString()}</p>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
@@ -315,9 +317,8 @@ const EmployeeManagement: React.FC = () => {
         </div>
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
-          <div className="bg-white rounded-3xl w-full max-w-5xl max-h-[92vh] overflow-hidden shadow-2xl flex flex-col border border-white/20">
+      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Employee" subtitle="HR - Glassco" width="lg">
+          <div className="p-6">
             {/* Header */}
             <div className="px-8 py-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
               <div className="flex items-center space-x-3">
