@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { toast } from 'sonner';
 import { Company, TemperingDispatch, ProductionPiece, PieceFault, Vendor, Quotation, VendorRate } from '../../../../../shared/types';
 import { ProductionService } from '../../../../../production/services/productionService';
 import { SalesService } from '../../../../../sales/services/salesService';
@@ -7,6 +6,7 @@ import {
   LayoutGrid, List, Plus, X, Save, Trash2, Edit, Truck, Layers, Flame, Calculator, CheckCircle2, Ban, Clock, Globe, Filter, Search, Phone, Receipt, Calendar
 } from 'lucide-react';
 import SupplyChainDashboard from '../../../../components/vendors/SupplyChainDashboard';
+import { SidePanel } from '@/modules/shared/components/SidePanel';
 
 interface GlasscoVendorHubProps {
     company: Company;
@@ -118,7 +118,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
   };
 
   const handleSaveVendor = () => {
-      if (!newVendorForm.name) return toast.error("Vendor Name is required", { duration: 4000 });
+      if (!newVendorForm.name) return alert("Vendor Name is required");
       
       let updatedVendors = [...vendors];
       if (editingId) {
