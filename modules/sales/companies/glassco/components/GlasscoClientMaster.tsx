@@ -5,6 +5,7 @@ import { SalesService } from '@/modules/sales/services/salesService';
 import { useClientMaster } from '@/modules/sales/hooks/useClientMaster';
 import { UserPlus, Search, Edit2, Trash2, X, Building, Phone, Save, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
+import { SidePanel } from '@/modules/shared/components/SidePanel';
 
 const GlasscoClientMaster: React.FC<{ company: Company }> = ({ company }) => {
   const {
@@ -75,7 +76,7 @@ const GlasscoClientMaster: React.FC<{ company: Company }> = ({ company }) => {
                   <span className="text-xs font-mono font-bold text-slate-600">{client.ntn || 'UNREGISTERED'}</span>
                 </td>
                 <td className="px-4 py-3">
-                  <p className="text-xs font-black text-blue-600">PKR {(Number(client.creditLimit) || 0).toLocaleString()}</p>
+                  <p className="text-xs font-black text-blue-600">PKR {client.creditLimit.toLocaleString()}</p>
                 </td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${client.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
@@ -98,8 +99,7 @@ const GlasscoClientMaster: React.FC<{ company: Company }> = ({ company }) => {
         </table>
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
+      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Business Partner" subtitle="Glassco - BP Master" width="md">
           <div className="bg-white rounded w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col border border-slate-300 animate-in zoom-in duration-200">
             <div className="sap-object-header flex justify-between items-start shrink-0">
                <div>
