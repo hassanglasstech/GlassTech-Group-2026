@@ -2,78 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Company, PettyCashEntry, CostCenter, Account, LedgerTransaction, Requisition } from '@/modules/shared/types';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
-import { Plus, Search, ArrowUpRight, ArrowDownLeft, X, Save, Wallet, Check, AlertTriangle, Fingerprint, Printer, Bookmark, Settings, Trash2 } from 'lucide-react';
+import { Plus, Search, ArrowUpRight, ArrowDownLeft, X, Save, Wallet, Check, AlertTriangle, Fingerprint, Printer } from 'lucide-react';
 import { UnifiedPaymentPrint } from '@/modules/finance/components/prints/UnifiedPaymentPrint';
-import { FinancialMappingRule } from '@/modules/finance/types/finance';
-import { useAuthStore } from '@/modules/auth/authStore';
-import { toast } from 'sonner';
-
-const MappingRulesManager: React.FC<{ 
-    rules: FinancialMappingRule[], 
-    accounts: Account[], 
-    costCenters: CostCenter[],
-    onClose: () => void,
-    onDelete: (id: string) => void
-}> = ({ rules, accounts, costCenters, onClose, onDelete }) => {
-    return (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]">
-            <div className="bg-white rounded-xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col border border-slate-300 animate-in zoom-in duration-300">
-                <div className="bg-[#354a5f] text-white p-4 flex justify-between items-center">
-                    <h3 className="text-lg font-bold uppercase tracking-tight flex items-center gap-2">
-                        <Bookmark size={20} />
-                        Payment Treatment Templates
-                    </h3>
-                    <button onClick={onClose} className="hover:bg-white/10 p-2 rounded transition-colors"><X size={20} /></button>
-                </div>
-                <div className="p-6 overflow-y-auto max-h-[70vh]">
-                    <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase text-slate-500 tracking-widest">
-                            <tr>
-                                <th className="px-4 py-3">Keyword / Category</th>
-                                <th className="px-4 py-3">Target G/L Account</th>
-                                <th className="px-4 py-3">Cost Center</th>
-                                <th className="px-4 py-3 text-center">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {rules.length === 0 ? (
-                                <tr>
-                                    <td colSpan={4} className="px-4 py-8 text-center text-slate-400 italic">No templates saved yet.</td>
-                                </tr>
-                            ) : (
-                                rules.map(rule => (
-                                    <tr key={rule.id} className="hover:bg-slate-50 transition-colors">
-                                        <td className="px-4 py-3 font-bold text-slate-700">{rule.keyword}</td>
-                                        <td className="px-4 py-3">
-                                            <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono font-bold">
-                                                {accounts.find(a => a.id === rule.targetGlId)?.code || 'Unknown'}
-                                            </span>
-                                            <span className="ml-2 text-slate-500">{accounts.find(a => a.id === rule.targetGlId)?.name}</span>
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-600">
-                                            {costCenters.find(cc => cc.id === rule.targetCostCenterId)?.name || '-'}
-                                        </td>
-                                        <td className="px-4 py-3 text-center">
-                                            <button 
-                                                onClick={() => onDelete(rule.id)}
-                                                className="text-rose-400 hover:text-rose-600 p-1 transition-colors"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-                <div className="p-4 bg-slate-50 border-t flex justify-end">
-                    <button onClick={onClose} className="sap-btn-primary">Close</button>
-                </div>
-            </div>
-        </div>
-    );
-};
 
 const BUSINESS_TRANSACTIONS = [
     // RECEIPTS
@@ -98,16 +28,11 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
   const [entries, setEntries] = useState<PettyCashEntry[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [mappingRules, setMappingRules] = useState<FinancialMappingRule[]>([]);
   const [authorizedReqs, setAuthorizedReqs] = useState<Requisition[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isRulesManagerOpen, setIsRulesManagerOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [activeTab, setActiveTab] = useState<'Receipt' | 'Payment'>('Payment');
-  
-  const { user } = useAuthStore();
-  const isSuperUser = user?.role === 'super_admin' || user?.role === 'glassco_admin' || user?.role === 'gtk_admin';
   
   // Printing State
   const [printingEntry, setPrintingEntry] = useState<PettyCashEntry | null>(null);
@@ -127,7 +52,6 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
     setEntries(filtered.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
     setCostCenters(FinanceService.getCostCenters().filter(cc => cc.company === company));
     setAccounts(FinanceService.getAccounts().filter(a => a.company === company && a.level === 5));
-    setMappingRules(FinanceService.getMappingRules().filter(r => r.company === company));
 
     // Fetch Authorized Requisitions for Linking (Expense/Maintenance/General/Overtime)
     const allReqs = InventoryService.getRequisitions().filter(Boolean);
@@ -143,63 +67,16 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
       const req = authorizedReqs.find(r => r.id === reqId);
       if (req) {
           setLinkedReqId(reqId);
-          
-          // Try to find a mapping rule for this subCategory or category
-          const rule = mappingRules.find(r => 
-            r.keyword.toLowerCase() === req.subCategory?.toLowerCase() || 
-            r.keyword.toLowerCase() === req.category?.toLowerCase()
-          );
-
           setFormData(prev => ({
               ...prev,
               amount: req.totalValue,
               description: `REQ: ${req.headerText} (${req.requisitioner})`,
-              referenceDoc: req.id,
-              glAccountId: rule?.targetGlId || prev.glAccountId,
-              costCenterId: rule?.targetCostCenterId || prev.costCenterId
+              referenceDoc: req.id
           }));
-          
-          if (rule) {
-            toast.info("Applied mapping rule for this requisition type.");
-          }
       } else {
           setLinkedReqId('');
           setFormData(prev => ({ ...prev, referenceDoc: '' }));
       }
-  };
-
-  const saveAsTemplate = () => {
-    if (!formData.description || !formData.glAccountId) {
-      return toast.error("Description and GL Account are required to save a template");
-    }
-
-    // Extract keyword from description or use business transaction name
-    const keyword = formData.description.split(':')[0].trim().replace('REQ: ', '');
-    
-    // Check if rule already exists
-    if (mappingRules.some(r => r.keyword.toLowerCase() === keyword.toLowerCase())) {
-        return toast.error("A template with this keyword already exists.");
-    }
-
-    const newRule: FinancialMappingRule = {
-      id: `RULE-${Date.now()}`,
-      company,
-      keyword,
-      targetGlId: formData.glAccountId,
-      targetCostCenterId: formData.costCenterId
-    };
-
-    const updatedRules = [...mappingRules, newRule];
-    FinanceService.saveMappingRules(updatedRules);
-    setMappingRules(updatedRules);
-    toast.success("Payment treatment saved as template!");
-  };
-
-  const deleteTemplate = (id: string) => {
-      const updated = mappingRules.filter(r => r.id !== id);
-      FinanceService.saveMappingRules(updated);
-      setMappingRules(updated);
-      toast.success("Template deleted.");
   };
 
   const currentBalance = useMemo(() => entries.filter(e => e.status === 'Posted').reduce((acc, curr) => curr.type === 'Receipt' ? acc + curr.amount : acc - curr.amount, 0), [entries]);
@@ -212,95 +89,65 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
   }, [accounts]);
 
   const handlePostEntry = (entryOrForm: Partial<PettyCashEntry>, isNew: boolean) => {
-    if (!entryOrForm.description || !entryOrForm.amount) return toast.error("Amount and Description required.");
+    if (!entryOrForm.description || !entryOrForm.amount) return alert("Amount and Description required.");
     
     // For Parked entry approval, we need to ensure GL is selected
-    if (!isNew && !entryOrForm.glAccountId && !formData.glAccountId) return toast.error("Please map a GL Account to approve this entry.");
+    if (!isNew && !entryOrForm.glAccountId && !formData.glAccountId) return alert("Please map a GL Account to approve this Factory entry.");
 
     const glId = isNew ? entryOrForm.glAccountId : formData.glAccountId;
     const bizTrans = isNew ? entryOrForm.businessTransaction : formData.businessTransaction;
     const ccId = isNew ? entryOrForm.costCenterId : formData.costCenterId;
 
-    if (!mainCashAccount) return toast.error("System Error: Main Cash GL not found.");
+    if (!mainCashAccount) return alert("System Error: Main Cash GL not found.");
 
-    // Determine Status: Non-super users can only 'Park' new entries
-    const targetStatus = isSuperUser ? 'Posted' : 'Parked';
+    // Ledger Posting
+    const debitLine = entryOrForm.type === 'Receipt' 
+        ? { accountId: mainCashAccount.id, debit: entryOrForm.amount!, credit: 0, text: `CJ: ${bizTrans}` }
+        : { accountId: glId!, debit: entryOrForm.amount!, credit: 0, text: `CJ: ${entryOrForm.description}`, costCenterId: ccId };
 
-    if (targetStatus === 'Posted') {
-        // Ledger Posting (Only if status is Posted)
-        const debitLine = entryOrForm.type === 'Receipt' 
-            ? { accountId: mainCashAccount.id, debit: entryOrForm.amount!, credit: 0, text: `CJ: ${bizTrans}` }
-            : { accountId: glId!, debit: entryOrForm.amount!, credit: 0, text: `CJ: ${entryOrForm.description}`, costCenterId: ccId };
+    const creditLine = entryOrForm.type === 'Receipt'
+        ? { accountId: glId!, debit: 0, credit: entryOrForm.amount!, text: `CJ: ${entryOrForm.description}`, costCenterId: ccId }
+        : { accountId: mainCashAccount.id, debit: 0, credit: entryOrForm.amount!, text: `CJ: ${bizTrans}` };
 
-        const creditLine = entryOrForm.type === 'Receipt'
-            ? { accountId: glId!, debit: 0, credit: entryOrForm.amount!, text: `CJ: ${entryOrForm.description}`, costCenterId: ccId }
-            : { accountId: mainCashAccount.id, debit: 0, credit: entryOrForm.amount!, text: `CJ: ${bizTrans}` };
+    const txId = `CJ-${Date.now().toString().slice(-6)}`;
+    const ledgerTx: LedgerTransaction = {
+        id: txId, company, docType: 'CJ', docDate: selectedDate, date: selectedDate,
+        description: `FBCJ: ${bizTrans} - ${entryOrForm.description}`,
+        referenceId: entryOrForm.referenceDoc || 'CASH_DESK',
+        status: 'Posted',
+        details: [debitLine, creditLine]
+    };
 
-        const txId = `CJ-${Date.now().toString().slice(-6)}`;
-        const ledgerTx: LedgerTransaction = {
-            id: txId, company, docType: 'CJ', docDate: selectedDate, date: selectedDate,
-            description: `FBCJ: ${bizTrans} - ${entryOrForm.description}`,
-            referenceId: entryOrForm.referenceDoc || 'CASH_DESK',
-            status: 'Posted',
-            details: [debitLine, creditLine]
-        };
-
-        FinanceService.recordTransaction(ledgerTx);
-    }
+    FinanceService.recordTransaction(ledgerTx);
 
     // Update Storage
     if (isNew) {
-        const txId = `CJ-${Date.now().toString().slice(-6)}`;
         const newEntry: PettyCashEntry = {
             ...(entryOrForm as PettyCashEntry),
-            id: txId, 
-            company, 
-            date: selectedDate, 
-            balance: targetStatus === 'Posted' ? currentBalance + (entryOrForm.type==='Receipt' ? entryOrForm.amount! : -entryOrForm.amount!) : 0,
-            status: targetStatus, 
-            recordedBy: user?.fullName || 'LOCAL_USER',
-            glAccountId: glId,
-            businessTransaction: bizTrans,
-            costCenterId: ccId
+            id: txId, company, date: selectedDate, balance: currentBalance + (entryOrForm.type==='Receipt' ? entryOrForm.amount! : -entryOrForm.amount!),
+            status: 'Posted', recordedBy: 'LOCAL_USER'
         };
         FinanceService.savePettyCashEntries([...FinanceService.getPettyCashEntries(), newEntry]);
 
-        // Mark Linked Requisition as Completed (Only if Posted)
-        if (targetStatus === 'Posted' && linkedReqId) {
+        // Phase 3: Mark Linked Requisition as Completed
+        if (linkedReqId) {
             const allReqs = InventoryService.getRequisitions();
             const updatedReqs = allReqs.map(r => r.id === linkedReqId ? { ...r, status: 'Completed' as const } : r);
             InventoryService.saveRequisitions(updatedReqs);
         }
 
-        toast.success(targetStatus === 'Posted' ? "Cash Entry Posted Successfully." : "Cash Entry Parked for Review.");
-
     } else {
-        // Update existing parked entry to Posted
+        // Update existing parked entry
         const allEntries = FinanceService.getPettyCashEntries();
-        const updated = allEntries.map(e => e.id === entryOrForm.id ? { 
-            ...e, 
-            status: 'Posted' as const, 
-            glAccountId: glId, 
-            businessTransaction: bizTrans, 
-            costCenterId: ccId,
-            balance: currentBalance + (e.type==='Receipt'?e.amount:-e.amount) 
-        } : e);
+        const updated = allEntries.map(e => e.id === entryOrForm.id ? { ...e, status: 'Posted' as const, glAccountId: glId, businessTransaction: bizTrans, balance: currentBalance + (e.type==='Receipt'?e.amount:-e.amount) } : e);
         FinanceService.savePettyCashEntries(updated);
-        
-        // If it was linked to a req, mark it completed
-        if (entryOrForm.referenceDoc) {
-            const allReqs = InventoryService.getRequisitions();
-            const updatedReqs = allReqs.map(r => r.id === entryOrForm.referenceDoc ? { ...r, status: 'Completed' as const } : r);
-            InventoryService.saveRequisitions(updatedReqs);
-        }
-
-        toast.success("Parked Entry Approved and Posted.");
     }
 
     refreshData();
     setIsModalOpen(false);
     setFormData({ amount: 0, description: '', costCenterId: '', glAccountId: '', businessTransaction: '', referenceDoc: '' });
     setLinkedReqId('');
+    alert("Cash Entry Posted Successfully.");
   };
 
   const getFilteredGLAccounts = (bizTransCode: string) => {
@@ -331,8 +178,9 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
         <div className="bg-[#354a5f] text-white p-6 rounded shadow-sm relative overflow-hidden">
            <div className="absolute top-0 right-0 p-4 opacity-10"><Wallet size={80} /></div>
            <p className="text-[10px] font-bold uppercase text-blue-200 tracking-widest mb-1">Cash Balance (FBCJ)</p>
-           <p className="text-3xl font-black">PKR {(Number(currentBalance) || 0).toLocaleString()}</p>
+           <p className="text-3xl font-black">PKR {currentBalance.toLocaleString()}</p>
         </div>
+        {/* ... (Other stat cards) ... */}
       </div>
 
       <div className="bg-white border border-slate-200 p-4 shadow-sm flex justify-between items-center no-print">
@@ -343,14 +191,9 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
             <input type="text" placeholder="Search narrative..." className="sap-input w-full pl-9 py-1.5 text-xs font-bold" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
           </div>
         </div>
-        <div className="flex items-center space-x-3">
-          <button onClick={() => setIsRulesManagerOpen(true)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="Manage Templates">
-            <Settings size={20} />
-          </button>
-          <button onClick={() => setIsModalOpen(true)} className="sap-btn-primary flex items-center space-x-2">
-            <Plus size={14} /> <span>Post Cash Document</span>
-          </button>
-        </div>
+        <button onClick={() => setIsModalOpen(true)} className="sap-btn-primary flex items-center space-x-2">
+          <Plus size={14} /> <span>Post Cash Document</span>
+        </button>
       </div>
 
       <div className="bg-white border border-slate-200 rounded shadow-sm overflow-hidden no-print">
@@ -406,19 +249,8 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
           <UnifiedPaymentPrint data={printingEntry} company={company} partyName="Authorized Personnel" />
       )}
 
-      {/* RULES MANAGER */}
-      {isRulesManagerOpen && (
-          <MappingRulesManager 
-            rules={mappingRules} 
-            accounts={accounts} 
-            costCenters={costCenters}
-            onClose={() => setIsRulesManagerOpen(false)}
-            onDelete={deleteTemplate}
-          />
-      )}
-
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[450]">
+      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Details" width="lg">
+        <div className="p-6 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[450]">
           <div className="bg-white rounded w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-300 animate-in zoom-in duration-300">
             <div className="sap-object-header flex justify-between items-start shrink-0">
                <div>
@@ -476,53 +308,28 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
                          </select>
                       </div>
                       <div className="space-y-1">
-                         <label className="text-[10px] font-bold uppercase text-slate-500">GL Account (5-Level COA)</label>
+                         <label className="text-[10px] font-bold uppercase text-slate-500">GL Account</label>
                          <select 
                             className="sap-input w-full font-bold" 
                             value={formData.glAccountId} 
                             onChange={e => setFormData({...formData, glAccountId: e.target.value})}
                          >
                             <option value="">-- Map to GL --</option>
-                            {getFilteredGLAccounts(formData.businessTransaction || '').sort((a,b) => a.code.localeCompare(b.code)).map(a => (
+                            {getFilteredGLAccounts(formData.businessTransaction || '').map(a => (
                                 <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>
                             ))}
                          </select>
                       </div>
                    </div>
-
-                   <div className="grid grid-cols-2 gap-6">
-                      <div className="space-y-1">
-                         <label className="text-[10px] font-bold uppercase text-slate-500">Cost Centre</label>
-                         <select 
-                            className="sap-input w-full font-bold" 
-                            value={formData.costCenterId} 
-                            onChange={e => setFormData({...formData, costCenterId: e.target.value})}
-                          >
-                            <option value="">-- Select Cost Centre --</option>
-                            {costCenters.map(cc => (
-                                <option key={cc.id} value={cc.id}>[{cc.code}] {cc.name}</option>
-                            ))}
-                         </select>
-                      </div>
-                      <div className="space-y-1">
-                         <label className="text-[10px] font-bold uppercase text-slate-500">Amount</label>
-                         <input type="number" disabled={!!formData.id} value={formData.amount} onChange={e => setFormData({...formData, amount: Number(e.target.value)})} className="sap-input w-full font-black text-lg" />
-                      </div>
-                   </div>
                    
+                   <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Amount</label><input type="number" disabled={!!formData.id} value={formData.amount} onChange={e => setFormData({...formData, amount: Number(e.target.value)})} className="sap-input w-full font-black text-lg" /></div>
                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Description</label><input type="text" disabled={!!formData.id} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="sap-input w-full font-bold uppercase" /></div>
                </div>
             </div>
 
-            <div className="px-8 py-4 bg-white border-t flex justify-between items-center shrink-0">
-               <button onClick={saveAsTemplate} className="flex items-center space-x-2 text-slate-500 hover:text-blue-600 text-[10px] font-black uppercase transition-colors">
-                  <Bookmark size={14} />
-                  <span>Save as Template</span>
-               </button>
-               <div className="flex space-x-3">
-                  <button onClick={() => setIsModalOpen(false)} className="sap-btn-ghost">Discard</button>
-                  <button onClick={() => handlePostEntry(formData, !formData.id)} className="sap-btn-primary flex items-center space-x-2"><Save size={14}/><span>{formData.status === 'Parked' ? 'Accept & Post' : 'Post Entry'}</span></button>
-               </div>
+            <div className="px-8 py-4 bg-white border-t flex justify-end space-x-3 shrink-0">
+               <button onClick={() => setIsModalOpen(false)} className="sap-btn-ghost">Discard</button>
+               <button onClick={() => handlePostEntry(formData, !formData.id)} className="sap-btn-primary flex items-center space-x-2"><Save size={14}/><span>{formData.status === 'Parked' ? 'Accept & Post' : 'Post Entry'}</span></button>
             </div>
           </div>
         </div>
