@@ -1,35 +1,18 @@
-/**
- * GLASSTECH ERP — SidePanel Component
- * 
- * Replaces full-page modals with smooth right-side sliding panel.
- * 2026 Enterprise UX pattern (SAP Fiori / Oracle Redwood style)
- * 
- * Usage:
- * <SidePanel 
- *   isOpen={isOpen} 
- *   onClose={() => setIsOpen(false)}
- *   title="New Quotation"
- *   width="lg"   // sm | md | lg | xl | full
- * >
- *   <YourFormContent />
- * </SidePanel>
- */
-
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { X, ChevronRight } from 'lucide-react';
 
 type PanelWidth = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 
 interface SidePanelProps {
-  isOpen:       boolean;
-  onClose:      () => void;
-  title:        string;
-  subtitle?:    string;
-  width?:       PanelWidth;
-  children:     React.ReactNode;
-  footer?:      React.ReactNode;
-  badge?:       string;
-  badgeColor?:  'blue' | 'emerald' | 'amber' | 'rose' | 'slate';
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  subtitle?: string;
+  width?: PanelWidth;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+  badge?: string;
+  badgeColor?: 'blue' | 'emerald' | 'amber' | 'rose' | 'slate';
 }
 
 const WIDTH_MAP: Record<PanelWidth, string> = {
@@ -49,12 +32,16 @@ const BADGE_COLORS: Record<string, string> = {
 };
 
 export const SidePanel: React.FC<SidePanelProps> = ({
-  isOpen, onClose, title, subtitle, width = 'lg',
-  children, footer, badge, badgeColor = 'blue',
+  isOpen,
+  onClose,
+  title,
+  subtitle,
+  width = 'lg',
+  children,
+  footer,
+  badge,
+  badgeColor = 'blue',
 }) => {
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  // Close on Escape key
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) onClose();
@@ -63,48 +50,29 @@ export const SidePanel: React.FC<SidePanelProps> = ({
     return () => document.removeEventListener('keydown', handleKey);
   }, [isOpen, onClose]);
 
-  // Prevent body scroll when panel open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
     }
-    return () => { document.body.style.overflow = ''; };
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, [isOpen]);
 
   return (
-    <>
-      {/* Backdrop */}
+    <React.Fragment>
       <div
-        className={`fixed inset-0 z-[200] transition-all duration-300 ${
-          isOpen
-            ? 'bg-slate-900/40 backdrop-blur-[2px] pointer-events-auto'
-            : 'bg-transparent pointer-events-none'
-        }`}
+        className={`fixed inset-0 z-[200] transition-all duration-300 ${isOpen ? 'bg-slate-900/40 backdrop-blur-sm pointer-events-auto' : 'bg-transparent pointer-events-none'}`}
         onClick={onClose}
       />
-
-      {/* Panel */}
       <div
-        ref={panelRef}
-        className={`
-          fixed top-0 right-0 h-full z-[201]
-          ${WIDTH_MAP[width]}
-          bg-white shadow-2xl
-          flex flex-col
-          transition-transform duration-300 ease-out
-          ${isOpen ? 'translate-x-0' : 'translate-x-full'}
-          no-print
-        `}
+        className={`fixed top-0 right-0 h-full z-[201] ${WIDTH_MAP[width]} bg-white shadow-2xl flex flex-col transition-transform duration-300 ease-out no-print ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
       >
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white shrink-0">
           <div className="flex items-center space-x-3 min-w-0">
-            {/* Breadcrumb feel */}
-            <div className="flex items-center space-x-2 text-slate-400">
-              <ChevronRight size={14} />
-            </div>
+            <ChevronRight size={14} className="text-slate-400" />
             <div className="min-w-0">
               <div className="flex items-center space-x-2">
                 <h2 className="text-sm font-black uppercase tracking-tight text-slate-900 truncate">
@@ -130,20 +98,16 @@ export const SidePanel: React.FC<SidePanelProps> = ({
             <X size={16} />
           </button>
         </div>
-
-        {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
           {children}
         </div>
-
-        {/* Footer (sticky) */}
         {footer && (
           <div className="shrink-0 border-t border-slate-100 bg-white px-6 py-4">
             {footer}
           </div>
         )}
       </div>
-    </>
+    </React.Fragment>
   );
 };
 
