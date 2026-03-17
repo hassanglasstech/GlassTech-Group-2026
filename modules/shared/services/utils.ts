@@ -22,15 +22,13 @@ export const safeParse = (key: string, defaultValue: string = '[]') => {
     const item = localStorage.getItem(key);
     if (!item) return JSON.parse(defaultValue);
     const parsed = JSON.parse(item);
-    // Must be array for collection keys
+    // Must be array for collection keys — silent reset, no console.warn spam
     if (defaultValue === '[]' && !Array.isArray(parsed)) {
-      console.warn(`[Storage] Corrupted data in ${key} — not an array. Resetting.`);
       localStorage.removeItem(key);
       return [];
     }
     return parsed;
   } catch (e) {
-    console.error(`[Storage] Corrupted data in ${key}. Resetting.`, e);
     try { localStorage.removeItem(key); } catch {}
     return JSON.parse(defaultValue);
   }
