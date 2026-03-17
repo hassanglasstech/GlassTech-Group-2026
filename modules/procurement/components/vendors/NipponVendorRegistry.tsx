@@ -166,90 +166,76 @@ const NipponVendorRegistry: React.FC = () => {
           </table>
       </div>
 
-      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Vendor" width="md">
-              <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in duration-200 border border-slate-300">
-                  <div className="px-8 py-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
-                      <div>
-                          <h3 className="text-xl font-black uppercase tracking-tight">{editingId ? 'Edit Partner' : 'New Registration'}</h3>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Vendor Master Data</p>
-                      </div>
-                      <button onClick={handleCloseModal} className="hover:bg-white/10 p-2 rounded-full transition-colors"><X size={24}/></button>
-                  </div>
-                  
-                  <div className="p-8 bg-slate-50 space-y-6">
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Company Name</label>
-                          <input 
-                              type="text" 
-                              className="sap-input w-full font-black uppercase text-sm" 
-                              value={formData.name} 
-                              onChange={e => setFormData({...formData, name: e.target.value})}
-                              placeholder="e.g. AL-NOOR ALUMINIUM"
-                          />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Nick Name</label>
-                              <input 
-                                  type="text" 
-                                  className="sap-input w-full font-bold uppercase text-xs" 
-                                  value={formData.nickName} 
-                                  onChange={e => setFormData({...formData, nickName: e.target.value})}
-                                  placeholder="e.g. ANA"
-                              />
-                          </div>
-                          <div className="space-y-1">
-                              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Registration Date</label>
-                              <input 
-                                  type="date" 
-                                  className="sap-input w-full font-bold text-xs" 
-                                  value={formData.registrationDate} 
-                                  onChange={e => setFormData({...formData, registrationDate: e.target.value})}
-                              />
-                          </div>
-                      </div>
-
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Address</label>
-                          <textarea 
-                              className="sap-input w-full font-bold uppercase text-xs h-20 resize-none" 
-                              value={formData.address} 
-                              onChange={e => setFormData({...formData, address: e.target.value})}
-                              placeholder="Full Business Address..."
-                          />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact Person</label>
-                              <input 
-                                  type="text" 
-                                  className="sap-input w-full font-bold uppercase text-xs" 
-                                  value={formData.contactPerson} 
-                                  onChange={e => setFormData({...formData, contactPerson: e.target.value})}
-                              />
-                          </div>
-                          <div className="space-y-1">
-                              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Phone Number</label>
-                              <input 
-                                  type="text" 
-                                  className="sap-input w-full font-bold text-xs" 
-                                  value={formData.phone} 
-                                  onChange={e => setFormData({...formData, phone: e.target.value})}
-                              />
-                          </div>
-                      </div>
-                  </div>
-
-                  <div className="px-8 py-6 bg-white border-t flex justify-end space-x-3">
-                      <button onClick={handleCloseModal} className="px-6 py-2 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-600">Discard</button>
-                      <button onClick={handleSave} className="bg-slate-900 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-red-600 transition-all flex items-center space-x-2">
-                          <Save size={16}/> <span>Save Vendor</span>
-                      </button>
-                  </div>
-              </div>
-          </SidePanel>
+      <SidePanel isOpen={isModalOpen} onClose={handleCloseModal} title={editingId ? 'Edit Partner' : 'New Registration'} width="md">
+        <div className="p-8 bg-slate-50 space-y-6">
+          <div className="space-y-1">
+            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Company Name</label>
+            <input
+              type="text"
+              className="sap-input w-full font-black uppercase text-sm"
+              value={formData.name}
+              onChange={e => setFormData({...formData, name: e.target.value})}
+              placeholder="e.g. AL-NOOR ALUMINIUM"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Nick Name</label>
+              <input
+                type="text"
+                className="sap-input w-full font-bold uppercase text-xs"
+                value={formData.nickName}
+                onChange={e => setFormData({...formData, nickName: e.target.value})}
+                placeholder="e.g. ANA"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Registration Date</label>
+              <input
+                type="date"
+                className="sap-input w-full font-bold text-xs"
+                value={formData.registrationDate}
+                onChange={e => setFormData({...formData, registrationDate: e.target.value})}
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Address</label>
+            <textarea
+              className="sap-input w-full font-bold uppercase text-xs h-20 resize-none"
+              value={formData.address}
+              onChange={e => setFormData({...formData, address: e.target.value})}
+              placeholder="Full Business Address..."
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contact Person</label>
+              <input
+                type="text"
+                className="sap-input w-full font-bold uppercase text-xs"
+                value={formData.contactPerson}
+                onChange={e => setFormData({...formData, contactPerson: e.target.value})}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Phone Number</label>
+              <input
+                type="text"
+                className="sap-input w-full font-bold text-xs"
+                value={formData.phone}
+                onChange={e => setFormData({...formData, phone: e.target.value})}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end space-x-3 pt-2">
+            <button onClick={handleCloseModal} className="px-6 py-2 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-600">Discard</button>
+            <button onClick={handleSave} className="bg-slate-900 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-red-600 transition-all flex items-center space-x-2">
+              <Save size={16}/> <span>Save Vendor</span>
+            </button>
+          </div>
+        </div>
+      </SidePanel>
     </div>
   );
 };

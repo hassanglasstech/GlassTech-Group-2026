@@ -167,55 +167,35 @@ const ProjectPortfolio: React.FC<ProjectPortfolioProps> = ({ projects, clients, 
                 })}
             </div>
 
-            <SidePanel isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} title="New Project" width="xl">
-          <div className="p-6">                        <div className="px-8 py-6 bg-slate-900 text-white border-b flex justify-between items-center shrink-0">
-                            <div><h3 className="font-black uppercase text-xl">Project Budget Initiation</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Cost Center Setup</p></div>
-                            <button onClick={() => setIsCreateOpen(false)}><Plus size={24} className="rotate-45"/></button>
+            <SidePanel isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} title="Project Budget Initiation" width="xl">
+                <div className="p-8 space-y-8 bg-slate-50">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="col-span-2"><label className="text-[10px] font-black uppercase text-slate-500 ml-1">Project Title</label><input type="text" className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold uppercase" value={newProjectForm.title} onChange={e => setNewProjectForm({...newProjectForm, title: e.target.value})} /></div>
+                        <div>
+                            <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Client (Search)</label>
+                            <input list="clientOptions" className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm" value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Type to search..." />
+                            <datalist id="clientOptions">{clients.map(c => <option key={c.id} value={c.name} />)}</datalist>
                         </div>
-                        <div className="p-8 space-y-8 overflow-y-auto bg-slate-50">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="col-span-2"><label className="text-[10px] font-black uppercase text-slate-500 ml-1">Project Title</label><input type="text" className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold uppercase" value={newProjectForm.title} onChange={e => setNewProjectForm({...newProjectForm, title: e.target.value})} /></div>
-                                
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Client (Search)</label>
-                                    <input 
-                                        list="clientOptions" 
-                                        className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm" 
-                                        value={clientSearch} 
-                                        onChange={e => setClientSearch(e.target.value)} 
-                                        placeholder="Type to search..."
-                                    />
-                                    <datalist id="clientOptions">
-                                        {clients.map(c => <option key={c.id} value={c.name} />)}
-                                    </datalist>
-                                </div>
-                                
-                                <div><label className="text-[10px] font-black uppercase text-slate-500 ml-1">Manual Ref</label><input type="text" className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold uppercase" value={newProjectForm.manualRef} onChange={e => setNewProjectForm({...newProjectForm, manualRef: e.target.value})} /></div>
-                                
-                                <div className="col-span-2">
-                                    <label className="text-[10px] font-black uppercase text-emerald-600 ml-1">Total Project Value (Contract Price)</label>
-                                    <input 
-                                        type="number" 
-                                        className="w-full p-3 bg-emerald-50 border border-emerald-200 rounded-xl font-black text-emerald-800 text-lg" 
-                                        value={newProjectForm.finalSettlementValue || ''} 
-                                        onChange={e => setNewProjectForm({...newProjectForm, finalSettlementValue: Number(e.target.value)})} 
-                                        placeholder="Enter Final Settlement Amount"
-                                    />
-                                </div>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-                                {[{l:'Glass Budget',i:Layout,k:'glassValue'}, {l:'Aluminium Budget',i:PenTool,k:'aluminiumValue'}, {l:'Hardware Budget',i:Hash,k:'hardwareValue'}, {l:'Consumables Budget',i:Box,k:'consumablesValue'}, {l:'Installation Budget',i:Hammer,k:'installationValue'}].map((f:any) => (
-                                    <div key={f.k}>
-                                        <label className="text-[10px] font-black uppercase text-slate-500 ml-1 flex items-center gap-1"><f.i size={10}/> {f.l}</label>
-                                        <input type="number" className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-800" value={newProjectForm[f.k as keyof typeof newProjectForm]} onChange={e => setNewProjectForm({...newProjectForm, [f.k]: Number(e.target.value)})} placeholder="0"/>
-                                    </div>
-                                ))}
-                            </div>
+                        <div><label className="text-[10px] font-black uppercase text-slate-500 ml-1">Manual Ref</label><input type="text" className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold uppercase" value={newProjectForm.manualRef} onChange={e => setNewProjectForm({...newProjectForm, manualRef: e.target.value})} /></div>
+                        <div className="col-span-2">
+                            <label className="text-[10px] font-black uppercase text-emerald-600 ml-1">Total Project Value (Contract Price)</label>
+                            <input type="number" className="w-full p-3 bg-emerald-50 border border-emerald-200 rounded-xl font-black text-emerald-800 text-lg" value={newProjectForm.finalSettlementValue || ''} onChange={e => setNewProjectForm({...newProjectForm, finalSettlementValue: Number(e.target.value)})} placeholder="Enter Final Settlement Amount" />
                         </div>
-                        <div className="px-8 py-6 bg-white border-t flex justify-end space-x-3 shrink-0"><button onClick={() => setIsCreateOpen(false)} className="px-6 py-2 text-slate-400 font-bold uppercase text-xs">Cancel</button><button onClick={handleCreateProject} className="bg-slate-900 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-blue-600 transition-all flex items-center space-x-2"><Save size={14}/> <span>Activate</span></button></div>
                     </div>
-        </SidePanel>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                        {[{l:'Glass Budget',i:Layout,k:'glassValue'}, {l:'Aluminium Budget',i:PenTool,k:'aluminiumValue'}, {l:'Hardware Budget',i:Hash,k:'hardwareValue'}, {l:'Consumables Budget',i:Box,k:'consumablesValue'}, {l:'Installation Budget',i:Hammer,k:'installationValue'}].map((f:any) => (
+                            <div key={f.k}>
+                                <label className="text-[10px] font-black uppercase text-slate-500 ml-1 flex items-center gap-1"><f.i size={10}/> {f.l}</label>
+                                <input type="number" className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-800" value={newProjectForm[f.k as keyof typeof newProjectForm]} onChange={e => setNewProjectForm({...newProjectForm, [f.k]: Number(e.target.value)})} placeholder="0"/>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="px-8 py-6 bg-white border-t flex justify-end space-x-3">
+                    <button onClick={() => setIsCreateOpen(false)} className="px-6 py-2 text-slate-400 font-bold uppercase text-xs">Cancel</button>
+                    <button onClick={handleCreateProject} className="bg-slate-900 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-blue-600 transition-all flex items-center space-x-2"><Save size={14}/> <span>Activate</span></button>
+                </div>
+            </SidePanel>
         </div>
     );
 };

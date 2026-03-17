@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Company, Account, LedgerTransaction } from '../../shared/types';
-import { FinanceService } from '../services/financeService';
+import { Company, Account, LedgerTransaction } from '@/modules/shared/types';
+import { FinanceService } from '@/modules/finance/services/financeService';
 import { SidePanel } from '@/modules/shared/components/SidePanel';
 import { 
   ChevronRight, ChevronDown, Folder, FileText, Plus, X, 
@@ -432,274 +432,179 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
       </div>
 
       {/* OPENING BALANCES MODAL */}
-      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div className="p-6 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 z-[500]">
-           <div className="bg-white rounded w-full max-w-5xl h-[90vh] shadow-2xl flex flex-col overflow-hidden border border-slate-300">
-              <div className="px-10 py-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
-                 <div>
-                    <h3 className="text-2xl font-black uppercase tracking-tight">System Opening Balances</h3>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Double Entry Initialization | Level 5 Accounts</p>
-                 </div>
-                 <button onClick={() => setIsOBModalOpen(false)} className="hover:bg-white/10 p-2 rounded transition-colors"><X size={24} /></button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto bg-slate-50 p-8">
-                 <table className="w-full bg-white shadow-sm border text-left">
-                    <thead className="bg-slate-100 text-[10px] font-black uppercase text-slate-500 sticky top-0 z-10">
-                       <tr>
-                          <th className="p-3 border-b">Account Code</th>
-                          <th className="p-3 border-b">Account Title</th>
-                          <th className="p-3 border-b text-right w-40">Debit (PKR)</th>
-                          <th className="p-3 border-b text-right w-40">Credit (PKR)</th>
-                       </tr>
-                    </thead>
-                    <tbody className="divide-y text-xs font-bold text-slate-700">
-                       {accounts.filter(a => a.level === 5).sort((a,b) => a.code.localeCompare(b.code)).map(acc => (
-                          <tr key={acc.id} className="hover:bg-blue-50/50">
-                             <td className="p-3 font-mono text-slate-400">{acc.code}</td>
-                             <td className="p-3">{acc.name}</td>
-                             <td className="p-2 text-right">
-                                <input 
-                                  type="number" 
-                                  className="w-full text-right p-2 border rounded bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none" 
-                                  value={obEntries[acc.id]?.debit || ''}
-                                  onChange={e => updateOBEntry(acc.id, 'debit', e.target.value)}
-                                  placeholder="0"
-                                />
-                             </td>
-                             <td className="p-2 text-right">
-                                <input 
-                                  type="number" 
-                                  className="w-full text-right p-2 border rounded bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none" 
-                                  value={obEntries[acc.id]?.credit || ''}
-                                  onChange={e => updateOBEntry(acc.id, 'credit', e.target.value)}
-                                  placeholder="0"
-                                />
-                             </td>
-                          </tr>
-                       ))}
-                    </tbody>
-                 </table>
-              </div>
-
-              <div className="px-10 py-6 bg-white border-t flex justify-between items-center shrink-0">
-                 <div className="flex items-center space-x-8 text-sm">
-                    <div>
-                       <span className="text-[10px] font-black uppercase text-slate-400 block">Total Debit</span>
-                       <span className="font-black text-slate-900">{obTotalDr.toLocaleString()}</span>
-                    </div>
-                    <div>
-                       <span className="text-[10px] font-black uppercase text-slate-400 block">Total Credit</span>
-                       <span className="font-black text-slate-900">{obTotalCr.toLocaleString()}</span>
-                    </div>
-                    <div className={`px-4 py-2 rounded border ${obDiff === 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
-                       <span className="text-[10px] font-black uppercase block">Difference</span>
-                       <span className="font-black">{obDiff.toLocaleString()}</span>
-                    </div>
-                 </div>
-                 <div className="flex space-x-3">
-                    <button onClick={() => setIsOBModalOpen(false)} className="sap-btn-ghost">Cancel</button>
-                    <button onClick={handleSaveOpeningBalances} disabled={Math.abs(obDiff) > 0.01} className="sap-btn-primary disabled:opacity-50 disabled:cursor-not-allowed">Post Balances</button>
-                 </div>
-              </div>
-           </div>
+      <SidePanel isOpen={isOBModalOpen} onClose={() => setIsOBModalOpen(false)} title="System Opening Balances" subtitle="Double Entry Initialization | Level 5 Accounts" width="xl">
+        <div className="flex-1 overflow-y-auto bg-slate-50 p-8">
+          <table className="w-full bg-white shadow-sm border text-left">
+            <thead className="bg-slate-100 text-[10px] font-black uppercase text-slate-500 sticky top-0 z-10">
+              <tr>
+                <th className="p-3 border-b">Account Code</th>
+                <th className="p-3 border-b">Account Title</th>
+                <th className="p-3 border-b text-right w-40">Debit (PKR)</th>
+                <th className="p-3 border-b text-right w-40">Credit (PKR)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y text-xs font-bold text-slate-700">
+              {accounts.filter(a => a.level === 5).sort((a,b) => a.code.localeCompare(b.code)).map(acc => (
+                <tr key={acc.id} className="hover:bg-blue-50/50">
+                  <td className="p-3 font-mono text-slate-400">{acc.code}</td>
+                  <td className="p-3">{acc.name}</td>
+                  <td className="p-2 text-right">
+                    <input type="number" className="w-full text-right p-2 border rounded bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none" value={obEntries[acc.id]?.debit || ''} onChange={e => updateOBEntry(acc.id, 'debit', e.target.value)} placeholder="0" />
+                  </td>
+                  <td className="p-2 text-right">
+                    <input type="number" className="w-full text-right p-2 border rounded bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none" value={obEntries[acc.id]?.credit || ''} onChange={e => updateOBEntry(acc.id, 'credit', e.target.value)} placeholder="0" />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      )}
+        <div className="px-10 py-6 bg-white border-t flex justify-between items-center">
+          <div className="flex items-center space-x-8 text-sm">
+            <div><span className="text-[10px] font-black uppercase text-slate-400 block">Total Debit</span><span className="font-black text-slate-900">{obTotalDr.toLocaleString()}</span></div>
+            <div><span className="text-[10px] font-black uppercase text-slate-400 block">Total Credit</span><span className="font-black text-slate-900">{obTotalCr.toLocaleString()}</span></div>
+            <div className={`px-4 py-2 rounded border ${obDiff === 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
+              <span className="text-[10px] font-black uppercase block">Difference</span>
+              <span className="font-black">{obDiff.toLocaleString()}</span>
+            </div>
+          </div>
+          <div className="flex space-x-3">
+            <button onClick={() => setIsOBModalOpen(false)} className="sap-btn-ghost">Cancel</button>
+            <button onClick={handleSaveOpeningBalances} disabled={Math.abs(obDiff) > 0.01} className="sap-btn-primary disabled:opacity-50 disabled:cursor-not-allowed">Post Balances</button>
+          </div>
+        </div>
+      </SidePanel>
 
       {/* ADD MODAL */}
-      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div className="p-6 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
-          <div className="bg-white rounded w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-300 animate-in zoom-in duration-200">
-            <div className="sap-object-header flex justify-between items-start shrink-0">
-               <div>
-                  <div className="flex items-center space-x-3 text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-2">
-                    <Landmark size={14}/> <span>Transaction: FSS0 Account Create</span>
-                  </div>
-                  <h3 className="text-2xl font-bold uppercase tracking-tight">Financial Node Maintenance</h3>
-               </div>
-               <button onClick={() => setIsAddModalOpen(false)} className="hover:bg-white/10 p-2 rounded transition-colors"><X size={24} /></button>
+      <SidePanel isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Financial Node Maintenance" subtitle="Transaction: FSS0 Account Create" width="md">
+        <div className="p-8 space-y-6 bg-slate-50">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase text-slate-500">Level 1: Account Class</label>
+              <select value={addSelections.l1} onChange={e => setAddSelections({ l1: e.target.value, l2: '', l3: '', l4: '' })} className="sap-input w-full font-bold">
+                <option value="">Select Class...</option>
+                {add_l1List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
+              </select>
             </div>
-            
-            <div className="p-8 space-y-6 bg-slate-50 flex-1 overflow-y-auto">
-               <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                     <label className="text-[10px] font-bold uppercase text-slate-500">Level 1: Account Class</label>
-                     <select value={addSelections.l1} onChange={e => setAddSelections({ l1: e.target.value, l2: '', l3: '', l4: '' })} className="sap-input w-full font-bold">
-                        <option value="">Select Class...</option>
-                        {add_l1List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
-                     </select>
-                  </div>
-                  <div className="space-y-1">
-                     <label className="text-[10px] font-bold uppercase text-slate-500">Level 2: IFRS Group</label>
-                     <select disabled={!addSelections.l1} value={addSelections.l2} onChange={e => setAddSelections({ ...addSelections, l2: e.target.value, l3: '', l4: '' })} className="sap-input w-full font-bold">
-                        <option value="">Select Group...</option>
-                        {add_l2List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
-                     </select>
-                  </div>
-                  <div className="space-y-1">
-                     <label className="text-[10px] font-bold uppercase text-slate-500">Level 3: Control Account</label>
-                     <select disabled={!addSelections.l2} value={addSelections.l3} onChange={e => setAddSelections({ ...addSelections, l3: e.target.value, l4: '' })} className="sap-input w-full font-bold">
-                        <option value="">Select Control...</option>
-                        {add_l3List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
-                     </select>
-                  </div>
-                  <div className="space-y-1">
-                     <label className="text-[10px] font-bold uppercase text-slate-500">Level 4: Sub-Ledger</label>
-                     <select disabled={!addSelections.l3} value={addSelections.l4} onChange={e => setAddSelections({ ...addSelections, l4: e.target.value })} className="sap-input w-full font-bold">
-                        <option value="">Select Sub-Ledger (Optional)...</option>
-                        {add_l4List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
-                     </select>
-                  </div>
-               </div>
-
-               <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start space-x-3">
-                  <Info size={20} className="text-blue-600 shrink-0"/>
-                  <p className="text-xs text-blue-800 leading-tight">
-                     <strong>Hierarchy Logic:</strong> Selecting a Level 4 parent will create a Level 5 (Transaction) account. Selecting Level 3 will create Level 4, and so on.
-                  </p>
-               </div>
-
-               <div className="space-y-4 pt-4 border-t border-slate-200">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold uppercase text-slate-500">New Account Description</label>
-                      <input type="text" placeholder="e.g. Furnace A" value={newAccName} onChange={e => setNewAccName(e.target.value)} className="sap-input w-full font-bold" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold uppercase text-slate-500">Manual G/L Code</label>
-                      <input type="text" placeholder="Auto if blank" value={newAccCode} onChange={e => setNewAccCode(e.target.value)} className="sap-input w-full font-mono font-bold text-blue-600" />
-                    </div>
-                  </div>
-               </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase text-slate-500">Level 2: IFRS Group</label>
+              <select disabled={!addSelections.l1} value={addSelections.l2} onChange={e => setAddSelections({ ...addSelections, l2: e.target.value, l3: '', l4: '' })} className="sap-input w-full font-bold">
+                <option value="">Select Group...</option>
+                {add_l2List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
+              </select>
             </div>
-
-            <div className="px-8 py-4 bg-white border-t flex justify-end space-x-3 shrink-0">
-               <button onClick={() => setIsAddModalOpen(false)} className="sap-btn-ghost">Cancel</button>
-               <button onClick={handleSaveAccount} disabled={!addSelections.l1 || !newAccName} className="sap-btn-primary disabled:opacity-30">Save Account</button>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase text-slate-500">Level 3: Control Account</label>
+              <select disabled={!addSelections.l2} value={addSelections.l3} onChange={e => setAddSelections({ ...addSelections, l3: e.target.value, l4: '' })} className="sap-input w-full font-bold">
+                <option value="">Select Control...</option>
+                {add_l3List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase text-slate-500">Level 4: Sub-Ledger</label>
+              <select disabled={!addSelections.l3} value={addSelections.l4} onChange={e => setAddSelections({ ...addSelections, l4: e.target.value })} className="sap-input w-full font-bold">
+                <option value="">Select Sub-Ledger (Optional)...</option>
+                {add_l4List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start space-x-3">
+            <Info size={20} className="text-blue-600 shrink-0"/>
+            <p className="text-xs text-blue-800 leading-tight"><strong>Hierarchy Logic:</strong> Selecting a Level 4 parent will create a Level 5 (Transaction) account. Selecting Level 3 will create Level 4, and so on.</p>
+          </div>
+          <div className="space-y-4 pt-4 border-t border-slate-200">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-slate-500">New Account Description</label>
+                <input type="text" placeholder="e.g. Furnace A" value={newAccName} onChange={e => setNewAccName(e.target.value)} className="sap-input w-full font-bold" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-slate-500">Manual G/L Code</label>
+                <input type="text" placeholder="Auto if blank" value={newAccCode} onChange={e => setNewAccCode(e.target.value)} className="sap-input w-full font-mono font-bold text-blue-600" />
+              </div>
             </div>
           </div>
         </div>
-      )}
+        <div className="px-8 py-4 bg-white border-t flex justify-end space-x-3">
+          <button onClick={() => setIsAddModalOpen(false)} className="sap-btn-ghost">Cancel</button>
+          <button onClick={handleSaveAccount} disabled={!addSelections.l1 || !newAccName} className="sap-btn-primary disabled:opacity-30">Save Account</button>
+        </div>
+      </SidePanel>
 
       {/* EDIT MODAL */}
-      {isEditModalOpen && editingAccount && (
-        <SidePanel isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Account" width="md">
-          <div className="bg-white rounded w-full max-w-lg shadow-2xl overflow-hidden flex flex-col border border-slate-300 animate-in zoom-in duration-200">
-            <div className="bg-slate-900 px-8 py-6 text-white flex justify-between items-center shrink-0">
-               <div className="flex items-center space-x-3">
-                  <Edit2 size={20}/>
-                  <h3 className="text-xl font-bold uppercase tracking-tight">Edit Account</h3>
-               </div>
-               <button onClick={() => setIsEditModalOpen(false)}><X size={24}/></button>
-            </div>
-            
-            <div className="p-8 space-y-6 bg-slate-50">
-               <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl">
-                  <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">Hierarchy Context</p>
-                  <p className="text-sm font-bold text-slate-800">Level {editingAccount.level} Node</p>
-               </div>
-
-               <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase text-slate-500">Account Description</label>
-                  <input 
-                    type="text" 
-                    value={editName} 
-                    onChange={e => setEditName(e.target.value)} 
-                    className="sap-input w-full font-bold"
-                  />
-               </div>
-
-               <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase text-slate-500">G/L Code</label>
-                  <input 
-                    type="text" 
-                    value={editCode} 
-                    onChange={e => setEditCode(e.target.value)} 
-                    className="sap-input w-full font-mono font-bold text-blue-600"
-                  />
-               </div>
-            </div>
-
-            <div className="px-8 py-4 bg-white border-t flex justify-end space-x-3 shrink-0">
-               <button onClick={() => setIsEditModalOpen(false)} className="sap-btn-ghost">Cancel</button>
-               <button onClick={handleUpdateAccount} className="sap-btn-primary">Update Account</button>
-            </div>
+      <SidePanel isOpen={isEditModalOpen && !!editingAccount} onClose={() => setIsEditModalOpen(false)} title="Edit Account" width="md">
+        <div className="p-8 space-y-6 bg-slate-50">
+          <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl">
+            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">Hierarchy Context</p>
+            <p className="text-sm font-bold text-slate-800">Level {editingAccount?.level} Node</p>
           </div>
-        </SidePanel>
-      )}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold uppercase text-slate-500">Account Description</label>
+            <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="sap-input w-full font-bold" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold uppercase text-slate-500">G/L Code</label>
+            <input type="text" value={editCode} onChange={e => setEditCode(e.target.value)} className="sap-input w-full font-mono font-bold text-blue-600" />
+          </div>
+        </div>
+        <div className="px-8 py-4 bg-white border-t flex justify-end space-x-3">
+          <button onClick={() => setIsEditModalOpen(false)} className="sap-btn-ghost">Cancel</button>
+          <button onClick={handleUpdateAccount} className="sap-btn-primary">Update Account</button>
+        </div>
+      </SidePanel>
 
-      {isDeleteModalOpen && (
-      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div className="p-6 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
-          <div className="bg-white rounded w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-300 animate-in zoom-in duration-200">
-            <div className="bg-[#bb0000] p-6 text-white flex justify-between items-center shrink-0">
-               <div className="flex items-center space-x-3">
-                  <Trash2 size={24}/>
-                  <h3 className="text-xl font-bold uppercase">Decommission Node</h3>
-               </div>
-               <button onClick={() => setIsDeleteModalOpen(false)}><X size={24}/></button>
+      {/* DELETE MODAL */}
+      <SidePanel isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Decommission Node" width="md">
+        <div className="p-8 space-y-6 bg-slate-50">
+          <div className="bg-rose-50 p-4 border border-rose-100 rounded-xl flex items-start space-x-3">
+            <ShieldAlert size={20} className="text-rose-600 shrink-0"/>
+            <p className="text-xs text-rose-800 leading-tight"><strong>Safety Protocol:</strong> You can only delete accounts that have <u>no sub-accounts</u> or children nodes. Please delete from the bottom (Level 5) up.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase text-slate-500">Level 1: Account Class</label>
+              <select value={delSelections.l1} onChange={e => setDelSelections({ l1: e.target.value, l2: '', l3: '', l4: '', l5: '' })} className="sap-input w-full font-bold">
+                <option value="">Select Class...</option>
+                {del_l1List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
+              </select>
             </div>
-            
-            <div className="p-8 space-y-6 bg-slate-50 flex-1 overflow-y-auto">
-               <div className="bg-rose-50 p-4 border border-rose-100 rounded-xl flex items-start space-x-3">
-                  <ShieldAlert size={20} className="text-rose-600 shrink-0"/>
-                  <p className="text-xs text-rose-800 leading-tight">
-                     <strong>Safety Protocol:</strong> You can only delete accounts that have <u>no sub-accounts</u> or children nodes. Please delete from the bottom (Level 5) up.
-                  </p>
-               </div>
-
-               <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                     <label className="text-[10px] font-bold uppercase text-slate-500">Level 1: Account Class</label>
-                     <select value={delSelections.l1} onChange={e => setDelSelections({ l1: e.target.value, l2: '', l3: '', l4: '', l5: '' })} className="sap-input w-full font-bold">
-                        <option value="">Select Class...</option>
-                        {del_l1List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
-                     </select>
-                  </div>
-                  <div className="space-y-1">
-                     <label className="text-[10px] font-bold uppercase text-slate-500">Level 2: Group</label>
-                     <select disabled={!delSelections.l1} value={delSelections.l2} onChange={e => setDelSelections({ ...delSelections, l2: e.target.value, l3: '', l4: '', l5: '' })} className="sap-input w-full font-bold">
-                        <option value="">Select Group (Target?)...</option>
-                        {del_l2List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
-                     </select>
-                  </div>
-                  <div className="space-y-1">
-                     <label className="text-[10px] font-bold uppercase text-slate-500">Level 3: Control</label>
-                     <select disabled={!delSelections.l2} value={delSelections.l3} onChange={e => setDelSelections({ ...delSelections, l3: e.target.value, l4: '', l5: '' })} className="sap-input w-full font-bold">
-                        <option value="">Select Control (Target?)...</option>
-                        {del_l3List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
-                     </select>
-                  </div>
-                  <div className="space-y-1">
-                     <label className="text-[10px] font-bold uppercase text-slate-500">Level 4: Sub-Ledger</label>
-                     <select disabled={!delSelections.l3} value={delSelections.l4} onChange={e => setDelSelections({ ...delSelections, l4: e.target.value, l5: '' })} className="sap-input w-full font-bold">
-                        <option value="">Select Sub-Ledger (Target?)...</option>
-                        {del_l4List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
-                     </select>
-                  </div>
-                  <div className="space-y-1 col-span-2">
-                     <label className="text-[10px] font-bold uppercase text-slate-500">Level 5: Transaction</label>
-                     <select disabled={!delSelections.l4} value={delSelections.l5} onChange={e => setDelSelections({ ...delSelections, l5: e.target.value })} className="sap-input w-full font-bold">
-                        <option value="">Select Transaction Acc (Target?)...</option>
-                        {del_l5List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
-                     </select>
-                  </div>
-               </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase text-slate-500">Level 2: Group</label>
+              <select disabled={!delSelections.l1} value={delSelections.l2} onChange={e => setDelSelections({ ...delSelections, l2: e.target.value, l3: '', l4: '', l5: '' })} className="sap-input w-full font-bold">
+                <option value="">Select Group (Target?)...</option>
+                {del_l2List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
+              </select>
             </div>
-
-            <div className="px-8 py-4 bg-white border-t flex justify-end space-x-3 shrink-0">
-               <button onClick={() => setIsDeleteModalOpen(false)} className="sap-btn-ghost">Cancel</button>
-               <button 
-                 onClick={handleProcessDelete} 
-                 disabled={!delSelections.l1} 
-                 className="bg-[#bb0000] text-white px-6 py-2 rounded font-bold text-sm hover:bg-[#a00000] disabled:opacity-30 flex items-center space-x-2"
-               >
-                 <Trash2 size={16}/> <span>Confirm Delete</span>
-               </button>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase text-slate-500">Level 3: Control</label>
+              <select disabled={!delSelections.l2} value={delSelections.l3} onChange={e => setDelSelections({ ...delSelections, l3: e.target.value, l4: '', l5: '' })} className="sap-input w-full font-bold">
+                <option value="">Select Control (Target?)...</option>
+                {del_l3List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase text-slate-500">Level 4: Sub-Ledger</label>
+              <select disabled={!delSelections.l3} value={delSelections.l4} onChange={e => setDelSelections({ ...delSelections, l4: e.target.value, l5: '' })} className="sap-input w-full font-bold">
+                <option value="">Select Sub-Ledger (Target?)...</option>
+                {del_l4List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1 col-span-2">
+              <label className="text-[10px] font-bold uppercase text-slate-500">Level 5: Transaction</label>
+              <select disabled={!delSelections.l4} value={delSelections.l5} onChange={e => setDelSelections({ ...delSelections, l5: e.target.value })} className="sap-input w-full font-bold">
+                <option value="">Select Transaction Acc (Target?)...</option>
+                {del_l5List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
+              </select>
             </div>
           </div>
         </div>
-      )}
+        <div className="px-8 py-4 bg-white border-t flex justify-end space-x-3">
+          <button onClick={() => setIsDeleteModalOpen(false)} className="sap-btn-ghost">Cancel</button>
+          <button onClick={handleProcessDelete} disabled={!delSelections.l1} className="bg-[#bb0000] text-white px-6 py-2 rounded font-bold text-sm hover:bg-[#a00000] disabled:opacity-30 flex items-center space-x-2">
+            <Trash2 size={16}/> <span>Confirm Delete</span>
+          </button>
+        </div>
+      </SidePanel>
     </div>
   );
 };

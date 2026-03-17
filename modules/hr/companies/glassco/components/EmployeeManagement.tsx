@@ -317,213 +317,59 @@ const EmployeeManagement: React.FC = () => {
         </div>
       </div>
 
-      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Employee" width="xl">
-          <div className="p-6">
-            {/* Header */}
-            <div className="px-8 py-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-blue-500/20 rounded-xl">
-                  {editingId ? <Briefcase className="text-blue-400" size={24} /> : <UserPlus className="text-blue-400" size={24} />}
-                </div>
-                <div>
-                  <h3 className="text-xl font-black tracking-tight uppercase">{editingId ? 'Edit Employee Profile' : 'Employee Registration'}</h3>
-                  <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">{company} Human Resources Registry</p>
-                </div>
+      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? 'Edit Employee Profile' : 'Employee Registration'} subtitle={`${company} Human Resources Registry`} width="xl">
+        <div className="flex-1 overflow-y-auto bg-slate-50">
+          <div className="p-10 space-y-8 max-w-4xl mx-auto">
+            <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+              <div className="flex items-center space-x-3 pb-4 border-b border-slate-100">
+                <UserCircle className="text-blue-600" size={22} />
+                <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight">Personal Information</h4>
               </div>
-              <button 
-                onClick={() => setIsModalOpen(false)} 
-                className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-all"
-              >
-                <X size={24} />
-              </button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto bg-slate-50">
-              <div className="p-10 space-y-8 max-w-4xl mx-auto">
-                {/* Personal Section */}
-                <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
-                  <div className="flex items-center space-x-3 pb-4 border-b border-slate-100">
-                    <UserCircle className="text-blue-600" size={22} />
-                    <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight">Personal Information</h4>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Full Name</label>
-                      <input 
-                        type="text" 
-                        placeholder="e.g. Ali Ahmed"
-                        className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
-                        value={formData.personal?.name}
-                        onChange={e => setFormData({...formData, personal: {...formData.personal!, name: e.target.value}})} 
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">CNIC Number</label>
-                      <input 
-                        type="text" 
-                        placeholder="35201-XXXXXXX-X"
-                        className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
-                        value={formData.personal?.cnic}
-                        onChange={e => setFormData({...formData, personal: {...formData.personal!, cnic: e.target.value}})} 
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Phone Number</label>
-                      <input 
-                        type="text" 
-                        placeholder="0300-XXXXXXX"
-                        className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
-                        value={formData.personal?.phone}
-                        onChange={e => setFormData({...formData, personal: {...formData.personal!, phone: e.target.value}})} 
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Residential Address</label>
-                      <input 
-                        type="text" 
-                        placeholder="Full home address"
-                        className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
-                        value={formData.personal?.address}
-                        onChange={e => setFormData({...formData, personal: {...formData.personal!, address: e.target.value}})} 
-                      />
-                    </div>
-                  </div>
-                </section>
-
-                {/* Work Section */}
-                <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
-                  <div className="flex items-center space-x-3 pb-4 border-b border-slate-100">
-                    <Briefcase className="text-indigo-600" size={22} />
-                    <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight">Employment Details</h4>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Employee ID Code</label>
-                      <input 
-                        type="text" 
-                        readOnly
-                        className="w-full bg-slate-100 border border-slate-200 p-3 rounded-xl outline-none font-black text-blue-600 uppercase cursor-not-allowed"
-                        value={formData.work?.employeeCode}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Grade</label>
-                      <div className="relative">
-                        <Layers className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                        <input 
-                          type="text" 
-                          placeholder="e.g. A, B, 17..."
-                          className="w-full bg-slate-50 border border-slate-200 p-3 pl-10 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold uppercase"
-                          value={formData.work?.grade}
-                          onChange={e => setFormData({...formData, work: {...formData.work!, grade: e.target.value}})} 
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Designation</label>
-                      <input 
-                        type="text" 
-                        placeholder="e.g. Production Manager"
-                        className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
-                        value={formData.work?.designation}
-                        onChange={e => setFormData({...formData, work: {...formData.work!, designation: e.target.value}})} 
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Department</label>
-                      <input 
-                        type="text" 
-                        placeholder="e.g. Quality Control"
-                        className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
-                        value={formData.work?.department}
-                        onChange={e => setFormData({...formData, work: {...formData.work!, department: e.target.value}})} 
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Joining Date</label>
-                      <input 
-                        type="date" 
-                        className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
-                        value={formData.work?.joinDate}
-                        onChange={e => setFormData({...formData, work: {...formData.work!, joinDate: e.target.value}})} 
-                      />
-                    </div>
-                  </div>
-                </section>
-
-                {/* Salary Section */}
-                <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
-                  <div className="flex items-center space-x-3 pb-4 border-b border-slate-100">
-                    <Wallet className="text-green-600" size={22} />
-                    <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight">Compensation Package</h4>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Basic Salary</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-[10px]">PKR</span>
-                        <input 
-                          type="number" 
-                          className="w-full bg-slate-50 border border-slate-200 p-3 pl-12 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-900"
-                          value={formData.salary?.basic || ''}
-                          onChange={e => setFormData({...formData, salary: {...formData.salary!, basic: Number(e.target.value)}})} 
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">House Rent</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-[10px]">PKR</span>
-                        <input 
-                          type="number" 
-                          className="w-full bg-slate-50 border border-slate-200 p-3 pl-12 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-900"
-                          value={formData.salary?.houseRent || ''}
-                          onChange={e => setFormData({...formData, salary: {...formData.salary!, houseRent: Number(e.target.value)}})} 
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Conveyance</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-[10px]">PKR</span>
-                        <input 
-                          type="number" 
-                          className="w-full bg-slate-50 border border-slate-200 p-3 pl-12 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-900"
-                          value={formData.salary?.conveyance || ''}
-                          onChange={e => setFormData({...formData, salary: {...formData.salary!, conveyance: Number(e.target.value)}})} 
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Special Allowance</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-[10px]">PKR</span>
-                        <input 
-                          type="number" 
-                          className="w-full bg-slate-50 border border-slate-200 p-3 pl-12 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-900"
-                          value={formData.salary?.specialAllowance || ''}
-                          onChange={e => setFormData({...formData, salary: {...formData.salary!, specialAllowance: Number(e.target.value)}})} 
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-4 p-4 bg-blue-50 rounded-2xl border border-blue-100 flex justify-between items-center">
-                    <span className="text-sm font-black text-blue-900 uppercase tracking-tighter">Gross Monthly Compensation:</span>
-                    <span className="text-xl font-black text-blue-600">
-                      PKR {((formData.salary?.basic || 0) + (formData.salary?.houseRent || 0) + (formData.salary?.conveyance || 0) + (formData.salary?.specialAllowance || 0)).toLocaleString()}
-                    </span>
-                  </div>
-                </section>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Full Name</label><input type="text" placeholder="e.g. Ali Ahmed" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold" value={formData.personal?.name} onChange={e => setFormData({...formData, personal: {...formData.personal!, name: e.target.value}})} /></div>
+                <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">CNIC Number</label><input type="text" placeholder="35201-XXXXXXX-X" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold" value={formData.personal?.cnic} onChange={e => setFormData({...formData, personal: {...formData.personal!, cnic: e.target.value}})} /></div>
+                <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Phone Number</label><input type="text" placeholder="0300-XXXXXXX" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold" value={formData.personal?.phone} onChange={e => setFormData({...formData, personal: {...formData.personal!, phone: e.target.value}})} /></div>
+                <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Residential Address</label><input type="text" placeholder="Full home address" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold" value={formData.personal?.address} onChange={e => setFormData({...formData, personal: {...formData.personal!, address: e.target.value}})} /></div>
               </div>
-            </div>
-            <div className="px-10 py-6 bg-white border-t border-slate-100 flex justify-between items-center shrink-0">
-              <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="px-6 py-3 text-slate-500 font-bold uppercase text-xs tracking-widest hover:text-slate-800">Discard Changes</button>
-              <button onClick={handleSave} className="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl hover:bg-blue-600 transition-all flex items-center space-x-2">
-                <span>{editingId ? 'Update Record' : 'Enroll Employee'}</span>
-              </button>
-            </div>
+            </section>
+
+            <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+              <div className="flex items-center space-x-3 pb-4 border-b border-slate-100">
+                <Briefcase className="text-indigo-600" size={22} />
+                <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight">Employment Details</h4>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Employee ID Code</label><input type="text" readOnly className="w-full bg-slate-100 border border-slate-200 p-3 rounded-xl outline-none font-black text-blue-600 uppercase cursor-not-allowed" value={formData.work?.employeeCode} /></div>
+                <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Grade</label><div className="relative"><Layers className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input type="text" placeholder="e.g. A, B, 17..." className="w-full bg-slate-50 border border-slate-200 p-3 pl-10 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold uppercase" value={formData.work?.grade} onChange={e => setFormData({...formData, work: {...formData.work!, grade: e.target.value}})} /></div></div>
+                <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Designation</label><input type="text" placeholder="e.g. Production Manager" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold" value={formData.work?.designation} onChange={e => setFormData({...formData, work: {...formData.work!, designation: e.target.value}})} /></div>
+                <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Department</label><input type="text" placeholder="e.g. Quality Control" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold" value={formData.work?.department} onChange={e => setFormData({...formData, work: {...formData.work!, department: e.target.value}})} /></div>
+                <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Joining Date</label><input type="date" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold" value={formData.work?.joinDate} onChange={e => setFormData({...formData, work: {...formData.work!, joinDate: e.target.value}})} /></div>
+              </div>
+            </section>
+
+            <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+              <div className="flex items-center space-x-3 pb-4 border-b border-slate-100">
+                <Wallet className="text-green-600" size={22} />
+                <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight">Compensation Package</h4>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Basic Salary</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-[10px]">PKR</span><input type="number" className="w-full bg-slate-50 border border-slate-200 p-3 pl-12 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-900" value={formData.salary?.basic || ''} onChange={e => setFormData({...formData, salary: {...formData.salary!, basic: Number(e.target.value)}})} /></div></div>
+                <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">House Rent</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-[10px]">PKR</span><input type="number" className="w-full bg-slate-50 border border-slate-200 p-3 pl-12 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-900" value={formData.salary?.houseRent || ''} onChange={e => setFormData({...formData, salary: {...formData.salary!, houseRent: Number(e.target.value)}})} /></div></div>
+                <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Conveyance</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-[10px]">PKR</span><input type="number" className="w-full bg-slate-50 border border-slate-200 p-3 pl-12 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-900" value={formData.salary?.conveyance || ''} onChange={e => setFormData({...formData, salary: {...formData.salary!, conveyance: Number(e.target.value)}})} /></div></div>
+                <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Special Allowance</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-[10px]">PKR</span><input type="number" className="w-full bg-slate-50 border border-slate-200 p-3 pl-12 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-900" value={formData.salary?.specialAllowance || ''} onChange={e => setFormData({...formData, salary: {...formData.salary!, specialAllowance: Number(e.target.value)}})} /></div></div>
+              </div>
+              <div className="mt-4 p-4 bg-blue-50 rounded-2xl border border-blue-100 flex justify-between items-center">
+                <span className="text-sm font-black text-blue-900 uppercase tracking-tighter">Gross Monthly Compensation:</span>
+                <span className="text-xl font-black text-blue-600">PKR {((formData.salary?.basic || 0) + (formData.salary?.houseRent || 0) + (formData.salary?.conveyance || 0) + (formData.salary?.specialAllowance || 0)).toLocaleString()}</span>
+              </div>
+            </section>
           </div>
-        </SidePanel>
+        </div>
+        <div className="px-10 py-6 bg-white border-t border-slate-100 flex justify-between items-center">
+          <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="px-6 py-3 text-slate-500 font-bold uppercase text-xs tracking-widest hover:text-slate-800">Discard Changes</button>
+          <button onClick={handleSave} className="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl hover:bg-blue-600 transition-all flex items-center space-x-2"><span>{editingId ? 'Update Record' : 'Enroll Employee'}</span></button>
+        </div>
+      </SidePanel>
     </div>
   );
 };

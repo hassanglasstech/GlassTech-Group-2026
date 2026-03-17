@@ -9,7 +9,7 @@ import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 
 const LoanManagement: React.FC = () => {
-  const company = 'Nippon';
+  const company = 'Glassco';
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loans, setLoans] = useState<LoanAdvance[]>([]);
   const [authorizedReqs, setAuthorizedReqs] = useState<Requisition[]>([]);
@@ -233,49 +233,35 @@ const LoanManagement: React.FC = () => {
         </table>
       </div>
 
-      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Loan/Advance" width="md">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-xl shadow-2xl flex flex-col border border-white/20 overflow-hidden">
-            <div className={`px-10 py-8 text-white flex justify-between items-center ${modalType === 'Loan' ? 'bg-slate-900' : 'bg-blue-600'}`}>
-              <div className="flex items-center space-x-4"><div className="p-3 bg-white/10 rounded-2xl shadow-inner">{modalType === 'Loan' ? <Banknote size={28} /> : <HandCoins size={28} />}</div><div><h3 className="text-2xl font-black tracking-tighter uppercase">{editingId ? 'Edit Entry' : (modalType === 'Loan' ? 'Issuance of Loan' : 'Salary Advance')}</h3><p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">Financial Ledger Entry</p></div></div>
-              <button onClick={() => { setIsModalOpen(false); setEditingId(null); }} className="hover:bg-white/10 p-2 rounded-full transition-colors"><X size={24} /></button>
+      <SidePanel isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingId(null); }} title={editingId ? 'Edit Entry' : (modalType === 'Loan' ? 'Issuance of Loan' : 'Salary Advance')} width="md">
+        <div className="p-10 space-y-8 bg-slate-50">
+          {!editingId && authorizedReqs.length > 0 && (
+            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl animate-in fade-in">
+              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 ml-1 mb-2 block">Link Approved Request (Optional)</label>
+              <select className="w-full bg-white border border-emerald-200 p-3 rounded-xl text-xs font-bold outline-none text-emerald-900" onChange={(e) => handleLinkRequisition(e.target.value)} value={newLoan.requisitionId || ''}>
+                <option value="">-- Direct Issuance (No Link) --</option>
+                {authorizedReqs.map(req => (
+                  <option key={req.id} value={req.id}>{req.id} | {req.requisitioner} | {req.reqType?.toUpperCase() || 'N/A'} | PKR {req.totalValue?.toLocaleString() || '0'}</option>
+                ))}
+              </select>
             </div>
-            <div className="p-10 space-y-8 bg-slate-50">
-              
-              {!editingId && authorizedReqs.length > 0 && (
-                  <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl animate-in fade-in">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 ml-1 mb-2 block">Link Approved Request (Optional)</label>
-                      <select 
-                          className="w-full bg-white border border-emerald-200 p-3 rounded-xl text-xs font-bold outline-none text-emerald-900"
-                          onChange={(e) => handleLinkRequisition(e.target.value)}
-                          value={newLoan.requisitionId || ''}
-                      >
-                          <option value="">-- Direct Issuance (No Link) --</option>
-                          {authorizedReqs.map(req => (
-                              <option key={req.id} value={req.id}>
-                                  {req.id} | {req.requisitioner} | {req.reqType?.toUpperCase() || 'N/A'} | PKR {req.totalValue?.toLocaleString() || '0'}
-                              </option>
-                          ))}
-                      </select>
-                  </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-8">
-                <div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Employee Profile</label><select className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl outline-none font-bold text-slate-900 shadow-sm focus:border-blue-500 transition-all" onChange={e => setNewLoan({...newLoan, employeeId: e.target.value})} value={newLoan.employeeId} disabled={!!editingId}><option value="">Select Associate...</option>{employees.map(e => <option key={e.id} value={e.id}>{e.personal.name} ({e.work.employeeCode})</option>)}</select></div>
-                <div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Ledger Date</label><input type="date" className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold outline-none shadow-sm focus:border-blue-500 transition-all" value={newLoan.date} onChange={e => setNewLoan({...newLoan, date: e.target.value})} /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-8">
-                <div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Total Principal (PKR)</label><input type="number" className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-black text-slate-900 outline-none shadow-sm focus:border-blue-500 transition-all" value={newLoan.amount || ''} onChange={e => setNewLoan({...newLoan, amount: Number(e.target.value)})} /></div>
-                {modalType === 'Loan' && (<div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Repayment/Mo (PKR)</label><input type="number" className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-black text-blue-600 outline-none shadow-sm focus:border-blue-500 transition-all" value={newLoan.repaymentAmount || ''} onChange={e => setNewLoan({...newLoan, repaymentAmount: Number(e.target.value)})} /></div>)}
-                {modalType === 'Advance' && (<div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex items-center justify-center"><p className="text-[10px] font-black text-blue-700 uppercase">Auto-Deduct Full Amount</p></div>)}
-              </div>
-              <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 flex items-start space-x-4"><AlertCircle className="text-amber-500 shrink-0 mt-1" size={20} /><p className="text-[10px] font-bold text-amber-700 uppercase leading-relaxed tracking-tight">{modalType === 'Advance' ? 'Note: This advance will be deducted in full from the upcoming salary cycle.' : 'Note: Monthly repayments will be automatically deducted during the payroll generation process.'}</p></div>
-            </div>
-            <div className="px-10 py-8 bg-white border-t flex justify-end space-x-4">
-              <button onClick={() => { setIsModalOpen(false); setEditingId(null); }} className="px-8 py-3 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-600">Discard</button>
-              <button onClick={handleSaveLoan} className={`${modalType === 'Loan' ? 'bg-slate-900' : 'bg-blue-600'} text-white px-12 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-2xl transition-all hover:scale-[1.02] active:scale-95`}>{editingId ? 'Update Record' : 'Post Transaction'}</button>
-            </div>
+          )}
+          <div className="grid grid-cols-2 gap-8">
+            <div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Employee Profile</label><select className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl outline-none font-bold text-slate-900 shadow-sm focus:border-blue-500 transition-all" onChange={e => setNewLoan({...newLoan, employeeId: e.target.value})} value={newLoan.employeeId} disabled={!!editingId}><option value="">Select Associate...</option>{employees.map(e => <option key={e.id} value={e.id}>{e.personal.name} ({e.work.employeeCode})</option>)}</select></div>
+            <div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Ledger Date</label><input type="date" className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold outline-none shadow-sm focus:border-blue-500 transition-all" value={newLoan.date} onChange={e => setNewLoan({...newLoan, date: e.target.value})} /></div>
           </div>
-        </SidePanel>
+          <div className="grid grid-cols-2 gap-8">
+            <div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Total Principal (PKR)</label><input type="number" className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-black text-slate-900 outline-none shadow-sm focus:border-blue-500 transition-all" value={newLoan.amount || ''} onChange={e => setNewLoan({...newLoan, amount: Number(e.target.value)})} /></div>
+            {modalType === 'Loan' && (<div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Repayment/Mo (PKR)</label><input type="number" className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-black text-blue-600 outline-none shadow-sm focus:border-blue-500 transition-all" value={newLoan.repaymentAmount || ''} onChange={e => setNewLoan({...newLoan, repaymentAmount: Number(e.target.value)})} /></div>)}
+            {modalType === 'Advance' && (<div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex items-center justify-center"><p className="text-[10px] font-black text-blue-700 uppercase">Auto-Deduct Full Amount</p></div>)}
+          </div>
+          <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 flex items-start space-x-4"><AlertCircle className="text-amber-500 shrink-0 mt-1" size={20} /><p className="text-[10px] font-bold text-amber-700 uppercase leading-relaxed tracking-tight">{modalType === 'Advance' ? 'Note: This advance will be deducted in full from the upcoming salary cycle.' : 'Note: Monthly repayments will be automatically deducted during the payroll generation process.'}</p></div>
+        </div>
+        <div className="px-10 py-8 bg-white border-t flex justify-end space-x-4">
+          <button onClick={() => { setIsModalOpen(false); setEditingId(null); }} className="px-8 py-3 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-600">Discard</button>
+          <button onClick={handleSaveLoan} className={`${modalType === 'Loan' ? 'bg-slate-900' : 'bg-blue-600'} text-white px-12 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-2xl transition-all hover:scale-[1.02] active:scale-95`}>{editingId ? 'Update Record' : 'Post Transaction'}</button>
+        </div>
+      </SidePanel>
     </div>
   );
 };

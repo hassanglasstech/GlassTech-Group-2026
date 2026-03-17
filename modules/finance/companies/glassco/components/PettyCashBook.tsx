@@ -250,91 +250,60 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
           <UnifiedPaymentPrint data={printingEntry} company={company} partyName="Authorized Personnel" />
       )}
 
-      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Payment Entry" width="lg">
-        <div className="p-6 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[450]">
-          <div className="bg-white rounded w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-300 animate-in zoom-in duration-300">
-            <div className="sap-object-header flex justify-between items-start shrink-0">
-               <div>
-                  <h3 className="text-2xl font-bold uppercase tracking-tight">{formData.status === 'Parked' ? 'Approve Factory Entry' : 'Cash Journal Entry'}</h3>
-               </div>
-               <button onClick={() => setIsModalOpen(false)} className="hover:bg-white/10 p-2 rounded transition-colors"><X size={24} /></button>
+      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={formData.status === 'Parked' ? 'Approve Factory Entry' : 'Cash Journal Entry'} width="lg">
+        <div className="p-8 space-y-6 bg-slate-50">
+          {formData.status === 'Parked' && (
+            <div className="bg-amber-50 p-4 border border-amber-200 rounded text-amber-800 text-xs font-bold uppercase">
+              This entry was initiated by Factory Central. Please assign a G/L Code to Post.
             </div>
-            
-            <div className="p-8 space-y-6 bg-slate-50 flex-1">
-               {formData.status === 'Parked' && (
-                   <div className="bg-amber-50 p-4 border border-amber-200 rounded text-amber-800 text-xs font-bold uppercase">
-                       This entry was initiated by Factory Central. Please assign a G/L Code to Post.
-                   </div>
-               )}
-               {/* FBCJ Tabs (Only for new) */}
-               {!formData.id && (
-                   <div className="flex space-x-1 border-b border-slate-300 pb-1">
-                      <button onClick={() => { setActiveTab('Payment'); setFormData({...formData, type: 'Payment', businessTransaction: '', glAccountId: ''}); }} className={`px-6 py-2 text-xs font-bold uppercase rounded-t-lg transition-all ${activeTab === 'Payment' ? 'bg-[#bb0000] text-white' : 'bg-slate-200 text-slate-500'}`}>Cash Payments</button>
-                      <button onClick={() => { setActiveTab('Receipt'); setFormData({...formData, type: 'Receipt', businessTransaction: '', glAccountId: ''}); }} className={`px-6 py-2 text-xs font-bold uppercase rounded-t-lg transition-all ${activeTab === 'Receipt' ? 'bg-[#107e3e] text-white' : 'bg-slate-200 text-slate-500'}`}>Cash Receipts</button>
-                   </div>
-               )}
-
-               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
-                   
-                   {!formData.id && activeTab === 'Payment' && authorizedReqs.length > 0 && (
-                       <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl">
-                           <label className="text-[10px] font-black uppercase text-emerald-700 ml-1 mb-1 block flex items-center gap-1"><Fingerprint size={10}/> Pay Against Approved Request (Optional)</label>
-                           <select 
-                               className="w-full bg-white border border-emerald-200 p-2 rounded-lg text-xs font-bold outline-none text-emerald-900"
-                               onChange={(e) => handleLinkRequisition(e.target.value)}
-                               value={linkedReqId}
-                           >
-                               <option value="">-- Direct Payment (No Link) --</option>
-                               {authorizedReqs.map(req => (
-                                   <option key={req.id} value={req.id}>
-                                       {req.id} | {req.reqType?.toUpperCase() || 'N/A'} | PKR {req.totalValue?.toLocaleString() || '0'}
-                                   </option>
-                               ))}
-                           </select>
-                       </div>
-                   )}
-
-                   <div className="grid grid-cols-2 gap-6">
-                      <div className="space-y-1">
-                         <label className="text-[10px] font-bold uppercase text-slate-500">Business Transaction</label>
-                         <select 
-                            className="sap-input w-full font-bold" 
-                            value={formData.businessTransaction} 
-                            onChange={e => setFormData({...formData, businessTransaction: e.target.value})}
-                         >
-                            <option value="">-- Select --</option>
-                            {BUSINESS_TRANSACTIONS.filter(b => b.type === (formData.type || activeTab)).map(b => (
-                                <option key={b.code} value={b.code}>[{b.code}] {b.name}</option>
-                            ))}
-                         </select>
-                      </div>
-                      <div className="space-y-1">
-                         <label className="text-[10px] font-bold uppercase text-slate-500">GL Account</label>
-                         <select 
-                            className="sap-input w-full font-bold" 
-                            value={formData.glAccountId} 
-                            onChange={e => setFormData({...formData, glAccountId: e.target.value})}
-                         >
-                            <option value="">-- Map to GL --</option>
-                            {getFilteredGLAccounts(formData.businessTransaction || '').map(a => (
-                                <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>
-                            ))}
-                         </select>
-                      </div>
-                   </div>
-                   
-                   <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Amount</label><input type="number" disabled={!!formData.id} value={formData.amount} onChange={e => setFormData({...formData, amount: Number(e.target.value)})} className="sap-input w-full font-black text-lg" /></div>
-                   <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Description</label><input type="text" disabled={!!formData.id} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="sap-input w-full font-bold uppercase" /></div>
-               </div>
+          )}
+          {!formData.id && (
+            <div className="flex space-x-1 border-b border-slate-300 pb-1">
+              <button onClick={() => { setActiveTab('Payment'); setFormData({...formData, type: 'Payment', businessTransaction: '', glAccountId: ''}); }} className={`px-6 py-2 text-xs font-bold uppercase rounded-t-lg transition-all ${activeTab === 'Payment' ? 'bg-[#bb0000] text-white' : 'bg-slate-200 text-slate-500'}`}>Cash Payments</button>
+              <button onClick={() => { setActiveTab('Receipt'); setFormData({...formData, type: 'Receipt', businessTransaction: '', glAccountId: ''}); }} className={`px-6 py-2 text-xs font-bold uppercase rounded-t-lg transition-all ${activeTab === 'Receipt' ? 'bg-[#107e3e] text-white' : 'bg-slate-200 text-slate-500'}`}>Cash Receipts</button>
             </div>
-
-            <div className="px-8 py-4 bg-white border-t flex justify-end space-x-3 shrink-0">
-               <button onClick={() => setIsModalOpen(false)} className="sap-btn-ghost">Discard</button>
-               <button onClick={() => handlePostEntry(formData, !formData.id)} className="sap-btn-primary flex items-center space-x-2"><Save size={14}/><span>{formData.status === 'Parked' ? 'Accept & Post' : 'Post Entry'}</span></button>
+          )}
+          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
+            {!formData.id && activeTab === 'Payment' && authorizedReqs.length > 0 && (
+              <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl">
+                <label className="text-[10px] font-black uppercase text-emerald-700 ml-1 mb-1 block flex items-center gap-1"><Fingerprint size={10}/> Pay Against Approved Request (Optional)</label>
+                <select className="w-full bg-white border border-emerald-200 p-2 rounded-lg text-xs font-bold outline-none text-emerald-900" onChange={(e) => handleLinkRequisition(e.target.value)} value={linkedReqId}>
+                  <option value="">-- Direct Payment (No Link) --</option>
+                  {authorizedReqs.map(req => (
+                    <option key={req.id} value={req.id}>{req.id} | {req.reqType?.toUpperCase() || 'N/A'} | PKR {req.totalValue?.toLocaleString() || '0'}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-slate-500">Business Transaction</label>
+                <select className="sap-input w-full font-bold" value={formData.businessTransaction} onChange={e => setFormData({...formData, businessTransaction: e.target.value})}>
+                  <option value="">-- Select --</option>
+                  {BUSINESS_TRANSACTIONS.filter(b => b.type === (formData.type || activeTab)).map(b => (
+                    <option key={b.code} value={b.code}>[{b.code}] {b.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-slate-500">GL Account</label>
+                <select className="sap-input w-full font-bold" value={formData.glAccountId} onChange={e => setFormData({...formData, glAccountId: e.target.value})}>
+                  <option value="">-- Map to GL --</option>
+                  {getFilteredGLAccounts(formData.businessTransaction || '').map(a => (
+                    <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
+            <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Amount</label><input type="number" disabled={!!formData.id} value={formData.amount} onChange={e => setFormData({...formData, amount: Number(e.target.value)})} className="sap-input w-full font-black text-lg" /></div>
+            <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Description</label><input type="text" disabled={!!formData.id} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="sap-input w-full font-bold uppercase" /></div>
           </div>
         </div>
-    </SidePanel>
+        <div className="px-8 py-4 bg-white border-t flex justify-end space-x-3">
+          <button onClick={() => setIsModalOpen(false)} className="sap-btn-ghost">Discard</button>
+          <button onClick={() => handlePostEntry(formData, !formData.id)} className="sap-btn-primary flex items-center space-x-2"><Save size={14}/><span>{formData.status === 'Parked' ? 'Accept & Post' : 'Post Entry'}</span></button>
+        </div>
+      </SidePanel>
   );
 };
 
