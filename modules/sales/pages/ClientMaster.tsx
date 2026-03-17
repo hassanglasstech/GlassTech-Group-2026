@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 
 const ClientMaster: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [clients, setClients] = useState<Client[]>([]); 
+  const [clients, setClients] = useState<Client[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -148,7 +148,8 @@ const ClientMaster: React.FC = () => {
         </table>
       </div>
 
-      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Business Partner" width="md">
+      {isModalOpen && (
+        <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Business Partner" width="md">
           <div className="bg-white rounded w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col border border-slate-300 animate-in zoom-in duration-200">
             <div className="sap-object-header flex justify-between items-start shrink-0">
                <div>
@@ -215,8 +216,8 @@ const ClientMaster: React.FC = () => {
               <button onClick={handleSave} className="sap-btn-primary flex items-center space-x-2"><Save size={14} /><span>Create Partner</span></button>
             </div>
           </div>
-        
-      </SidePanel>
+        </SidePanel>
+      )}
     </div>
   );
 };
