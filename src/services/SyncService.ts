@@ -1,267 +1,326 @@
 /**
- * GLASSTECH ERP — Structured Logger (EH-Phase 6)
- *
- * Replaces console.log/error/warn with structured logging:
- * - Activity logs: user actions (save, delete, post, approve)
- * - Error logs: from ErrorBoundary (already done in Phase 1)
- * - Performance logs: slow operations
- * - Audit trail: who did what when
- *
- * All logs → localStorage + Supabase activity_logs table
+ * GLASSTECH ERP — Smart Sync Service
+ * 
+ * Strategy:
+ *   - localStorage = offline buffer (fast reads, always works)
+ *   - Supabase = master copy (source of truth when online)
+ * 
+ * Auto-sync:
+ *   - On app start: fetch from Supabase → localStorage
+ *   - On every save: write localStorage immediately + queue Supabase push
+ *   - On net reconnect: auto-push pending local changes
+ *   - Conflict: last-write-wins using updated_at timestamp
  */
 
+import { supabase } from './supabaseClient';
+import { safeParse } from '../modules/shared/services/utils';
 import { toast } from 'sonner';
-import { safeSave, safeParse } from './utils';
+import { translateError, OfflineQueue, withRetry } from '../modules/shared/services/networkService';
 
-// ── Log types ─────────────────────────────────────────────────────────
-export type LogLevel   = 'info' | 'warn' | 'error' | 'success' | 'audit';
-export type LogModule  =
-  | 'HR' | 'Finance' | 'Sales' | 'Inventory' | 'Production'
-  | 'Procurement' | 'Logistics' | 'Projects' | 'Admin' | 'Auth' | 'Sync' | 'System';
+// ── Pending changes queue (survives page reload via localStorage) ─────
+const PENDING_KEY = 'gtk_erp_pending_sync';
+const LAST_SYNC_KEY = 'gtk_erp_last_sync';
+const SYNC_VERSION_KEY = 'gtk_erp_sync_version';
 
-export interface LogEntry {
-  id:          string;
-  timestamp:   string;
-  level:       LogLevel;
-  module:      LogModule | string;
-  action:      string;
-  description: string;
-  user?:       string;
-  company?:    string;
-  referenceId?: string;
-  amount?:     number;
-  meta?:       Record<string, any>;
-  duration?:   number; // ms for performance logs
-}
-
-// ── Storage ───────────────────────────────────────────────────────────
-const LOG_KEY     = 'gtk_erp_activity_logs';
-const MAX_LOGS    = 500;
-const MAX_ERRORS  = 100;
-
-// ── Current user context (set on login) ──────────────────────────────
-let _currentUser    = 'System';
-let _currentCompany = 'GTK';
-
-export const setLogContext = (user: string, company: string) => {
-  _currentUser    = user;
-  _currentCompany = company;
+type PendingChange = {
+  table: string;
+  localKey: string;
+  changedAt: string; // ISO timestamp
 };
 
-// ── Core logger ───────────────────────────────────────────────────────
-const writeLog = (entry: Omit<LogEntry, 'id' | 'timestamp' | 'user' | 'company'>): LogEntry => {
-  const full: LogEntry = {
-    id:          `log_${Date.now()}_${Math.random().toString(36).slice(2,5)}`,
-    timestamp:   new Date().toISOString(),
-    user:        _currentUser,
-    company:     _currentCompany,
-    ...entry,
-  };
+const getPending = (): PendingChange[] => {
+  try { return JSON.parse(localStorage.getItem(PENDING_KEY) || '[]'); }
+  catch { return []; }
+};
 
+const addPending = (table: string, localKey: string) => {
+  const pending = getPending();
+  // Replace if already queued for same table
+  const filtered = pending.filter(p => p.table !== table);
+  filtered.push({ table, localKey, changedAt: new Date().toISOString() });
+  localStorage.setItem(PENDING_KEY, JSON.stringify(filtered));
+};
+
+const clearPending = (table: string) => {
+  const pending = getPending().filter(p => p.table !== table);
+  localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
+};
+
+// ── Table → localStorage key mapping ─────────────────────────────────
+const TABLE_MAP: Record<string, string> = {
+  employees:          'gtk_erp_employees',
+  attendance:         'gtk_erp_attendance',
+  loans:              'gtk_erp_loans',
+  payroll:            'gtk_erp_payroll',
+  accounts:           'gtk_erp_accounts',
+  cost_centers:       'gtk_erp_cost_centers',
+  ledger:             'gtk_erp_ledger',
+  petty_cash:         'gtk_erp_petty_cash',
+  recurring_expenses: 'gtk_erp_recurring_expenses',
+  financial_events:   'gtk_erp_financial_events',
+  mapping_rules:      'gtk_erp_mapping_rules',
+  gl_config:          'gtk_erp_gl_config',
+  clients:            'gtk_erp_clients',
+  quotations:         'gtk_erp_quotations',
+  projects:           'gtk_erp_projects',
+  products:           'gtk_erp_products',
+  vendors:            'gtk_erp_vendors',
+  store_items:        'gtk_erp_store',
+  stock_ledger:       'gtk_erp_stock_ledger',
+  inspection_lots:    'gtk_erp_inspection_lots',
+  remnants:           'gtk_erp_remnants',
+  handling_units:     'gtk_erp_handling_units',
+  requisitions:       'gtk_erp_requisitions',
+  purchase_orders:    'gtk_erp_purchase_orders',
+  production_pieces:  'gtk_erp_production_pieces',
+  job_orders:         'gtk_erp_job_orders',
+  gate_passes:        'gtk_erp_gate_pass',
+  warehouse_spots:    'gtk_erp_warehouse_spots',
+  activity_logs:      'gtk_erp_activity_logs',
+};
+
+// ── Supabase column mapper (snake_case from DB) ───────────────────────
+const toSnakeCase = (str: string) => str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+const toCamelCase = (str: string) => str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+
+const mapToSupabase = (item: any) => {
+  const mapped: any = {};
+  for (const key in item) {
+    // Keep 'id' and 'updated_at' as is, convert others to snake_case
+    const newKey = (key === 'id' || key === 'updated_at') ? key : toSnakeCase(key);
+    mapped[newKey] = item[key];
+  }
+  return mapped;
+};
+
+const mapFromSupabase = (item: any) => {
+  const mapped: any = {};
+  for (const key in item) {
+    const newKey = (key === 'id' || key === 'updated_at') ? key : toCamelCase(key);
+    mapped[newKey] = item[key];
+  }
+  return mapped;
+};
+
+// ── Tables that are LOCAL ONLY — never pushed to Supabase ────────────
+const LOCAL_ONLY_TABLES = new Set(['activity_logs']);
+
+const pushTable = async (table: string, localKey: string): Promise<boolean> => {
+  if (LOCAL_ONLY_TABLES.has(table)) return true; // skip silently
+
+  const rawData = safeParse(localKey);
+  if (!rawData || rawData.length === 0) return true;
+  
+  // Map to snake_case for Supabase
+  const data = rawData.map(mapToSupabase);
+  
   try {
-    const existing: LogEntry[] = safeParse(LOG_KEY);
-    const updated = [full, ...existing].slice(0, MAX_LOGS);
-    safeSave(LOG_KEY, updated);
-  } catch (err) {
-    console.warn('[Logger] Failed to write log:', err);
+    await withRetry(
+      async () => {
+        const { error } = await supabase.from(table).upsert(data, {
+          onConflict: 'id',
+          ignoreDuplicates: false,
+        });
+        if (error) {
+          // 400 = table/column mismatch — skip this table silently
+          if (error.code === 'PGRST204' || error.code === '42P01' || error.message?.includes('relation') || error.message?.includes('column')) {
+            console.log(`[Sync] Skipping ${table} — table or column not found in DB. Run SQL migration.`);
+            return; // don't throw — treat as soft skip
+          }
+          throw error;
+        }
+      },
+      { context: `Sync:${table}`, maxRetries: 2, delayMs: 1500 }
+    );
+    return true;
+  } catch (err: any) {
+    console.warn(`[Sync] Push failed for ${table}:`, translateError(err));
+    return false;
   }
-
-  // Also write to console in dev
-  const prefix = `[${full.module}:${full.action}]`;
-  switch (full.level) {
-    case 'error': console.error(prefix, full.description, full.meta || ''); break;
-    case 'warn':  console.warn(prefix, full.description, full.meta || ''); break;
-    case 'audit': console.info(`🔒 ${prefix}`, full.description); break;
-    default:      console.log(prefix, full.description); break;
-  }
-
-  return full;
 };
 
-// ── Public API ────────────────────────────────────────────────────────
-export const Logger = {
+const pullTable = async (table: string, localKey: string): Promise<boolean> => {
+  try {
+    const rawData = await withRetry(
+      async () => {
+        const { data, error } = await supabase.from(table).select('*');
+        if (error) throw error;
+        return data;
+      },
+      { context: `Pull:${table}`, maxRetries: 2, delayMs: 1000 }
+    );
+    if (rawData && rawData.length > 0) {
+      // Map back to camelCase for local storage
+      const data = rawData.map(mapFromSupabase);
+      localStorage.setItem(localKey, JSON.stringify(data));
+    }
+    return true;
+  } catch (err: any) {
+    console.warn(`[Sync] Pull failed for ${table}:`, translateError(err));
+    return false;
+  }
+};
 
-  // User action: save, create, update, delete
-  action: (module: LogModule | string, action: string, description: string, meta?: {
-    referenceId?: string;
-    amount?: number;
-    extra?: Record<string, any>;
-  }) => writeLog({
-    level: 'audit',
-    module, action, description,
-    referenceId: meta?.referenceId,
-    amount:      meta?.amount,
-    meta:        meta?.extra,
+// ── Connection state ──────────────────────────────────────────────────
+let isOnline = navigator.onLine;
+let syncInProgress = false;
+
+// ── Main SyncService ──────────────────────────────────────────────────
+export const SyncService = {
+
+  // Called once on app start
+  init: () => {
+    // Listen for online/offline events
+    window.addEventListener('online', () => {
+      isOnline = true;
+      console.log('[Sync] Network restored — flushing queue + pushing pending...');
+      toast.success('Back online — syncing changes...', { id: 'back-online', duration: 3000 });
+      // Flush offline queue first, then sync
+      OfflineQueue.flush(supabase).then(() => SyncService.pushPending());
+    });
+
+    window.addEventListener('offline', () => {
+      isOnline = false;
+      console.log('[Sync] Network lost — working offline');
+    });
+
+    // Auto-sync every 5 minutes if online
+    setInterval(() => {
+      if (isOnline && !syncInProgress) {
+        SyncService.pushPending();
+      }
+    }, 5 * 60 * 1000);
+  },
+
+  // Called after any local save — queues for Supabase push
+  markDirty: (table: string) => {
+    const localKey = TABLE_MAP[table];
+    if (!localKey) return;
+    addPending(table, localKey);
+    // If online, push immediately in background
+    if (isOnline) {
+      setTimeout(() => SyncService.pushTable(table), 500);
+    }
+  },
+
+  // Push a single table to Supabase
+  pushTable: async (table: string): Promise<void> => {
+    const localKey = TABLE_MAP[table];
+    if (!localKey) return;
+    const ok = await pushTable(table, localKey);
+    if (ok) clearPending(table);
+  },
+
+  // Push all pending changes (called on reconnect / manual sync)
+  pushPending: async (): Promise<{ pushed: number; failed: number }> => {
+    if (syncInProgress) return { pushed: 0, failed: 0 };
+    syncInProgress = true;
+
+    const pending = getPending();
+    if (pending.length === 0) {
+      syncInProgress = false;
+      return { pushed: 0, failed: 0 };
+    }
+
+    let pushed = 0;
+    let failed = 0;
+
+    for (const change of pending) {
+      const ok = await pushTable(change.table, change.localKey);
+      if (ok) { clearPending(change.table); pushed++; }
+      else failed++;
+    }
+
+    syncInProgress = false;
+    if (pushed > 0) {
+      console.log(`[Sync] Pushed ${pushed} table(s) to Supabase`);
+      localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
+    }
+    return { pushed, failed };
+  },
+
+  // Full sync — push all tables (manual Globe button)
+  syncAll: async (): Promise<{ success: boolean }> => {
+    if (!isOnline) {
+      toast.warning('No internet connection. Changes saved locally.');
+      return { success: false };
+    }
+
+    syncInProgress = true;
+    toast.info('Syncing to Cloud...', { duration: 2000 });
+
+    let allOk = true;
+    const tables = Object.keys(TABLE_MAP);
+
+    for (const table of tables) {
+      const localKey = TABLE_MAP[table];
+      const ok = await pushTable(table, localKey);
+      if (!ok) allOk = false;
+      else clearPending(table);
+    }
+
+    localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
+    syncInProgress = false;
+
+    if (allOk) {
+      toast.success('All data synced to Cloud ✓');
+      return { success: true };
+    } else {
+      toast.warning('Sync partial — some tables failed. Will retry.');
+      return { success: false };
+    }
+  },
+
+  // Fetch from Supabase → localStorage (app start / device switch)
+  fetchFromCloud: async (): Promise<{ success: boolean }> => {
+    if (!isOnline) {
+      console.log('[Sync] Offline — using cached localStorage data');
+      return { success: false };
+    }
+
+    // Pull all tables
+    const tables = Object.keys(TABLE_MAP);
+    let fetched = 0;
+
+    for (const table of tables) {
+      const localKey = TABLE_MAP[table];
+      const ok = await pullTable(table, localKey);
+      if (ok) fetched++;
+    }
+
+    localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
+    console.log(`[Sync] Fetched ${fetched}/${tables.length} tables from Supabase`);
+    return { success: fetched > 0 };
+  },
+
+  // Status info
+  getStatus: () => ({
+    isOnline,
+    pendingChanges: getPending().length,
+    lastSync: localStorage.getItem(LAST_SYNC_KEY) || 'Never',
+    syncInProgress,
   }),
 
-  // Info log
-  info: (module: LogModule | string, message: string, meta?: Record<string, any>) =>
-    writeLog({ level: 'info', module, action: 'INFO', description: message, meta }),
+  // Conflict check — compare local vs remote timestamp
+  checkConflict: async (table: string, id: string): Promise<'local_newer' | 'remote_newer' | 'same'> => {
+    const localKey = TABLE_MAP[table];
+    if (!localKey) return 'same';
 
-  // Warning
-  warn: (module: LogModule | string, message: string, meta?: Record<string, any>) =>
-    writeLog({ level: 'warn', module, action: 'WARNING', description: message, meta }),
+    const localData: any[] = safeParse(localKey);
+    const localItem = localData.find((r: any) => r.id === id);
+    if (!localItem) return 'remote_newer';
 
-  // Error (with optional toast)
-  error: (module: LogModule | string, message: string, err?: any, showToast = false) => {
-    const entry = writeLog({
-      level: 'error', module, action: 'ERROR',
-      description: message,
-      meta: { error: err?.message || String(err), stack: err?.stack?.slice(0,200) },
-    });
-    if (showToast) toast.error(message, { duration: 4000 });
-    return entry;
-  },
+    const { data } = await supabase.from(table).select('updated_at').eq('id', id).single();
+    if (!data) return 'local_newer';
 
-  // Success action
-  success: (module: LogModule | string, action: string, description: string, referenceId?: string) =>
-    writeLog({ level: 'success', module, action, description, referenceId }),
+    const localTime = new Date(localItem.updated_at || localItem.updatedAt || 0).getTime();
+    const remoteTime = new Date(data.updated_at || 0).getTime();
 
-  // Performance: track slow operations
-  perf: (module: LogModule | string, operation: string, durationMs: number) => {
-    if (durationMs > 2000) { // only log if > 2 seconds
-      writeLog({
-        level: 'warn', module,
-        action: 'SLOW_OPERATION',
-        description: `${operation} took ${durationMs}ms`,
-        duration: durationMs,
-      });
-    }
-  },
-
-  // Auth events
-  auth: (action: 'LOGIN' | 'LOGOUT' | 'BLOCKED', email: string, detail?: string) =>
-    writeLog({
-      level: action === 'BLOCKED' ? 'warn' : 'audit',
-      module: 'Auth', action,
-      description: `${email}${detail ? ` — ${detail}` : ''}`,
-    }),
-
-  // Sync events
-  sync: (action: 'PUSH' | 'PULL' | 'FAILED', tables: string[], detail?: string) =>
-    writeLog({
-      level: action === 'FAILED' ? 'error' : 'info',
-      module: 'Sync', action,
-      description: `${action} ${tables.join(', ')}${detail ? ` — ${detail}` : ''}`,
-      meta: { tables },
-    }),
-
-  // Get logs
-  getLogs: (filter?: {
-    level?: LogLevel;
-    module?: string;
-    company?: string;
-    limit?: number;
-  }): LogEntry[] => {
-    let logs: LogEntry[] = safeParse(LOG_KEY);
-    if (filter?.level)   logs = logs.filter(l => l.level === filter.level);
-    if (filter?.module)  logs = logs.filter(l => l.module === filter.module);
-    if (filter?.company) logs = logs.filter(l => l.company === filter.company);
-    return logs.slice(0, filter?.limit || 200);
-  },
-
-  // Clear logs
-  clear: () => {
-    safeSave(LOG_KEY, []);
-    toast.success('Activity logs cleared.', { duration: 2000 });
-  },
-
-  // Export as CSV
-  exportCSV: () => {
-    const logs: LogEntry[] = safeParse(LOG_KEY);
-    const header = 'Timestamp,Level,Module,Action,User,Company,Description,Reference,Amount\n';
-    const rows = logs.map(l =>
-      [
-        l.timestamp, l.level, l.module, l.action,
-        l.user || '', l.company || '',
-        `"${(l.description || '').replace(/"/g, '""')}"`,
-        l.referenceId || '', l.amount || '',
-      ].join(',')
-    ).join('\n');
-    const blob = new Blob([header + rows], { type: 'text/csv' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `activity_log_${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('Logs exported as CSV.', { duration: 2000 });
-  },
-
-  // Stats for dashboard
-  getStats: () => {
-    const logs: LogEntry[] = safeParse(LOG_KEY);
-    const today = new Date().toISOString().slice(0, 10);
-    return {
-      total:       logs.length,
-      todayCount:  logs.filter(l => l.timestamp.startsWith(today)).length,
-      errors:      logs.filter(l => l.level === 'error').length,
-      audits:      logs.filter(l => l.level === 'audit').length,
-      byModule:    Object.fromEntries(
-        [...new Set(logs.map(l => l.module))].map(m => [
-          m, logs.filter(l => l.module === m).length
-        ])
-      ),
-    };
+    if (localTime > remoteTime) return 'local_newer';
+    if (remoteTime > localTime) return 'remote_newer';
+    return 'same';
   },
 };
 
-// ── Performance timer helper ──────────────────────────────────────────
-export const perfTimer = (module: LogModule | string, operation: string) => {
-  const start = Date.now();
-  return {
-    end: () => Logger.perf(module, operation, Date.now() - start),
-  };
-};
-
-// ── Override console (optional — call in App.tsx) ─────────────────────
-export const installConsoleOverride = () => {
-  const originalError = console.error.bind(console);
-  const originalWarn  = console.warn.bind(console);
-
-  // Guard flag — prevents writeLog → console.warn → writeLog infinite loop
-  let _insideLogger = false;
-
-  console.error = (...args: any[]) => {
-    originalError(...args);
-    if (_insideLogger) return;
-    const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
-    if (msg.includes('Warning:') || msg.includes('ReactDOM')) return;
-    try {
-      _insideLogger = true;
-      writeLog({
-        level: 'error', module: 'System',
-        action: 'CONSOLE_ERROR',
-        description: msg.slice(0, 200),
-      });
-    } catch {} finally {
-      _insideLogger = false;
-    }
-  };
-
-  console.warn = (...args: any[]) => {
-    originalWarn(...args);
-    if (_insideLogger) return;
-    const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
-    // Skip noisy/internal warn sources
-    if (
-      msg.includes('[Fast Refresh]') ||
-      msg.includes('DevTools') ||
-      msg.includes('[IDB]') ||
-      msg.includes('[Sync]') ||
-      msg.includes('[Logger]') ||
-      msg.includes('[Storage]') ||
-      msg.includes('[OfflineQueue]')
-    ) return;
-    try {
-      _insideLogger = true;
-      writeLog({
-        level: 'warn', module: 'System',
-        action: 'CONSOLE_WARN',
-        description: msg.slice(0, 200),
-      });
-    } catch {} finally {
-      _insideLogger = false;
-    }
-  };
-};
+// Auto-init when module loads
+SyncService.init();
