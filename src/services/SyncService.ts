@@ -80,15 +80,34 @@ const TABLE_MAP: Record<string, string> = {
 };
 
 // ── Supabase column mapper (snake_case from DB) ───────────────────────
-// Most tables store data as-is (JSON columns or flat).
-// We upsert the raw localStorage array directly.
+const toSnakeCase = (str: string) => str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+const toCamelCase = (str: string) => str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
 
+const mapToSupabase = (item: any) => {
+  const mapped: any = {};
+  for (const key in item) {
+    // Keep 'id' and 'updated_at' as is, convert others to snake_case
+    const newKey = (key === 'id' || key === 'updated_at') ? key : toSnakeCase(key);
+    mapped[newKey] = item[key];
+  }
+  return mapped;
+};
+
+const mapFromSupabase = (item: any) => {
+  const mapped: any = {};
+  for (const key in item) {
+    const newKey = (key === 'id' || key === 'updated_at') ? key : toCamelCase(key);
+    mapped[newKey] = item[key];
+  }
+  return mapped;
+};
 
 const pushTable = async (table: string, localKey: string): Promise<boolean> => {
   const rawData = safeParse(localKey);
   if (!rawData || rawData.length === 0) return true;
-  // Apply table-specific mapper (camelCase → snake_case)
-  const data = applyMapper(table, rawData);
+  
+  // Map to snake_case for Supabase
+  const data = rawData.map(mapToSupabase);
   
   try {
     await withRetry(
@@ -103,394 +122,29 @@ const pushTable = async (table: string, localKey: string): Promise<boolean> => {
     );
     return true;
   } catch (err: any) {
-    if (String(err).includes('404') || String(err).includes('does not exist')) {
-      console.info(`[Sync] Table ${table} not in Supabase yet — skipping push`);
-      return true;
-    }
     console.warn(`[Sync] Push failed for ${table}:`, translateError(err));
     return false;
   }
 };
 
-// Map flat Supabase employee → nested app structure
-const mapEmployee = (r: any) => ({
-  id:        r.id,
-  company:   r.company,
-  personal:  { name: r.name || '', cnic: r.cnic || '', phone: r.phone || '', address: r.address || '' },
-  work:      { designation: r.designation || '', department: r.department || '', grade: r.grade || '', joinDate: r.join_date || '', employeeCode: r.employee_code || '' },
-  salary:    { basic: Number(r.basic) || 0, houseRent: Number(r.house_rent) || 0, conveyance: Number(r.conveyance) || 0, specialAllowance: Number(r.special_allowance) || 0 },
-});
-
-
-// Map nested app employee → flat Supabase structure
-const flattenEmployee = (e: any) => ({
-  id:               e.id,
-  company:          e.company,
-  name:             e.personal?.name || '',
-  cnic:             e.personal?.cnic || '',
-  phone:            e.personal?.phone || '',
-  address:          e.personal?.address || '',
-  designation:      e.work?.designation || '',
-  department:       e.work?.department || '',
-  grade:            e.work?.grade || '',
-  join_date:        e.work?.joinDate || null,
-  employee_code:    e.work?.employeeCode || '',
-  basic:            e.salary?.basic || 0,
-  house_rent:       e.salary?.houseRent || 0,
-  conveyance:       e.salary?.conveyance || 0,
-  special_allowance: e.salary?.specialAllowance || 0,
-});
-
-
-// ── Table-specific mappers: localStorage (camelCase) → Supabase (snake_case) ──
-const TABLE_MAPPERS: Record<string, (row: any) => any> = {
-
-  products: (p: any) => ({
-    id:               p.id,
-    company:          p.company,
-    category:         p.category,
-    description:      p.description,
-    base_price:       p.basePrice ?? p.base_price ?? 0,
-    tempering_price:  p.temperingPrice ?? p.tempering_price ?? 0,
-    cost_price:       p.costPrice ?? p.cost_price ?? 0,
-    unit:             p.unit ?? 'PCS',
-    variants:         p.variants ?? [],
-    glass_type:       p.glassType ?? p.glass_type ?? null,
-    main_category:    p.mainCategory ?? p.main_category ?? '',
-    sub_category:     p.subCategory ?? p.sub_category ?? '',
-    thickness:        p.thickness ?? '',
-    sheet_size:       p.sheetSize ?? p.sheet_size ?? '',
-    service_nick:     p.serviceNick ?? p.service_nick ?? '',
-    brand:            p.brand ?? '',
-    model_no:         p.modelNo ?? p.model_no ?? '',
-    finish_color:     p.finishColor ?? p.finish_color ?? '',
-    material:         p.material ?? '',
-    image_url:        p.imageUrl ?? p.image_url ?? '',
-    direction:        p.direction ?? '',
-    tongue_length:    p.tongueLength ?? p.tongue_length ?? '',
-    spindle_length:   p.spindleLength ?? p.spindle_length ?? '',
-    profile_code:     p.profileCode ?? p.profile_code ?? '',
-    system_sub_class: p.systemSubClass ?? p.system_sub_class ?? '',
-    profile_role:     p.profileRole ?? p.profile_role ?? '',
-    technical_specs:  p.technicalSpecs ?? p.technical_specs ?? {},
-    width:            p.width ?? 0,
-    height:           p.height ?? 0,
-    frame_color:      p.frameColor ?? p.frame_color ?? '',
-    mesh_color:       p.meshColor ?? p.mesh_color ?? '',
-    is_set:           p.isSet ?? p.is_set ?? false,
-    set_components:   p.setComponents ?? p.set_components ?? [],
-    hs_code:          p.hsCode ?? p.hs_code ?? '',
-    sub_description:  p.subDescription ?? p.sub_description ?? '',
-  }),
-
-  accounts: (a: any) => ({
-    id:             a.id,
-    company:        a.company,
-    code:           a.code,
-    name:           a.name,
-    level:          a.level,
-    parent_id:      a.parentId ?? a.parent_id ?? null,
-    type:           a.type ?? '',
-    normal_balance: a.normalBalance ?? a.normal_balance ?? 'Dr',
-    balance:        a.balance ?? 0,
-    is_active:      a.isActive ?? a.is_active ?? true,
-  }),
-
-  store_items: (s: any) => ({
-    id:                   s.id,
-    company:              s.company,
-    name:                 s.name,
-    category:             s.category,
-    quantity:             s.quantity ?? 0,
-    unrestricted_qty:     s.unrestrictedQty ?? s.unrestricted_qty ?? 0,
-    qi_qty:               s.qiQty ?? s.qi_qty ?? 0,
-    blocked_qty:          s.blockedQty ?? s.blocked_qty ?? 0,
-    reserved_qty:         s.reservedQty ?? s.reserved_qty ?? 0,
-    consignment_qty:      s.consignmentQty ?? s.consignment_qty ?? 0,
-    unit:                 s.unit ?? 'PCS',
-    alt_unit:             s.altUnit ?? s.alt_unit ?? '',
-    conversion_factor:    s.conversionFactor ?? s.conversion_factor ?? 1,
-    min_level:            s.minLevel ?? s.min_level ?? 0,
-    reorder_point:        s.reorderPoint ?? s.reorder_point ?? 0,
-    moving_average_price: s.movingAveragePrice ?? s.moving_average_price ?? 0,
-    total_value:          s.totalValue ?? s.total_value ?? 0,
-    storage_bin:          s.storageBin ?? s.storage_bin ?? '',
-    last_movement_date:   s.lastMovementDate ?? s.last_movement_date ?? '',
-  }),
-
-  activity_logs: (l: any) => ({
-    id:          l.id,
-    company:     l.company ?? '',
-    user_name:   l.user ?? l.user_name ?? 'System',
-    module:      l.module ?? '',
-    action:      l.action ?? '',
-    description: l.description ?? '',
-    level:       l.level ?? 'info',
-    timestamp:   l.timestamp ?? new Date().toISOString(),
-    amount:      l.amount ?? 0,
-    reference_id: l.referenceId ?? l.reference_id ?? '',
-  }),
-
-  quotations: (q: any) => ({
-    id:                    q.id,
-    company:               q.company,
-    date:                  q.date,
-    due_date:              q.dueDate ?? q.due_date ?? null,
-    client_id:             q.clientId ?? q.client_id ?? null,
-    project_name:          q.projectName ?? q.project_name ?? '',
-    subject:               q.subject ?? '',
-    items:                 q.items ?? [],
-    service_charges:       q.serviceCharges ?? q.service_charges ?? 0,
-    discount_percent:      q.discountPercent ?? q.discount_percent ?? 0,
-    discount_amount:       q.discountAmount ?? q.discount_amount ?? 0,
-    status:                q.status ?? 'Draft',
-    order_no:              q.orderNo ?? q.order_no ?? '',
-    is_already_dispatched: q.isAlreadyDispatched ?? q.is_already_dispatched ?? false,
-    manual_ref:            q.manualRef ?? q.manual_ref ?? '',
-  }),
-
-  clients: (c: any) => ({
-    id:             c.id,
-    company:        c.company,
-    name:           c.name,
-    contact_person: c.contactPerson ?? c.contact_person ?? '',
-    email:          c.email ?? '',
-    phone:          c.phone ?? '',
-    address:        c.address ?? '',
-    ntn:            c.ntn ?? '',
-    credit_limit:   c.creditLimit ?? c.credit_limit ?? 0,
-    status:         c.status ?? 'Active',
-  }),
-
-  employees: flattenEmployee,
-
-  ledger: (l: any) => ({
-    id:           l.id,
-    company:      l.company,
-    doc_type:     l.docType ?? l.doc_type ?? '',
-    doc_date:     l.docDate ?? l.doc_date ?? null,
-    date:         l.date ?? null,
-    posting_date: l.postingDate ?? l.posting_date ?? null,
-    reference:    l.reference ?? '',
-    description:  l.description ?? '',
-    status:       l.status ?? 'Parked',
-    details:      l.details ?? l.lineItems ?? [],
-    amount:       l.amount ?? 0,
-  }),
-
-  requisitions: (r: any) => ({
-    id:              r.id,
-    company:         r.company || 'GTK',
-    date:            r.date,
-    header_text:     r.headerText ?? r.header_text ?? '',
-    requisitioner:   r.requisitioner ?? '',
-    priority:        r.priority ?? 'Normal',
-    req_type:        r.reqType ?? r.req_type ?? r.subCategory ?? '',
-    category:        r.category ?? '',
-    sub_category:    r.subCategory ?? r.sub_category ?? '',
-    status:          r.status ?? 'Pending',
-    items:           r.items ?? [],
-    employee_id:     r.employeeId ?? r.employee_id ?? '',
-    target_company:  r.targetCompany ?? r.target_company ?? '',
-  }),
-
-  purchase_orders: (p: any) => ({
-    id:           p.id,
-    from_company: p.fromCompany ?? p.from_company ?? 'GTK',
-    to_company:   p.toCompany ?? p.to_company ?? '',
-    date:         p.date ?? null,
-    status:       p.status ?? 'Draft',
-    vendor:       p.vendor ?? '',
-    items:        p.items ?? [],
-    total_amount: p.totalAmount ?? p.total_amount ?? 0,
-    category:     p.category ?? '',
-    project_id:   p.projectId ?? p.project_id ?? '',
-  }),
-};
-
-// Apply mapper if exists, otherwise pass through
-const applyMapper = (table: string, data: any[]): any[] => {
-  const mapper = TABLE_MAPPERS[table];
-  if (!mapper) return data;
-  return data.map(row => {
-    try { return mapper(row); }
-    catch { return row; }
-  });
-};
-
-// ── Pull mappers: Supabase (snake_case) → app (camelCase) ────────────
-const PULL_MAPPERS: Record<string, (row: any) => any> = {
-
-  store_items: (r: any) => ({
-    id:                 r.id,
-    company:            r.company,
-    name:               r.name,
-    category:           r.category,
-    quantity:           Number(r.quantity) || 0,
-    unrestrictedQty:    Number(r.unrestricted_qty) || 0,
-    qiQty:              Number(r.qi_qty) || 0,
-    blockedQty:         Number(r.blocked_qty) || 0,
-    reservedQty:        Number(r.reserved_qty) || 0,
-    consignmentQty:     Number(r.consignment_qty) || 0,
-    unit:               r.unit || 'PCS',
-    altUnit:            r.alt_unit || '',
-    conversionFactor:   Number(r.conversion_factor) || 1,
-    minLevel:           Number(r.min_level) || 0,
-    reorderPoint:       Number(r.reorder_point) || 0,
-    movingAveragePrice: Number(r.moving_average_price) || 0,
-    totalValue:         Number(r.total_value) || 0,
-    storageBin:         r.storage_bin || '',
-    lastMovementDate:   r.last_movement_date || '',
-  }),
-
-  products: (r: any) => ({
-    id:             r.id,
-    company:        r.company,
-    category:       r.category,
-    description:    r.description,
-    basePrice:      Number(r.base_price) || 0,
-    temperingPrice: Number(r.tempering_price) || 0,
-    costPrice:      Number(r.cost_price) || 0,
-    unit:           r.unit || 'PCS',
-    variants:       r.variants || [],
-    glassType:      r.glass_type || '',
-    mainCategory:   r.main_category || '',
-    subCategory:    r.sub_category || '',
-    thickness:      r.thickness || '',
-    sheetSize:      r.sheet_size || '',
-    serviceNick:    r.service_nick || '',
-    brand:          r.brand || '',
-    modelNo:        r.model_no || '',
-    finishColor:    r.finish_color || '',
-    material:       r.material || '',
-    imageUrl:       r.image_url || '',
-    direction:      r.direction || '',
-    tongueLength:   r.tongue_length || '',
-    spindleLength:  r.spindle_length || '',
-    profileCode:    r.profile_code || '',
-    systemSubClass: r.system_sub_class || '',
-    profileRole:    r.profile_role || '',
-    technicalSpecs: r.technical_specs || {},
-    width:          Number(r.width) || 0,
-    height:         Number(r.height) || 0,
-    frameColor:     r.frame_color || '',
-    meshColor:      r.mesh_color || '',
-    isSet:          r.is_set || false,
-    setComponents:  r.set_components || [],
-    hsCode:         r.hs_code || '',
-    subDescription: r.sub_description || '',
-  }),
-
-  accounts: (r: any) => ({
-    id:            r.id,
-    company:       r.company,
-    code:          r.code,
-    name:          r.name,
-    level:         r.level,
-    parentId:      r.parent_id || r.parentId || null,
-    type:          r.type || '',
-    normalBalance: r.normal_balance || 'Dr',
-    balance:       Number(r.balance) || 0,
-    isActive:      r.is_active ?? true,
-  }),
-
-  clients: (r: any) => ({
-    id:            r.id,
-    company:       r.company,
-    name:          r.name,
-    contactPerson: r.contact_person || '',
-    email:         r.email || '',
-    phone:         r.phone || '',
-    address:       r.address || '',
-    ntn:           r.ntn || '',
-    creditLimit:   Number(r.credit_limit) || 0,
-    status:        r.status || 'Active',
-  }),
-
-  quotations: (r: any) => ({
-    id:                   r.id,
-    company:              r.company,
-    date:                 r.date,
-    dueDate:              r.due_date,
-    clientId:             r.client_id,
-    projectName:          r.project_name || '',
-    subject:              r.subject || '',
-    items:                r.items || [],
-    serviceCharges:       Number(r.service_charges) || 0,
-    discountPercent:      Number(r.discount_percent) || 0,
-    discountAmount:       Number(r.discount_amount) || 0,
-    status:               r.status || 'Draft',
-    orderNo:              r.order_no || '',
-    isAlreadyDispatched:  r.is_already_dispatched || false,
-    manualRef:            r.manual_ref || '',
-  }),
-
-  requisitions: (r: any) => ({
-    id:            r.id,
-    company:       r.company,
-    date:          r.date,
-    headerText:    r.header_text || '',
-    requisitioner: r.requisitioner || '',
-    priority:      r.priority || 'Normal',
-    reqType:       r.req_type || '',
-    category:      r.category || '',
-    subCategory:   r.sub_category || '',
-    status:        r.status || 'Pending',
-    items:         r.items || [],
-    employeeId:    r.employee_id || '',
-    targetCompany: r.target_company || '',
-  }),
-
-  purchase_orders: (r: any) => ({
-    id:          r.id,
-    fromCompany: r.from_company || '',
-    toCompany:   r.to_company || '',
-    date:        r.date,
-    status:      r.status || 'Draft',
-    vendor:      r.vendor || '',
-    items:       r.items || [],
-    totalAmount: Number(r.total_amount) || 0,
-    category:    r.category || '',
-    projectId:   r.project_id || '',
-  }),
-};
-
-const applyPullMapper = (table: string, data: any[]): any[] => {
-  const mapper = PULL_MAPPERS[table];
-  if (!mapper) return data;
-  return data.map(row => {
-    try { return mapper(row); }
-    catch { return row; }
-  });
-};
-
 const pullTable = async (table: string, localKey: string): Promise<boolean> => {
   try {
-    const { data, error } = await supabase.from(table).select('*');
-    
-    // 404 = table doesn't exist in Supabase yet — skip silently
-    if (error) {
-      if (error.code === '42P01' || error.message?.includes('does not exist') || 
-          String(error).includes('404')) {
-        console.info(`[Sync] Table ${table} not in Supabase yet — skipping`);
-        return true; // not a failure
-      }
-      console.warn(`[Sync] Pull failed for ${table}:`, error.message);
-      return false;
-    }
-    if (data && data.length > 0) {
-      // Apply pull mapper: snake_case → camelCase + nested structure
-      let mapped = table === 'employees' ? data.map(mapEmployee) : data;
-      mapped = applyPullMapper(table, mapped);
-      localStorage.setItem(localKey, JSON.stringify(mapped));
+    const rawData = await withRetry(
+      async () => {
+        const { data, error } = await supabase.from(table).select('*');
+        if (error) throw error;
+        return data;
+      },
+      { context: `Pull:${table}`, maxRetries: 2, delayMs: 1000 }
+    );
+    if (rawData && rawData.length > 0) {
+      // Map back to camelCase for local storage
+      const data = rawData.map(mapFromSupabase);
+      localStorage.setItem(localKey, JSON.stringify(data));
     }
     return true;
   } catch (err: any) {
-    // Silently skip 404s
-    if (String(err).includes('404') || String(err).includes('not found')) {
-      return true;
-    }
-    console.warn(`[Sync] Pull failed for ${table}:`, err?.message);
+    console.warn(`[Sync] Pull failed for ${table}:`, translateError(err));
     return false;
   }
 };
@@ -527,18 +181,13 @@ export const SyncService = {
   },
 
   // Called after any local save — queues for Supabase push
-  // Debounced: prevents rapid-fire sync on fast user input
   markDirty: (table: string) => {
     const localKey = TABLE_MAP[table];
     if (!localKey) return;
     addPending(table, localKey);
-    // Debounce: wait 2 seconds before pushing (prevents spam)
+    // If online, push immediately in background
     if (isOnline) {
-      const debounceKey = `_debounce_${table}`;
-      clearTimeout((SyncService as any)[debounceKey]);
-      (SyncService as any)[debounceKey] = setTimeout(() => {
-        SyncService.pushTable(table);
-      }, 2000);
+      setTimeout(() => SyncService.pushTable(table), 500);
     }
   },
 
