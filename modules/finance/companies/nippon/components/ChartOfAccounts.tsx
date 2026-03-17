@@ -431,8 +431,8 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
       </div>
 
       {/* OPENING BALANCES MODAL */}
-      {isOBModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 z-[500]">
+      <SidePanel isOpen={isOBModalOpen} onClose={() => setIsOBModalOpen(false)} title="Details" width="lg">
+        <div className="p-6 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 z-[500]">
            <div className="bg-white rounded w-full max-w-5xl h-[90vh] shadow-2xl flex flex-col overflow-hidden border border-slate-300">
               <div className="px-10 py-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
                  <div>
@@ -485,15 +485,15 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
                  <div className="flex items-center space-x-8 text-sm">
                     <div>
                        <span className="text-[10px] font-black uppercase text-slate-400 block">Total Debit</span>
-                       <span className="font-black text-slate-900">{(Number(obTotalDr) || 0).toLocaleString()}</span>
+                       <span className="font-black text-slate-900">{obTotalDr.toLocaleString()}</span>
                     </div>
                     <div>
                        <span className="text-[10px] font-black uppercase text-slate-400 block">Total Credit</span>
-                       <span className="font-black text-slate-900">{(Number(obTotalCr) || 0).toLocaleString()}</span>
+                       <span className="font-black text-slate-900">{obTotalCr.toLocaleString()}</span>
                     </div>
                     <div className={`px-4 py-2 rounded border ${obDiff === 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
                        <span className="text-[10px] font-black uppercase block">Difference</span>
-                       <span className="font-black">{(Number(obDiff) || 0).toLocaleString()}</span>
+                       <span className="font-black">{obDiff.toLocaleString()}</span>
                     </div>
                  </div>
                  <div className="flex space-x-3">
@@ -506,8 +506,8 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
       )}
 
       {/* ADD MODAL */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
+      <SidePanel isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Details" width="lg">
+        <div className="p-6 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
           <div className="bg-white rounded w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-300 animate-in zoom-in duration-200">
             <div className="sap-object-header flex justify-between items-start shrink-0">
                <div>
@@ -628,8 +628,8 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
       )}
 
       {/* DELETE MODAL (UPDATED 5-LEVEL SUPPORT) */}
-      {isDeleteModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
+      <SidePanel isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Details" width="lg">
+        <div className="p-6 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
           <div className="bg-white rounded w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-300 animate-in zoom-in duration-200">
             <div className="bg-[#bb0000] p-6 text-white flex justify-between items-center shrink-0">
                <div className="flex items-center space-x-3">
