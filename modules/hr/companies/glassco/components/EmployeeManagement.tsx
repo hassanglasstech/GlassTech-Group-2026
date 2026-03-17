@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Employee, Account } from '@/modules/shared/types';
 import { HRService } from '@/modules/hr/services/hrService';
