@@ -250,7 +250,6 @@ const NipponVendorRegistry: React.FC = () => {
                   </div>
               </div>
           </SidePanel>
-      )}
     </div>
   );
 };

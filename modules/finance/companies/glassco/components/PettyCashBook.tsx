@@ -334,7 +334,6 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
             </div>
           </div>
         </div>
-      )}
     </SidePanel>
   );
 };

@@ -276,7 +276,6 @@ const LoanManagement: React.FC = () => {
             </div>
           </div>
         </SidePanel>
-      )}
     </div>
   );
 };

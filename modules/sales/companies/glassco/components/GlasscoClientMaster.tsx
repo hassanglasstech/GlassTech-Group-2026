@@ -167,7 +167,6 @@ const GlasscoClientMaster: React.FC<{ company: Company }> = ({ company }) => {
             </div>
           </div>
         </SidePanel>
-      )}
     </div>
   );
 };

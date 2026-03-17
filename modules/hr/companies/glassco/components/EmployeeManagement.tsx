@@ -524,7 +524,6 @@ const EmployeeManagement: React.FC = () => {
             </div>
           </div>
         </SidePanel>
-      )}
     </div>
   );
 };

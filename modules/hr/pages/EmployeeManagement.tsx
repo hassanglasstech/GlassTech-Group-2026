@@ -319,13 +319,15 @@ const EmployeeManagement: React.FC = () => {
         </div>
       </div>
 
-      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Employee" width="xl"> { setIsModalOpen(false); }}
-      title={editingId ? 'Edit Employee' : 'New Employee'}
-      subtitle="Human Capital Management"
-      badge={editingId ? 'Edit' : 'New'}
-      badgeColor={editingId ? 'amber' : 'blue'}
-      width="xl"
-    >
+      <SidePanel
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={editingId ? 'Edit Employee' : 'New Employee'}
+        subtitle="Human Capital Management"
+        badge={editingId ? 'Edit' : 'New'}
+        badgeColor={editingId ? 'amber' : 'blue'}
+        width="xl"
+      >
       <div className="p-6 overflow-y-auto">
 
             
