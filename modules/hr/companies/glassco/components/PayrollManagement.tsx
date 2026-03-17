@@ -212,8 +212,8 @@ const PayrollManagement: React.FC = () => {
             <div className="grid grid-cols-2 gap-10 mb-8 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div className="space-y-1">
                     <p className="font-bold uppercase text-slate-400 text-[8px]">Employee Identification</p>
-                    <p className="text-lg font-black text-slate-900 leading-none">{emp.personal.name}</p>
-                    <p className="text-[10px] font-bold text-blue-700 uppercase">{emp.work.employeeCode} | {emp.work.designation}</p>
+                    <p className="text-lg font-black text-slate-900 leading-none">{emp?.personal?.name ?? "—"}</p>
+                    <p className="text-[10px] font-bold text-blue-700 uppercase">{emp?.work?.employeeCode ?? "—"} | {emp?.work?.designation ?? "—"}</p>
                     <p className="text-[10px] font-medium text-slate-500">{emp.work.department}</p>
                 </div>
                 <div className="text-right space-y-1">
