@@ -8,8 +8,10 @@ import * as XLSX from 'xlsx';
 
 import { useAppStore } from '../../shared/store/appStore';
 import { toast } from 'sonner';
+import { SidePanel } from '@/modules/shared/components/SidePanel';
 
-const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
+const LoanManagement: React.FC = () => {
+  const company = useAppStore(state => state.selectedCompany);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loans, setLoans] = useState<LoanAdvance[]>([]);
   const [authorizedReqs, setAuthorizedReqs] = useState<Requisition[]>([]);
@@ -210,8 +212,8 @@ const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
                       <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${loan.type === 'Loan' ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{loan.type}</span>
                       {loan.requisitionId && <span className="ml-2 inline-flex items-center text-[8px] font-bold text-emerald-600 bg-emerald-50 px-1 rounded border border-emerald-100"><Fingerprint size={8}/> PR LINKED</span>}
                   </td>
-                  <td className="px-6 py-4 font-black text-slate-900">PKR {(Number(loan.amount) || 0).toLocaleString()}</td>
-                  <td className="px-6 py-4 font-bold text-slate-600">PKR {(Number(loan.repaymentAmount) || 0).toLocaleString()}</td>
+                  <td className="px-6 py-4 font-black text-slate-900">PKR {loan.amount.toLocaleString()}</td>
+                  <td className="px-6 py-4 font-bold text-slate-600">PKR {loan.repaymentAmount.toLocaleString()}</td>
                   <td className="px-6 py-4">
                     {loan.status === 'Active' ? 
                       <div className="flex items-center space-x-1.5 text-amber-600 font-black uppercase text-[10px] bg-amber-50 px-2 py-1 rounded-lg border border-amber-100 w-fit"><Clock size={12} /><span>Deduction Active</span></div> : 
@@ -233,8 +235,7 @@ const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
         </table>
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[110] animate-in zoom-in duration-200">
+      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Loan/Advance" subtitle="HR Finance" width="md">
           <div className="bg-white rounded-[2.5rem] w-full max-w-xl shadow-2xl flex flex-col border border-white/20 overflow-hidden">
             <div className={`px-10 py-8 text-white flex justify-between items-center ${modalType === 'Loan' ? 'bg-slate-900' : 'bg-blue-600'}`}>
               <div className="flex items-center space-x-4"><div className="p-3 bg-white/10 rounded-2xl shadow-inner">{modalType === 'Loan' ? <Banknote size={28} /> : <HandCoins size={28} />}</div><div><h3 className="text-2xl font-black tracking-tighter uppercase">{editingId ? 'Edit Entry' : (modalType === 'Loan' ? 'Issuance of Loan' : 'Salary Advance')}</h3><p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">Financial Ledger Entry</p></div></div>
@@ -261,7 +262,7 @@ const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
               )}
 
               <div className="grid grid-cols-2 gap-8">
-                <div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Employee Profile</label><select className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl outline-none font-bold text-slate-900 shadow-sm focus:border-blue-500 transition-all" onChange={e => setNewLoan({...newLoan, employeeId: e.target.value})} value={newLoan.employeeId} disabled={!!editingId}><option value="">Select Associate...</option>{employees.map(e => <option key={e.id} value={e.id}>{e?.personal?.name ?? "Unknown"} ({e?.work?.employeeCode ?? "—"})</option>)}</select></div>
+                <div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Employee Profile</label><select className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl outline-none font-bold text-slate-900 shadow-sm focus:border-blue-500 transition-all" onChange={e => setNewLoan({...newLoan, employeeId: e.target.value})} value={newLoan.employeeId} disabled={!!editingId}><option value="">Select Associate...</option>{employees.map(e => <option key={e.id} value={e.id}>{e.personal.name} ({e.work.employeeCode})</option>)}</select></div>
                 <div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Ledger Date</label><input type="date" className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold outline-none shadow-sm focus:border-blue-500 transition-all" value={newLoan.date} onChange={e => setNewLoan({...newLoan, date: e.target.value})} /></div>
               </div>
               <div className="grid grid-cols-2 gap-8">
