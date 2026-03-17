@@ -3,10 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { Company, Client } from '../../shared/types';
 import { SalesService } from '../services/salesService';
 import { UserPlus, Search, Edit2, Trash2, X, Building, Phone, Save, Briefcase } from 'lucide-react';
+import { SidePanel } from '@/modules/shared/components/SidePanel';
 
 import { useAppStore } from '../../shared/store/appStore';
 import { toast } from 'sonner';
-import { SidePanel } from '@/modules/shared/components/SidePanel';
 
 const ClientMaster: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
@@ -148,8 +148,14 @@ const ClientMaster: React.FC = () => {
         </table>
       </div>
 
-      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Business Partner" subtitle="Sales - BP Master" width="md">
-          <div className="bg-white rounded w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col border border-slate-300 animate-in zoom-in duration-200">
+      <SidePanel
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title="New Business Partner"
+        subtitle="Sales - BP Master"
+        width="md"
+      >
+        <div className="p-6 space-y-4">
             <div className="sap-object-header flex justify-between items-start shrink-0">
                <div>
                   <div className="flex items-center space-x-3 text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-2">
@@ -214,9 +220,8 @@ const ClientMaster: React.FC = () => {
               <button onClick={() => setIsModalOpen(false)} className="sap-btn-ghost">Discard</button>
               <button onClick={handleSave} className="sap-btn-primary flex items-center space-x-2"><Save size={14} /><span>Create Partner</span></button>
             </div>
-          </div>
-        </div>
-      )}
+                  </div>
+      </SidePanel>
     </div>
   );
 };
