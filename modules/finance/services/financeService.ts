@@ -236,6 +236,108 @@ export const FinanceService = {
     return newAccount;
   },
 
+  // GL Category → Account mapping for auto-hint
+  // Returns { debitId, debitCode, debitName, creditId, creditCode, creditName }
+  resolveGLMapping: (company: Company, category: string): { debitId: string; debitCode: string; debitName: string; creditId: string; creditCode: string; creditName: string } | null => {
+    const accounts = FinanceService.getAccounts().filter(a => a.company === company);
+    const find = (code: string) => accounts.find(a => a.code === code);
+
+    const CATEGORY_MAP: Record<string, { debit: string; credit: string }> = {
+      'Raw Material':        { debit: '5111', credit: '1111' },
+      'Factory Utilities':   { debit: '5131', credit: '1111' },
+      'Repair & Maintenance':{ debit: '5213', credit: '1111' },
+      'Admin / Office':      { debit: '5211', credit: '1111' },
+      'Selling & Dist.':     { debit: '522',  credit: '1111' },
+      'Employee Loan':       { debit: '1141', credit: '1111' },
+      'Procurement / Other': { debit: '5214', credit: '1111' },
+      'HR':                  { debit: '1141', credit: '1111' },
+    };
+
+    const mapping = CATEGORY_MAP[category] || CATEGORY_MAP['Procurement / Other'];
+    const debit  = find(mapping.debit);
+    const credit = find(mapping.credit);
+    if (!debit || !credit) return null;
+    return {
+      debitId:    debit.id,
+      debitCode:  debit.code,
+      debitName:  debit.name,
+      creditId:   credit.id,
+      creditCode: credit.code,
+      creditName: credit.name,
+    };
+  },
+
+  // Creates a PARKED Payment Voucher (docType PV) linked to a requisition.
+  // Parked = status 'Parked', no P&L impact until super-user posts it.
+  createParkedPV: (requisition: any): LedgerTransaction => {
+    const company  = requisition.company as Company;
+    const amount   = requisition.estimatedAmount ?? requisition.totalValue ?? 0;
+    const category = requisition.category || requisition.reqType || 'Procurement / Other';
+    const gl       = FinanceService.resolveGLMapping(company, category);
+
+    const debitAccountId  = gl?.debitId  ?? '';
+    const creditAccountId = gl?.creditId ?? '';
+    const costCenterId    = requisition.items?.[0]?.costCenter ?? '';
+
+    const pv: LedgerTransaction = {
+      id:          `PV-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
+      company,
+      docType:     'PV',
+      docDate:     requisition.date,
+      date:        new Date().toISOString().split('T')[0],
+      description: `[PARKED] PV for ${requisition.id} — ${requisition.headerText}`,
+      referenceId: requisition.id,
+      status:      'Parked',
+      reqId:       requisition.id,
+      details: [
+        { accountId: debitAccountId,  debit: amount, credit: 0,      text: `Expense — ${requisition.headerText}`, costCenterId },
+        { accountId: creditAccountId, debit: 0,      credit: amount, text: 'Cash / Bank payment',               costCenterId },
+      ],
+    };
+
+    const all = FinanceService.getLedger();
+    FinanceService.saveLedger([...all, pv]);
+    Logger.action('Finance', 'CREATE_PARKED_PV', `Parked PV created: ${pv.id} for REQ ${requisition.id}`);
+    return pv;
+  },
+
+  // Post a parked PV — called by Finance super-user after review
+  postParkedPV: (pvId: string, reviewerNote?: string): LedgerTransaction | null => {
+    const all = FinanceService.getLedger();
+    const idx = all.findIndex(t => t.id === pvId);
+    if (idx === -1) return null;
+    const pv = all[idx];
+    if (pv.status !== 'Parked') return pv;
+
+    const posted: LedgerTransaction = {
+      ...pv,
+      status:      'Posted',
+      description: pv.description.replace('[PARKED] ', '') + (reviewerNote ? ` | Note: ${reviewerNote}` : ''),
+      date:        new Date().toISOString().split('T')[0],
+    };
+    all[idx] = posted;
+    FinanceService.saveLedger([...all]);
+    Logger.action('Finance', 'POST_PV', `PV posted: ${pvId}`);
+    return posted;
+  },
+
+  // Budget check: total posted+parked spend on a cost center this month vs threshold
+  getCostCenterSpend: (company: Company, costCenterId: string): { posted: number; parked: number; total: number } => {
+    const ledger   = FinanceService.getLedger().filter(t => t.company === company);
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    const relevant  = ledger.filter(t =>
+      t.date?.startsWith(thisMonth) &&
+      t.details.some(d => d.costCenterId === costCenterId && d.debit > 0)
+    );
+    let posted = 0, parked = 0;
+    relevant.forEach(t => {
+      const amt = t.details.reduce((s, d) => s + (d.costCenterId === costCenterId ? d.debit : 0), 0);
+      if (t.status === 'Posted') posted += amt;
+      else                       parked += amt;
+    });
+    return { posted, parked, total: posted + parked };
+  },
+
   postAutomatedRequisitionEntry: (requisition: any) => {
     const company = requisition.company;
     const date = new Date().toISOString().split('T')[0];
