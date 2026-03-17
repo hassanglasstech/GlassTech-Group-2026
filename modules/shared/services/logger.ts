@@ -219,30 +219,49 @@ export const installConsoleOverride = () => {
   const originalError = console.error.bind(console);
   const originalWarn  = console.warn.bind(console);
 
+  // Guard flag — prevents writeLog → console.warn → writeLog infinite loop
+  let _insideLogger = false;
+
   console.error = (...args: any[]) => {
     originalError(...args);
+    if (_insideLogger) return;
     const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
-    // Don't log React dev warnings (too noisy)
     if (msg.includes('Warning:') || msg.includes('ReactDOM')) return;
     try {
+      _insideLogger = true;
       writeLog({
         level: 'error', module: 'System',
         action: 'CONSOLE_ERROR',
         description: msg.slice(0, 200),
       });
-    } catch {}
+    } catch {} finally {
+      _insideLogger = false;
+    }
   };
 
   console.warn = (...args: any[]) => {
     originalWarn(...args);
+    if (_insideLogger) return;
     const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
-    if (msg.includes('[Fast Refresh]') || msg.includes('DevTools')) return;
+    // Skip noisy/internal warn sources
+    if (
+      msg.includes('[Fast Refresh]') ||
+      msg.includes('DevTools') ||
+      msg.includes('[IDB]') ||
+      msg.includes('[Sync]') ||
+      msg.includes('[Logger]') ||
+      msg.includes('[Storage]') ||
+      msg.includes('[OfflineQueue]')
+    ) return;
     try {
+      _insideLogger = true;
       writeLog({
         level: 'warn', module: 'System',
         action: 'CONSOLE_WARN',
         description: msg.slice(0, 200),
       });
-    } catch {}
+    } catch {} finally {
+      _insideLogger = false;
+    }
   };
 };
