@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Company, PettyCashEntry, CostCenter, Account, LedgerTransaction, Requisition } from '../../shared/types';
 import { FinanceService } from '../services/financeService';
+import { SidePanel } from '@/modules/shared/components/SidePanel';
 import { InventoryService } from '../../procurement/services/inventoryService';
 import { Plus, Search, ArrowUpRight, ArrowDownLeft, X, Save, Wallet, Check, AlertTriangle, Fingerprint, Printer } from 'lucide-react';
 import { UnifiedPaymentPrint } from '../components/prints/UnifiedPaymentPrint';
@@ -250,7 +251,7 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
           <UnifiedPaymentPrint data={printingEntry} company={company} partyName="Authorized Personnel" />
       )}
 
-      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Details" width="lg">
+      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Payment Entry" width="lg">
         <div className="p-6 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[450]">
           <div className="bg-white rounded w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-300 animate-in zoom-in duration-300">
             <div className="sap-object-header flex justify-between items-start shrink-0">
@@ -335,7 +336,7 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
           </div>
         </div>
       )}
-    </div>
+    </SidePanel>
   );
 };
 

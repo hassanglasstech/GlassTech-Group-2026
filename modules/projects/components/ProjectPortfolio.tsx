@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Project, Client, LedgerTransaction } from '../../shared/types';
 import { ProjectService } from '../services/projectService';
+import { SidePanel } from '@/modules/shared/components/SidePanel';
 import { FinanceService } from '../../finance/services/financeService';
 import { Plus, Save, Activity, Layout, PenTool, Hash, Box, Hammer, AlertTriangle, Wallet } from 'lucide-react';
 
@@ -166,15 +167,7 @@ const ProjectPortfolio: React.FC<ProjectPortfolioProps> = ({ projects, clients, 
                 })}
             </div>
 
-            <SidePanel
-          isOpen={isCreateOpen}
-          onClose={() => setIsCreateOpen(false)}
-          title="New Project Budget"
-          subtitle="Project Systems"
-          badge="New"
-          badgeColor="blue"
-          width="xl"
-        >
+            <SidePanel isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} title="New Project" width="xl">
           <div className="p-6">                        <div className="px-8 py-6 bg-slate-900 text-white border-b flex justify-between items-center shrink-0">
                             <div><h3 className="font-black uppercase text-xl">Project Budget Initiation</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Cost Center Setup</p></div>
                             <button onClick={() => setIsCreateOpen(false)}><Plus size={24} className="rotate-45"/></button>

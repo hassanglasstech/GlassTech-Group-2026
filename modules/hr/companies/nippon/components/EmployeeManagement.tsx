@@ -2,11 +2,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Employee, Account } from '@/modules/shared/types';
 import { HRService } from '@/modules/hr/services/hrService';
+import { SidePanel } from '@/modules/shared/components/SidePanel';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { UserPlus, Search, Edit2, Trash2, X, Briefcase, Wallet, UserCircle, FileUp, Download, Layers } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
-import { SidePanel } from '@/modules/shared/components/SidePanel';
 
 const EmployeeManagement: React.FC = () => {
   const company = 'Nippon';
@@ -317,7 +317,7 @@ const EmployeeManagement: React.FC = () => {
         </div>
       </div>
 
-      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Employee" subtitle="HR - Nippon" width="lg">
+      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Employee" width="xl">
           <div className="p-6">
             {/* Header */}
             <div className="px-8 py-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
@@ -523,7 +523,7 @@ const EmployeeManagement: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </SidePanel>
       )}
     </div>
   );

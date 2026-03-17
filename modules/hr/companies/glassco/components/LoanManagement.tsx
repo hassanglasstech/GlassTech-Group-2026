@@ -233,8 +233,7 @@ const LoanManagement: React.FC = () => {
         </table>
       </div>
 
-      {isModalOpen && (
-        <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Loan/Advance" width="md">
+      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Loan/Advance" width="md">
           <div className="bg-white rounded-[2.5rem] w-full max-w-xl shadow-2xl flex flex-col border border-white/20 overflow-hidden">
             <div className={`px-10 py-8 text-white flex justify-between items-center ${modalType === 'Loan' ? 'bg-slate-900' : 'bg-blue-600'}`}>
               <div className="flex items-center space-x-4"><div className="p-3 bg-white/10 rounded-2xl shadow-inner">{modalType === 'Loan' ? <Banknote size={28} /> : <HandCoins size={28} />}</div><div><h3 className="text-2xl font-black tracking-tighter uppercase">{editingId ? 'Edit Entry' : (modalType === 'Loan' ? 'Issuance of Loan' : 'Salary Advance')}</h3><p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">Financial Ledger Entry</p></div></div>

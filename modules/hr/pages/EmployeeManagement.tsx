@@ -6,9 +6,9 @@ import { FinanceService } from '../../finance/services/financeService';
 import { UserPlus, Search, Edit2, Trash2, X, Briefcase, Wallet, UserCircle, FileUp, Download, Layers } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
+import { SidePanel } from '@/modules/shared/components/SidePanel';
 import { useAppStore } from '../../shared/store/appStore';
 import { toast } from 'sonner';
-import { SidePanel } from '@/modules/shared/components/SidePanel';
 
 const EmployeeManagement: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
@@ -319,9 +319,7 @@ const EmployeeManagement: React.FC = () => {
         </div>
       </div>
 
-      <SidePanel
-      isOpen={isModalOpen}
-      onClose={() => { setIsModalOpen(false); }}
+      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Employee" width="xl"> { setIsModalOpen(false); }}
       title={editingId ? 'Edit Employee' : 'New Employee'}
       subtitle="Human Capital Management"
       badge={editingId ? 'Edit' : 'New'}

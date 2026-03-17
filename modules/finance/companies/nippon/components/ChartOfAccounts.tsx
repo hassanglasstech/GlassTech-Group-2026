@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Company, Account, LedgerTransaction } from '@/modules/shared/types';
 import { FinanceService } from '@/modules/finance/services/financeService';
+import { SidePanel } from '@/modules/shared/components/SidePanel';
 import { 
   ChevronRight, ChevronDown, Folder, FileText, Plus, X, 
   Landmark, Search, LayoutList, Briefcase, Wallet, PieChart, 
@@ -431,7 +432,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
       </div>
 
       {/* OPENING BALANCES MODAL */}
-      <SidePanel isOpen={isOBModalOpen} onClose={() => setIsOBModalOpen(false)} title="Details" width="lg">
+      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
         <div className="p-6 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 z-[500]">
            <div className="bg-white rounded w-full max-w-5xl h-[90vh] shadow-2xl flex flex-col overflow-hidden border border-slate-300">
               <div className="px-10 py-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
@@ -506,7 +507,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
       )}
 
       {/* ADD MODAL */}
-      <SidePanel isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Details" width="lg">
+      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
         <div className="p-6 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
           <div className="bg-white rounded w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-300 animate-in zoom-in duration-200">
             <div className="sap-object-header flex justify-between items-start shrink-0">
@@ -582,7 +583,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
 
       {/* EDIT MODAL */}
       {isEditModalOpen && editingAccount && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
+        <SidePanel isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Account" width="md">
           <div className="bg-white rounded w-full max-w-lg shadow-2xl overflow-hidden flex flex-col border border-slate-300 animate-in zoom-in duration-200">
             <div className="bg-slate-900 px-8 py-6 text-white flex justify-between items-center shrink-0">
                <div className="flex items-center space-x-3">
@@ -624,11 +625,10 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
                <button onClick={handleUpdateAccount} className="sap-btn-primary">Update Account</button>
             </div>
           </div>
-        </div>
-      )}
+        </SidePanel>
 
       {/* DELETE MODAL (UPDATED 5-LEVEL SUPPORT) */}
-      <SidePanel isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Details" width="lg">
+      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
         <div className="p-6 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
           <div className="bg-white rounded w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-300 animate-in zoom-in duration-200">
             <div className="bg-[#bb0000] p-6 text-white flex justify-between items-center shrink-0">

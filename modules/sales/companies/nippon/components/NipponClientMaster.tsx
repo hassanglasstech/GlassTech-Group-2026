@@ -2,8 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { Company, Client } from '@/modules/shared/types';
 import { SalesService } from '@/modules/sales/services/salesService';
-import { useClientMaster } from '@/modules/sales/hooks/useClientMaster';
 import { SidePanel } from '@/modules/shared/components/SidePanel';
+import { useClientMaster } from '@/modules/sales/hooks/useClientMaster';
 import { UserPlus, Search, Edit2, Trash2, X, Building, Phone, Save, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -99,13 +99,7 @@ const NipponClientMaster: React.FC<{ company: Company }> = ({ company }) => {
         </table>
       </div>
 
-      <SidePanel
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="New Business Partner"
-        subtitle="Nippon - BP Master"
-        width="md"
-      >
+      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Business Partner" width="md">
         <div className="p-6 space-y-4">
             <div className="sap-object-header flex justify-between items-start shrink-0">
                <div>

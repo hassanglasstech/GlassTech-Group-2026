@@ -2,9 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { Company, Client } from '../../shared/types';
 import { SalesService } from '../services/salesService';
-import { SidePanel } from '@/modules/shared/components/SidePanel';
 import { UserPlus, Search, Edit2, Trash2, X, Building, Phone, Save, Briefcase } from 'lucide-react';
 
+import { SidePanel } from '@/modules/shared/components/SidePanel';
 import { useAppStore } from '../../shared/store/appStore';
 import { toast } from 'sonner';
 
@@ -148,8 +148,7 @@ const ClientMaster: React.FC = () => {
         </table>
       </div>
 
-      {isModalOpen && (
-        <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Business Partner" width="md">
+      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Business Partner" width="md">
           <div className="bg-white rounded w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col border border-slate-300 animate-in zoom-in duration-200">
             <div className="sap-object-header flex justify-between items-start shrink-0">
                <div>
@@ -217,7 +216,6 @@ const ClientMaster: React.FC = () => {
             </div>
           </div>
         </SidePanel>
-      )}
     </div>
   );
 };

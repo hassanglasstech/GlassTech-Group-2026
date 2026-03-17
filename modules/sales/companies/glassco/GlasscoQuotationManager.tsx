@@ -2,8 +2,8 @@ import React, { useMemo } from 'react';
 import { GlasscoPrintTemplate } from '@/modules/glassco/core/GlasscoPrintTemplate';
 import { GlasscoList } from '@/modules/glassco/core/GlasscoList';
 import { GlasscoEditor } from '@/modules/glassco/core/GlasscoEditor';
-import { useGlasscoQuotations } from './useGlasscoQuotations';
 import { SidePanel } from '@/modules/shared/components/SidePanel';
+import { useGlasscoQuotations } from './useGlasscoQuotations';
 
 const GlasscoQuotationManager: React.FC = () => {
   const {

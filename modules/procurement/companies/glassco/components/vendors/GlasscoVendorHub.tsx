@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Company, TemperingDispatch, ProductionPiece, PieceFault, Vendor, Quotation, VendorRate } from '../../../../../shared/types';
 import { ProductionService } from '../../../../../production/services/productionService';
 import { SalesService } from '../../../../../sales/services/salesService';
+import { SidePanel } from '@/modules/shared/components/SidePanel';
 import { 
   LayoutGrid, List, Plus, X, Save, Trash2, Edit, Truck, Layers, Flame, Calculator, CheckCircle2, Ban, Clock, Globe, Filter, Search, Phone, Receipt, Calendar
 } from 'lucide-react';
 import SupplyChainDashboard from '../../../../components/vendors/SupplyChainDashboard';
-import { SidePanel } from '@/modules/shared/components/SidePanel';
 
 interface GlasscoVendorHubProps {
     company: Company;
@@ -284,8 +284,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
           </div>
       )}
 
-      {isAddVendorOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]">
+      <SidePanel isOpen={isAddVendorOpen} onClose={() => setIsAddVendorOpen(false)} title="New Vendor" width="md">
            <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in duration-200 border border-slate-300">
               <div className="sap-object-header flex justify-between items-center shrink-0">
                  <div><h3 className="text-2xl font-bold uppercase tracking-tight">{editingId ? 'Edit Vendor Profile' : 'Onboard New Vendor'}</h3></div>
@@ -311,8 +310,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
                  <button onClick={handleSaveVendor} className="sap-btn-primary flex items-center space-x-2"><Save size={14} /> <span>Save Vendor</span></button>
               </div>
            </div>
-        </div>
-      )}
+        </SidePanel>
 
       {/* RATE CARD MODAL */}
       {isRateModalOpen && selectedVendorForRates && (

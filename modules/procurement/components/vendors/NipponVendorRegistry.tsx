@@ -2,8 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { Company, Vendor } from '@/modules/shared/types';
 import { SalesService } from '@/modules/sales/services/salesService';
-import { Plus, Search, MapPin, Calendar, Phone, Save, X, Edit2, Trash2, Building } from 'lucide-react';
 import { SidePanel } from '@/modules/shared/components/SidePanel';
+import { Plus, Search, MapPin, Calendar, Phone, Save, X, Edit2, Trash2, Building } from 'lucide-react';
 
 const NipponVendorRegistry: React.FC = () => {
   const company: Company = 'Nippon';
@@ -166,7 +166,7 @@ const NipponVendorRegistry: React.FC = () => {
           </table>
       </div>
 
-      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Vendor" subtitle="Vendor Network" width="md">
+      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Vendor" width="md">
               <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in duration-200 border border-slate-300">
                   <div className="px-8 py-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
                       <div>
@@ -249,7 +249,7 @@ const NipponVendorRegistry: React.FC = () => {
                       </button>
                   </div>
               </div>
-          </div>
+          </SidePanel>
       )}
     </div>
   );
