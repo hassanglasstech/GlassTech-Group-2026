@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { toast } from 'sonner';
 import { Company, Vendor } from '@/modules/shared/types';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { Plus, Search, MapPin, Calendar, Phone, Save, X, Edit2, Trash2, Building } from 'lucide-react';
+import { SidePanel } from '@/modules/shared/components/SidePanel';
 
 const NipponVendorRegistry: React.FC = () => {
   const company: Company = 'Nippon';
@@ -35,7 +35,7 @@ const NipponVendorRegistry: React.FC = () => {
   };
 
   const handleSave = () => {
-    if (!formData.name) return toast.error("Company Name is required.", { duration: 4000 });
+    if (!formData.name) return alert("Company Name is required.");
 
     const newVendor: Vendor = {
       ...(formData as Vendor),
@@ -166,8 +166,7 @@ const NipponVendorRegistry: React.FC = () => {
           </table>
       </div>
 
-      {isModalOpen && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]">
+      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Vendor" subtitle="Vendor Network" width="md">
               <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in duration-200 border border-slate-300">
                   <div className="px-8 py-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
                       <div>
