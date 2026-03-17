@@ -3,6 +3,7 @@ import { GlasscoPrintTemplate } from '@/modules/glassco/core/GlasscoPrintTemplat
 import { GlasscoList } from '@/modules/glassco/core/GlasscoList';
 import { GlasscoEditor } from '@/modules/glassco/core/GlasscoEditor';
 import { useGlasscoQuotations } from './useGlasscoQuotations';
+import { SidePanel } from '@/modules/shared/components/SidePanel';
 
 const GlasscoQuotationManager: React.FC = () => {
   const {
@@ -98,7 +99,17 @@ const GlasscoQuotationManager: React.FC = () => {
               onImportJson={handleImportJson}
               onImportExcel={handleImportExcel}
             />
-        ) : (
+        ) : null}
+
+        <SidePanel
+          isOpen={isEditorOpen}
+          onClose={() => setIsEditorOpen(false)}
+          title={formData.id?.startsWith('DRF-') ? 'Draft Quotation' : formData.id ? 'Edit Quotation' : 'New Quotation'}
+          subtitle={clients.find(c => c.id === formData.clientId)?.name || 'Glassco Sales'}
+          badge={formData.status === 'Approved' ? 'Approved' : formData.id?.startsWith('DRF-') ? 'Draft' : 'New'}
+          badgeColor={formData.status === 'Approved' ? 'emerald' : 'blue'}
+          width="xl"
+        >
             <GlasscoEditor 
               formData={formData} clients={clients} products={products} isMM={isMM} setIsMM={setIsMM} 
               lastSerial={lastSerial}
@@ -106,7 +117,8 @@ const GlasscoQuotationManager: React.FC = () => {
               onAddItem={addItem} onAddSection={addSection} onDuplicateItem={duplicateItem}
               onRemoveItem={removeItem} onSave={handleSaveQuotation} 
             />
-        )}
+
+        </SidePanel>
     </div>
   );
 };
