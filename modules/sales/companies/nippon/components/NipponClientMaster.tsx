@@ -166,8 +166,6 @@ const NipponClientMaster: React.FC<{ company: Company }> = ({ company }) => {
               <button onClick={handleSave} className="sap-btn-primary flex items-center space-x-2"><Save size={14} /><span>Create Partner</span></button>
             </div>
           </div>
-        </div>
-      )}
     </div>
   );
 };
