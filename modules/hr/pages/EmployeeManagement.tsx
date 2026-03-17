@@ -320,33 +320,16 @@ const EmployeeManagement: React.FC = () => {
       </div>
 
       <SidePanel
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={editingId ? 'Edit Employee' : 'New Employee'}
-        subtitle="Human Capital Management"
-        badge={editingId ? 'Edit' : 'New'}
-        badgeColor={editingId ? 'amber' : 'blue'}
-        width="xl"
-      >
-        <div className="p-6 space-y-6">
-            {/* Header */}
-            <div className="px-8 py-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-blue-500/20 rounded-xl">
-                  {editingId ? <Briefcase className="text-blue-400" size={24} /> : <UserPlus className="text-blue-400" size={24} />}
-                </div>
-                <div>
-                  <h3 className="text-xl font-black tracking-tight uppercase">{editingId ? 'Edit Employee Profile' : 'Employee Registration'}</h3>
-                  <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">{company} Human Resources Registry</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setIsModalOpen(false)} 
-                className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-all"
-              >
-                <X size={24} />
-              </button>
-            </div>
+      isOpen={isModalOpen}
+      onClose={() => { setIsModalOpen(false); }}
+      title={editingId ? 'Edit Employee' : 'New Employee'}
+      subtitle="Human Capital Management"
+      badge={editingId ? 'Edit' : 'New'}
+      badgeColor={editingId ? 'amber' : 'blue'}
+      width="xl"
+    >
+      <div className="p-6 overflow-y-auto">
+
             
             <div className="flex-1 overflow-y-auto bg-slate-50">
               <div className="p-10 space-y-8 max-w-4xl mx-auto">
@@ -532,7 +515,9 @@ const EmployeeManagement: React.FC = () => {
                 <span>{editingId ? 'Update Record' : 'Enroll Employee'}</span>
               </button>
             </div>
-      </SidePanel>
+          
+      </div>
+    </SidePanel>
     </div>
   );
 };
