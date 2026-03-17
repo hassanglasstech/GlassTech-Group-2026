@@ -297,8 +297,8 @@ const AttendanceRegister: React.FC = () => {
 
       setEditingSummary({
           employeeId: emp.id,
-          name: emp.personal.name,
-          code: emp.work.employeeCode,
+          name: emp?.personal?.name ?? "",
+          code: emp?.work?.employeeCode ?? "",
           manualAbsent: initialManualAbsent,
           lates: initialLates,
           allowedAbsent: Number(totals.allowedAbsent || 0),
@@ -418,7 +418,7 @@ const AttendanceRegister: React.FC = () => {
         if (rec.overtimeHours > 0) char += `+${rec.overtimeHours}`;
         return char;
       });
-      return [emp.work.employeeCode, emp.personal.name, ...dailyStatuses, totals.p, totals.a, totals.ot];
+      return [emp?.work?.employeeCode ?? "", emp?.personal?.name ?? "", ...dailyStatuses, totals.p, totals.a, totals.ot];
     });
     const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
     const wb = XLSX.utils.book_new();
@@ -493,7 +493,7 @@ const AttendanceRegister: React.FC = () => {
                   const record = records.find(r => r.employeeId === emp.id);
                   return (
                     <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-4"><p className="font-black text-slate-900 leading-none">{emp.personal.name}</p><p className="text-[9px] text-slate-400 font-bold uppercase mt-1">{emp.work.employeeCode}</p></td>
+                      <td className="px-6 py-4"><p className="font-black text-slate-900 leading-none">{emp?.personal?.name ?? "—"}</p><p className="text-[9px] text-slate-400 font-bold uppercase mt-1">{emp?.work?.employeeCode ?? "—"}</p></td>
                       <td className="px-6 py-4">
                         <select value={record?.status || 'Present'} onChange={(e) => handleUpdateRecord(emp.id, e.target.value as any, record?.lateMinutes || 0, record?.earlyMinutes || 0, record?.overtimeHours || 0)} className="text-[10px] font-black uppercase border-2 border-slate-100 rounded-lg px-3 py-1.5 outline-none focus:border-blue-500 transition-all bg-white">
                           <option value="Present">Present</option><option value="Absent">Absent</option><option value="Late">Late</option><option value="Leave">Leave</option>
@@ -534,8 +534,8 @@ const AttendanceRegister: React.FC = () => {
                   return (
                     <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-4 py-3 sticky left-0 bg-white z-20 border-r shadow-lg">
-                        <p className="font-bold text-xs text-slate-800 leading-none">{emp.personal.name}</p>
-                        <p className="text-[8px] text-slate-400 font-black uppercase mt-1 tracking-tighter">{emp.work.employeeCode}</p>
+                        <p className="font-bold text-xs text-slate-800 leading-none">{emp?.personal?.name ?? "—"}</p>
+                        <p className="text-[8px] text-slate-400 font-black uppercase mt-1 tracking-tighter">{emp?.work?.employeeCode ?? "—"}</p>
                       </td>
                       {daysArray.map(day => {
                         const dateStr = `${selectedMonth}-${String(day).padStart(2, '0')}`;
@@ -614,11 +614,11 @@ const AttendanceRegister: React.FC = () => {
                                   <td className="px-6 py-4">
                                       <div className="flex items-center space-x-3">
                                           <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${totals.isManual ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
-                                              {totals.isManual ? <Edit3 size={14}/> : emp.personal.name.charAt(0)}
+                                              {totals.isManual ? <Edit3 size={14}/> : emp?.personal?.name?.charAt(0) ?? "?"}
                                           </div>
                                           <div>
-                                              <p className="font-bold text-slate-900 leading-none">{emp.personal.name}</p>
-                                              <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">{emp.work.employeeCode}</p>
+                                              <p className="font-bold text-slate-900 leading-none">{emp?.personal?.name ?? "—"}</p>
+                                              <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">{emp?.work?.employeeCode ?? "—"}</p>
                                           </div>
                                       </div>
                                   </td>
