@@ -13,9 +13,20 @@
  */
 
 import { supabase } from './supabaseClient';
-import { safeParse } from '../modules/shared/services/utils';
 import { toast } from 'sonner';
-import { translateError, OfflineQueue, withRetry } from '../modules/shared/services/networkService';
+import { translateError, OfflineQueue, withRetry } from '../../modules/shared/services/networkService';
+
+// Inline safeParse — avoids cross-directory import issues in build
+const safeParse = (key: string): any[] => {
+  try {
+    const item = localStorage.getItem(key);
+    if (!item) return [];
+    const parsed = JSON.parse(item);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
 
 // ── Pending changes queue (survives page reload via localStorage) ─────
 const PENDING_KEY = 'gtk_erp_pending_sync';
