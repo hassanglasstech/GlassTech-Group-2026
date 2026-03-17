@@ -4,7 +4,6 @@ import { Project, Client, LedgerTransaction } from '../../shared/types';
 import { ProjectService } from '../services/projectService';
 import { FinanceService } from '../../finance/services/financeService';
 import { Plus, Save, Activity, Layout, PenTool, Hash, Box, Hammer, AlertTriangle, Wallet } from 'lucide-react';
-import { SidePanel } from '@/modules/shared/components/SidePanel';
 
 interface ProjectPortfolioProps {
     projects: Project[];
@@ -167,10 +166,16 @@ const ProjectPortfolio: React.FC<ProjectPortfolioProps> = ({ projects, clients, 
                 })}
             </div>
 
-            {isCreateOpen && (
-                <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-[2rem] w-full max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in duration-300 border border-slate-300 flex flex-col max-h-[90vh]">
-                        <div className="px-8 py-6 bg-slate-900 text-white border-b flex justify-between items-center shrink-0">
+            <SidePanel
+          isOpen={isCreateOpen}
+          onClose={() => setIsCreateOpen(false)}
+          title="New Project Budget"
+          subtitle="Project Systems"
+          badge="New"
+          badgeColor="blue"
+          width="xl"
+        >
+          <div className="p-6">                        <div className="px-8 py-6 bg-slate-900 text-white border-b flex justify-between items-center shrink-0">
                             <div><h3 className="font-black uppercase text-xl">Project Budget Initiation</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Cost Center Setup</p></div>
                             <button onClick={() => setIsCreateOpen(false)}><Plus size={24} className="rotate-45"/></button>
                         </div>
@@ -217,8 +222,7 @@ const ProjectPortfolio: React.FC<ProjectPortfolioProps> = ({ projects, clients, 
                         </div>
                         <div className="px-8 py-6 bg-white border-t flex justify-end space-x-3 shrink-0"><button onClick={() => setIsCreateOpen(false)} className="px-6 py-2 text-slate-400 font-bold uppercase text-xs">Cancel</button><button onClick={handleCreateProject} className="bg-slate-900 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-blue-600 transition-all flex items-center space-x-2"><Save size={14}/> <span>Activate</span></button></div>
                     </div>
-                </div>
-            )}
+        </SidePanel>
         </div>
     );
 };
