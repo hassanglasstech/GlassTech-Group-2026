@@ -12,7 +12,16 @@ const KEYS = {
 };
 
 export const HRService = {
-  getEmployees: (): Employee[] => safeParse(KEYS.EMPLOYEES),
+  getEmployees: (): Employee[] => {
+    const raw: any[] = safeParse(KEYS.EMPLOYEES);
+    // Sanitize — guard against records with missing personal/work/salary objects
+    return raw.filter(Boolean).map(e => ({
+      ...e,
+      personal: e.personal ?? { name: '', cnic: '', phone: '', address: '' },
+      work:     e.work     ?? { designation: '', department: '', grade: '', joinDate: '', employeeCode: '' },
+      salary:   e.salary   ?? { basic: 0, houseRent: 0, conveyance: 0, specialAllowance: 0 },
+    }));
+  },
   saveEmployees: (data: Employee[]) => {
     safeSave(KEYS.EMPLOYEES, data);
     SyncService.markDirty('employees');
