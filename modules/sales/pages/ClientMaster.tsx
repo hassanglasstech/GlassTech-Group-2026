@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 
 const ClientMaster: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [clients, setClients] = useState<Client[]>([]);
+  const [clients, setClients] = useState<Client[]>([]); 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
