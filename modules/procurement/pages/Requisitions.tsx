@@ -272,11 +272,25 @@ const Requisitions: React.FC = () => {
     const strategy = getReleaseStrategy(pr.totalValue);
     if (!confirm(`Perform ${strategy.label} Approval for PKR ${pr.totalValue.toLocaleString()}?`)) return;
 
+    const approvedPr = { ...pr, status: 'Approved' as const, approvedBy: 'Authorized User', paymentStatus: pr.requiresCashPayment ? 'Pending' : 'Not Required' };
+
+    // Auto-create Parked PV when cash payment is flagged
+    if (pr.requiresCashPayment) {
+      try {
+        const pv = FinanceService.createParkedPV(approvedPr);
+        approvedPr.paymentRef = pv.id;
+        toast.success(`Approved ✓  Parked PV ${pv.id} created — Finance must review & post`, { duration: 6000 });
+      } catch (e) {
+        console.error('PV creation failed:', e);
+        toast.error('Approved but PV creation failed — check Finance module', { duration: 5000 });
+      }
+    }
+
     const all = InventoryService.getRequisitions().filter(Boolean);
-    const updated = all.map(r => r.id === id ? { ...r, status: 'Approved' as const, approvedBy: 'Authorized User' } : r);
+    const updated = all.map(r => r.id === id ? approvedPr : r);
     InventoryService.saveRequisitions(updated);
 
-    // NEW NOTIFICATION SYSTEM: Send back to Branch
+    // Send notification back to Branch
     if (company === 'Factory' && pr.company !== 'Factory') {
         const notification = {
             id: Date.now().toString(),
@@ -292,7 +306,7 @@ const Requisitions: React.FC = () => {
     }
 
     refreshData();
-    toast.success(`Requisition Approved Successfully!`);
+    if (!pr.requiresCashPayment) toast.success(`Requisition Approved Successfully!`);
   };
 
   const handleDisapprove = (id: string) => {
