@@ -7,8 +7,8 @@ import { UserPlus, Search, Edit2, Trash2, X, Briefcase, Wallet, UserCircle, File
 import * as XLSX from 'xlsx';
 
 import { useAppStore } from '../../shared/store/appStore';
-import { SidePanel } from '@/modules/shared/components/SidePanel';
 import { toast } from 'sonner';
+import { SidePanel } from '@/modules/shared/components/SidePanel';
 
 const EmployeeManagement: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
@@ -321,14 +321,14 @@ const EmployeeManagement: React.FC = () => {
 
       <SidePanel
         isOpen={isModalOpen}
-        onClose={() => { setIsModalOpen(false); }}
-        title={editingId ? "Edit Employee" : "New Employee"}
+        onClose={() => setIsModalOpen(false)}
+        title={editingId ? 'Edit Employee' : 'New Employee'}
         subtitle="Human Capital Management"
-        width="lg"
-        badge={editingId ? "Edit" : "New"}
-        badgeColor={editingId ? "amber" : "blue"}
+        badge={editingId ? 'Edit' : 'New'}
+        badgeColor={editingId ? 'amber' : 'blue'}
+        width="xl"
       >
-          <div className="bg-white rounded-3xl w-full max-w-5xl max-h-[92vh] overflow-hidden shadow-2xl flex flex-col border border-white/20">
+        <div className="p-6 space-y-6">
             {/* Header */}
             <div className="px-8 py-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
               <div className="flex items-center space-x-3">
@@ -532,7 +532,6 @@ const EmployeeManagement: React.FC = () => {
                 <span>{editingId ? 'Update Record' : 'Enroll Employee'}</span>
               </button>
             </div>
-          </div>
       </SidePanel>
     </div>
   );
