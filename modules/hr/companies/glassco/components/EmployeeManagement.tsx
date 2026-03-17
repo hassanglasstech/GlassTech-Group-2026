@@ -203,8 +203,8 @@ const EmployeeManagement: React.FC = () => {
   };
 
   const filteredEmployees = employees.filter(e => 
-    e.personal.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    e.work.employeeCode.toLowerCase().includes(searchTerm.toLowerCase())
+    e.personal?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    e.work?.employeeCode?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -264,11 +264,11 @@ const EmployeeManagement: React.FC = () => {
                   <td className="px-6 py-4">
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm border border-blue-200">
-                        {emp.personal.name.charAt(0)}
+                        {emp.personal?.name?.charAt(0) ?? '?'}
                       </div>
                       <div>
-                        <p className="font-bold text-slate-900 leading-tight">{emp.personal.name}</p>
-                        <p className="text-[11px] text-slate-400 font-semibold">{emp.personal.cnic}</p>
+                        <p className="font-bold text-slate-900 leading-tight">{emp.personal?.name ?? '—'}</p>
+                        <p className="text-[11px] text-slate-400 font-semibold">{emp.personal?.cnic ?? '—'}</p>
                       </div>
                     </div>
                   </td>
