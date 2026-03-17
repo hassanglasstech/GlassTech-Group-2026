@@ -1,15 +1,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Company, Employee, AttendanceRecord, LoanAdvance, Payroll, LedgerTransaction } from '../../shared/types';
-import { HRService } from '../services/hrService';
-import { FinanceService } from '../../finance/services/financeService';
+import { Employee, AttendanceRecord, LoanAdvance, Payroll, LedgerTransaction } from '@/modules/shared/types';
+import { HRService } from '@/modules/hr/services/hrService';
+import { FinanceService } from '@/modules/finance/services/financeService';
 import { CreditCard, Printer, Eye, X, Calculator, Calendar, FileUp, Download, ArrowLeft, CheckCircle2, ShieldCheck, BarChart3, FileText, Info, Check, AlertCircle, Building2, User, Ban, ShieldCheck as Shield, Send, Landmark } from 'lucide-react';
 import * as XLSX from 'xlsx';
-
-import { useAppStore } from '../../shared/store/appStore';
 import { toast } from 'sonner';
 
-const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
+const PayrollManagement: React.FC = () => {
+  const company = 'Glassco';
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [payrolls, setPayrolls] = useState<(Payroll & { isSalaryPaid?: boolean, isOvertimePaid?: boolean, allowedAbsentCount?: number, loanWaived?: boolean })[]>([]);
@@ -213,8 +212,8 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
             <div className="grid grid-cols-2 gap-10 mb-8 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div className="space-y-1">
                     <p className="font-bold uppercase text-slate-400 text-[8px]">Employee Identification</p>
-                    <p className="text-lg font-black text-slate-900 leading-none">{emp.personal.name}</p>
-                    <p className="text-[10px] font-bold text-blue-700 uppercase">{emp.work.employeeCode} | {emp.work.designation}</p>
+                    <p className="text-lg font-black text-slate-900 leading-none">{emp?.personal?.name ?? "—"}</p>
+                    <p className="text-[10px] font-bold text-blue-700 uppercase">{emp?.work?.employeeCode ?? "—"} | {emp?.work?.designation ?? "—"}</p>
                     <p className="text-[10px] font-medium text-slate-500">{emp.work.department}</p>
                 </div>
                 <div className="text-right space-y-1">
