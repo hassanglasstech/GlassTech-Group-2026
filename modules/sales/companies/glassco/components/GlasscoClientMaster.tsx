@@ -98,7 +98,7 @@ const GlasscoClientMaster: React.FC<{ company: Company }> = ({ company }) => {
         </table>
       </div>
 
-      {isModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200"> setIsModalOpen(false)} title="New Business Partner" width="md">
+      {isModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">
         <div className="p-8 grid grid-cols-2 gap-8 bg-slate-50">
           <div className="space-y-6">
             <h4 className="text-xs font-bold uppercase text-slate-500 tracking-widest border-b pb-2">General Data</h4>

@@ -249,7 +249,7 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
           <UnifiedPaymentPrint data={printingEntry} company={company} partyName="Authorized Personnel" />
       )}
 
-      {isModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200"> setIsModalOpen(false)} title={formData.status === 'Parked' ? 'Approve Factory Entry' : 'Cash Journal Entry'} width="lg">
+      {isModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">
         <div className="p-8 space-y-6 bg-slate-50">
           {formData.status === 'Parked' && (
             <div className="bg-amber-50 p-4 border border-amber-200 rounded text-amber-800 text-xs font-bold uppercase">

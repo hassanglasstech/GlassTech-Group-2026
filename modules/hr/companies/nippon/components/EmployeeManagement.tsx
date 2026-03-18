@@ -316,7 +316,7 @@ const EmployeeManagement: React.FC = () => {
         </div>
       </div>
 
-      {isModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200"> setIsModalOpen(false)} title={editingId ? 'Edit Employee Profile' : 'Employee Registration'} subtitle={`${company} Human Resources Registry`} width="xl">
+      {isModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">
         <div className="flex-1 overflow-y-auto bg-slate-50">
           <div className="p-10 space-y-8 max-w-4xl mx-auto">
             <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
