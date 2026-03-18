@@ -77,6 +77,7 @@ const TABLE_MAP: Record<string, string> = {
   products:           'gtk_erp_products',
   vendors:            'gtk_erp_vendors',
   store_items:        'gtk_erp_store',
+  assets:             'gtk_erp_assets',
   stock_ledger:       'gtk_erp_stock_ledger',
   inspection_lots:    'gtk_erp_inspection_lots',
   remnants:           'gtk_erp_remnants',
@@ -116,14 +117,32 @@ const mapFromSupabase = (item: any) => {
 // ── Tables that are LOCAL ONLY — never pushed to Supabase ────────────
 const LOCAL_ONLY_TABLES = new Set(['activity_logs']);
 
+// ── Known columns per table (only send what DB expects) ──────────────
+const TABLE_COLUMNS: Record<string, string[]> = {
+  ledger:    ['id', 'company', 'doc_type', 'doc_date', 'date', 'description', 'reference_id', 'status', 'details', 'updated_at'],
+  employees: ['id', 'company', 'name', 'personal', 'work', 'salary', 'basic', 'house_rent', 'conveyance', 'special_allowance', 'department', 'designation', 'grade', 'join_date', 'employee_code', 'address', 'phone', 'cnic', 'updated_at'],
+  assets:    ['id', 'company', 'name', 'category', 'serial_no', 'purchase_date', 'purchase_cost', 'useful_life', 'status', 'location', 'assigned_to', 'depreciation_method', 'maintenance_logs', 'notes', 'updated_at'],
+};
+
+const filterColumns = (table: string, data: any[]): any[] => {
+  const cols = TABLE_COLUMNS[table];
+  if (!cols) return data;
+  return data.map(row => {
+    const filtered: any = {};
+    cols.forEach(col => { if (col in row) filtered[col] = row[col]; });
+    return filtered;
+  });
+};
+
 const pushTable = async (table: string, localKey: string): Promise<boolean> => {
   if (LOCAL_ONLY_TABLES.has(table)) return true; // skip silently
 
   const rawData = safeParse(localKey);
   if (!rawData || rawData.length === 0) return true;
   
-  // Map to snake_case for Supabase
-  const data = rawData.map(mapToSupabase);
+  // Map to snake_case for Supabase, then filter to known columns
+  const mapped = rawData.map(mapToSupabase);
+  const data = filterColumns(table, mapped);
   
   try {
     await withRetry(
@@ -134,9 +153,11 @@ const pushTable = async (table: string, localKey: string): Promise<boolean> => {
         });
         if (error) {
           // 400 = table/column mismatch — skip this table silently
-          if (error.code === 'PGRST204' || error.code === '42P01' || error.message?.includes('relation') || error.message?.includes('column')) {
-            console.log(`[Sync] Skipping ${table} — table or column not found in DB. Run SQL migration.`);
-            return; // don't throw — treat as soft skip
+          if (error.code === 'PGRST204' || error.code === '42P01' || 
+              error.message?.includes('relation') || error.message?.includes('column') ||
+              error.message?.includes('enum') || error.message?.includes('invalid input value')) {
+            console.log(`[Sync] Skipping ${table} — schema mismatch: ${error.message}`);
+            return;
           }
           throw error;
         }
