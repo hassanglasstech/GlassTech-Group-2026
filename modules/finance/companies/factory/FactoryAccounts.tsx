@@ -22,8 +22,8 @@ import {
 
 type CategoryKey = 'ops' | 'reporting' | 'hr' | 'assets' | 'config';
 
-const NipponAccounts: React.FC = () => {
-  const company = 'Nippon';
+const FactoryAccounts: React.FC = () => {
+  const company = 'Factory';
   const [activeCategory, setActiveCategory] = useState<CategoryKey>('ops');
   const [activeTab, setActiveTab] = useState<string>('registry');
 
@@ -164,4 +164,4 @@ const NipponAccounts: React.FC = () => {
   );
 };
 
-export default NipponAccounts;
+export default FactoryAccounts;

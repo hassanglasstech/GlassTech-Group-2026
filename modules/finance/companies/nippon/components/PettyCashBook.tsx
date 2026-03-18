@@ -53,12 +53,16 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
     setCostCenters(FinanceService.getCostCenters().filter(cc => cc.company === company));
     setAccounts(FinanceService.getAccounts().filter(a => a.company === company && a.level === 5));
 
-    // Fetch Authorized Requisitions for Linking (Expense/Maintenance/General/Overtime)
+    // Fetch Authorized Requisitions for Linking
     const allReqs = InventoryService.getRequisitions().filter(Boolean);
+    const allEntries = FinanceService.getPettyCashEntries();
+    const linkedReqIds = new Set(allEntries.map(e => e.referenceDoc).filter(Boolean));
+    
     const relevant = allReqs.filter(r => 
         r.company === company && 
         r.status === 'Approved' && 
-        ['Expense', 'Maintenance', 'General', 'Overtime', 'Consumable'].includes(r.reqType || '')
+        ['Expense', 'Maintenance', 'General', 'Overtime', 'Consumable'].includes(r.reqType || '') &&
+        !linkedReqIds.has(r.id)
     );
     setAuthorizedReqs(relevant);
   };

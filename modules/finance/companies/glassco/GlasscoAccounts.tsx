@@ -13,21 +13,20 @@ import BillingHub from './components/BillingHub';
 import GLConfiguration from './components/GLConfiguration';
 import AgingReport from './components/AgingReport';
 import FinanceDashboardView from '../../components/FinanceDashboardView';
-import COAViewer from '../../components/COAViewer';
+import AssetManagement from '../../components/AssetManagement';
 import { 
   Landmark, CreditCard, ListTree, BookOpen, BarChart4, 
   FilePieChart, Target, Wallet, RefreshCw, FileText, 
-  Inbox, Settings, Clock, Briefcase, LayoutGrid, Users, BarChart3
+  Inbox, Settings, Clock, Briefcase, LayoutGrid, Users, BarChart3, Package
 } from 'lucide-react';
 
-type CategoryKey = 'ops' | 'reporting' | 'hr' | 'config';
+type CategoryKey = 'ops' | 'reporting' | 'hr' | 'assets' | 'config';
 
 const GlasscoAccounts: React.FC = () => {
   const company = 'Glassco';
   const [activeCategory, setActiveCategory] = useState<CategoryKey>('ops');
   const [activeTab, setActiveTab] = useState<string>('registry');
 
-  // Define Category Structure
   const structure = useMemo(() => {
     return {
       ops: {
@@ -56,6 +55,13 @@ const GlasscoAccounts: React.FC = () => {
         tabs: [
           { id: 'loans', label: 'Loan Management', icon: CreditCard },
           { id: 'payroll', label: 'Payroll Processing', icon: Landmark },
+        ]
+      },
+      assets: {
+        label: 'Asset Management',
+        icon: Package,
+        tabs: [
+          { id: 'assets', label: 'Assets & Tools', icon: Package },
         ]
       },
       config: {
@@ -143,6 +149,9 @@ const GlasscoAccounts: React.FC = () => {
           {/* HR Finance */}
           {activeTab === 'loans' && <LoanManagement company={company} />}
           {activeTab === 'payroll' && <PayrollManagement company={company} />}
+
+          {/* Assets */}
+          {activeTab === 'assets' && <AssetManagement />}
           
           {/* Config */}
           {activeTab === 'coa' && <ChartOfAccounts company={company} />}
