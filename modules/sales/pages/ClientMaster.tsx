@@ -4,7 +4,6 @@ import { Company, Client } from '../../shared/types';
 import { SalesService } from '../services/salesService';
 import { UserPlus, Search, Edit2, Trash2, X, Building, Phone, Save, Briefcase } from 'lucide-react';
 
-import { SidePanel } from '@/modules/shared/components/SidePanel';
 import { useAppStore } from '../../shared/store/appStore';
 import { toast } from 'sonner';
 
@@ -148,7 +147,7 @@ const ClientMaster: React.FC = () => {
         </table>
       </div>
 
-      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Business Partner" width="md">
+      {isModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200"> setIsModalOpen(false)} title="New Business Partner" width="md">
         <div className="p-8 grid grid-cols-2 gap-8 bg-slate-50">
           <div className="space-y-6">
             <h4 className="text-xs font-bold uppercase text-slate-500 tracking-widest border-b pb-2">General Data</h4>
@@ -191,7 +190,7 @@ const ClientMaster: React.FC = () => {
           <button onClick={() => setIsModalOpen(false)} className="sap-btn-ghost">Discard</button>
           <button onClick={handleSave} className="sap-btn-primary flex items-center space-x-2"><Save size={14} /><span>Create Partner</span></button>
         </div>
-      </SidePanel>
+      </div></div>)}
     </div>
   );
 };

@@ -2,7 +2,6 @@ import React, { useMemo } from 'react';
 import { GlasscoPrintTemplate } from '@/modules/glassco/core/GlasscoPrintTemplate';
 import { GlasscoList } from '@/modules/glassco/core/GlasscoList';
 import { GlasscoEditor } from '@/modules/glassco/core/GlasscoEditor';
-import { SidePanel } from '@/modules/shared/components/SidePanel';
 import { useGlasscoQuotations } from './useGlasscoQuotations';
 
 const GlasscoQuotationManager: React.FC = () => {
@@ -101,9 +100,7 @@ const GlasscoQuotationManager: React.FC = () => {
             />
         ) : null}
 
-        <SidePanel
-          isOpen={isEditorOpen}
-          onClose={() => setIsEditorOpen(false)}
+        {isEditorOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200"> setIsEditorOpen(false)}
           title={formData.id?.startsWith('DRF-') ? 'Draft Quotation' : formData.id ? 'Edit Quotation' : 'New Quotation'}
           subtitle={clients.find(c => c.id === formData.clientId)?.name || 'Glassco Sales'}
           badge={formData.status === 'Approved' ? 'Approved' : formData.id?.startsWith('DRF-') ? 'Draft' : 'New'}
@@ -118,7 +115,7 @@ const GlasscoQuotationManager: React.FC = () => {
               onRemoveItem={removeItem} onSave={handleSaveQuotation} 
             />
 
-        </SidePanel>
+        </div></div>)}
     </div>
   );
 };

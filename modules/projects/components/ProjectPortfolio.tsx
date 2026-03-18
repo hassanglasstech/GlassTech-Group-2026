@@ -2,7 +2,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Project, Client, LedgerTransaction } from '../../shared/types';
 import { ProjectService } from '../services/projectService';
-import { SidePanel } from '@/modules/shared/components/SidePanel';
 import { FinanceService } from '../../finance/services/financeService';
 import { Plus, Save, Activity, Layout, PenTool, Hash, Box, Hammer, AlertTriangle, Wallet } from 'lucide-react';
 
@@ -167,7 +166,7 @@ const ProjectPortfolio: React.FC<ProjectPortfolioProps> = ({ projects, clients, 
                 })}
             </div>
 
-            <SidePanel isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} title="Project Budget Initiation" width="xl">
+            {isCreateOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200"> setIsCreateOpen(false)} title="Project Budget Initiation" width="xl">
                 <div className="p-8 space-y-8 bg-slate-50">
                     <div className="grid grid-cols-2 gap-4">
                         <div className="col-span-2"><label className="text-[10px] font-black uppercase text-slate-500 ml-1">Project Title</label><input type="text" className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold uppercase" value={newProjectForm.title} onChange={e => setNewProjectForm({...newProjectForm, title: e.target.value})} /></div>
@@ -195,7 +194,7 @@ const ProjectPortfolio: React.FC<ProjectPortfolioProps> = ({ projects, clients, 
                     <button onClick={() => setIsCreateOpen(false)} className="px-6 py-2 text-slate-400 font-bold uppercase text-xs">Cancel</button>
                     <button onClick={handleCreateProject} className="bg-slate-900 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-blue-600 transition-all flex items-center space-x-2"><Save size={14}/> <span>Activate</span></button>
                 </div>
-            </SidePanel>
+            </div></div>)}
         </div>
     );
 };

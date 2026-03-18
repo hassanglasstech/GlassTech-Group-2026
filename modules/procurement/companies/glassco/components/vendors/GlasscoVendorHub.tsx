@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Company, TemperingDispatch, ProductionPiece, PieceFault, Vendor, Quotation, VendorRate } from '../../../../../shared/types';
 import { ProductionService } from '../../../../../production/services/productionService';
 import { SalesService } from '../../../../../sales/services/salesService';
-import { SidePanel } from '@/modules/shared/components/SidePanel';
 import { 
   LayoutGrid, List, Plus, X, Save, Trash2, Edit, Truck, Layers, Flame, Calculator, CheckCircle2, Ban, Clock, Globe, Filter, Search, Phone, Receipt, Calendar
 } from 'lucide-react';
@@ -284,7 +283,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
           </div>
       )}
 
-      <SidePanel isOpen={isAddVendorOpen} onClose={() => setIsAddVendorOpen(false)} title={editingId ? 'Edit Vendor Profile' : 'Onboard New Vendor'} width="md">
+      {isAddVendorOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200"> setIsAddVendorOpen(false)} title={editingId ? 'Edit Vendor Profile' : 'Onboard New Vendor'} width="md">
         <div className="p-8 space-y-6 bg-slate-50">
           <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Vendor Name</label><input type="text" value={newVendorForm.name} onChange={e => setNewVendorForm({...newVendorForm, name: e.target.value})} className="sap-input w-full font-black uppercase" /></div>
           <div className="grid grid-cols-2 gap-4">
@@ -304,9 +303,9 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
           <button onClick={() => setIsAddVendorOpen(false)} className="sap-btn-ghost">Cancel</button>
           <button onClick={handleSaveVendor} className="sap-btn-primary flex items-center space-x-2"><Save size={14} /> <span>Save Vendor</span></button>
         </div>
-      </SidePanel>
+      </div></div>)}
 
-      <SidePanel isOpen={isRateModalOpen && !!selectedVendorForRates} onClose={() => setIsRateModalOpen(false)} title="Rate Card History" subtitle={selectedVendorForRates?.name} width="md">
+      {isRateModalOpen && !!selectedVendorForRates && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200"> setIsRateModalOpen(false)} title="Rate Card History" subtitle={selectedVendorForRates?.name} width="md">
         <div className="p-6 bg-slate-50 space-y-6">
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <h4 className="text-[10px] font-black uppercase text-slate-400 mb-2">New Rate Entry</h4>
@@ -362,9 +361,9 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
             </table>
           </div>
         </div>
-      </SidePanel>
+      </div></div>)}
 
-      <SidePanel isOpen={!!reconcileTripId} onClose={() => setReconcileTripId(null)} title="Service Cost Engine" subtitle="Reconciliation & Cost Allocation" width="xl">
+      {!!reconcileTripId && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200"> setReconcileTripId(null)} title="Service Cost Engine" subtitle="Reconciliation & Cost Allocation" width="xl">
         <div className="flex-1 overflow-y-auto p-10 bg-slate-50">
           {(() => {
             const costData = getBatchCostAnalysis(reconcileTripId);
@@ -398,7 +397,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
         <div className="px-10 py-8 bg-white border-t flex justify-end">
           <button onClick={() => setReconcileTripId(null)} className="bg-slate-900 text-white px-12 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-blue-600 transition-all">Finish Audit</button>
         </div>
-      </SidePanel>
+      </div></div>)}
     </div>
   );
 };

@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Company, Account, LedgerTransaction } from '@/modules/shared/types';
 import { FinanceService } from '@/modules/finance/services/financeService';
-import { SidePanel } from '@/modules/shared/components/SidePanel';
 import { 
   ChevronRight, ChevronDown, Folder, FileText, Plus, X, 
   Landmark, Search, LayoutList, Briefcase, Wallet, PieChart, 
@@ -432,7 +431,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
       </div>
 
       {/* OPENING BALANCES MODAL */}
-      <SidePanel isOpen={isOBModalOpen} onClose={() => setIsOBModalOpen(false)} title="System Opening Balances" subtitle="Double Entry Initialization | Level 5 Accounts" width="xl">
+      {isOBModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200"> setIsOBModalOpen(false)} title="System Opening Balances" subtitle="Double Entry Initialization | Level 5 Accounts" width="xl">
         <div className="flex-1 overflow-y-auto bg-slate-50 p-8">
           <table className="w-full bg-white shadow-sm border text-left">
             <thead className="bg-slate-100 text-[10px] font-black uppercase text-slate-500 sticky top-0 z-10">
@@ -473,10 +472,10 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
             <button onClick={handleSaveOpeningBalances} disabled={Math.abs(obDiff) > 0.01} className="sap-btn-primary disabled:opacity-50 disabled:cursor-not-allowed">Post Balances</button>
           </div>
         </div>
-      </SidePanel>
+      </div></div>)}
 
       {/* ADD MODAL */}
-      <SidePanel isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Financial Node Maintenance" subtitle="Transaction: FSS0 Account Create" width="md">
+      {isAddModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200"> setIsAddModalOpen(false)} title="Financial Node Maintenance" subtitle="Transaction: FSS0 Account Create" width="md">
         <div className="p-8 space-y-6 bg-slate-50">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
@@ -529,10 +528,10 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
           <button onClick={() => setIsAddModalOpen(false)} className="sap-btn-ghost">Cancel</button>
           <button onClick={handleSaveAccount} disabled={!addSelections.l1 || !newAccName} className="sap-btn-primary disabled:opacity-30">Save Account</button>
         </div>
-      </SidePanel>
+      </div></div>)}
 
       {/* EDIT MODAL */}
-      <SidePanel isOpen={isEditModalOpen && !!editingAccount} onClose={() => setIsEditModalOpen(false)} title="Edit Account" width="md">
+      {isEditModalOpen && !!editingAccount && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200"> setIsEditModalOpen(false)} title="Edit Account" width="md">
         <div className="p-8 space-y-6 bg-slate-50">
           <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl">
             <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">Hierarchy Context</p>
@@ -551,10 +550,10 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
           <button onClick={() => setIsEditModalOpen(false)} className="sap-btn-ghost">Cancel</button>
           <button onClick={handleUpdateAccount} className="sap-btn-primary">Update Account</button>
         </div>
-      </SidePanel>
+      </div></div>)}
 
       {/* DELETE MODAL */}
-      <SidePanel isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Decommission Node" width="md">
+      {isDeleteModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200"> setIsDeleteModalOpen(false)} title="Decommission Node" width="md">
         <div className="p-8 space-y-6 bg-slate-50">
           <div className="bg-rose-50 p-4 border border-rose-100 rounded-xl flex items-start space-x-3">
             <ShieldAlert size={20} className="text-rose-600 shrink-0"/>
@@ -604,7 +603,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
             <Trash2 size={16}/> <span>Confirm Delete</span>
           </button>
         </div>
-      </SidePanel>
+      </div></div>)}
     </div>
   );
 };

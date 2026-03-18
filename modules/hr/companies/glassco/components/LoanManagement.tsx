@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Employee, LoanAdvance, Requisition } from '@/modules/shared/types';
 import { HRService } from '@/modules/hr/services/hrService';
-import { SidePanel } from '@/modules/shared/components/SidePanel';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { Plus, Search, CheckCircle, Clock, Banknote, HandCoins, X, AlertCircle, FileUp, Download, Calendar, Edit2, Trash2, Fingerprint } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -233,7 +232,7 @@ const LoanManagement: React.FC = () => {
         </table>
       </div>
 
-      <SidePanel isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingId(null); }} title={editingId ? 'Edit Entry' : (modalType === 'Loan' ? 'Issuance of Loan' : 'Salary Advance')} width="md">
+      {isModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200"> { setIsModalOpen(false); setEditingId(null); }} title={editingId ? 'Edit Entry' : (modalType === 'Loan' ? 'Issuance of Loan' : 'Salary Advance')} width="md">
         <div className="p-10 space-y-8 bg-slate-50">
           {!editingId && authorizedReqs.length > 0 && (
             <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl animate-in fade-in">
@@ -261,7 +260,7 @@ const LoanManagement: React.FC = () => {
           <button onClick={() => { setIsModalOpen(false); setEditingId(null); }} className="px-8 py-3 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-600">Discard</button>
           <button onClick={handleSaveLoan} className={`${modalType === 'Loan' ? 'bg-slate-900' : 'bg-blue-600'} text-white px-12 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-2xl transition-all hover:scale-[1.02] active:scale-95`}>{editingId ? 'Update Record' : 'Post Transaction'}</button>
         </div>
-      </SidePanel>
+      </div></div>)}
     </div>
   );
 };

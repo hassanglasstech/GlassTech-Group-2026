@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Employee, Account } from '@/modules/shared/types';
 import { HRService } from '@/modules/hr/services/hrService';
-import { SidePanel } from '@/modules/shared/components/SidePanel';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { UserPlus, Search, Edit2, Trash2, X, Briefcase, Wallet, UserCircle, FileUp, Download, Layers } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -317,7 +316,7 @@ const EmployeeManagement: React.FC = () => {
         </div>
       </div>
 
-      <SidePanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? 'Edit Employee Profile' : 'Employee Registration'} subtitle={`${company} Human Resources Registry`} width="xl">
+      {isModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200"> setIsModalOpen(false)} title={editingId ? 'Edit Employee Profile' : 'Employee Registration'} subtitle={`${company} Human Resources Registry`} width="xl">
         <div className="flex-1 overflow-y-auto bg-slate-50">
           <div className="p-10 space-y-8 max-w-4xl mx-auto">
             <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
@@ -369,7 +368,7 @@ const EmployeeManagement: React.FC = () => {
           <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="px-6 py-3 text-slate-500 font-bold uppercase text-xs tracking-widest hover:text-slate-800">Discard Changes</button>
           <button onClick={handleSave} className="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl hover:bg-blue-600 transition-all flex items-center space-x-2"><span>{editingId ? 'Update Record' : 'Enroll Employee'}</span></button>
         </div>
-      </SidePanel>
+      </div></div>)}
     </div>
   );
 };

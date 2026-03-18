@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { Company, Vendor } from '@/modules/shared/types';
 import { SalesService } from '@/modules/sales/services/salesService';
-import { SidePanel } from '@/modules/shared/components/SidePanel';
 import { Plus, Search, MapPin, Calendar, Phone, Save, X, Edit2, Trash2, Building } from 'lucide-react';
 
 const NipponVendorRegistry: React.FC = () => {
@@ -166,7 +165,7 @@ const NipponVendorRegistry: React.FC = () => {
           </table>
       </div>
 
-      <SidePanel isOpen={isModalOpen} onClose={handleCloseModal} title={editingId ? 'Edit Partner' : 'New Registration'} width="md">
+      {isModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">
         <div className="p-8 bg-slate-50 space-y-6">
           <div className="space-y-1">
             <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Company Name</label>
@@ -235,7 +234,7 @@ const NipponVendorRegistry: React.FC = () => {
             </button>
           </div>
         </div>
-      </SidePanel>
+      </div></div>)}
     </div>
   );
 };
