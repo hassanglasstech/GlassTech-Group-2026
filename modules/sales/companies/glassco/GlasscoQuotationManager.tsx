@@ -100,20 +100,19 @@ const GlasscoQuotationManager: React.FC = () => {
             />
         ) : null}
 
-        {isEditorOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200"> c.id === formData.clientId)?.name || 'Glassco Sales'}
-          badge={formData.status === 'Approved' ? 'Approved' : formData.id?.startsWith('DRF-') ? 'Draft' : 'New'}
-          badgeColor={formData.status === 'Approved' ? 'emerald' : 'blue'}
-          width="xl"
-        >
-            <GlasscoEditor 
-              formData={formData} clients={clients} products={products} isMM={isMM} setIsMM={setIsMM} 
-              lastSerial={lastSerial}
-              onClose={() => setIsEditorOpen(false)} onUpdateItem={updateGlassItem} 
-              onAddItem={addItem} onAddSection={addSection} onDuplicateItem={duplicateItem}
-              onRemoveItem={removeItem} onSave={handleSaveQuotation} 
-            />
-
-        </div></div>)}
+        {isEditorOpen && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]">
+            <div className="bg-white rounded-xl w-full max-w-4xl h-[90vh] shadow-2xl overflow-hidden flex flex-col border border-slate-200">
+              <GlasscoEditor 
+                formData={formData} clients={clients} products={products} isMM={isMM} setIsMM={setIsMM} 
+                lastSerial={lastSerial}
+                onClose={() => setIsEditorOpen(false)} onUpdateItem={updateGlassItem} 
+                onAddItem={addItem} onAddSection={addSection} onDuplicateItem={duplicateItem}
+                onRemoveItem={removeItem} onSave={handleSaveQuotation} 
+              />
+            </div>
+          </div>
+        )}
     </div>
   );
 };
