@@ -232,7 +232,7 @@ const LoanManagement: React.FC = () => {
         </table>
       </div>
 
-      {isModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200"> { setIsModalOpen(false); setEditingId(null); }} title={editingId ? 'Edit Entry' : (modalType === 'Loan' ? 'Issuance of Loan' : 'Salary Advance')} width="md">
+      {isModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">
         <div className="p-10 space-y-8 bg-slate-50">
           {!editingId && authorizedReqs.length > 0 && (
             <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl animate-in fade-in">
