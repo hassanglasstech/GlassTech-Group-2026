@@ -135,7 +135,7 @@ const NipponAccounts: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-[1600px] mx-auto animate-in fade-in duration-300">
           {/* Operations */}
-          {activeTab === 'dashboard' && <FinanceDashboardView metrics={{cashPosition: 1000000, accountsReceivable: 500000, accountsPayable: 200000, netProfit: 300000, topExpenses: []}} />}
+          {activeTab === 'dashboard' && <FinanceDashboardView company={company} />}
           {activeTab === 'registry' && <FinancialRegistry company={company} />}
           {activeTab === 'cash_journal' && <PettyCashBook company={company} />}
           {activeTab === 'ledger' && <GeneralLedger company={company} />}
