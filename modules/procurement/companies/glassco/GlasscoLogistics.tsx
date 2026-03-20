@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GatePass, TemperingDispatch, ProductionPiece, Quotation, Client, Vendor } from '@/modules/shared/types';
+import { GatePass, TemperingDispatch, ProductionPiece, Quotation, Client, Vendor, Company } from '@/modules/shared/types';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { Truck, ShieldCheck, ClipboardList } from 'lucide-react';
@@ -7,8 +7,7 @@ import GateControl from './components/logistics/GateControl';
 import SecurityAudit from './components/logistics/SecurityAudit';
 import DispatchPlanner from './components/logistics/DispatchPlanner';
 
-const GlasscoLogistics: React.FC = () => {
-  const company = 'Glassco';
+const CompanyLogistics: React.FC<{ company: Company }> = ({ company }) => {
   const [activeTab, setActiveTab] = useState<'gate' | 'security' | 'dispatches'>('gate');
   const [gatePasses, setGatePasses] = useState<GatePass[]>([]);
   const [dispatches, setDispatches] = useState<TemperingDispatch[]>([]);
@@ -94,4 +93,4 @@ const GlasscoLogistics: React.FC = () => {
   );
 };
 
-export default GlasscoLogistics;
+export default CompanyLogistics;

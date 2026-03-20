@@ -1,19 +1,20 @@
 import React, { useState, useMemo } from 'react';
-import LoanManagement from '../../../hr/pages/LoanManagement';
-import PayrollManagement from '../../../hr/pages/PayrollManagement';
-import ChartOfAccounts from './components/ChartOfAccounts';
-import GeneralLedger from './components/GeneralLedger';
-import TrialBalance from './components/TrialBalance';
-import FinancialStatements from './components/FinancialStatements';
-import CostCenterMaster from './components/CostCenterMaster';
-import PettyCashBook from './components/PettyCashBook';
-import RecurringExpenses from './components/RecurringExpenses';
-import FinancialRegistry from './components/FinancialRegistry';
-import BillingHub from './components/BillingHub';
-import GLConfiguration from './components/GLConfiguration';
-import AgingReport from './components/AgingReport';
-import FinanceDashboardView from '../../components/FinanceDashboardView';
-import AssetManagement from '../../components/AssetManagement';
+import { Company } from '@/modules/shared/types';
+import LoanManagement from '@/modules/hr/pages/LoanManagement';
+import PayrollManagement from '@/modules/hr/pages/PayrollManagement';
+import ChartOfAccounts from '@/modules/finance/pages/ChartOfAccounts';
+import GeneralLedger from '@/modules/finance/pages/GeneralLedger';
+import TrialBalance from '@/modules/finance/pages/TrialBalance';
+import FinancialStatements from '@/modules/finance/pages/FinancialStatements';
+import CostCenterMaster from '@/modules/finance/pages/CostCenterMaster';
+import PettyCashBook from '@/modules/finance/pages/PettyCashBook';
+import RecurringExpenses from '@/modules/finance/pages/RecurringExpenses';
+import FinancialRegistry from '@/modules/finance/pages/FinancialRegistry';
+import BillingHub from '@/modules/finance/components/BillingHub';
+import GLConfiguration from '@/modules/finance/components/GLConfiguration';
+import AgingReport from '@/modules/finance/components/AgingReport';
+import FinanceDashboardView from '@/modules/finance/components/FinanceDashboardView';
+import AssetManagement from '@/modules/finance/components/AssetManagement';
 import { 
   Landmark, CreditCard, ListTree, BookOpen, BarChart4, 
   FilePieChart, Target, Wallet, RefreshCw, FileText, 
@@ -22,8 +23,7 @@ import {
 
 type CategoryKey = 'ops' | 'reporting' | 'hr' | 'assets' | 'config';
 
-const GlasscoAccounts: React.FC = () => {
-  const company = 'Glassco';
+const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
   const [activeCategory, setActiveCategory] = useState<CategoryKey>('ops');
   const [activeTab, setActiveTab] = useState<string>('registry');
 
@@ -164,4 +164,4 @@ const GlasscoAccounts: React.FC = () => {
   );
 };
 
-export default GlasscoAccounts;
+export default CompanyAccounts;

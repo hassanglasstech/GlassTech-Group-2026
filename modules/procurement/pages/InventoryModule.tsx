@@ -11,7 +11,7 @@ import GlasscoGoodsIssue from '@/modules/procurement/companies/glassco/component
 import GlasscoGoodsReceiptMIGO from '@/modules/procurement/companies/glassco/components/inventory/GoodsReceiptMIGO';
 
 import NipponStockOverview from '@/modules/procurement/companies/nippon/components/inventory/StockOverview';
-import NipponGoodsIssue from '@/modules/procurement/companies/nippon/components/inventory/GoodsIssue';
+// GlasscoGoodsIssue removed - using shared GlasscoGoodsIssue
 import NipponGoodsReceipt from '@/modules/procurement/companies/nippon/components/inventory/GoodsReceipt';
 import { 
   LayoutGrid, ArrowUpRight, ShieldCheck, Truck, Database, Loader2
@@ -112,7 +112,7 @@ const InventoryModule: React.FC = () => {
 
       {activeTab === 'issuance' && (
           company === 'Nippon' ? (
-              <NipponGoodsIssue 
+              <GlasscoGoodsIssue 
                 items={items}
                 costCenters={costCenters}
                 projects={projects}

@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Search, Wrench, Package, Truck, Monitor, ChevronDown, Edit2, Trash2, X, Save, AlertTriangle, CheckCircle, Clock, BarChart3 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Search, Wrench, Package, Truck, Monitor, Edit2, Trash2, X, Save, Clock, BarChart3, Download, Upload, FileDown } from 'lucide-react';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
+import { SyncService } from '@/src/services/SyncService';
 
 // ── Types ─────────────────────────────────────────────────────────────
 type AssetCategory = 'Machinery' | 'Vehicle' | 'Tool' | 'Furniture' | 'IT Equipment' | 'Other';
@@ -82,6 +84,11 @@ const calculateDepreciation = (asset: Asset) => {
 const AssetManagement: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
   const [assets, setAssets] = useState<Asset[]>([]);
+
+  useEffect(() => {
+    const all = safeParse(ASSET_KEY).filter((a: Asset) => a.company === company);
+    setAssets(all);
+  }, [company]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('All');
   const [filterStatus, setFilterStatus] = useState<string>('All');
@@ -108,15 +115,87 @@ const AssetManagement: React.FC = () => {
   };
   const [logForm, setLogForm] = useState<Partial<MaintenanceLog>>(emptyLog);
 
-  useEffect(() => {
-    const all = safeParse(ASSET_KEY).filter((a: Asset) => a.company === company);
-    setAssets(all);
-  }, [company]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Export Functions ────────────────────────────────────────────────
+  const handleExportExcel = () => {
+    const rows = assets.map(a => ({
+      ID: a.id, Company: a.company, Name: a.name, Category: a.category,
+      SerialNo: a.serialNo, PurchaseDate: a.purchaseDate, PurchaseCost: a.purchaseCost,
+      UsefulLife: a.usefulLife, Status: a.status, Location: a.location,
+      AssignedTo: a.assignedTo, DepreciationMethod: a.depreciationMethod, Notes: a.notes,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Assets');
+
+    // Maintenance logs on separate sheet
+    const logs = assets.flatMap(a => a.maintenanceLogs.map(l => ({
+      AssetID: a.id, AssetName: a.name, LogID: l.id,
+      Date: l.date, Description: l.description, Cost: l.cost,
+      Vendor: l.vendor, PerformedBy: l.performedBy, NextDueDate: l.nextDueDate || '',
+    })));
+    if (logs.length > 0) {
+      const ws2 = XLSX.utils.json_to_sheet(logs);
+      XLSX.utils.book_append_sheet(wb, ws2, 'Maintenance Logs');
+    }
+    XLSX.writeFile(wb, `${company}_Assets_${new Date().toISOString().slice(0,10)}.xlsx`);
+    toast.success('Excel exported');
+  };
+
+  const handleExportJSON = () => {
+    const json = JSON.stringify(assets, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${company}_Assets_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('JSON exported');
+  };
+
+  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const wb = XLSX.read(evt.target?.result, { type: 'binary' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows: any[] = XLSX.utils.sheet_to_json(ws);
+        const imported: Asset[] = rows.map((row, i) => ({
+          id: row.ID || `AST-IMP-${Date.now()}-${i}`,
+          company,
+          name: row.Name || '',
+          category: (row.Category as AssetCategory) || 'Other',
+          serialNo: row.SerialNo || '',
+          purchaseDate: row.PurchaseDate || new Date().toISOString().split('T')[0],
+          purchaseCost: Number(row.PurchaseCost) || 0,
+          usefulLife: Number(row.UsefulLife) || 5,
+          status: (row.Status as AssetStatus) || 'Active',
+          location: row.Location || '',
+          assignedTo: row.AssignedTo || '',
+          depreciationMethod: row.DepreciationMethod || 'Straight Line',
+          maintenanceLogs: [],
+          notes: row.Notes || '',
+        }));
+        const merged = [...assets.filter(a => !imported.find(i => i.id === a.id)), ...imported];
+        saveAssets(merged);
+        toast.success(`${imported.length} assets imported`);
+      } catch {
+        toast.error('Import failed — check file format');
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = '';
+  };
 
   const saveAssets = (data: Asset[]) => {
     const all = safeParse(ASSET_KEY);
     const others = all.filter((a: Asset) => a.company !== company);
     localStorage.setItem(ASSET_KEY, JSON.stringify([...others, ...data]));
+    SyncService.markDirty('assets');
     setAssets(data);
   };
 
@@ -178,10 +257,25 @@ const AssetManagement: React.FC = () => {
           <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Asset Management</h2>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{company} — Fixed Assets & Tools Register</p>
         </div>
-        <button onClick={() => { setEditingAsset(null); setAssetForm({...emptyAsset, company}); setIsAssetModalOpen(true); }}
-          className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-blue-600 transition-all flex items-center space-x-2">
-          <Plus size={14}/><span>Add Asset</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleImportExcel} className="hidden"/>
+          <button onClick={() => fileInputRef.current?.click()}
+            className="border border-slate-200 bg-white text-slate-600 px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 flex items-center space-x-2">
+            <Upload size={14}/><span>Import Excel</span>
+          </button>
+          <button onClick={handleExportExcel}
+            className="border border-slate-200 bg-white text-slate-600 px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 flex items-center space-x-2">
+            <Download size={14}/><span>Excel</span>
+          </button>
+          <button onClick={handleExportJSON}
+            className="border border-slate-200 bg-white text-slate-600 px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 flex items-center space-x-2">
+            <FileDown size={14}/><span>JSON</span>
+          </button>
+          <button onClick={() => { setEditingAsset(null); setAssetForm({...emptyAsset, company}); setIsAssetModalOpen(true); }}
+            className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-blue-600 transition-all flex items-center space-x-2">
+            <Plus size={14}/><span>Add Asset</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats */}

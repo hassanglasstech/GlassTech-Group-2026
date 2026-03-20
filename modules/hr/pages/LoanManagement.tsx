@@ -1,14 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Employee, LoanAdvance, Requisition } from '@/modules/shared/types';
+import { Employee, LoanAdvance, Requisition, Company } from '@/modules/shared/types';
 import { HRService } from '@/modules/hr/services/hrService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { Plus, Search, CheckCircle, Clock, Banknote, HandCoins, X, AlertCircle, FileUp, Download, Calendar, Edit2, Trash2, Fingerprint } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 
-const LoanManagement: React.FC = () => {
-  const company = 'Glassco';
+const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loans, setLoans] = useState<LoanAdvance[]>([]);
   const [authorizedReqs, setAuthorizedReqs] = useState<Requisition[]>([]);

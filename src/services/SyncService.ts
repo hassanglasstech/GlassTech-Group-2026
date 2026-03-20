@@ -120,6 +120,7 @@ const LOCAL_ONLY_TABLES = new Set(['activity_logs']);
 // ── Known columns per table (only send what DB expects) ──────────────
 const TABLE_COLUMNS: Record<string, string[]> = {
   ledger:    ['id', 'company', 'doc_type', 'doc_date', 'date', 'description', 'reference_id', 'status', 'details', 'updated_at'],
+  petty_cash: ['id', 'company', 'date', 'type', 'amount', 'description', 'reference_doc', 'created_at'],
   employees: ['id', 'company', 'name', 'personal', 'work', 'salary', 'basic', 'house_rent', 'conveyance', 'special_allowance', 'department', 'designation', 'grade', 'join_date', 'employee_code', 'address', 'phone', 'cnic', 'updated_at'],
   assets:    ['id', 'company', 'name', 'category', 'serial_no', 'purchase_date', 'purchase_cost', 'useful_life', 'status', 'location', 'assigned_to', 'depreciation_method', 'maintenance_logs', 'notes', 'updated_at'],
 };
@@ -129,7 +130,14 @@ const filterColumns = (table: string, data: any[]): any[] => {
   if (!cols) return data;
   return data.map(row => {
     const filtered: any = {};
-    cols.forEach(col => { if (col in row) filtered[col] = row[col]; });
+    cols.forEach(col => {
+      if (col in row) {
+        filtered[col] = row[col];
+      } else if (col === 'type' && !('type' in row)) {
+        // petty_cash: ensure type is never null
+        filtered[col] = row['entryType'] || 'Payment';
+      }
+    });
     return filtered;
   });
 };
@@ -172,17 +180,26 @@ const pushTable = async (table: string, localKey: string): Promise<boolean> => {
 };
 
 const pullTable = async (table: string, localKey: string): Promise<boolean> => {
+  if (LOCAL_ONLY_TABLES.has(table)) return true; // skip silently — same as push
   try {
     const rawData = await withRetry(
       async () => {
         const { data, error } = await supabase.from(table).select('*');
-        if (error) throw error;
+        if (error) {
+          // 404 = table not found — skip silently
+          if (error.code === 'PGRST204' || error.code === '42P01' ||
+              error.message?.includes('relation') || error.message?.includes('not found') ||
+              error.message?.includes('schema cache')) {
+            console.log(`[Sync] Skipping pull for ${table} — not in schema cache yet`);
+            return null;
+          }
+          throw error;
+        }
         return data;
       },
       { context: `Pull:${table}`, maxRetries: 2, delayMs: 1000 }
     );
     if (rawData && rawData.length > 0) {
-      // Map back to camelCase for local storage
       const data = rawData.map(mapFromSupabase);
       localStorage.setItem(localKey, JSON.stringify(data));
     }

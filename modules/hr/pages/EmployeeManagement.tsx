@@ -1,14 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Employee, Account } from '@/modules/shared/types';
+import { Employee, Account, Company } from '@/modules/shared/types';
 import { HRService } from '@/modules/hr/services/hrService';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { UserPlus, Search, Edit2, Trash2, X, Briefcase, Wallet, UserCircle, FileUp, Download, Layers } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 
-const EmployeeManagement: React.FC = () => {
-  const company = 'Glassco';
+const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);

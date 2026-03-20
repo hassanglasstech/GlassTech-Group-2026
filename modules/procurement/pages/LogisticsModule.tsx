@@ -1,16 +1,10 @@
-
 import React from 'react';
 import { useAppStore } from '@/modules/shared/store/appStore';
-import GlasscoLogistics from '@/modules/procurement/companies/glassco/GlasscoLogistics';
-import NipponLogistics from '@/modules/procurement/companies/nippon/NipponLogistics';
+import CompanyLogistics from '@/modules/procurement/companies/glassco/GlasscoLogistics';
 
 const LogisticsModule: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-
-  if (company === 'Nippon') return <NipponLogistics />;
-  
-  // Default to Glassco
-  return <GlasscoLogistics />;
+  return <CompanyLogistics company={company} />;
 };
 
 export default React.memo(LogisticsModule);

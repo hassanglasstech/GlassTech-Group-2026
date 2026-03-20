@@ -1,14 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Employee, AttendanceRecord, LoanAdvance, Payroll, LedgerTransaction } from '@/modules/shared/types';
+import { Employee, AttendanceRecord, LoanAdvance, Payroll, LedgerTransaction, Company } from '@/modules/shared/types';
 import { HRService } from '@/modules/hr/services/hrService';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { CreditCard, Printer, Eye, X, Calculator, Calendar, FileUp, Download, ArrowLeft, CheckCircle2, ShieldCheck, BarChart3, FileText, Info, Check, AlertCircle, Building2, User, Ban, ShieldCheck as Shield, Send, Landmark } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 
-const PayrollManagement: React.FC = () => {
-  const company = 'Glassco';
+const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [payrolls, setPayrolls] = useState<(Payroll & { isSalaryPaid?: boolean, isOvertimePaid?: boolean, allowedAbsentCount?: number, loanWaived?: boolean })[]>([]);

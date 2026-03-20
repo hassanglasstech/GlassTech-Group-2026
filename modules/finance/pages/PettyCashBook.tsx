@@ -56,22 +56,16 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
     // Fetch Authorized Requisitions for Linking
     const allReqs = InventoryService.getRequisitions().filter(Boolean);
     const allEntries = FinanceService.getPettyCashEntries();
+    // Already linked req IDs
     const linkedReqIds = new Set(allEntries.map(e => e.referenceDoc).filter(Boolean));
     
-    const relevant = allReqs.filter(r => 
-        r.company === company && 
-        r.status === 'Approved' && 
-        [
-        'Expense', 'Maintenance', 'General', 'Overtime', 'Consumable',
-        'General Expense', 'Maintenance / R&M', 'Vehicle Fuel', 'Vehicle Maintenance',
-        'Repair & Maintenance', 'Fuel Expense', 'TA/DA', 'Fare Expense',
-        'Scrap', 'Consumables', 'PV', 'Payment'
-      ].includes(r.reqType || '') || [
-        'General Expense', 'Maintenance / R&M', 'Vehicle Fuel', 'Vehicle Maintenance',
-        'Repair & Maintenance', 'Fuel Expense', 'TA/DA', 'Fare Expense', 'Scrap', 'Consumables'
-      ].includes(r.subCategory || '') &&
-        !linkedReqIds.has(r.id)
-    );
+    const relevant = allReqs.filter(r => {
+        if (r.company !== company) return false;
+        if (r.status !== 'Approved') return false;
+        if (linkedReqIds.has(r.id)) return false;
+        // Show all approved reqs — HR loans, expense reqs, empty type reqs all included
+        return true;
+    });
     setAuthorizedReqs(relevant);
   };
 
