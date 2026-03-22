@@ -238,6 +238,42 @@ export const FinanceService = {
 
   // GL Category → Account mapping for auto-hint
   // Returns { debitId, debitCode, debitName, creditId, creditCode, creditName }
+  // Subcategory-based GL mapping for requisition auto-posting
+  SUBCATEGORY_GL_MAP: {
+    'Loan Request':        { debitCode: '1141', debitLabel: 'Employee Loans',       creditCode: '1111', creditLabel: 'Cash/Bank' },
+    'Salary Advance':      { debitCode: '1141', debitLabel: 'Salary Advances',      creditCode: '1111', creditLabel: 'Cash/Bank' },
+    'Material / Inventory':{ debitCode: '5111', debitLabel: 'Raw Inventory',        creditCode: '2111', creditLabel: 'Accounts Payable' },
+    'Consumables':         { debitCode: '5111', debitLabel: 'Raw Inventory',        creditCode: '1111', creditLabel: 'Cash/Bank' },
+    'General Expense':     { debitCode: '5211', debitLabel: 'Admin Expense',        creditCode: '1111', creditLabel: 'Cash/Bank' },
+    'TA/DA':               { debitCode: '5215', debitLabel: 'Travel & Conveyance',  creditCode: '1111', creditLabel: 'Cash/Bank' },
+    'Fare Expense':        { debitCode: '5215', debitLabel: 'Travel & Conveyance',  creditCode: '1111', creditLabel: 'Cash/Bank' },
+    'Maintenance / R&M':   { debitCode: '5213', debitLabel: 'R&M Expense',          creditCode: '1111', creditLabel: 'Cash/Bank' },
+    'Vehicle Fuel':        { debitCode: '5216', debitLabel: 'Vehicle & Fuel',       creditCode: '1111', creditLabel: 'Cash/Bank' },
+    'Fuel Expense':        { debitCode: '5216', debitLabel: 'Vehicle & Fuel',       creditCode: '1111', creditLabel: 'Cash/Bank' },
+    'Vehicle Maintenance': { debitCode: '5213', debitLabel: 'R&M Expense',          creditCode: '1111', creditLabel: 'Cash/Bank' },
+    'Scrap':               { debitCode: '5217', debitLabel: 'Scrap/Waste',          creditCode: '1111', creditLabel: 'Cash/Bank' },
+    'Repair & Maintenance':{ debitCode: '5213', debitLabel: 'R&M Expense',          creditCode: '1111', creditLabel: 'Cash/Bank' },
+    'Overtime Approval':   { debitCode: '5112', debitLabel: 'Overtime Expense',     creditCode: '2121', creditLabel: 'Employee Dues Payable' },
+    'Skip Installment':    { debitCode: '1141', debitLabel: 'Employee Loans',       creditCode: '1141', creditLabel: 'Employee Loans (Adj)' },
+    'Waive Absent':        { debitCode: '5211', debitLabel: 'Admin Expense',        creditCode: '2121', creditLabel: 'Employee Dues Payable' },
+  } as Record<string, { debitCode: string; debitLabel: string; creditCode: string; creditLabel: string }>,
+
+  // Resolve GL for a subcategory — returns account objects if found, or hint labels as fallback
+  resolveSubcategoryGL: (company: Company, subCategory: string): { debitCode: string; debitName: string; creditCode: string; creditName: string } | null => {
+    const map = FinanceService.SUBCATEGORY_GL_MAP[subCategory];
+    if (!map) return null;
+    const accounts = FinanceService.getAccounts().filter(a => a.company === company);
+    const findAcc = (code: string) => accounts.find(a => a.code === code);
+    const debit = findAcc(map.debitCode);
+    const credit = findAcc(map.creditCode);
+    return {
+      debitCode:  debit?.code  || map.debitCode,
+      debitName:  debit?.name  || map.debitLabel,
+      creditCode: credit?.code || map.creditCode,
+      creditName: credit?.name || map.creditLabel,
+    };
+  },
+
   resolveGLMapping: (company: Company, category: string): { debitId: string; debitCode: string; debitName: string; creditId: string; creditCode: string; creditName: string } | null => {
     const accounts = FinanceService.getAccounts().filter(a => a.company === company);
     const find = (code: string) => accounts.find(a => a.code === code);

@@ -6,13 +6,11 @@ import { InventoryService } from '@/modules/procurement/services/inventoryServic
 import { SalesService } from '@/modules/sales/services/salesService';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import ProductMaster from '@/modules/sales/pages/ProductMaster';
-import GlasscoStockOverview from '@/modules/procurement/companies/glassco/components/inventory/StockOverview';
-import GlasscoGoodsIssue from '@/modules/procurement/companies/glassco/components/inventory/GoodsIssue';
-import GlasscoGoodsReceiptMIGO from '@/modules/procurement/companies/glassco/components/inventory/GoodsReceiptMIGO';
+import StockOverview from '@/modules/procurement/components/inventory/StockOverview';
+import GoodsIssue from '@/modules/procurement/components/inventory/GoodsIssue';
+import GoodsReceiptMIGO from '@/modules/procurement/components/inventory/GoodsReceiptMIGO';
 
-import NipponStockOverview from '@/modules/procurement/companies/nippon/components/inventory/StockOverview';
-// GlasscoGoodsIssue removed - using shared GlasscoGoodsIssue
-import NipponGoodsReceipt from '@/modules/procurement/companies/nippon/components/inventory/GoodsReceipt';
+import NipponGoodsReceipt from '@/modules/procurement/components/inventory/NipponGoodsReceipt';
 import { 
   LayoutGrid, ArrowUpRight, ShieldCheck, Truck, Database, Loader2
 } from 'lucide-react';
@@ -90,13 +88,13 @@ const InventoryModule: React.FC = () => {
 
       {activeTab === 'overview' && (
         company === 'Nippon' ? (
-            <NipponStockOverview 
+            <StockOverview 
                 items={items}
                 searchTerm={searchTerm}
                 setSearchTerm={setSearchTerm}
             />
         ) : (
-            <GlasscoStockOverview 
+            <StockOverview 
                 items={items}
                 searchTerm={searchTerm}
                 setSearchTerm={setSearchTerm}
@@ -111,23 +109,13 @@ const InventoryModule: React.FC = () => {
       )}
 
       {activeTab === 'issuance' && (
-          company === 'Nippon' ? (
-              <GlasscoGoodsIssue 
+              <GoodsIssue 
                 items={items}
                 costCenters={costCenters}
                 projects={projects}
                 ledger={ledger}
                 refreshData={refreshSync}
               />
-          ) : (
-              <GlasscoGoodsIssue 
-                items={items}
-                costCenters={costCenters}
-                projects={projects}
-                ledger={ledger}
-                refreshData={refreshSync}
-              />
-          )
       )}
 
       {company === 'Nippon' ? (
@@ -137,7 +125,7 @@ const InventoryModule: React.FC = () => {
             refreshData={refreshSync}
           />
       ) : (
-          <GlasscoGoodsReceiptMIGO 
+          <GoodsReceiptMIGO 
             products={products}
             isOpen={isMigoOpen}
             onClose={() => setIsMigoOpen(false)}

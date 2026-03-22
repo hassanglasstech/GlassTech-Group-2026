@@ -3,9 +3,9 @@ import { GatePass, TemperingDispatch, ProductionPiece, Quotation, Client, Vendor
 import { ProductionService } from '@/modules/production/services/productionService';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { Truck, ShieldCheck, ClipboardList } from 'lucide-react';
-import GateControl from './components/logistics/GateControl';
-import SecurityAudit from './components/logistics/SecurityAudit';
-import DispatchPlanner from './components/logistics/DispatchPlanner';
+import GateControl from '@/modules/procurement/components/logistics/GateControl';
+import SecurityAudit from '@/modules/procurement/components/logistics/SecurityAudit';
+import DispatchPlanner from '@/modules/procurement/components/logistics/DispatchPlanner';
 
 const CompanyLogistics: React.FC<{ company: Company }> = ({ company }) => {
   const [activeTab, setActiveTab] = useState<'gate' | 'security' | 'dispatches'>('gate');

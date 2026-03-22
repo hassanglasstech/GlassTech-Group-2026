@@ -179,13 +179,16 @@ export const useGlasscoQuotations = () => {
     
     setFormData(finalQuo);
 
+    // Always close editor and return to list after save
+    setIsEditorOpen(false);
+    setTimeout(() => refreshData(), 200);
+    
     if (action === 'approve') {
-        setIsEditorOpen(false);
-        setTimeout(() => refreshData(), 200);
         toast.success(`Approved as ${finalOrderNo}`, { duration: 3000 });
+    } else if (action === 'draft') {
+        toast.success(`Draft saved: ${finalId}`, { duration: 3000 });
     } else {
-        refreshData();
-        toast.success(`Saved: ${finalId}`, { duration: 3000 });
+        toast.success(`Quotation saved: ${finalId}`, { duration: 3000 });
     }
   };
 

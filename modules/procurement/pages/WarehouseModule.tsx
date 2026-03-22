@@ -1,14 +1,10 @@
 import React from 'react';
-import { Company } from '@/modules/shared/types';
-import GlasscoWarehouseModule from '@/modules/procurement/companies/glassco/components/warehouse/GlasscoWarehouseModule';
-import NipponWarehouseModule from '@/modules/procurement/companies/nippon/components/warehouse/NipponWarehouseModule';
+import { useAppStore } from '@/modules/shared/store/appStore';
+import WarehouseModule from '@/modules/procurement/components/warehouse/WarehouseModule';
 
-const WarehouseModule: React.FC<{ company: Company }> = ({ company }) => {
-  if (company === 'Nippon') {
-    return <NipponWarehouseModule company={company} />;
-  }
-  
-  return <GlasscoWarehouseModule company={company} />;
+const WarehouseModulePage: React.FC = () => {
+  const company = useAppStore(state => state.selectedCompany);
+  return <WarehouseModule company={company} />;
 };
 
-export default WarehouseModule;
+export default React.memo(WarehouseModulePage);

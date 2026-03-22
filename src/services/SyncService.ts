@@ -200,7 +200,42 @@ const pullTable = async (table: string, localKey: string): Promise<boolean> => {
       { context: `Pull:${table}`, maxRetries: 2, delayMs: 1000 }
     );
     if (rawData && rawData.length > 0) {
-      const data = rawData.map(mapFromSupabase);
+      let data = rawData.map(mapFromSupabase);
+      
+      // ── Rebuild nested structure for employees ──────────────────
+      // Supabase stores flat columns (name, cnic, phone, designation etc.)
+      // but EmployeeManagement expects nested {personal:{}, work:{}, salary:{}}
+      if (table === 'employees') {
+        data = data.map((e: any) => ({
+          ...e,
+          personal: e.personal && typeof e.personal === 'object' && e.personal.name
+            ? e.personal
+            : {
+                name: e.name || e.personal?.name || '',
+                cnic: e.cnic || e.personal?.cnic || '',
+                phone: e.phone || e.personal?.phone || '',
+                address: e.address || e.personal?.address || '',
+              },
+          work: e.work && typeof e.work === 'object' && e.work.employeeCode
+            ? e.work
+            : {
+                designation: e.designation || e.work?.designation || '',
+                department: e.department || e.work?.department || '',
+                grade: e.grade || e.work?.grade || '',
+                joinDate: e.joinDate || e.join_date || e.work?.joinDate || '',
+                employeeCode: e.employeeCode || e.employee_code || e.work?.employeeCode || '',
+              },
+          salary: e.salary && typeof e.salary === 'object' && (e.salary.basic !== undefined)
+            ? e.salary
+            : {
+                basic: e.basic || e.salary?.basic || 0,
+                houseRent: e.houseRent || e.house_rent || e.salary?.houseRent || 0,
+                conveyance: e.conveyance || e.salary?.conveyance || 0,
+                specialAllowance: e.specialAllowance || e.special_allowance || e.salary?.specialAllowance || 0,
+              },
+        }));
+      }
+      
       localStorage.setItem(localKey, JSON.stringify(data));
     }
     return true;

@@ -3,9 +3,9 @@ import { GlobalErrorBoundary, ModuleErrorBoundary } from '@/modules/shared/compo
 import { HashRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, ShoppingBag, Landmark, ShieldCheck,
-  Briefcase, Factory, Globe, Warehouse, Menu, Bell, Search,
+  Briefcase, Factory, Globe, Warehouse, Menu, Bell, Search, 
   Truck, Handshake, Folder, Loader2, X, LogOut, ChevronDown,
-  Home, DollarSign, Settings
+  Home, DollarSign, Settings, BarChart3
 } from 'lucide-react';
 import { Company } from '@/modules/shared/constants';
 import { AppService } from '@/modules/shared/services/appService';
@@ -20,6 +20,8 @@ import { useAuthStore, isOfficeHours, ROLE_DEFAULT_COMPANY, ROLE_MODULES } from 
 import LoginPage from '@/modules/auth/LoginPage';
 
 import NotificationCenter from './modules/shared/components/NotificationCenter';
+import { ConfirmProvider } from './modules/shared/components/ConfirmDialog';
+import useKeyboardShortcuts from './modules/shared/hooks/useKeyboardShortcuts';
 
 // ── Lazy load modules ────────────────────────────────────────────────
 const Dashboard        = React.lazy(() => import('./modules/shared/pages/Dashboard'));
@@ -34,6 +36,7 @@ const ProductionModule = React.lazy(() => import('./modules/production/pages/Pro
 const InventoryModule  = React.lazy(() => import('./modules/procurement/pages/InventoryModule'));
 const LogisticsModule  = React.lazy(() => import('./modules/procurement/pages/LogisticsModule'));
 const VendorHub        = React.lazy(() => import('./modules/procurement/pages/VendorHub'));
+const MDDashboard       = React.lazy(() => import('./modules/md-dashboard/MDDashboard'));
 
 // ── All nav items definition ─────────────────────────────────────────
 const ALL_NAV = [
@@ -48,6 +51,7 @@ const ALL_NAV = [
   { name: 'FICO Financials',      path: '/accounts',    icon: Landmark,        key: 'accounts'     },
   { name: 'Supply Chain Hub',     path: '/hub',         icon: Globe,           key: 'hub'          },
   { name: 'Procurement (PUR)',    path: '/requisitions',icon: ShoppingBag,     key: 'requisitions' },
+  { name: 'MD Dashboard',          path: '/md-dashboard', icon: BarChart3,       key: 'md-dashboard' },
   { name: 'Basis Admin',          path: '/admin',       icon: ShieldCheck,     key: 'admin'        },
 ];
 
@@ -98,6 +102,7 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
     if (['sales','projects','inventory'].includes(item.key) && selectedCompany === 'Factory') return false;
     // Admin only for super_admin or gtk_admin
     if (item.key === 'admin' && user?.role !== 'super_admin' && user?.role !== 'gtk_admin') return false;
+    if (item.key === 'md-dashboard' && user?.role !== 'super_admin' && user?.role !== 'gtk_admin') return false;
     return true;
   });
 
@@ -123,15 +128,15 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
       {isMobile && isSidebarOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[90] no-print" onClick={toggleSidebar} />
       )}
-      <aside className={`${sidebarClasses} bg-[#2f3e4d] text-white flex flex-col no-print transition-all duration-300 ease-in-out shrink-0`}>
+      <aside className={`${sidebarClasses} bg-slate-800 text-white flex flex-col no-print transition-all duration-300 ease-in-out shrink-0`}>
 
         {/* Header */}
-        <div className="h-14 flex items-center justify-between px-4 border-b border-white/5 shrink-0 bg-[#354a5f]">
+        <div className="h-14 flex items-center justify-between px-4 border-b border-white/5 shrink-0 bg-slate-900">
           <div className="flex items-center">
-            {!isMobile && <button onClick={toggleSidebar} className="hover:bg-white/10 p-1.5 rounded transition-colors mr-3"><Menu size={20} /></button>}
+            {!isMobile && <button onClick={toggleSidebar} className="hover:bg-white/10 p-1.5 rounded transition-colors mr-3" aria-label="Toggle menu"><Menu size={20} /></button>}
             {(isSidebarOpen || isMobile) && <span className="font-bold text-sm tracking-tight text-blue-200 uppercase">GlassTech 2026</span>}
           </div>
-          {isMobile && <button onClick={toggleSidebar} className="p-2 hover:bg-white/10 rounded-full"><X size={20} /></button>}
+          {isMobile && <button onClick={toggleSidebar} className="p-2 hover:bg-white/10 rounded-full" aria-label="Close"><X size={20} /></button>}
         </div>
 
         {/* Company Switcher — only if multi-company access */}
@@ -139,17 +144,17 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
           <div className="p-4 border-b border-white/5">
             {companies.length > 1 ? (
               <>
-                <p className="text-[10px] font-black text-slate-400 uppercase mb-2 px-1">Control Unit</p>
+                <p className="text-xs font-bold text-slate-400 uppercase mb-2 px-1">Control Unit</p>
                 <select
                   value={selectedCompany}
                   onChange={e => setSelectedCompany(e.target.value as Company)}
-                  className="w-full bg-[#1c2936] border border-white/10 rounded-xl p-3 text-xs font-bold focus:outline-none cursor-pointer text-blue-100"
+                  className="w-full bg-slate-900/80 border border-white/10 rounded-xl p-3 text-xs font-bold focus:outline-none cursor-pointer text-blue-100"
                 >
                   {companies.map(c => <option key={c} value={c}>{c === 'Glassco' ? 'GlassCo' : c} Group</option>)}
                 </select>
               </>
             ) : (
-              <div className="bg-[#1c2936] border border-white/10 rounded-xl p-3 text-xs font-bold text-blue-100">
+              <div className="bg-slate-900/80 border border-white/10 rounded-xl p-3 text-xs font-bold text-blue-100">
                 {selectedCompany === 'Glassco' ? 'GlassCo' : selectedCompany} Group
               </div>
             )}
@@ -158,13 +163,16 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
 
         {/* Nav */}
         <nav className="flex-1 mt-2 space-y-1 overflow-y-auto no-scrollbar">
-          {navItems.map(item => {
+          {navItems.map((item, idx) => {
             const isActive = location.pathname.startsWith(item.path === '/' ? '____' : item.path) || (item.path === '/' && location.pathname === '/');
+            const shortcutNum = idx < 8 ? idx + 1 : null;
             return (
               <Link key={item.path} to={item.path} onClick={() => isMobile && toggleSidebar()}
-                className={`flex items-center h-12 px-4 transition-all ${isActive ? 'bg-[#1a2b3c] border-l-4 border-blue-500 text-blue-200 shadow-inner' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}>
+                title={shortcutNum ? `${item.name} (Alt+${shortcutNum})` : item.name}
+                className={`flex items-center h-12 px-4 transition-all ${isActive ? 'bg-slate-900/60 border-l-4 border-blue-500 text-blue-200 shadow-inner' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}>
                 <item.icon size={20} className="shrink-0" />
-                {(isSidebarOpen || isMobile) && <span className="ml-4 font-medium text-xs whitespace-nowrap uppercase tracking-wide">{item.name}</span>}
+                {(isSidebarOpen || isMobile) && <span className="ml-4 font-medium text-xs whitespace-nowrap uppercase tracking-wide flex-1">{item.name}</span>}
+                {(isSidebarOpen || isMobile) && shortcutNum && <span className="text-xs text-slate-500 font-mono ml-2 hidden lg:inline">⌥{shortcutNum}</span>}
               </Link>
             );
           })}
@@ -172,11 +180,11 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
 
         {/* User info + logout */}
         {(isSidebarOpen || isMobile) && user && (
-          <div className="p-4 border-t border-white/5 bg-[#1c2936]">
+          <div className="p-4 border-t border-white/5 bg-slate-900/80">
             <div className="flex items-center justify-between">
               <div className="min-w-0">
-                <p className="text-xs font-black text-white truncate">{user.fullName || user.email}</p>
-                <p className="text-[10px] text-blue-300 font-bold uppercase mt-0.5">{roleLabels[user.role] || user.role}</p>
+                <p className="text-xs font-bold text-white truncate">{user.fullName || user.email}</p>
+                <p className="text-xs text-blue-300 font-bold uppercase mt-0.5">{roleLabels[user.role] || user.role}</p>
               </div>
               <button onClick={() => { signOut(); toast.success('Logged out.'); }}
                 className="ml-2 p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors shrink-0" title="Sign out">
@@ -186,8 +194,8 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
           </div>
         )}
 
-        <div className="py-2 border-t border-white/5 bg-[#253240] print-hidden">
-          <p className="text-[8px] font-bold text-slate-500 text-center uppercase tracking-widest">© 2026 GLASSTECH GROUP</p>
+        <div className="py-2 border-t border-white/5 bg-slate-800 print-hidden">
+          <p className="text-xs font-bold text-slate-500 text-center uppercase tracking-widest">© 2026 GLASSTECH GROUP</p>
         </div>
       </aside>
     </>
@@ -210,7 +218,7 @@ const BottomNav: React.FC<{ allowedModules: string[] | null }> = ({ allowedModul
     !allowedModules?.length || allowedModules.includes(item.key)
   );
   return (
-    <nav className="bottom-nav lg:hidden no-print">
+    <nav className="bottom-nav lg:hidden no-print" role="navigation" aria-label="Quick access">
       {items.slice(0, 5).map(item => {
         const isActive = item.path === '/'
           ? location.pathname === '/'
@@ -228,6 +236,9 @@ const BottomNav: React.FC<{ allowedModules: string[] | null }> = ({ allowedModul
 };
 
 // ── Main App ─────────────────────────────────────────────────────────
+// Keyboard shortcuts — must be inside HashRouter for useNavigate
+const KeyboardShortcutsProvider = () => { useKeyboardShortcuts(); return null; };
+
 const App: React.FC = () => {
   const { selectedCompany, isSidebarOpen, setSidebarOpen, setSelectedCompany } = useAppStore();
   const { user, signOut } = useAuthStore();
@@ -293,26 +304,29 @@ const App: React.FC = () => {
 
   return (
     <GlobalErrorBoundary>
+      <a href="#main-content" className="skip-to-content">Skip to main content</a>
+    <ConfirmProvider>
     <HashRouter>
+      <KeyboardShortcutsProvider />
       <Toaster position="top-right" richColors />
       {!user || !user.email || !user.role ? (
         <LoginPage />
       ) : (
-      <div className="flex h-screen bg-[#eff4f9] font-sans overflow-hidden"
+      <div className="flex h-screen bg-slate-50 font-sans overflow-hidden"
            data-user={user.role}>
         <Sidebar isMobile={isMobile} />
-        <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-          <header className="sap-shell no-print shrink-0 z-[80] flex items-center justify-between px-3 md:px-4">
+        <main id="main-content" className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+          <header className="sap-shell no-print shrink-0 z-[80] flex items-center justify-between px-3 md:px-4" role="banner">
             <div className="flex items-center space-x-3">
-              {isMobile && <button onClick={() => setSidebarOpen(true)} className="p-2 hover:bg-white/10 rounded"><Menu size={20} /></button>}
+              {isMobile && <button onClick={() => setSidebarOpen(true)} className="p-2 hover:bg-white/10 rounded" aria-label="Open menu"><Menu size={20} /></button>}
               <div className="hidden sm:flex items-center space-x-3">
                 <div className="w-8 h-8 flex items-center justify-center bg-white/10 rounded">
-                  <span className="font-black text-xs text-blue-300">GT</span>
+                  <span className="font-bold text-xs text-blue-300">GT</span>
                 </div>
                 <span className="font-bold text-sm tracking-tight hidden md:inline print-hidden">Glasstech ERP 2026</span>
               </div>
               <div className="h-4 w-px bg-white/20 hidden sm:block" />
-              <span className="text-[10px] font-black text-blue-200 uppercase tracking-widest bg-blue-500/20 px-2 py-1 rounded whitespace-nowrap">
+              <span className="text-xs font-bold text-blue-200 uppercase tracking-widest bg-blue-500/20 px-2 py-1 rounded whitespace-nowrap">
                 {selectedCompany} UNIT
               </span>
             </div>
@@ -332,7 +346,7 @@ const App: React.FC = () => {
                   : <Globe size={18} className={isOnline ? 'text-white' : 'text-slate-500'} />
                 }
                 {!isOnline && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-rose-500 rounded-full border border-[#354a5f]"/>
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-rose-600 rounded-full border border-slate-700"/>
                 )}
               </button>
               <div className="relative hidden lg:block">
@@ -345,10 +359,10 @@ const App: React.FC = () => {
               {/* User badge */}
               <div className="flex items-center space-x-2 cursor-pointer hover:bg-white/10 p-1 rounded-lg border border-white/5"
                 onClick={() => { Logger.auth('LOGOUT', user?.email || ''); signOut(); toast.success('Logged out.'); }}>
-                <div className="w-7 h-7 rounded-lg bg-blue-500 flex items-center justify-center font-bold text-[10px] shadow-lg">
+                <div className="w-7 h-7 rounded-lg bg-blue-500 flex items-center justify-center font-bold text-xs shadow-lg">
                   {user.fullName?.slice(0, 2).toUpperCase() || user.email.slice(0, 2).toUpperCase()}
                 </div>
-                <span className="hidden md:block text-[10px] text-blue-200 font-bold uppercase">
+                <span className="hidden md:block text-xs text-blue-200 font-bold uppercase">
                   {user.fullName?.split(' ')[0] || 'User'}
                 </span>
                 <LogOut size={13} className="text-slate-400 hidden md:block" />
@@ -357,7 +371,7 @@ const App: React.FC = () => {
           </header>
 
           {!isOnline && (
-            <div className="bg-amber-500/90 text-white text-center text-[10px] font-black uppercase tracking-widest py-1.5 px-4 no-print">
+            <div className="bg-amber-500/90 text-white text-center text-xs font-bold uppercase tracking-widest py-1.5 px-4 no-print">
               ⚡ Offline Mode — Changes saved locally, will sync when connected
             </div>
           )}
@@ -365,8 +379,7 @@ const App: React.FC = () => {
             <div className="p-3 md:p-8 max-w-[1600px] mx-auto min-h-full flex flex-col">
               <Suspense fallback={
                 <div className="h-full flex flex-col items-center justify-center text-slate-400 animate-pulse">
-                  <Loader2 size={48} className="animate-spin text-blue-500 mb-4" />
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em]">Loading Module...</p>
+                  <div className="space-y-4 animate-slide-up"><div className="skeleton skeleton-heading"></div><div className="grid grid-cols-2 md:grid-cols-4 gap-4"><div className="skeleton skeleton-card"></div><div className="skeleton skeleton-card"></div><div className="skeleton skeleton-card"></div><div className="skeleton skeleton-card"></div></div><div className="skeleton skeleton-heading" style={{width:"30%",marginTop:"16px"}}></div><div className="skeleton skeleton-row"></div><div className="skeleton skeleton-row"></div><div className="skeleton skeleton-row"></div></div>
                 </div>
               }>
                 <Routes>
@@ -381,6 +394,7 @@ const App: React.FC = () => {
                   <Route path="/hub/*"         element={<ModuleErrorBoundary moduleName="Supply Hub"><IntercompanyHub /></ModuleErrorBoundary>} />
                   <Route path="/requisitions"  element={<ModuleErrorBoundary moduleName="Procurement"><Requisitions /></ModuleErrorBoundary>} />
                   <Route path="/accounts/*"    element={<ModuleErrorBoundary moduleName="Finance"><AccountsModule /></ModuleErrorBoundary>} />
+                  <Route path="/md-dashboard" element={<ModuleErrorBoundary moduleName="MD Dashboard"><MDDashboard /></ModuleErrorBoundary>} />
                   <Route path="/admin"         element={<ModuleErrorBoundary moduleName="Admin"><AdminSecurity /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />
                 </Routes>              </Suspense>
@@ -391,6 +405,7 @@ const App: React.FC = () => {
       </div>
       )}
     </HashRouter>
+    </ConfirmProvider>
     </GlobalErrorBoundary>
   );
 };

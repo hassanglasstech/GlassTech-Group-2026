@@ -101,8 +101,8 @@ const GlasscoQuotationManager: React.FC = () => {
         ) : null}
 
         {isEditorOpen && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]">
-            <div className="bg-white rounded-xl w-full max-w-4xl h-[90vh] shadow-2xl overflow-hidden flex flex-col border border-slate-200">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 md:p-4 z-[500]" role="dialog" aria-modal="true">
+            <div className="bg-white rounded-xl w-full max-w-7xl h-[95vh] shadow-2xl overflow-hidden flex flex-col border border-slate-200">
               <GlasscoEditor 
                 formData={formData} clients={clients} products={products} isMM={isMM} setIsMM={setIsMM} 
                 lastSerial={lastSerial}
