@@ -43,6 +43,9 @@ export interface CostCenter {
   manager: string; 
   category: 'F' | 'H' | 'W' | 'V' | 'L'; 
   hierarchyArea: string; 
+  budgetMonthly?: number;    // monthly budget limit (PKR)
+  budgetYearly?: number;     // annual budget limit (PKR)
+  alertThreshold?: number;   // % at which to warn (default 80)
 }
 
 export interface PettyCashEntry { 

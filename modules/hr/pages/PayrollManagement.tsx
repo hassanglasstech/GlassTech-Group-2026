@@ -152,43 +152,82 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
     };
   }, { totalBasic: 0, totalAllowances: 0, totalOTAmount: 0, totalOTHours: 0, totalDeductionsCombined: 0, totalNetDisbursable: 0, totalPaidDisbursement: 0, totalPureSalary: 0, totalPaidSalary: 0, totalPaidOT: 0, totalLoanRecovery: 0 });
 
-  // --- PHASE 3: AUTOMATED LEDGER POSTING ---
+  // --- PHASE 3: AUTOMATED LEDGER POSTING (Enhanced: Full Breakdown) ---
   const handlePostPayrollToLedger = async () => {
       const monthName = new Date(selectedMonth).toLocaleString('default', { month: 'long', year: 'numeric' });
       if (!confirm(`Generate Ledger Entry for ${monthName} Payroll?\n\nTotal Payable: PKR ${summary.totalNetDisbursable.toLocaleString()}`)) return;
 
       const txId = `PAY-JV-${selectedMonth.replace('-','')}`;
       
-      // Find Accounts (Dynamic Lookup - Assumes standard codes if not found by name)
+      // Check if already posted
+      const existingLedger = FinanceService.getLedger();
+      if (existingLedger.some(t => t.id === txId)) {
+        return toast.error(`Payroll JV for ${monthName} already posted (${txId}).`);
+      }
+
+      // Find GL Accounts
       const allAccounts = FinanceService.getAccounts().filter(a => a.company === company);
+      const findAcc = (keyword: string, type: string) => allAccounts.find(a => a.name.toUpperCase().includes(keyword) && a.type === type);
+
+      const salaryExpAcc   = findAcc('SALARIES', 'Expense')   || findAcc('SALARY', 'Expense')   || { id: 'SAL-EXP', name: 'Salaries Expense' };
+      const allowanceAcc   = findAcc('ALLOWANCE', 'Expense')  || salaryExpAcc;
+      const overtimeAcc    = findAcc('OVERTIME', 'Expense')   || salaryExpAcc;
+      const payableAcc     = findAcc('PAYABLE', 'Liability')  || findAcc('SALARIES', 'Liability') || { id: 'SAL-PAY', name: 'Salaries Payable' };
+      const staffLoanAcc   = findAcc('LOAN', 'Asset')         || findAcc('ADVANCE', 'Asset')      || { id: 'STAFF-LOAN', name: 'Staff Loans' };
+
+      // Build detailed GL lines
+      const details: { accountId: string; debit: number; credit: number; text: string; costCenterId?: string }[] = [];
+
+      // DEBIT SIDE: Expense breakdowns
+      const totalBasic      = payrolls.reduce((s, p) => s + p.basicPay, 0);
+      const totalAllowances = payrolls.reduce((s, p) => s + p.allowances, 0);
+      const totalOvertime   = payrolls.reduce((s, p) => s + p.overtimePay, 0);
+
+      if (totalBasic > 0)      details.push({ accountId: salaryExpAcc.id, debit: totalBasic, credit: 0, text: `Basic Salary — ${monthName}` });
+      if (totalAllowances > 0) details.push({ accountId: allowanceAcc.id, debit: totalAllowances, credit: 0, text: `Allowances — ${monthName}` });
+      if (totalOvertime > 0)   details.push({ accountId: overtimeAcc.id, debit: totalOvertime, credit: 0, text: `Overtime — ${monthName}` });
+
+      // CREDIT SIDE: Net payable + deductions recovered
+      const totalAbsentDed = payrolls.reduce((s, p) => s + p.absentDeduction, 0);
+      const totalLateDed   = payrolls.reduce((s, p) => s + p.lateDeduction, 0);
+      const totalLoanRec   = payrolls.reduce((s, p) => s + p.loanDeduction + p.advanceDeduction, 0);
+      const totalNetPay    = summary.totalNetDisbursable;
+
+      if (totalNetPay > 0)   details.push({ accountId: payableAcc.id, debit: 0, credit: totalNetPay, text: `Net Payable — ${monthName}` });
+      if (totalLoanRec > 0)  details.push({ accountId: staffLoanAcc.id, debit: 0, credit: totalLoanRec, text: `Loan/Advance Recovery — ${monthName}` });
+
+      // Absent & Late deductions reduce the expense (contra), but since they're already netted
+      // in netSalary, the above lines are balanced. Add note-only if significant.
       
-      const salaryExpAcc = allAccounts.find(a => a.name.includes('Salaries') && a.type === 'Expense') || { id: '61100', name: 'Salaries Expense' };
-      const payableAcc = allAccounts.find(a => a.name.includes('Payable') && a.type === 'Liability') || { id: '21100', name: 'Salaries Payable' };
-      const staffLoanAcc = allAccounts.find(a => (a.name.includes('Loan') || a.name.includes('Advance')) && a.type === 'Asset') || { id: '12210', name: 'Staff Loans' };
-
-      const totalRecoveries = summary.totalLoanRecovery;
-      const totalNetPayable = summary.totalNetDisbursable;
-
-      const bookedExpense = summary.totalNetDisbursable + summary.totalLoanRecovery;
-
       const transaction: LedgerTransaction = {
-          id: txId,
-          company,
-          docType: 'SA',
+          id: txId, company, docType: 'SA',
           docDate: new Date().toISOString().split('T')[0],
           date: new Date().toISOString().split('T')[0],
-          description: `PAYROLL ACCRUAL: ${monthName.toUpperCase()}`,
+          description: `PAYROLL: ${monthName.toUpperCase()} — ${payrolls.length} employees`,
           referenceId: selectedMonth,
           status: 'Posted',
-          details: [
-              { accountId: salaryExpAcc.id, debit: bookedExpense, credit: 0, text: `Gross Salary ${monthName}` },
-              { accountId: payableAcc.id, debit: 0, credit: totalNetPayable, text: `Net Payable ${monthName}` },
-              { accountId: staffLoanAcc.id, debit: 0, credit: totalRecoveries, text: `Loan Recovery ${monthName}` }
-          ]
+          details
       };
 
       FinanceService.recordTransaction(transaction);
-      toast.success(`Success: Payroll Journal Voucher ${txId} Posted to General Ledger.`);
+
+      // ── Update Loan Balances in HR ──
+      if (totalLoanRec > 0) {
+        const allLoans = HRService.getLoans();
+        const updatedLoans = allLoans.map(loan => {
+          if (loan.status !== 'Active') return loan;
+          const payroll = payrolls.find(p => p.employeeId === loan.employeeId);
+          if (!payroll) return loan;
+          const deduction = loan.type === 'Advance' ? payroll.advanceDeduction : payroll.loanDeduction;
+          if (deduction <= 0) return loan;
+          const newRepaid = (loan.repaymentAmount || 0) + deduction;
+          const isFullyPaid = newRepaid >= loan.amount;
+          return { ...loan, repaymentAmount: newRepaid, status: isFullyPaid ? 'Completed' as const : loan.status };
+        });
+        HRService.saveLoans(updatedLoans);
+      }
+
+      toast.success(`Payroll JV ${txId} posted — Basic: ${totalBasic.toLocaleString()}, Allow: ${totalAllowances.toLocaleString()}, OT: ${totalOvertime.toLocaleString()}, Loan Rec: ${totalLoanRec.toLocaleString()}`);
   };
 
   const renderSlip = (pay: any) => {

@@ -106,16 +106,44 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
     if (!isBalanced) return alert("System Error: Document is not balanced.");
     const txId = editingDocId || `${formData.docType}-${Date.now().toString().slice(-6)}`;
     
+    // ── If posting a previously Parked PV, use postParkedPV (auto-updates linked Requisition) ──
+    if (editingDocId && status === 'Posted') {
+      const existingTx = transactions.find(t => t.id === editingDocId);
+      if (existingTx && existingTx.status === 'Parked') {
+        // First update the PV with any edits Finance made
+        const allTxs = FinanceService.getLedger();
+        const editedPV: LedgerTransaction = {
+          id: editingDocId,
+          company: selectedTargetCompany,
+          docType: formData.docType, docDate: formData.docDate,
+          date: formData.postDate, description: formData.description.toUpperCase(),
+          referenceId: formData.referenceId, status: 'Parked' as const,
+          reqId: existingTx.reqId,
+          details: formData.details.map(d => ({ ...d, debit: Number(d.debit), credit: Number(d.credit) }))
+        };
+        const updatedTxs = allTxs.map(t => t.id === editingDocId ? editedPV : t);
+        FinanceService.saveLedger(updatedTxs);
+
+        // Now post it — this also marks linked Requisition as "Paid"
+        const posted = FinanceService.postParkedPV(editingDocId);
+        refreshData();
+        setIsModalOpen(false);
+        resetForm();
+        alert(`Success: PV ${editingDocId} Posted to ${selectedTargetCompany} Ledger.${posted?.reqId ? ` Requisition ${posted.reqId} marked as Paid.` : ''}`);
+        return;
+      }
+    }
+
+    // ── Standard flow for new documents or non-Parked edits ──
     const tx: LedgerTransaction = {
       id: txId, 
-      company: selectedTargetCompany, // Use the selected company
+      company: selectedTargetCompany,
       docType: formData.docType, docDate: formData.docDate,
       date: formData.postDate, description: formData.description.toUpperCase(),
       referenceId: formData.referenceId, status: status,
       details: formData.details.map(d => ({ ...d, debit: Number(d.debit), credit: Number(d.credit) }))
     };
 
-    // Load fresh ledger to avoid race conditions
     const allTxs = FinanceService.getLedger();
     let updatedTxs = [...allTxs];
     if (editingDocId) updatedTxs = updatedTxs.map(t => t.id === editingDocId ? tx : t);
@@ -201,7 +229,14 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
                     <tr className={`${activeTab === 'Parked' ? 'bg-amber-50/50' : 'bg-slate-50/50'}`}>
                     <td className="px-4 py-2 font-bold text-slate-400 text-xs">{tx.date}</td>
                     <td className="px-4 py-2 font-black text-blue-600 text-xs">{tx.id}</td>
-                    <td className="px-4 py-2 font-bold text-slate-800 uppercase text-xs">{tx.description}</td>
+                    <td className="px-4 py-2 font-bold text-slate-800 uppercase text-xs">
+                      {tx.description}
+                      {activeTab === 'Parked' && (tx.reqId || tx.referenceId?.startsWith('REQ')) && (
+                        <span className="ml-2 text-[9px] font-black text-purple-600 bg-purple-50 px-2 py-0.5 rounded-lg border border-purple-100">
+                          REQ: {tx.reqId || tx.referenceId}
+                        </span>
+                      )}
+                    </td>
                     <td colSpan={2}></td>
                     <td className="px-4 py-2 text-center"><span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${tx.status === 'Posted' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{tx.status}</span></td>
                     {activeTab === 'Parked' && (

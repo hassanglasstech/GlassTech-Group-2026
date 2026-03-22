@@ -1,180 +1,489 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Company, Quotation, ProductionPiece, LedgerTransaction } from '../../shared/types';
 import { FinanceService } from '../services/financeService';
 import { SalesService } from '../../sales/services/salesService';
 import { ProductionService } from '../../production/services/productionService';
-import { FileText, CheckCircle2, Ban, ArrowRightLeft } from 'lucide-react';
+import { 
+  FileText, CheckCircle2, Ban, ArrowRightLeft, DollarSign, Search,
+  Receipt, XCircle, X, Save, Banknote, AlertCircle, Clock, Eye, CreditCard
+} from 'lucide-react';
+import { toast } from 'sonner';
+
+interface Invoice {
+  id: string;
+  company: Company;
+  orderId: string;
+  orderNo: string;
+  clientId: string;
+  clientName: string;
+  date: string;
+  dueDate: string;
+  totalAmount: number;
+  receivedAmount: number;
+  balance: number;
+  status: 'Outstanding' | 'Partial' | 'Paid' | 'Overdue';
+  glTxId: string;
+  payments: PaymentReceipt[];
+}
+
+interface PaymentReceipt {
+  id: string;
+  invoiceId: string;
+  date: string;
+  amount: number;
+  method: 'Cash' | 'Bank Transfer' | 'Cheque' | 'Online';
+  reference: string;
+  glTxId: string;
+}
 
 const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
+  const [activeView, setActiveView] = useState<'billing' | 'receivables' | 'receipts'>('billing');
   const [orders, setOrders] = useState<Quotation[]>([]);
   const [pieces, setPieces] = useState<ProductionPiece[]>([]);
   const [clients, setClients] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [receipts, setReceipts] = useState<PaymentReceipt[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Payment receipt modal
+  const [receiptModalInvoice, setReceiptModalInvoice] = useState<Invoice | null>(null);
+  const [receiptForm, setReceiptForm] = useState({ amount: 0, method: 'Bank Transfer' as PaymentReceipt['method'], reference: '' });
 
   useEffect(() => {
-    setOrders(SalesService.getQuotations().filter(q => q.company === company && q.status === 'Approved'));
+    refreshData();
+  }, [company]);
+
+  const refreshData = () => {
+    setOrders(SalesService.getQuotations().filter(q => q.company === company && (q.status === 'Approved' || q.status === 'Invoiced' || q.status === 'Partial Payment' || q.status === 'Paid')));
     setPieces(ProductionService.getProductionPieces());
     setClients(SalesService.getClients());
-  }, [company]);
+    setInvoices(SalesService.getInvoices().filter((i: Invoice) => i.company === company));
+    setReceipts(SalesService.getPaymentReceipts().filter((r: any) => {
+      const inv = SalesService.getInvoices().find((i: any) => i.id === r.invoiceId);
+      return inv?.company === company;
+    }));
+  };
 
   const isCycleComplete = (orderNo?: string) => {
     if (!orderNo) return false;
     const orderPieces = pieces.filter(p => p.orderId === orderNo);
-    if (orderPieces.length === 0) return false;
-    // For billing, we allow if delivered or simply if it's a service order without pieces
+    if (orderPieces.length === 0) return true; // Service orders without pieces
     return orderPieces.every(p => p.status === 'Delivered');
   };
 
-  const handleGenerateInvoice = (order: Quotation) => {
-      const client = clients.find(c => c.id === order.clientId);
-      const clientName = client?.name || 'Walk-in';
-      
-      // 1. Calculate Revenue
-      const totalRevenue = order.items.reduce((sum, item) => sum + item.amount, 0);
-      
-      // 2. Fetch All Accounts (to handle multi-company posting)
-      const allAccounts = FinanceService.getAccounts();
-      
-      // --- SENDER SIDE (e.g. Glassco) ---
-      const myAccounts = allAccounts.filter(a => a.company === company);
-      // Logic: Find 'Receivables' and 'Sales'
-      const receivableAcc = myAccounts.find(a => a.name.includes('RECEIVABLE') || a.code.startsWith('122')) || myAccounts.find(a => a.type === 'Asset');
-      const revenueAcc = myAccounts.find(a => a.name.includes('SALES') || a.code.startsWith('411')) || myAccounts.find(a => a.type === 'Revenue');
-
-      if (!receivableAcc || !revenueAcc) {
-          return alert(`Error: Setup Chart of Accounts for ${company} first (Need Receivables & Sales accounts).`);
-      }
-
-      // 3. Create Ledger Transaction (Sender)
-      const txId = `INV-${Date.now().toString().slice(-6)}`;
-      const newLedgerEntries: LedgerTransaction[] = [];
-
-      const senderTx: LedgerTransaction = {
-          id: txId,
-          company,
-          docType: 'DR', // Customer Invoice
-          docDate: new Date().toISOString().split('T')[0],
-          date: new Date().toISOString().split('T')[0],
-          description: `INVOICE: ${clientName} - Ref: ${order.orderNo}`,
-          referenceId: order.orderNo || order.id,
-          status: 'Posted',
-          details: [
-              { accountId: receivableAcc.id, debit: totalRevenue, credit: 0, text: `Due from ${clientName}` },
-              { accountId: revenueAcc.id, debit: 0, credit: totalRevenue, text: `Revenue: ${order.projectName || 'General'}` }
-          ]
-      };
-      newLedgerEntries.push(senderTx);
-
-      // --- INTER-COMPANY AUTOMATION (The Magic) ---
-      let mirrorMsg = "";
-      
-      // Detect if Client is a Sister Company
-      let targetCompany: Company | null = null;
-      const cNameUpper = clientName.toUpperCase();
-      if (cNameUpper.includes('GTI')) targetCompany = 'GTI';
-      else if (cNameUpper.includes('GTK')) targetCompany = 'GTK';
-      else if (cNameUpper.includes('NIPPON')) targetCompany = 'Nippon';
-      else if (cNameUpper.includes('GLASSCO')) targetCompany = 'Glassco';
-      else if (cNameUpper.includes('FACTORY')) targetCompany = 'Factory';
-
-      // Prevent self-billing (Glassco selling to Glassco)
-      if (targetCompany && targetCompany !== company) {
-          const targetAccounts = allAccounts.filter(a => a.company === targetCompany);
-          
-          // Logic: Find 'Cost of Sales/Material' and 'Payables' in Target
-          // Debit: Expense/Asset (Purchase), Credit: Liability (Payable to Source)
-          const costAcc = targetAccounts.find(a => a.name.includes('CONSUMED') || a.name.includes('MATERIAL') || a.code.startsWith('511')) || targetAccounts.find(a => a.type === 'Expense');
-          const payableAcc = targetAccounts.find(a => a.name.includes('PAYABLE') || a.code.startsWith('221')) || targetAccounts.find(a => a.type === 'Liability');
-
-          if (costAcc && payableAcc) {
-              const receiverTx: LedgerTransaction = {
-                  id: `BILL-${txId}`, // Linked ID
-                  company: targetCompany,
-                  docType: 'KR', // Vendor Invoice
-                  docDate: new Date().toISOString().split('T')[0],
-                  date: new Date().toISOString().split('T')[0],
-                  description: `AUTO-PURCHASE: From ${company} - Ref: ${order.orderNo}`,
-                  referenceId: txId,
-                  status: 'Posted',
-                  details: [
-                      { accountId: costAcc.id, debit: totalRevenue, credit: 0, text: `Material Cost (Auto from ${company})` },
-                      { accountId: payableAcc.id, debit: 0, credit: totalRevenue, text: `Payable to ${company}` }
-                  ]
-              };
-              newLedgerEntries.push(receiverTx);
-              mirrorMsg = `\n\n✨ INTER-COMPANY SYNC ACTIVE:\nPurchase Entry automatically posted in ${targetCompany} Books.\n(Dr: ${costAcc.name}, Cr: ${payableAcc.name})`;
-          } else {
-              mirrorMsg = `\n\n⚠️ Sync Warning: Could not auto-post to ${targetCompany}. Check their Chart of Accounts.`;
-          }
-      }
-
-      // 4. Commit All Transactions
-      const currentLedger = FinanceService.getLedger();
-      FinanceService.saveLedger([...currentLedger, ...newLedgerEntries]);
-      
-      // 5. Visual Feedback
-      alert(`Success: Invoice ${txId} Generated & Revenue Booked (PKR ${(Number(totalRevenue) || 0).toLocaleString()}).${mirrorMsg}`);
+  const isAlreadyInvoiced = (orderId: string) => {
+    return invoices.some(inv => inv.orderId === orderId);
   };
+
+  // ── GENERATE INVOICE ──
+  const handleGenerateInvoice = (order: Quotation) => {
+    if (isAlreadyInvoiced(order.id)) return toast.error('Already invoiced!');
+    
+    const client = clients.find(c => c.id === order.clientId);
+    const clientName = client?.name || 'Walk-in';
+    const totalRevenue = order.items.reduce((sum, item) => sum + item.amount, 0);
+    const serviceCharges = (order.serviceCharges || []).reduce((sum: number, sc: any) => sum + (sc.amount || 0), 0);
+    const subtotal = totalRevenue + serviceCharges;
+    const discount = order.discountAmount || (subtotal * (order.discountPercent || 0) / 100);
+    const finalAmount = subtotal - discount;
+
+    // GL Entry: Dr Accounts Receivable, Cr Sales Revenue
+    const allAccounts = FinanceService.getAccounts().filter(a => a.company === company);
+    const receivableAcc = allAccounts.find(a => a.name.includes('RECEIVABLE') || a.code.startsWith('122')) || allAccounts.find(a => a.type === 'Asset');
+    const revenueAcc = allAccounts.find(a => a.name.includes('SALES') || a.code.startsWith('411')) || allAccounts.find(a => a.type === 'Revenue');
+
+    if (!receivableAcc || !revenueAcc) {
+      return toast.error(`Setup COA first: Need Receivables & Sales Revenue accounts for ${company}`);
+    }
+
+    const invoiceId = `INV-${company.substring(0, 3).toUpperCase()}-${Date.now().toString().slice(-6)}`;
+    const txId = `GL-${invoiceId}`;
+
+    // Post GL entry
+    const glTx: LedgerTransaction = {
+      id: txId, company, docType: 'DR', docDate: new Date().toISOString().split('T')[0],
+      date: new Date().toISOString().split('T')[0],
+      description: `INVOICE ${invoiceId}: ${clientName} — ${order.orderNo || order.id}`,
+      referenceId: invoiceId, status: 'Posted',
+      details: [
+        { accountId: receivableAcc.id, debit: finalAmount, credit: 0, text: `AR: ${clientName}` },
+        { accountId: revenueAcc.id, debit: 0, credit: finalAmount, text: `Revenue: ${order.projectName || 'Sales'}` }
+      ]
+    };
+
+    const currentLedger = FinanceService.getLedger();
+    FinanceService.saveLedger([...currentLedger, glTx]);
+
+    // Inter-company mirror (same logic as before)
+    let targetCompany: Company | null = null;
+    const cNameUpper = clientName.toUpperCase();
+    if (cNameUpper.includes('GTI')) targetCompany = 'GTI';
+    else if (cNameUpper.includes('GTK')) targetCompany = 'GTK';
+    else if (cNameUpper.includes('NIPPON')) targetCompany = 'Nippon';
+    else if (cNameUpper.includes('GLASSCO')) targetCompany = 'Glassco';
+    else if (cNameUpper.includes('FACTORY')) targetCompany = 'Factory';
+
+    if (targetCompany && targetCompany !== company) {
+      const targetAccounts = FinanceService.getAccounts().filter(a => a.company === targetCompany);
+      const costAcc = targetAccounts.find(a => a.name.includes('CONSUMED') || a.name.includes('MATERIAL') || a.code.startsWith('511')) || targetAccounts.find(a => a.type === 'Expense');
+      const payableAcc = targetAccounts.find(a => a.name.includes('PAYABLE') || a.code.startsWith('221')) || targetAccounts.find(a => a.type === 'Liability');
+      if (costAcc && payableAcc) {
+        const mirrorTx: LedgerTransaction = {
+          id: `BILL-${txId}`, company: targetCompany, docType: 'KR',
+          docDate: new Date().toISOString().split('T')[0], date: new Date().toISOString().split('T')[0],
+          description: `AUTO-PURCHASE: From ${company} — ${invoiceId}`,
+          referenceId: txId, status: 'Posted',
+          details: [
+            { accountId: costAcc.id, debit: finalAmount, credit: 0, text: `Material from ${company}` },
+            { accountId: payableAcc.id, debit: 0, credit: finalAmount, text: `Payable to ${company}` }
+          ]
+        };
+        FinanceService.saveLedger([...FinanceService.getLedger(), mirrorTx]);
+      }
+    }
+
+    // Create Invoice record
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + 30);
+
+    const invoice: Invoice = {
+      id: invoiceId, company, orderId: order.id, orderNo: order.orderNo || order.id,
+      clientId: order.clientId, clientName, date: new Date().toISOString().split('T')[0],
+      dueDate: dueDate.toISOString().split('T')[0],
+      totalAmount: finalAmount, receivedAmount: 0, balance: finalAmount,
+      status: 'Outstanding', glTxId: txId, payments: []
+    };
+
+    const allInvoices = SalesService.getInvoices();
+    SalesService.saveInvoices([...allInvoices, invoice]);
+
+    // Update Quotation status to 'Invoiced'
+    const allQuotations = SalesService.getQuotations();
+    const updatedQuotations = allQuotations.map(q => q.id === order.id ? { ...q, status: 'Invoiced' as any, invoiceNo: invoiceId } : q);
+    SalesService.saveQuotations(updatedQuotations);
+
+    refreshData();
+    toast.success(`Invoice ${invoiceId} generated — PKR ${finalAmount.toLocaleString()} booked to AR`);
+  };
+
+  // ── RECORD PAYMENT RECEIPT ──
+  const handleRecordPayment = () => {
+    if (!receiptModalInvoice) return;
+    if (receiptForm.amount <= 0) return toast.error('Amount must be greater than 0');
+    if (receiptForm.amount > receiptModalInvoice.balance) return toast.error(`Cannot exceed balance of PKR ${receiptModalInvoice.balance.toLocaleString()}`);
+
+    // GL Entry: Dr Cash/Bank, Cr Accounts Receivable
+    const allAccounts = FinanceService.getAccounts().filter(a => a.company === company);
+    const cashAcc = allAccounts.find(a => a.name.includes('CASH') || a.name.includes('BANK') || a.code.startsWith('111')) || allAccounts.find(a => a.type === 'Asset' && a.level === 5);
+    const receivableAcc = allAccounts.find(a => a.name.includes('RECEIVABLE') || a.code.startsWith('122')) || allAccounts.find(a => a.type === 'Asset');
+
+    if (!cashAcc || !receivableAcc) return toast.error('Setup COA: Need Cash/Bank and Receivables accounts');
+
+    const receiptId = `REC-${Date.now().toString().slice(-6)}`;
+    const txId = `GL-${receiptId}`;
+
+    const glTx: LedgerTransaction = {
+      id: txId, company, docType: 'DZ', docDate: new Date().toISOString().split('T')[0],
+      date: new Date().toISOString().split('T')[0],
+      description: `RECEIPT ${receiptId}: ${receiptModalInvoice.clientName} — ${receiptModalInvoice.id}`,
+      referenceId: receiptId, status: 'Posted',
+      details: [
+        { accountId: cashAcc.id, debit: receiptForm.amount, credit: 0, text: `Cash received: ${receiptForm.method}${receiptForm.reference ? ` (${receiptForm.reference})` : ''}` },
+        { accountId: receivableAcc.id, debit: 0, credit: receiptForm.amount, text: `AR settled: ${receiptModalInvoice.id}` }
+      ]
+    };
+
+    FinanceService.saveLedger([...FinanceService.getLedger(), glTx]);
+
+    // Update Invoice
+    const allInvoices = SalesService.getInvoices() as Invoice[];
+    const newReceived = receiptModalInvoice.receivedAmount + receiptForm.amount;
+    const newBalance = receiptModalInvoice.totalAmount - newReceived;
+    const newStatus = newBalance <= 0 ? 'Paid' : 'Partial';
+
+    const payment: PaymentReceipt = {
+      id: receiptId, invoiceId: receiptModalInvoice.id, date: new Date().toISOString().split('T')[0],
+      amount: receiptForm.amount, method: receiptForm.method, reference: receiptForm.reference, glTxId: txId
+    };
+
+    const updatedInvoices = allInvoices.map(inv =>
+      inv.id === receiptModalInvoice.id
+        ? { ...inv, receivedAmount: newReceived, balance: newBalance, status: newStatus, payments: [...(inv.payments || []), payment] }
+        : inv
+    );
+    SalesService.saveInvoices(updatedInvoices);
+
+    // Save receipt separately
+    const allReceipts = SalesService.getPaymentReceipts();
+    SalesService.savePaymentReceipts([...allReceipts, payment]);
+
+    // Update Quotation status
+    if (newBalance <= 0) {
+      const allQ = SalesService.getQuotations();
+      const updQ = allQ.map(q => q.id === receiptModalInvoice.orderId ? { ...q, status: 'Paid' as any, receivedAmount: newReceived } : q);
+      SalesService.saveQuotations(updQ);
+    } else {
+      const allQ = SalesService.getQuotations();
+      const updQ = allQ.map(q => q.id === receiptModalInvoice.orderId ? { ...q, status: 'Partial Payment' as any, receivedAmount: newReceived } : q);
+      SalesService.saveQuotations(updQ);
+    }
+
+    refreshData();
+    setReceiptModalInvoice(null);
+    setReceiptForm({ amount: 0, method: 'Bank Transfer', reference: '' });
+    toast.success(`Payment PKR ${receiptForm.amount.toLocaleString()} recorded — ${newBalance <= 0 ? 'FULLY PAID' : `Balance: PKR ${newBalance.toLocaleString()}`}`);
+  };
+
+  // ── Aging calculation ──
+  const getAgingDays = (dueDate: string) => {
+    const diff = Math.floor((Date.now() - new Date(dueDate).getTime()) / (1000 * 60 * 60 * 24));
+    return diff > 0 ? diff : 0;
+  };
+
+  // ── Filtered data ──
+  const billableOrders = orders.filter(o => o.status === 'Approved' && !isAlreadyInvoiced(o.id));
+  const outstandingInvoices = invoices.filter(i => i.status !== 'Paid');
+  const totalAR = outstandingInvoices.reduce((s, i) => s + i.balance, 0);
+  const overdueInvoices = outstandingInvoices.filter(i => getAgingDays(i.dueDate) > 0);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-       <div className="bg-slate-900 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-8 opacity-10"><FileText size={120} /></div>
-          <div><h2 className="text-2xl font-black uppercase tracking-tight">SD Billing Engine</h2><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Invoice Generation Guardrails (Full Cycle Check)</p></div>
-       </div>
+      {/* Header with AR Summary */}
+      <div className="bg-slate-900 text-white p-8 rounded-[2rem] shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-8 opacity-10"><FileText size={120} /></div>
+        <div className="flex justify-between items-start relative z-10">
+          <div>
+            <h2 className="text-2xl font-black uppercase tracking-tight">SD Billing & Collections</h2>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Invoice → AR → Payment Receipt → GL Auto-Post</p>
+          </div>
+          <div className="flex space-x-6 text-right">
+            <div><p className="text-[9px] font-bold text-slate-400 uppercase">Total AR Outstanding</p><p className="text-2xl font-black text-amber-400">PKR {totalAR.toLocaleString()}</p></div>
+            <div><p className="text-[9px] font-bold text-slate-400 uppercase">Overdue</p><p className="text-2xl font-black text-rose-400">{overdueInvoices.length}</p></div>
+            <div><p className="text-[9px] font-bold text-slate-400 uppercase">Invoices</p><p className="text-2xl font-black text-emerald-400">{invoices.length}</p></div>
+          </div>
+        </div>
+      </div>
 
-       <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
+      {/* Tabs */}
+      <div className="flex items-center space-x-1 bg-white p-1 rounded-xl border shadow-sm w-fit">
+        <button onClick={() => setActiveView('billing')} className={`flex items-center space-x-2 px-5 py-2 rounded-lg text-xs font-bold transition-all ${activeView === 'billing' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+          <FileText size={15}/><span>Generate Invoice</span>
+          {billableOrders.length > 0 && <span className="bg-amber-400 text-amber-900 text-[9px] font-black px-1.5 rounded-full">{billableOrders.length}</span>}
+        </button>
+        <button onClick={() => setActiveView('receivables')} className={`flex items-center space-x-2 px-5 py-2 rounded-lg text-xs font-bold transition-all ${activeView === 'receivables' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+          <CreditCard size={15}/><span>Accounts Receivable</span>
+          {outstandingInvoices.length > 0 && <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 rounded-full">{outstandingInvoices.length}</span>}
+        </button>
+        <button onClick={() => setActiveView('receipts')} className={`flex items-center space-x-2 px-5 py-2 rounded-lg text-xs font-bold transition-all ${activeView === 'receipts' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+          <Receipt size={15}/><span>Payment History</span>
+        </button>
+      </div>
+
+      {/* ═══ TAB: GENERATE INVOICE ═══ */}
+      {activeView === 'billing' && (
+        <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
           <table className="w-full text-left sap-table">
-             <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase text-slate-500 tracking-widest">
-                <tr>
-                    <th className="px-6 py-3">Order Ref</th>
-                    <th className="px-6 py-3">Business Partner</th>
-                    <th className="px-6 py-3">Industrial Status</th>
-                    <th className="px-6 py-3">Inter-Co Check</th>
-                    <th className="px-6 py-3">Operation</th>
-                </tr>
-             </thead>
-             <tbody>
-                {orders.map(order => {
-                  const complete = isCycleComplete(order.orderNo);
-                  const client = clients.find(c => c.id === order.clientId);
-                  const isInterCo = ['GTI', 'GTK', 'NIPPON', 'GLASSCO', 'FACTORY'].some(c => client?.name.toUpperCase().includes(c));
+            <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-500 tracking-widest">
+              <tr>
+                <th className="px-6 py-3">Order Ref</th>
+                <th className="px-6 py-3">Client</th>
+                <th className="px-6 py-3">Amount (PKR)</th>
+                <th className="px-6 py-3">Production</th>
+                <th className="px-6 py-3">Inter-Co</th>
+                <th className="px-6 py-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {billableOrders.map(order => {
+                const complete = isCycleComplete(order.orderNo);
+                const client = clients.find(c => c.id === order.clientId);
+                const isInterCo = ['GTI', 'GTK', 'NIPPON', 'GLASSCO', 'FACTORY'].some(c => client?.name?.toUpperCase().includes(c));
+                const total = order.items.reduce((s, i) => s + i.amount, 0);
 
-                  return (
-                    <tr key={order.id}>
-                       <td className="px-6 py-4 font-black text-blue-600">{order.orderNo}</td>
-                       <td className="px-6 py-4 font-bold text-slate-700">{client?.name || 'Unknown'}</td>
-                       <td className="px-6 py-4">
-                          <div className="flex items-center space-x-2">
-                             {complete ? <CheckCircle2 size={16} className="text-emerald-500"/> : <Ban size={16} className="text-rose-500"/>}
-                             <span className={`text-[10px] font-black uppercase ${complete ? 'text-emerald-600' : 'text-rose-600'}`}>{complete ? 'Cycle Complete' : 'Production In-Progress'}</span>
-                          </div>
-                       </td>
-                       <td className="px-6 py-4">
-                          {isInterCo ? (
-                              <div className="flex items-center space-x-1 text-indigo-600 bg-indigo-50 px-2 py-1 rounded w-fit border border-indigo-100">
-                                  <ArrowRightLeft size={12}/>
-                                  <span className="text-[9px] font-black uppercase">Auto-Mirror</span>
-                              </div>
-                          ) : (
-                              <span className="text-[9px] text-slate-400 font-bold uppercase">-</span>
-                          )}
-                       </td>
-                       <td className="px-6 py-4">
-                          <button 
-                            onClick={() => handleGenerateInvoice(order)}
-                            disabled={!complete} 
-                            className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${complete ? 'bg-emerald-600 text-white shadow-lg hover:bg-emerald-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
-                          >
-                            Generate Invoice
-                          </button>
-                       </td>
-                    </tr>
-                  );
-                })}
-             </tbody>
+                return (
+                  <tr key={order.id} className="hover:bg-slate-50">
+                    <td className="px-6 py-4 font-black text-blue-600">{order.orderNo || order.id}</td>
+                    <td className="px-6 py-4 font-bold text-slate-700">{client?.name || 'Walk-in'}</td>
+                    <td className="px-6 py-4 font-black">PKR {total.toLocaleString()}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2">
+                        {complete ? <CheckCircle2 size={14} className="text-emerald-500"/> : <Clock size={14} className="text-amber-500"/>}
+                        <span className={`text-[10px] font-black uppercase ${complete ? 'text-emerald-600' : 'text-amber-600'}`}>{complete ? 'Ready' : 'In Progress'}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {isInterCo ? (
+                        <div className="flex items-center space-x-1 text-indigo-600 bg-indigo-50 px-2 py-1 rounded w-fit border border-indigo-100">
+                          <ArrowRightLeft size={11}/><span className="text-[9px] font-black uppercase">Auto-Mirror</span>
+                        </div>
+                      ) : <span className="text-[9px] text-slate-400">—</span>}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button onClick={() => handleGenerateInvoice(order)} disabled={!complete}
+                        className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${complete ? 'bg-emerald-600 text-white shadow hover:bg-emerald-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>
+                        Generate Invoice
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {billableOrders.length === 0 && (
+                <tr><td colSpan={6} className="text-center py-12 text-slate-300 font-bold uppercase text-xs italic">No billable orders. Approved orders with complete production will appear here.</td></tr>
+              )}
+            </tbody>
           </table>
-       </div>
+        </div>
+      )}
+
+      {/* ═══ TAB: ACCOUNTS RECEIVABLE ═══ */}
+      {activeView === 'receivables' && (
+        <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
+          <div className="p-4 bg-slate-50 border-b flex justify-between items-center">
+            <h3 className="font-black text-slate-800 uppercase text-sm">Outstanding Invoices</h3>
+            <div className="relative w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+              <input type="text" placeholder="Search invoices..." className="sap-input w-full pl-9 text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            </div>
+          </div>
+          <table className="w-full text-left sap-table">
+            <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-500 tracking-widest">
+              <tr>
+                <th className="px-6 py-3">Invoice #</th>
+                <th className="px-6 py-3">Client</th>
+                <th className="px-6 py-3">Date</th>
+                <th className="px-6 py-3">Due Date</th>
+                <th className="px-6 py-3 text-right">Total</th>
+                <th className="px-6 py-3 text-right">Received</th>
+                <th className="px-6 py-3 text-right">Balance</th>
+                <th className="px-6 py-3 text-center">Status</th>
+                <th className="px-6 py-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.filter(i => !searchTerm || i.id.toLowerCase().includes(searchTerm.toLowerCase()) || i.clientName.toLowerCase().includes(searchTerm.toLowerCase())).map(inv => {
+                const aging = getAgingDays(inv.dueDate);
+                const isOverdue = inv.status !== 'Paid' && aging > 0;
+                return (
+                  <tr key={inv.id} className={`hover:bg-slate-50 ${isOverdue ? 'bg-rose-50/30' : ''}`}>
+                    <td className="px-6 py-3 font-black text-blue-600">{inv.id}</td>
+                    <td className="px-6 py-3 font-bold text-slate-700 text-xs uppercase">{inv.clientName}</td>
+                    <td className="px-6 py-3 text-xs text-slate-500">{inv.date}</td>
+                    <td className="px-6 py-3 text-xs">
+                      <span className={isOverdue ? 'text-rose-600 font-bold' : 'text-slate-500'}>{inv.dueDate}</span>
+                      {isOverdue && <span className="ml-1 text-[9px] text-rose-500 font-black">({aging}d overdue)</span>}
+                    </td>
+                    <td className="px-6 py-3 text-right font-black text-xs">{inv.totalAmount.toLocaleString()}</td>
+                    <td className="px-6 py-3 text-right font-bold text-emerald-600 text-xs">{inv.receivedAmount.toLocaleString()}</td>
+                    <td className="px-6 py-3 text-right font-black text-xs">{inv.balance.toLocaleString()}</td>
+                    <td className="px-6 py-3 text-center">
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                        inv.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' :
+                        inv.status === 'Partial' ? 'bg-amber-100 text-amber-700' :
+                        isOverdue ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'
+                      }`}>{isOverdue && inv.status !== 'Paid' ? 'Overdue' : inv.status}</span>
+                    </td>
+                    <td className="px-6 py-3 text-right">
+                      {inv.status !== 'Paid' && (
+                        <button onClick={() => { setReceiptModalInvoice(inv); setReceiptForm({ amount: inv.balance, method: 'Bank Transfer', reference: '' }); }}
+                          className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase hover:bg-emerald-700">
+                          Receive Payment
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {invoices.length === 0 && (
+                <tr><td colSpan={9} className="text-center py-12 text-slate-300 font-bold uppercase text-xs italic">No invoices yet. Generate from billing tab.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ═══ TAB: PAYMENT HISTORY ═══ */}
+      {activeView === 'receipts' && (
+        <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
+          <div className="p-4 bg-slate-50 border-b"><h3 className="font-black text-slate-800 uppercase text-sm">Payment Receipts</h3></div>
+          <table className="w-full text-left sap-table">
+            <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-500 tracking-widest">
+              <tr>
+                <th className="px-6 py-3">Receipt #</th>
+                <th className="px-6 py-3">Invoice</th>
+                <th className="px-6 py-3">Date</th>
+                <th className="px-6 py-3">Method</th>
+                <th className="px-6 py-3">Reference</th>
+                <th className="px-6 py-3 text-right">Amount (PKR)</th>
+                <th className="px-6 py-3">GL Ref</th>
+              </tr>
+            </thead>
+            <tbody>
+              {receipts.sort((a, b) => b.date.localeCompare(a.date)).map(r => (
+                <tr key={r.id} className="hover:bg-slate-50">
+                  <td className="px-6 py-3 font-black text-emerald-600">{r.id}</td>
+                  <td className="px-6 py-3 font-bold text-blue-600 text-xs">{r.invoiceId}</td>
+                  <td className="px-6 py-3 text-xs text-slate-500">{r.date}</td>
+                  <td className="px-6 py-3"><span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[9px] font-black uppercase">{r.method}</span></td>
+                  <td className="px-6 py-3 text-xs font-bold text-slate-600">{r.reference || '—'}</td>
+                  <td className="px-6 py-3 text-right font-black">{r.amount.toLocaleString()}</td>
+                  <td className="px-6 py-3 text-[9px] font-bold text-slate-400">{r.glTxId}</td>
+                </tr>
+              ))}
+              {receipts.length === 0 && (
+                <tr><td colSpan={7} className="text-center py-12 text-slate-300 font-bold uppercase text-xs italic">No payments recorded yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ═══ MODAL: RECEIVE PAYMENT ═══ */}
+      {receiptModalInvoice && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in duration-200">
+            <div className="px-8 py-6 bg-emerald-600 text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-black uppercase">Receive Payment</h3>
+                <p className="text-[10px] font-bold text-emerald-200 uppercase tracking-widest">{receiptModalInvoice.id} — {receiptModalInvoice.clientName}</p>
+              </div>
+              <button onClick={() => setReceiptModalInvoice(null)}><XCircle size={24}/></button>
+            </div>
+            <div className="p-8 bg-slate-50 space-y-6">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-white p-4 rounded-xl border text-center">
+                  <p className="text-[9px] font-black uppercase text-slate-400">Invoice Total</p>
+                  <p className="text-lg font-black">{receiptModalInvoice.totalAmount.toLocaleString()}</p>
+                </div>
+                <div className="bg-white p-4 rounded-xl border text-center">
+                  <p className="text-[9px] font-black uppercase text-emerald-500">Already Received</p>
+                  <p className="text-lg font-black text-emerald-600">{receiptModalInvoice.receivedAmount.toLocaleString()}</p>
+                </div>
+                <div className="bg-white p-4 rounded-xl border text-center">
+                  <p className="text-[9px] font-black uppercase text-rose-500">Balance Due</p>
+                  <p className="text-lg font-black text-rose-600">{receiptModalInvoice.balance.toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Amount Received (PKR)</label>
+                  <input type="number" className="sap-input w-full font-black text-lg" value={receiptForm.amount} onChange={e => setReceiptForm({...receiptForm, amount: Number(e.target.value)})} /></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Payment Method</label>
+                  <select className="sap-input w-full font-bold" value={receiptForm.method} onChange={e => setReceiptForm({...receiptForm, method: e.target.value as any})}>
+                    <option value="Bank Transfer">Bank Transfer</option><option value="Cash">Cash</option><option value="Cheque">Cheque</option><option value="Online">Online</option>
+                  </select></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Reference / Cheque No</label>
+                  <input type="text" className="sap-input w-full font-bold uppercase" value={receiptForm.reference} onChange={e => setReceiptForm({...receiptForm, reference: e.target.value})} placeholder="Optional" /></div>
+              </div>
+            </div>
+            <div className="px-8 py-6 bg-white border-t flex justify-end space-x-3">
+              <button onClick={() => setReceiptModalInvoice(null)} className="px-6 py-3 text-slate-400 font-black uppercase text-xs">Cancel</button>
+              <button onClick={handleRecordPayment} className="bg-emerald-600 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl flex items-center space-x-2">
+                <Banknote size={16}/><span>Record Payment</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

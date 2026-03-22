@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import OldDisbursements from '@/modules/shared/pages/OldDisbursements';
 import EmployeeManagement from './EmployeeManagement';
-import AttendanceRegister from '../companies/glassco/components/AttendanceRegister';
+import AttendanceRegister from './AttendanceRegister';
 import LoanManagement from './LoanManagement';
 import PayrollManagement from './PayrollManagement';
 import { Users, ClipboardCheck, Landmark, CreditCard, History } from 'lucide-react';

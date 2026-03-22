@@ -1,12 +1,5 @@
-
 import React, { useState } from 'react';
 import { Company } from '../../shared/types';
-import GlasscoClientMaster from '../companies/glassco/components/GlasscoClientMaster';
-import NipponClientMaster from '../companies/nippon/components/NipponClientMaster';
-import GlasscoSalesOrders from '../companies/glassco/components/GlasscoSalesOrders';
-import NipponSalesOrders from '../companies/nippon/components/NipponSalesOrders';
-import GlasscoSalesPipeline from '../companies/glassco/components/GlasscoSalesPipeline';
-import NipponSalesPipeline from '../companies/nippon/components/NipponSalesPipeline';
 import ClientMaster from './ClientMaster';
 import QuotationManager from './QuotationManager';
 import NipponQuotationManager from '../companies/nippon/NipponQuotationManager';
@@ -53,30 +46,21 @@ const SalesCRM: React.FC = () => {
 
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-[1600px] mx-auto">
-            {activeTab === 'clients' && (
-                company === 'Nippon' ? <NipponClientMaster company={company} /> :
-                company === 'Glassco' ? <GlasscoClientMaster company={company} /> :
-                <ClientMaster />
-            )}
+            {/* Unified ClientMaster for all companies */}
+            {activeTab === 'clients' && <ClientMaster />}
+
             {activeTab === 'design' && company !== 'Glassco' && company !== 'Nippon' && <DesignStudio />}
             
+            {/* QuotationManager stays company-specific (glass vs hardware are too different) */}
             {activeTab === 'quotations' && (
                 company === 'Nippon' ? <NipponQuotationManager /> :
                 company === 'Glassco' ? <GlasscoQuotationManager /> :
                 <QuotationManager />
             )}
             
-            {activeTab === 'orders' && (
-                company === 'Nippon' ? <NipponSalesOrders company={company} /> :
-                company === 'Glassco' ? <GlasscoSalesOrders company={company} /> :
-                <SalesOrders />
-            )}
-
-            {activeTab === 'pipeline' && (
-                company === 'Nippon' ? <NipponSalesPipeline company={company} /> :
-                company === 'Glassco' ? <GlasscoSalesPipeline company={company} /> :
-                <SalesPipeline />
-            )}
+            {/* Unified SalesOrders & Pipeline for all companies */}
+            {activeTab === 'orders' && <SalesOrders />}
+            {activeTab === 'pipeline' && <SalesPipeline />}
         </div>
       </div>
     </div>

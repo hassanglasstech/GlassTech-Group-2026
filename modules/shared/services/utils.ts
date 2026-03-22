@@ -34,11 +34,27 @@ export const safeParse = (key: string, defaultValue: string = '[]') => {
   }
 };
 
-// ── Safe localStorage write ───────────────────────────────────────────
+// ── Safe localStorage write (with auto audit stamp) ─────────────────
 export const safeSave = (key: string, data: any): boolean => {
   try {
-    const serialized = JSON.stringify(data);
-    // Check storage quota (rough estimate: 5MB typical)
+    // Auto-stamp _updatedAt and _version on array items with id
+    let toSave = data;
+    if (Array.isArray(data) && key.startsWith('gtk_erp')) {
+      const now = new Date().toISOString();
+      toSave = data.map((item: any) => {
+        if (item && typeof item === 'object' && item.id) {
+          return {
+            ...item,
+            _updatedAt: now,
+            _version: (item._version || 0) + 1,
+            _createdAt: item._createdAt || now,
+          };
+        }
+        return item;
+      });
+    }
+
+    const serialized = JSON.stringify(toSave);
     const currentUsage = Object.keys(localStorage)
       .reduce((sum, k) => sum + (localStorage.getItem(k)?.length || 0), 0);
     if (currentUsage + serialized.length > 4.5 * 1024 * 1024) {
@@ -57,6 +73,25 @@ export const safeSave = (key: string, data: any): boolean => {
     console.error(`[Storage] Save failed for ${key}:`, err);
     return false;
   }
+};
+
+// ── Stamp single record with audit fields ───────────────────────────
+export const stampAudit = (record: any, userEmail?: string): any => {
+  const now = new Date().toISOString();
+  return {
+    ...record,
+    _createdAt: record._createdAt || now,
+    _createdBy: record._createdBy || userEmail || 'system',
+    _updatedAt: now,
+    _updatedBy: userEmail || 'system',
+    _version: (record._version || 0) + 1,
+  };
+};
+
+// ── Optimistic lock check — true if safe to save ────────────────────
+export const checkVersion = (existing: any, incoming: any): boolean => {
+  if (!existing?._version || !incoming?._version) return true;
+  return incoming._version >= existing._version;
 };
 
 // ── Async service wrapper ─────────────────────────────────────────────
@@ -104,7 +139,7 @@ export const getStorageHealth = () => {
 
 // ── Schema version management ─────────────────────────────────────────
 const SCHEMA_VERSION_KEY = 'gt_schema_version';
-const CURRENT_SCHEMA_VERSION = 3; // increment when data shape changes
+const CURRENT_SCHEMA_VERSION = 4; // v4: added _updatedAt, _version, _createdAt audit fields
 
 export const checkSchemaVersion = (): boolean => {
   try {

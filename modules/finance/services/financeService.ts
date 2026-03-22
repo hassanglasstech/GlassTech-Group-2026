@@ -338,6 +338,7 @@ export const FinanceService = {
   },
 
   // Post a parked PV — called by Finance super-user after review
+  // Also updates linked Requisition status to 'Paid' if reqId exists
   postParkedPV: (pvId: string, reviewerNote?: string): LedgerTransaction | null => {
     const all = FinanceService.getLedger();
     const idx = all.findIndex(t => t.id === pvId);
@@ -353,7 +354,24 @@ export const FinanceService = {
     };
     all[idx] = posted;
     FinanceService.saveLedger([...all]);
-    Logger.action('Finance', 'POST_PV', `PV posted: ${pvId}`);
+
+    // ── Auto-update linked Requisition → "Paid" ──
+    const reqId = pv.reqId || pv.referenceId;
+    if (reqId) {
+      try {
+        const reqs: any[] = safeParse('gtk_erp_requisitions');
+        const reqIdx = reqs.findIndex((r: any) => r && r.id === reqId);
+        if (reqIdx !== -1) {
+          reqs[reqIdx] = { ...reqs[reqIdx], status: 'Paid', paymentStatus: 'Paid' };
+          safeSave('gtk_erp_requisitions', reqs);
+          Logger.action('Finance', 'REQ_AUTO_PAID', `Requisition ${reqId} marked Paid via PV ${pvId}`);
+        }
+      } catch (e) {
+        console.warn('Could not auto-update requisition status:', e);
+      }
+    }
+
+    Logger.action('Finance', 'POST_PV', `PV posted: ${pvId}${reqId ? ` (REQ: ${reqId})` : ''}`);
     return posted;
   },
 
@@ -443,5 +461,130 @@ export const FinanceService = {
 
     FinanceService.recordTransaction(tx);
     return tx;
+  },
+
+  // ── Budget Check: returns spend vs limit for a cost center ─────────
+  checkBudget: (company: Company, costCenterId: string): { 
+    spent: number; budget: number; remaining: number; percent: number; overBudget: boolean; alert: boolean 
+  } => {
+    const cc = FinanceService.getCostCenters().find(c => c.id === costCenterId && c.company === company);
+    if (!cc || !cc.budgetMonthly) return { spent: 0, budget: 0, remaining: 0, percent: 0, overBudget: false, alert: false };
+    const spend = FinanceService.getCostCenterSpend(company, costCenterId);
+    const budget = cc.budgetMonthly;
+    const remaining = budget - spend.total;
+    const percent = Math.round((spend.total / budget) * 100);
+    const threshold = cc.alertThreshold || 80;
+    return { spent: spend.total, budget, remaining, percent, overBudget: remaining < 0, alert: percent >= threshold };
+  },
+
+  // ── Depreciation: Calculate and post monthly depreciation for all active assets ──
+  postDepreciation: (company: Company, month: string): { posted: number; total: number } => {
+    const assets: any[] = safeParse('gtk_erp_assets').filter((a: any) => a.company === company && a.status === 'Active');
+    if (assets.length === 0) return { posted: 0, total: 0 };
+
+    const depKey = `DEP-${company}-${month}`;
+    const existing = FinanceService.getLedger().find(t => t.id === depKey);
+    if (existing) return { posted: 0, total: 0 }; // already posted
+
+    let totalDep = 0;
+    const details: any[] = [];
+    const accounts = FinanceService.getAccounts().filter(a => a.company === company);
+    const depExpAcc = accounts.find(a => a.name.toUpperCase().includes('DEPRECIATION') && a.type === 'Expense') || { id: 'DEP-EXP' };
+    const accumDepAcc = accounts.find(a => a.name.toUpperCase().includes('ACCUMULATED') && a.type === 'Asset') || { id: 'ACCUM-DEP' };
+
+    for (const asset of assets) {
+      let monthlyDep = 0;
+      if (asset.depreciationMethod === 'Straight Line') {
+        monthlyDep = (asset.purchaseCost || 0) / ((asset.usefulLife || 5) * 12);
+      } else {
+        // Declining balance: 2x straight-line rate on book value
+        const rate = (2 / ((asset.usefulLife || 5) * 12));
+        const bookValue = (asset.purchaseCost || 0) - (asset.accumulatedDep || 0);
+        monthlyDep = bookValue * rate;
+      }
+      monthlyDep = Math.round(monthlyDep);
+      if (monthlyDep <= 0) continue;
+      totalDep += monthlyDep;
+    }
+
+    if (totalDep <= 0) return { posted: 0, total: 0 };
+
+    const tx: LedgerTransaction = {
+      id: depKey, company, docType: 'SA',
+      docDate: `${month}-01`, date: new Date().toISOString().split('T')[0],
+      description: `DEPRECIATION: ${month} — ${assets.length} assets`,
+      referenceId: month, status: 'Posted',
+      details: [
+        { accountId: depExpAcc.id, debit: totalDep, credit: 0, text: `Depreciation Expense ${month}` },
+        { accountId: accumDepAcc.id, debit: 0, credit: totalDep, text: `Accumulated Depreciation ${month}` }
+      ]
+    };
+    FinanceService.recordTransaction(tx);
+
+    // Update accumulated dep on assets
+    const allAssets: any[] = safeParse('gtk_erp_assets');
+    const updated = allAssets.map((a: any) => {
+      if (a.company !== company || a.status !== 'Active') return a;
+      let md = 0;
+      if (a.depreciationMethod === 'Straight Line') md = Math.round((a.purchaseCost || 0) / ((a.usefulLife || 5) * 12));
+      else md = Math.round(((a.purchaseCost || 0) - (a.accumulatedDep || 0)) * (2 / ((a.usefulLife || 5) * 12)));
+      return { ...a, accumulatedDep: (a.accumulatedDep || 0) + md };
+    });
+    safeSave('gtk_erp_assets', updated);
+
+    return { posted: assets.length, total: totalDep };
+  },
+
+  // ── Recurring Expenses: Auto-post all due recurring entries ────────
+  postRecurringExpenses: (company: Company): { posted: number; skipped: number } => {
+    const expenses: any[] = FinanceService.getRecurringExpenses().filter((e: any) => e.company === company);
+    const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+    let posted = 0, skipped = 0;
+
+    for (const exp of expenses) {
+      if (exp.lastPostedMonth === currentMonth) { skipped++; continue; }
+      
+      const txId = `REC-${exp.id}-${currentMonth.replace('-', '')}`;
+      const existing = FinanceService.getLedger().find(t => t.id === txId);
+      if (existing) { skipped++; continue; }
+
+      const tx: LedgerTransaction = {
+        id: txId, company, docType: 'SA',
+        docDate: `${currentMonth}-${String(exp.dayOfMonth || 1).padStart(2, '0')}`,
+        date: new Date().toISOString().split('T')[0],
+        description: `RECURRING: ${exp.name} — ${currentMonth}`,
+        referenceId: exp.id, status: 'Posted',
+        details: [
+          { accountId: exp.debitAccountId, debit: exp.amount, credit: 0, text: exp.name, costCenterId: exp.costCenterId || '' },
+          { accountId: exp.creditAccountId, debit: 0, credit: exp.amount, text: `Auto: ${exp.name}` }
+        ]
+      };
+      FinanceService.recordTransaction(tx);
+
+      // Update lastPostedMonth
+      const allExp = FinanceService.getRecurringExpenses();
+      const updatedExp = allExp.map((e: any) => e.id === exp.id ? { ...e, lastPostedMonth: currentMonth } : e);
+      FinanceService.saveRecurringExpenses(updatedExp);
+      posted++;
+    }
+    return { posted, skipped };
+  },
+
+  // ── Stock Alerts: Return items below reorder point ────────────────
+  getStockAlerts: (company: Company): { item: string; current: number; reorderPoint: number; minLevel: number; critical: boolean }[] => {
+    const items: any[] = safeParse('gtk_erp_store').filter((i: any) => i.company === company);
+    const alerts: any[] = [];
+    for (const item of items) {
+      if ((item.reorderPoint || 0) > 0 && item.quantity <= item.reorderPoint) {
+        alerts.push({
+          item: item.name,
+          current: item.quantity,
+          reorderPoint: item.reorderPoint,
+          minLevel: item.minLevel || 0,
+          critical: item.quantity <= (item.minLevel || 0)
+        });
+      }
+    }
+    return alerts.sort((a, b) => (a.critical ? -1 : 1) - (b.critical ? -1 : 1));
   }
 };

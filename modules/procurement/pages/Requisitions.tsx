@@ -390,31 +390,23 @@ const Requisitions: React.FC = () => {
       return { label: 'L1 Manager', color: 'bg-blue-100 text-blue-700' };
   };
 
+  // ─── APPROVE: Single Parked PV → Finance reviews & posts ─────────────
   const handleApprove = (id: string) => {
     const pr = requisitions.find(r => r.id === id);
     if (!pr) return;
-    const strategy = getReleaseStrategy(pr.totalValue);
 
-    const approvedPr = { ...pr, status: 'Approved' as const, approvedBy: 'MD', paymentStatus: pr.requiresCashPayment ? 'Pending' : 'Not Required' };
+    const approvedPr = { ...pr, status: 'Approved' as const, approvedBy: 'MD', paymentStatus: 'Pending' as const };
 
-    // ── GL Auto-Post: Create L5 accounts and ledger entries ──
+    // ── Single GL Entry: Parked PV ──
+    // Finance reviews → edits if needed → posts to GL
+    // NO separate postAutomatedRequisitionEntry (that caused double entries)
     try {
-      FinanceService.postAutomatedRequisitionEntry(approvedPr);
-      toast.success(`GL Auto-Posted: ${pr.subCategory || pr.reqType} → L5 account created`, { duration: 5000 });
+      const pv = FinanceService.createParkedPV(approvedPr);
+      approvedPr.paymentRef = pv.id;
+      toast.success(`Approved ✓ Parked PV ${pv.id} created — Finance must review & post`, { duration: 6000 });
     } catch (e) {
-      console.error('GL Auto-Post failed:', e);
-    }
-
-    // Auto-create Parked PV when cash payment is flagged
-    if (pr.requiresCashPayment) {
-      try {
-        const pv = FinanceService.createParkedPV(approvedPr);
-        approvedPr.paymentRef = pv.id;
-        toast.success(`Approved ✓  Parked PV ${pv.id} created — Finance must review & post`, { duration: 6000 });
-      } catch (e) {
-        console.error('PV creation failed:', e);
-        toast.error('Approved but PV creation failed — check Finance module', { duration: 5000 });
-      }
+      console.error('PV creation failed:', e);
+      toast.error('Approved but PV creation failed — check Finance module', { duration: 5000 });
     }
 
     const all = InventoryService.getRequisitions().filter(Boolean);
@@ -427,7 +419,7 @@ const Requisitions: React.FC = () => {
             id: Date.now().toString(),
             targetCompany: pr.company,
             title: `Requisition Approved!`,
-            message: `Factory approved PR #${pr.id}. You can now process the payment.`,
+            message: `Factory approved PR #${pr.id}. Parked PV created — Finance will review & post.`,
             isRead: false,
             date: new Date().toISOString(),
             link: `/requisitions?id=${pr.id}`
@@ -438,7 +430,6 @@ const Requisitions: React.FC = () => {
 
     refreshData();
     setExpandedId(null);
-    if (!pr.requiresCashPayment) toast.success(`Requisition Approved + GL Posted Successfully!`);
   };
 
   // ─── REJECT with Reason (merged from Glassco) ─────────────────────────
@@ -463,85 +454,9 @@ const Requisitions: React.FC = () => {
     refreshData();
   };
 
-  // NEW JIT LEDGER LOGIC: Auto-Account Creation
-  const handlePaymentVoucher = (req: Requisition) => {
-    if (req.status !== 'Approved') {
-        return toast.error("Only approved requisitions can be paid.");
-    }
-
-    try {
-        // 1. Get/Create the Debit Account
-        let debitAccount;
-        if (req.category === 'HR' && (req.subCategory === 'Loan Request' || req.subCategory === 'Salary Advance')) {
-            // Use the automated mapping logic from FinanceService
-            const assets = FinanceService.ensureAccount(company as any, 'ASSETS', 1, null, 'Asset', '10');
-            const currentAssets = FinanceService.ensureAccount(company as any, 'CURRENT ASSETS', 2, assets.id, 'Asset', '11');
-            const loansAdvances = FinanceService.ensureAccount(company as any, 'LOANS & ADVANCES', 3, currentAssets.id, 'Asset', '114');
-            const empLoansControl = FinanceService.ensureAccount(company as any, 'EMPLOYEE LOANS CONTROL', 4, loansAdvances.id, 'Asset', '1141');
-            
-            debitAccount = FinanceService.ensureAccount(
-                company as any, 
-                req.employeeName || `EMP-${req.employeeId}`, 
-                5, 
-                empLoansControl.id, 
-                'Asset', 
-                '11410'
-            );
-        } else {
-            // For other categories, debit an expense account
-            const expenses = FinanceService.ensureAccount(company as any, 'EXPENSES', 1, null, 'Expense', '50');
-            const opExpenses = FinanceService.ensureAccount(company as any, 'OPERATING EXPENSES', 2, expenses.id, 'Expense', '52');
-            const adminExpenses = FinanceService.ensureAccount(company as any, 'ADMIN EXPENSES', 3, opExpenses.id, 'Expense', '521');
-            const procurement = FinanceService.ensureAccount(company as any, 'PROCUREMENT & MATERIALS', 4, adminExpenses.id, 'Expense', '5214');
-            
-            debitAccount = FinanceService.ensureAccount(
-                company as any, 
-                req.subCategory || 'GENERAL PROCUREMENT', 
-                5, 
-                procurement.id, 
-                'Expense', 
-                '52140'
-            );
-        }
-
-        // 2. Get/Create the Credit Account (Bank/Cash)
-        const assets = FinanceService.ensureAccount(company as any, 'ASSETS', 1, null, 'Asset', '10');
-        const currentAssets = FinanceService.ensureAccount(company as any, 'CURRENT ASSETS', 2, assets.id, 'Asset', '11');
-        const cashBank = FinanceService.ensureAccount(company as any, 'CASH & BANK', 3, currentAssets.id, 'Asset', '111');
-        const cashAtBank = FinanceService.ensureAccount(company as any, 'CASH AT BANK', 4, cashBank.id, 'Asset', '1112');
-        const creditAccount = FinanceService.ensureAccount(company as any, 'MAIN BANK ACCOUNT', 5, cashAtBank.id, 'Asset', '11120');
-
-        // 3. Record the Transaction
-        const tx: any = {
-            id: `PV-${Date.now()}`,
-            company: company as any,
-            docType: 'PV',
-            docDate: new Date().toISOString().split('T')[0],
-            date: new Date().toISOString().split('T')[0],
-            description: `Payment for PR #${req.id}: ${req.headerText}`,
-            referenceId: req.id,
-            status: 'Posted',
-            details: [
-                { accountId: debitAccount.id, debit: req.totalValue || req.loanAmount || 0, credit: 0, text: `Debit: ${req.subCategory}` },
-                { accountId: creditAccount.id, debit: 0, credit: req.totalValue || req.loanAmount || 0, text: `Credit: Bank Payment` }
-            ]
-        };
-
-        FinanceService.recordTransaction(tx);
-
-        // 4. Update Requisition Status
-        const allReqs = InventoryService.getRequisitions().filter(Boolean);
-        const updatedReqs = allReqs.map(r => r.id === req.id ? { ...r, status: 'Paid' as any } : r);
-        InventoryService.saveRequisitions(updatedReqs);
-        
-        refreshData();
-        toast.success(`Payment Voucher Posted Successfully! Account: ${debitAccount.code}`);
-
-    } catch (error) {
-        console.error("Payment Voucher Error:", error);
-        toast.error("Failed to process payment voucher.");
-    }
-  };
+  // handlePaymentVoucher REMOVED — Parked PV is created on approval.
+  // Finance team reviews & posts via General Ledger > Parked tab.
+  // When Finance posts the Parked PV, the GL entry goes live.
 
   const handleAddNewSubCategory = (cat: string) => {
     const name = window.prompt(`Enter new sub-category for ${cat}:`);
@@ -565,7 +480,8 @@ const Requisitions: React.FC = () => {
       const poId = AppService.generateSequenceID('PO', company, allPOs);
       const newPO: PurchaseOrder = {
           id: poId, fromCompany: company, toVendor: vendor, date: new Date().toISOString().split('T')[0],
-          status: 'Sent', totalAmount: amount, category: category, projectId: project, items: items
+          status: 'Sent', totalAmount: amount, category: category, projectId: project, items: items,
+          reqId: sourcePRId || undefined
       };
       ProductionService.savePurchaseOrders([...allPOs, newPO]);
       if (sourcePRId) {
@@ -702,8 +618,8 @@ const Requisitions: React.FC = () => {
                           </>
                         )}
                         <button onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 size={16}/></button>
-                        {company !== 'Factory' && r.status === 'Approved' && (
-                          <button onClick={() => handlePaymentVoucher(r)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Payment Voucher"><DollarSign size={16}/></button>
+                        {r.status === 'Approved' && r.paymentRef && (
+                          <span className="text-[9px] font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded-lg" title={`Parked PV: ${r.paymentRef} — Finance will post via GL`}>{r.paymentRef}</span>
                         )}
                       </td>
                     </tr>

@@ -11,6 +11,7 @@ import PettyCashBook from '@/modules/finance/pages/PettyCashBook';
 import RecurringExpenses from '@/modules/finance/pages/RecurringExpenses';
 import FinancialRegistry from '@/modules/finance/pages/FinancialRegistry';
 import BillingHub from '@/modules/finance/components/BillingHub';
+import ThreeWayMatching from '@/modules/finance/components/ThreeWayMatching';
 import GLConfiguration from '@/modules/finance/components/GLConfiguration';
 import AgingReport from '@/modules/finance/components/AgingReport';
 import FinanceDashboardView from '@/modules/finance/components/FinanceDashboardView';
@@ -18,7 +19,7 @@ import AssetManagement from '@/modules/finance/components/AssetManagement';
 import { 
   Landmark, CreditCard, ListTree, BookOpen, BarChart4, 
   FilePieChart, Target, Wallet, RefreshCw, FileText, 
-  Inbox, Settings, Clock, Briefcase, LayoutGrid, Users, BarChart3, Package
+  Inbox, Settings, Clock, Briefcase, LayoutGrid, Users, BarChart3, Package, ShieldCheck
 } from 'lucide-react';
 
 type CategoryKey = 'ops' | 'reporting' | 'hr' | 'assets' | 'config';
@@ -38,6 +39,7 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
           { id: 'cash_journal', label: 'Cash Journal', icon: Wallet },
           { id: 'ledger', label: 'General Ledger', icon: BookOpen },
           { id: 'billing', label: 'Invoice Billing', icon: FileText },
+          { id: 'matching', label: '3-Way Matching', icon: ShieldCheck },
         ]
       },
       reporting: {
@@ -140,6 +142,7 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
           {activeTab === 'cash_journal' && <PettyCashBook company={company} />}
           {activeTab === 'ledger' && <GeneralLedger company={company} />}
           {activeTab === 'billing' && <BillingHub company={company} />}
+          {activeTab === 'matching' && <ThreeWayMatching company={company} />}
           
           {/* Reporting */}
           {activeTab === 'trial' && <TrialBalance company={company} />}

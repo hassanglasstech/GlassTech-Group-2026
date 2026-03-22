@@ -7,6 +7,8 @@ const KEYS = {
   QUOTATIONS: 'gtk_erp_quotations',
   PROJECTS: 'gtk_erp_projects',
   VENDORS: 'gtk_erp_vendors',
+  INVOICES: 'gtk_erp_invoices',
+  PAYMENT_RECEIPTS: 'gtk_erp_payment_receipts',
 };
 
 import { safeParse, safeSave } from '../../shared/services/utils';
@@ -23,4 +25,12 @@ export const SalesService = {
   saveProjects: (data: Project[]) => safeSave(KEYS.PROJECTS, data),
   getVendors: (): Vendor[] => safeParse(KEYS.VENDORS),
   saveVendors: (data: Vendor[]) => safeSave(KEYS.VENDORS, data),
+
+  // ── Invoices ──
+  getInvoices: (): any[] => safeParse(KEYS.INVOICES),
+  saveInvoices: (data: any[]) => safeSave(KEYS.INVOICES, data),
+
+  // ── Payment Receipts (AR Collections) ──
+  getPaymentReceipts: (): any[] => safeParse(KEYS.PAYMENT_RECEIPTS),
+  savePaymentReceipts: (data: any[]) => safeSave(KEYS.PAYMENT_RECEIPTS, data),
 };
