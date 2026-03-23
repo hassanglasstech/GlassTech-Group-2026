@@ -4,6 +4,7 @@ import { AppService } from '@/modules/shared/services/appService';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { FinanceService } from '@/modules/finance/services/financeService';
+import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { 
   ClipboardList, Plus, X, Activity, Truck, Calendar, Send, 
   ShieldCheck, Printer, Ban, Receipt, ArrowRightLeft, Trash2
@@ -44,8 +45,6 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
     const [printingVoucher, setPrintingVoucher] = useState<{data: PettyCashEntry, recipient: string} | null>(null);
     const [printingServiceOrder, setPrintingServiceOrder] = useState<TemperingDispatch | null>(null);
     const [isServiceOrderModalOpen, setIsServiceOrderModalOpen] = useState(false);
-
-import { InventoryService } from '@/modules/procurement/services/inventoryService';
 
     const [tripHeader, setTripHeader] = useState({
         date: new Date().toISOString().split('T')[0],
