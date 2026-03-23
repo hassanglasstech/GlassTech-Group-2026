@@ -129,6 +129,14 @@ export const ServiceOrderPrint: React.FC<Props> = ({ dispatch, pieces, jobOrders
                             <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Total Ft²</p>
                             <p className="text-lg font-black text-blue-700">{summary.totalSqFt.toFixed(2)}</p>
                         </div>
+                        <div>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Rate / Ft²</p>
+                            <p className="text-lg font-black text-indigo-700">PKR {(dispatch.chargesPerSqFt || 0).toLocaleString()}</p>
+                        </div>
+                        <div>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Total Cost</p>
+                            <p className="text-lg font-black text-emerald-700">PKR {(dispatch.totalCharges || Math.round(summary.totalSqFt * (dispatch.chargesPerSqFt || 0))).toLocaleString()}</p>
+                        </div>
                     </div>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 justify-end flex-1 pl-6">
                         {Object.entries(summary.breakdown).slice(0, 6).map(([key, val]) => (

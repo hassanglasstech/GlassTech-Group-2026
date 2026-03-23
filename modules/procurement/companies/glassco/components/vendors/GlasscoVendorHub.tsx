@@ -413,9 +413,32 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
               <div className="absolute top-0 right-0 p-8 opacity-10"><FileText size={100}/></div>
               <div><h2 className="text-xl font-black uppercase">Service Orders</h2><p className="text-[10px] font-bold text-emerald-200 uppercase tracking-widest mt-1">All external processing orders with vendor rates & GL entries</p></div>
               <div className="flex space-x-4 text-right relative z-10">
-                <div><p className="text-[9px] font-bold text-emerald-200 uppercase">Total Orders</p><p className="text-2xl font-black">{soDispatches.length}</p></div>
-                <div><p className="text-[9px] font-bold text-emerald-200 uppercase">GL Entries</p><p className="text-2xl font-black">{ledger.length}</p></div>
+                <div><p className="text-[9px] font-bold text-emerald-200 uppercase">Orders</p><p className="text-2xl font-black">{soDispatches.length}</p></div>
+                <div><p className="text-[9px] font-bold text-emerald-200 uppercase">Total Cost</p><p className="text-2xl font-black">PKR {soDispatches.reduce((s, d) => s + (d.totalCharges || 0), 0).toLocaleString()}</p></div>
               </div>
+            </div>
+            {/* Vendor-wise outstanding */}
+            <div className="grid grid-cols-3 gap-4">
+              {(() => {
+                const vendorTotals: Record<string, { total: number; paid: number }> = {};
+                soDispatches.forEach(d => {
+                  const cost = d.totalCharges || (d.totalSqFt * (d.chargesPerSqFt || 0));
+                  if (!vendorTotals[d.plantName]) vendorTotals[d.plantName] = { total: 0, paid: 0 };
+                  vendorTotals[d.plantName].total += cost;
+                  const gl = ledger.find(t => t.referenceId === d.id);
+                  if (gl?.status === 'Posted') vendorTotals[d.plantName].paid += cost;
+                });
+                return Object.entries(vendorTotals).map(([name, v]) => (
+                  <div key={name} className="bg-white p-4 rounded-2xl border shadow-sm">
+                    <p className="text-[9px] font-black text-slate-400 uppercase">{name}</p>
+                    <p className="text-lg font-black text-slate-800">PKR {v.total.toLocaleString()}</p>
+                    <div className="flex justify-between mt-2 text-[9px] font-bold">
+                      <span className="text-emerald-600">Paid: PKR {v.paid.toLocaleString()}</span>
+                      <span className={`${v.total - v.paid > 0 ? 'text-rose-600' : 'text-slate-400'}`}>Due: PKR {(v.total - v.paid).toLocaleString()}</span>
+                    </div>
+                  </div>
+                ));
+              })()}
             </div>
             <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
               <table className="w-full text-left sap-table">

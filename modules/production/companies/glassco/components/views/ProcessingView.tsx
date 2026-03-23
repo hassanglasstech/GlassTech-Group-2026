@@ -7,6 +7,7 @@ import { isInternal, getGlassSize } from '@/modules/production/components/Produc
 import { useNavigate } from 'react-router-dom';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { ProductionService } from '@/modules/production/services/productionService';
+import { SalesService } from '@/modules/sales/services/salesService';
 
 const ProcessingView: React.FC = () => {
   const { 
@@ -145,37 +146,76 @@ const ProcessingView: React.FC = () => {
                       return loaded > 0 ? (
                         <button onClick={() => {
                           if (!confirm(`Finalize loading? ${loaded} pieces will be dispatched.`)) return;
-                          // Auto-dispatch the trip
                           const allDisp = ProductionService.getTemperingDispatches();
-                          const updDisp = allDisp.map(d => d.id === activeDispatchIdForLoading ? { ...d, status: 'Dispatched' as const } : d);
-                          ProductionService.saveTemperingDispatches(updDisp);
-                          // Update piece statuses
                           const allPcs = ProductionService.getProductionPieces();
+                          const loadedPcs = allPcs.filter(p => p.dispatchId === activeDispatchIdForLoading);
                           const isSite = selectedTrip?.serviceType === 'Site Delivery';
-                          const updPcs = allPcs.map(p => p.dispatchId === activeDispatchIdForLoading ? { ...p, status: (isSite ? 'Delivered' : 'Dispatched') as any, lastUpdated: new Date().toISOString() } : p);
+
+                          // ── Calculate totalSqFt and thickness-wise cost ──
+                          let totalSqFt = 0;
+                          let totalCost = 0;
+                          const vendor = selectedTrip ? SalesService.getVendors().find(v => v.name.toUpperCase() === selectedTrip.plantName.toUpperCase()) : null;
+                          const vendorRates = vendor?.rates?.sort((a, b) => (b.effectiveDate || '').localeCompare(a.effectiveDate || '')) || [];
+
+                          loadedPcs.forEach(p => {
+                            const sqFt = p.totalSqFt || 0;
+                            totalSqFt += sqFt;
+                            // Match piece thickness to vendor rate
+                            const thickness = getGlassSize(p.specs || ''); // e.g. "5mm"
+                            const matchedRate = vendorRates.find(r => r.thickness === thickness) || vendorRates.find(r => r.thickness === 'All') || vendorRates[0];
+                            const rate = matchedRate?.rate || selectedTrip?.chargesPerSqFt || 0;
+                            totalCost += sqFt * rate;
+                          });
+                          totalCost = Math.round(totalCost);
+
+                          // ── Update dispatch with calculated totals ──
+                          const updDisp = allDisp.map(d => d.id === activeDispatchIdForLoading
+                            ? { ...d, status: 'Dispatched' as const, totalSqFt, totalCharges: totalCost }
+                            : d);
+                          ProductionService.saveTemperingDispatches(updDisp);
+
+                          // ── Update piece statuses ──
+                          const updPcs = allPcs.map(p => p.dispatchId === activeDispatchIdForLoading
+                            ? { ...p, status: (isSite ? 'Delivered' : 'Dispatched') as any, lastUpdated: new Date().toISOString() }
+                            : p);
                           ProductionService.saveProductionPieces(updPcs);
-                          // COGS GL entry for tempering/lamination/DG trips
-                          if (selectedTrip && selectedTrip.serviceType !== 'Site Delivery' && selectedTrip.serviceType !== 'Supply') {
-                            const loadedPcs = allPcs.filter(p => p.dispatchId === activeDispatchIdForLoading);
-                            const totalSqFt = loadedPcs.reduce((s, p) => s + (p.totalSqFt || 0), 0);
-                            const rate = selectedTrip.chargesPerSqFt || 0;
-                            const totalCost = rate > 0 ? totalSqFt * rate : selectedTrip.totalCharges || 0;
-                            if (totalCost > 0) {
-                              const accs = FinanceService.getAccounts().filter(a => a.company === company);
-                              const cogsAcc = accs.find(a => a.name.toUpperCase().includes('COGS') || a.name.toUpperCase().includes('DIRECT COST') || a.code.startsWith('51')) || accs.find(a => a.type === 'Expense');
-                              const vendorPayable = accs.find(a => a.name.toUpperCase().includes('PAYABLE') || a.code.startsWith('211')) || accs.find(a => a.type === 'Liability');
-                              if (cogsAcc && vendorPayable) {
-                                const txId = `GL-SO-${selectedTrip.id}`;
-                                FinanceService.saveLedger([...FinanceService.getLedger(), {
-                                  id: txId, company, docType: 'KR', docDate: new Date().toISOString().split('T')[0], date: new Date().toISOString().split('T')[0],
-                                  description: `[PARKED] SERVICE ORDER: ${selectedTrip.serviceType} — ${selectedTrip.plantName} — ${loadedPcs.length} pcs / ${totalSqFt.toFixed(1)} sqft`,
-                                  referenceId: selectedTrip.id, status: 'Parked',
-                                  details: [
-                                    { accountId: cogsAcc.id, debit: totalCost, credit: 0, text: `${selectedTrip.serviceType} cost: ${selectedTrip.plantName}` },
-                                    { accountId: vendorPayable.id, debit: 0, credit: totalCost, text: `Payable: ${selectedTrip.plantName}` }
-                                  ]
-                                } as any]);
-                              }
+
+                          // ── COGS GL entry (Parked) ──
+                          if (selectedTrip && !isSite && selectedTrip.serviceType !== 'Supply' && totalCost > 0) {
+                            const accs = FinanceService.getAccounts().filter(a => a.company === company);
+                            const cogsAcc = accs.find(a => a.name.toUpperCase().includes('COGS') || a.name.toUpperCase().includes('DIRECT COST') || a.code.startsWith('51')) || accs.find(a => a.type === 'Expense');
+                            const vendorPayable = accs.find(a => a.name.toUpperCase().includes('PAYABLE') || a.code.startsWith('211')) || accs.find(a => a.type === 'Liability');
+                            if (cogsAcc && vendorPayable) {
+                              const txId = `GL-SO-${selectedTrip.id}`;
+                              FinanceService.saveLedger([...FinanceService.getLedger(), {
+                                id: txId, company, docType: 'KR', docDate: new Date().toISOString().split('T')[0], date: new Date().toISOString().split('T')[0],
+                                description: `[PARKED] SERVICE ORDER: ${selectedTrip.serviceType} — ${selectedTrip.plantName} — ${loadedPcs.length} pcs / ${totalSqFt.toFixed(1)} sqft — PKR ${totalCost.toLocaleString()}`,
+                                referenceId: selectedTrip.id, status: 'Parked',
+                                details: [
+                                  { accountId: cogsAcc.id, debit: totalCost, credit: 0, text: `${selectedTrip.serviceType}: ${selectedTrip.plantName} (${loadedPcs.length} pcs)` },
+                                  { accountId: vendorPayable.id, debit: 0, credit: totalCost, text: `Payable: ${selectedTrip.plantName}` }
+                                ]
+                              } as any]);
+
+                              // ── Cash Journal entry ──
+                              const cashEntries = FinanceService.getPettyCashEntries();
+                              const lastBal = cashEntries.filter((e: any) => e.company === company).sort((a: any, b: any) => b.id.localeCompare(a.id))[0]?.balance || 0;
+                              FinanceService.savePettyCashEntries([...cashEntries, {
+                                id: `CJ-SO-${selectedTrip.id}`, company, date: new Date().toISOString().split('T')[0],
+                                description: `Service Order: ${selectedTrip.serviceType} — ${selectedTrip.plantName} — ${loadedPcs.length} pcs`,
+                                type: 'Payment', amount: totalCost, balance: lastBal - totalCost,
+                                recordedBy: 'System', status: 'Parked', glAccountId: cogsAcc.id,
+                                businessTransaction: 'Service Order', referenceDoc: txId
+                              } as any]);
+
+                              // ── Event Registry ──
+                              const evts = FinanceService.getFinancialEvents();
+                              FinanceService.saveFinancialEvents([...evts, {
+                                id: `EVT-SO-${selectedTrip.id}`, company, date: new Date().toISOString().split('T')[0],
+                                sourceModule: 'Sales' as const,
+                                description: `Service Order dispatched: ${selectedTrip.serviceType} — ${selectedTrip.plantName} — PKR ${totalCost.toLocaleString()}`,
+                                amount: totalCost, referenceId: selectedTrip.id, status: 'Pending' as const
+                              }]);
                             }
                           }
                           setActiveDispatchIdForLoading(''); setExpandedLoadingJob(null);
