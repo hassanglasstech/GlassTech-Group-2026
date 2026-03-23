@@ -61,6 +61,7 @@ const JobRegistryView: React.FC<JobRegistryViewProps> = ({
             if (!matchesClient || !matchesPeriod) return false;
 
             const jobPieces = pieces.filter(p => p.orderId === j.orderNo);
+            const delivered = jobPieces.filter(p => p.status === 'Delivered').length;
             
             if (statusFilter === 'All') return true;
             if (statusFilter === 'Active') return !(delivered === jobPieces.length && jobPieces.length > 0); // everything except fully delivered

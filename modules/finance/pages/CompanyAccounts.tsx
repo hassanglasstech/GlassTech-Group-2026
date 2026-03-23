@@ -12,6 +12,7 @@ import RecurringExpenses from '@/modules/finance/pages/RecurringExpenses';
 import FinancialRegistry from '@/modules/finance/pages/FinancialRegistry';
 import BillingHub from '@/modules/finance/components/BillingHub';
 import ThreeWayMatching from '@/modules/finance/components/ThreeWayMatching';
+import { toast } from 'sonner';
 import GLConfiguration from '@/modules/finance/components/GLConfiguration';
 import AgingReport from '@/modules/finance/components/AgingReport';
 import FinanceDashboardView from '@/modules/finance/components/FinanceDashboardView';
@@ -74,6 +75,7 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
           { id: 'cost_centers', label: 'Cost Centers', icon: Target },
           { id: 'gl_config', label: 'GL Configuration', icon: Settings },
           { id: 'recurring', label: 'Recurring Entries', icon: RefreshCw },
+          { id: 'monthly_actions', label: 'Monthly Actions', icon: Clock },
         ]
       }
     };
@@ -161,6 +163,38 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
           {activeTab === 'cost_centers' && <CostCenterMaster company={company} />}
           {activeTab === 'gl_config' && <GLConfiguration company={company} />}
           {activeTab === 'recurring' && <RecurringExpenses company={company} />}
+          
+          {/* Monthly Actions */}
+          {activeTab === 'monthly_actions' && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <div className="bg-indigo-600 text-white p-8 rounded-[2rem] shadow-xl">
+                <h2 className="text-2xl font-black uppercase">Monthly Finance Actions</h2>
+                <p className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest mt-1">Run depreciation and recurring expenses for the current period</p>
+              </div>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="bg-white p-8 rounded-2xl border shadow-sm space-y-4">
+                  <h3 className="text-sm font-black uppercase text-slate-800">Asset Depreciation</h3>
+                  <p className="text-xs text-slate-500">Calculates monthly depreciation (Straight Line / Declining Balance) for all active assets and posts a single GL entry.</p>
+                  <button onClick={() => {
+                    const month = new Date().toISOString().slice(0, 7);
+                    if (!confirm(`Run depreciation for ${month}?`)) return;
+                    const result = FinanceService.postDepreciation(company, month);
+                    if (result.posted > 0) toast.success(`Depreciation posted: ${result.posted} assets, PKR ${result.total.toLocaleString()}`);
+                    else toast.error(result.total === 0 ? 'No active assets found' : `Already posted for ${month}`);
+                  }} className="bg-blue-600 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-blue-700">Run Depreciation</button>
+                </div>
+                <div className="bg-white p-8 rounded-2xl border shadow-sm space-y-4">
+                  <h3 className="text-sm font-black uppercase text-slate-800">Recurring Expenses</h3>
+                  <p className="text-xs text-slate-500">Auto-posts all recurring expense entries (rent, utilities, etc.) that haven't been posted for the current month.</p>
+                  <button onClick={() => {
+                    if (!confirm('Post all due recurring expenses?')) return;
+                    const result = FinanceService.postRecurringExpenses(company);
+                    toast.success(`Posted: ${result.posted}, Skipped (already done): ${result.skipped}`);
+                  }} className="bg-emerald-600 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-emerald-700">Post Recurring</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

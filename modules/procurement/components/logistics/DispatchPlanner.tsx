@@ -45,11 +45,17 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
     const [printingServiceOrder, setPrintingServiceOrder] = useState<TemperingDispatch | null>(null);
     const [isServiceOrderModalOpen, setIsServiceOrderModalOpen] = useState(false);
 
+import { InventoryService } from '@/modules/procurement/services/inventoryService';
+
     const [tripHeader, setTripHeader] = useState({
         date: new Date().toISOString().split('T')[0],
         time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
         originLocation: 'Factory',
+        vehicleId: '',
     });
+
+    // Vehicle master for dropdown
+    const allVehicles = InventoryService.getVehicles().filter(v => v.status === 'Active');
 
     const [stops, setStops] = useState<PlannedStop[]>([]);
     const [newStop, setNewStop] = useState<Partial<PlannedStop>>({
@@ -91,6 +97,10 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
 
     const handleFinalizeTrip = () => {
         if (stops.length === 0) return alert("Please add at least one drop/destination.");
+        const selectedVehicle = allVehicles.find(v => v.id === tripHeader.vehicleId);
+        const vehiclePlate = selectedVehicle?.plateNo || 'TBD';
+        const driverName = selectedVehicle?.driverName || 'TBD';
+
         const today = new Date().toISOString().split('T')[0];
         const isFuture = tripHeader.date > today;
         const initialStatus = isFuture ? 'Scheduled' : 'Ready to Dispatch';
@@ -101,12 +111,33 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
             const chlId = AppService.generateSequenceID('CH', company, allDispatches);
             return {
                 id: chlId, tripId: tripId, company, date: tripHeader.date, dispatchTime: tripHeader.time, originLocation: tripHeader.originLocation,
-                plantName: stop.plantName, pickLocation: stop.pickLocation, vehicleNo: "TBD", driverName: "TBD", serviceType: stop.serviceType,
+                plantName: stop.plantName, pickLocation: stop.pickLocation, vehicleNo: vehiclePlate, driverName: driverName, serviceType: stop.serviceType,
                 pieceIds: [], totalSqFt: 0, status: initialStatus, chargesPerSqFt: 0, totalCharges: 0, expectedReturnDate: stop.expectedReturnDate
             };
         });
 
         ProductionService.saveTemperingDispatches([...allDispatches, ...newDispatches]);
+
+        // ── Auto-create VehicleTrip records ──
+        if (selectedVehicle) {
+          const existingTrips = InventoryService.getVehicleTrips();
+          const newVehicleTrips = newDispatches.map(d => ({
+            id: `VT-${d.id}`,
+            vehicleId: selectedVehicle.id,
+            dispatchId: d.id,
+            company,
+            date: tripHeader.date,
+            destination: d.plantName,
+            serviceType: d.serviceType,
+            fare: selectedVehicle.owner === 'Hired' ? selectedVehicle.hireRate : 0,
+            fuelCost: 0,
+            tollCharges: 0,
+            status: 'Scheduled' as const,
+            paidStatus: 'Unpaid' as const,
+          }));
+          InventoryService.saveVehicleTrips([...existingTrips, ...newVehicleTrips]);
+        }
+
         refreshData();
         setIsPlannerOpen(false);
         resetForm();
@@ -122,7 +153,7 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
         alert(`Trip ${tripId} Created.\n\nGo to Glassco Production > Processing & Logistics > Loading tab.\nThe trip will auto-select for piece loading.`);
     };
 
-    const resetForm = () => { setTripHeader({ date: new Date().toISOString().split('T')[0], time: '09:00', originLocation: 'Factory' }); setStops([]); };
+    const resetForm = () => { setTripHeader({ date: new Date().toISOString().split('T')[0], time: '09:00', originLocation: 'Factory', vehicleId: '' }); setStops([]); };
 
     const handleDispatchAction = (id: string) => {
         if (!confirm("Mark trip as DISPATCHED? This freezes the manifest.")) return;
@@ -476,6 +507,15 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
                                           </select>
                                       </div>
                                   </div>
+                              </div>
+                              <div className="col-span-3 space-y-1">
+                                  <label className="text-[10px] font-bold uppercase text-indigo-600">Assign Vehicle</label>
+                                  <select className="sap-input w-full font-bold uppercase" value={tripHeader.vehicleId} onChange={e => setTripHeader({...tripHeader, vehicleId: e.target.value})}>
+                                      <option value="">-- Select Vehicle --</option>
+                                      {allVehicles.map(v => (
+                                          <option key={v.id} value={v.id}>{v.plateNo} — {v.driverName} ({v.owner})</option>
+                                      ))}
+                                  </select>
                               </div>
                           </div>
                       </div>

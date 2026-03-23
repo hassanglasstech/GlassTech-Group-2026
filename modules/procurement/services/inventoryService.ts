@@ -1,4 +1,4 @@
-import { StoreItem, MaterialLedgerEntry, InspectionLot, Remnant, HandlingUnit, Requisition, PurchaseOrder } from '@/modules/procurement/types/inventory';
+import { StoreItem, MaterialLedgerEntry, InspectionLot, Remnant, HandlingUnit, Requisition, PurchaseOrder, Vehicle, VehicleTrip, VehicleExpense } from '@/modules/procurement/types/inventory';
 import { initDB } from '@/modules/shared/services/db';
 
 const KEYS = {
@@ -9,6 +9,9 @@ const KEYS = {
   HANDLING_UNITS: 'gtk_erp_handling_units',
   REQUISITIONS: 'gtk_erp_requisitions',
   PURCHASE_ORDERS: 'gtk_erp_purchase_orders',
+  VEHICLES: 'gtk_erp_vehicles',
+  VEHICLE_TRIPS: 'gtk_erp_vehicle_trips',
+  VEHICLE_EXPENSES: 'gtk_erp_vehicle_expenses',
 };
 
 import { bgSaveToIDB, safeParse, safeSave, safeAsync } from '@/modules/shared/services/utils';
@@ -50,4 +53,12 @@ export const InventoryService = {
   saveHandlingUnits: (data: HandlingUnit[]) => safeSave(KEYS.HANDLING_UNITS, data),
   getPurchaseOrders: (): PurchaseOrder[] => safeParse(KEYS.PURCHASE_ORDERS),
   savePurchaseOrders: (data: PurchaseOrder[]) => safeSave(KEYS.PURCHASE_ORDERS, data),
+
+  // ── Vehicle Fleet ──
+  getVehicles: (): Vehicle[] => safeParse(KEYS.VEHICLES),
+  saveVehicles: (data: Vehicle[]) => safeSave(KEYS.VEHICLES, data),
+  getVehicleTrips: (): VehicleTrip[] => safeParse(KEYS.VEHICLE_TRIPS),
+  saveVehicleTrips: (data: VehicleTrip[]) => safeSave(KEYS.VEHICLE_TRIPS, data),
+  getVehicleExpenses: (): VehicleExpense[] => safeParse(KEYS.VEHICLE_EXPENSES),
+  saveVehicleExpenses: (data: VehicleExpense[]) => safeSave(KEYS.VEHICLE_EXPENSES, data),
 };

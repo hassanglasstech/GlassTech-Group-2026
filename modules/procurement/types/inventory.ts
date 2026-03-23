@@ -221,3 +221,47 @@ export interface GatePass {
 export interface InspectionLot { id: string; }
 export interface Remnant { id: string; }
 export interface HandlingUnit { id: string; }
+
+// ── Vehicle Fleet Management ─────────────────────────────────────────
+export interface Vehicle {
+  id: string;
+  plateNo: string;
+  type: 'Pickup' | 'Truck' | 'Loader' | 'Shehzore' | 'Container' | 'Other';
+  owner: 'Factory' | 'Hired';
+  driverName: string;
+  driverPhone?: string;
+  monthlyInstallment: number;
+  hireRate: number;
+  status: 'Active' | 'Maintenance' | 'Inactive';
+  notes?: string;
+}
+
+export interface VehicleTrip {
+  id: string;
+  vehicleId: string;
+  dispatchId?: string;
+  company: Company;
+  date: string;
+  destination: string;
+  serviceType: string;
+  fare: number;
+  fuelCost?: number;
+  tollCharges?: number;
+  status: 'Scheduled' | 'Completed' | 'Cancelled';
+  paidStatus: 'Unpaid' | 'Paid';
+  glTxId?: string;
+}
+
+// Vehicle running expenses (fuel, maintenance, challan, installment, etc.)
+export interface VehicleExpense {
+  id: string;
+  vehicleId: string;
+  date: string;
+  type: 'Fuel' | 'Maintenance' | 'Challan' | 'Toll' | 'Insurance' | 'Installment' | 'Other';
+  amount: number;
+  description: string;
+  paidBy?: 'Cash' | 'Bank' | 'Petty Cash';
+  paidStatus: 'Unpaid' | 'Paid';
+  glTxId?: string;
+  month?: string;
+}

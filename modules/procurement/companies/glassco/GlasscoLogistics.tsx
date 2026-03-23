@@ -6,9 +6,10 @@ import { Truck, ShieldCheck, ClipboardList } from 'lucide-react';
 import GateControl from '@/modules/procurement/components/logistics/GateControl';
 import SecurityAudit from '@/modules/procurement/components/logistics/SecurityAudit';
 import DispatchPlanner from '@/modules/procurement/components/logistics/DispatchPlanner';
+import VehicleTripManager from '@/modules/procurement/components/logistics/VehicleTripManager';
 
 const CompanyLogistics: React.FC<{ company: Company }> = ({ company }) => {
-  const [activeTab, setActiveTab] = useState<'gate' | 'security' | 'dispatches'>('gate');
+  const [activeTab, setActiveTab] = useState<'gate' | 'security' | 'dispatches' | 'vehicles'>('gate');
   const [gatePasses, setGatePasses] = useState<GatePass[]>([]);
   const [dispatches, setDispatches] = useState<TemperingDispatch[]>([]);
   const [pieces, setPieces] = useState<ProductionPiece[]>([]);
@@ -56,6 +57,9 @@ const CompanyLogistics: React.FC<{ company: Company }> = ({ company }) => {
         <button onClick={() => setActiveTab('dispatches')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all ${activeTab === 'dispatches' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
           <ClipboardList size={16} /><span>Dispatch Matrix (VT01N)</span>
         </button>
+        <button onClick={() => setActiveTab('vehicles')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all ${activeTab === 'vehicles' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+          <Truck size={16} /><span>Vehicle Trip Manager</span>
+        </button>
       </div>
 
       {activeTab === 'gate' && (
@@ -88,6 +92,10 @@ const CompanyLogistics: React.FC<{ company: Company }> = ({ company }) => {
             vendors={vendors}
             refreshData={refreshData}
         />
+      )}
+
+      {activeTab === 'vehicles' && (
+        <VehicleTripManager company={company} />
       )}
     </div>
   );

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useProductionContext } from '@/modules/production/components/ProductionContext';
 import InwardAuditView from '@/modules/production/components/InwardAuditView';
-import { Flame, ArrowDownLeft, Hourglass, Layers, ChevronLeft, User, LayoutGrid, Clock } from 'lucide-react';
+import { Flame, ArrowDownLeft, Hourglass, Layers, ChevronLeft, User, LayoutGrid, Clock, CheckCircle2, ArrowLeft } from 'lucide-react';
 import JobCard from '@/modules/production/components/sub/JobCard';
-import { isInternal } from '@/modules/production/components/ProductionUtils';
+import { isInternal, getGlassSize } from '@/modules/production/components/ProductionUtils';
+import { useNavigate } from 'react-router-dom';
 
 const ProcessingView: React.FC = () => {
   const { 
@@ -16,6 +17,8 @@ const ProcessingView: React.FC = () => {
   } = useProductionContext();
 
   const [activeSubTab, setActiveSubTab] = useState<'tempering' | 'inward' | 'wip' | 'lamination' | 'double_glaze'>('tempering');
+  const [expandedLoadingJob, setExpandedLoadingJob] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   // ── Auto-detect pending trip from Logistics ──
   React.useEffect(() => {
@@ -127,79 +130,118 @@ const ProcessingView: React.FC = () => {
         </div>
 
         {activeSubTab === 'tempering' && (
-            <div className="space-y-6 animate-in fade-in duration-300">
-               {!selectedJobId && (
-                 <div className="bg-rose-600 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-8 opacity-10"><Flame size={120} /></div>
-                    <div><h2 className="text-2xl font-black uppercase">Destination Trip Loading</h2><p className="text-[10px] font-bold text-rose-200 uppercase tracking-widest mt-1">Load Material to Outgoing Trip</p></div>
-                    <div className="space-y-2 relative z-10"><label className="text-[9px] font-black uppercase text-rose-200 ml-1">Select Outgoing Trip</label><select value={activeDispatchIdForLoading} onChange={e => setActiveDispatchIdForLoading(e.target.value)} className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm font-black outline-none w-64 text-white"><option value="" className="text-slate-900">-- Select Trip to Load --</option>{dispatches.filter(d => d.status === 'Ready to Dispatch' || d.status === 'Scheduled').map(d => (<option key={d.id} value={d.id} className="text-slate-900">{d.originLocation && d.originLocation !== 'Factory' ? `🔄 TRANSFER: ${d.originLocation} -> ` : (d.serviceType === 'Site Delivery' ? '📦 SITE: ' : '🔥 PLANT: ')}{d.plantName} ({d.vehicleNo})</option>))}</select></div>
-                 </div>
-               )}
+            <div className="space-y-4 animate-in fade-in duration-300">
+               {/* Header with trip selector + Finalize Loading button */}
+               <div className="bg-rose-600 text-white p-6 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-8 opacity-10"><Flame size={120} /></div>
+                  <div><h2 className="text-xl font-black uppercase">Trip Loading</h2><p className="text-[10px] font-bold text-rose-200 uppercase tracking-widest mt-1">Select trip, expand jobs, load pieces</p></div>
+                  <div className="flex items-center space-x-4 relative z-10">
+                    <div className="space-y-1"><label className="text-[9px] font-black uppercase text-rose-200">Trip</label><select value={activeDispatchIdForLoading} onChange={e => setActiveDispatchIdForLoading(e.target.value)} className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm font-black outline-none w-64 text-white"><option value="" className="text-slate-900">-- Select --</option>{dispatches.filter(d => d.status === 'Ready to Dispatch' || d.status === 'Scheduled').map(d => (<option key={d.id} value={d.id} className="text-slate-900">{d.serviceType === 'Site Delivery' ? '📦 ' : '🔥 '}{d.plantName} ({d.vehicleNo})</option>))}</select></div>
+                    {activeDispatchIdForLoading && (() => {
+                      const loaded = pieces.filter(p => p.dispatchId === activeDispatchIdForLoading).length;
+                      return loaded > 0 ? (
+                        <button onClick={() => { setActiveDispatchIdForLoading(''); setExpandedLoadingJob(null); navigate('/logistics'); }} className="bg-white text-rose-600 px-6 py-3 rounded-xl font-black uppercase text-xs shadow-lg flex items-center space-x-2 hover:bg-rose-50">
+                          <CheckCircle2 size={16}/><span>Finalize Loading ({loaded} pcs)</span>
+                        </button>
+                      ) : null;
+                    })()}
+                  </div>
+               </div>
 
-               {/* ── Loaded Summary Bar ── */}
-               {activeDispatchIdForLoading && !selectedJobId && (() => {
+               {/* Summary bar */}
+               {activeDispatchIdForLoading && (() => {
                  const selectedTrip = dispatches.find(d => d.id === activeDispatchIdForLoading);
                  const loadedPieces = pieces.filter(p => p.dispatchId === activeDispatchIdForLoading);
                  const loadedSqFt = loadedPieces.reduce((s, p) => s + (p.totalSqFt || 0), 0);
-                 const uniqueOrders = Array.from(new Set(loadedPieces.map(p => p.orderId)));
                  if (!selectedTrip) return null;
                  return (
                    <div className="bg-white border-2 border-rose-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
-                     <div className="flex items-center space-x-6">
-                       <div className="bg-rose-100 text-rose-600 p-3 rounded-xl"><Flame size={20}/></div>
-                       <div>
-                         <p className="text-xs font-black text-slate-800 uppercase">{selectedTrip.serviceType}: {selectedTrip.plantName}</p>
-                         <p className="text-[10px] text-slate-400 font-bold">{selectedTrip.id} | Origin: {selectedTrip.originLocation || 'Factory'}</p>
-                       </div>
+                     <div className="flex items-center space-x-4">
+                       <div className="bg-rose-100 text-rose-600 p-2 rounded-xl"><Flame size={18}/></div>
+                       <div><p className="text-xs font-black text-slate-800 uppercase">{selectedTrip.serviceType}: {selectedTrip.plantName}</p><p className="text-[10px] text-slate-400 font-bold">{selectedTrip.id} | {selectedTrip.vehicleNo}</p></div>
                      </div>
-                     <div className="flex items-center space-x-8 text-right">
-                       <div><p className="text-[9px] font-black text-slate-400 uppercase">Loaded</p><p className="text-xl font-black text-rose-600">{loadedPieces.length} <span className="text-[10px] text-slate-400">Pcs</span></p></div>
-                       <div><p className="text-[9px] font-black text-slate-400 uppercase">Area</p><p className="text-xl font-black text-slate-700">{loadedSqFt.toFixed(1)} <span className="text-[10px] text-slate-400">Ft²</span></p></div>
-                       <div><p className="text-[9px] font-black text-slate-400 uppercase">Orders</p><p className="text-xl font-black text-blue-600">{uniqueOrders.length}</p></div>
+                     <div className="flex items-center space-x-6 text-right">
+                       <div><p className="text-[9px] font-black text-slate-400 uppercase">Loaded</p><p className="text-lg font-black text-rose-600">{loadedPieces.length} Pcs</p></div>
+                       <div><p className="text-[9px] font-black text-slate-400 uppercase">Area</p><p className="text-lg font-black text-slate-700">{loadedSqFt.toFixed(1)} Ft²</p></div>
                      </div>
                    </div>
                  );
                })()}
 
-               {renderGrid(
-                 (p) => {
-                    const selectedTrip = dispatches.find(d => d.id === activeDispatchIdForLoading);
-                    if (!selectedTrip) return false;
-                    if (p.dispatchId === activeDispatchIdForLoading) return true;
-                    const origin = selectedTrip.originLocation || 'Factory';
-                    if (origin === 'Factory') {
-                        const isSiteDelivery = selectedTrip.serviceType === 'Site Delivery';
-                        if (isSiteDelivery) return p.status === 'Ready to Dispatch' && !p.dispatchId;
-                        if (company === 'Glassco' && (selectedTrip.serviceType === 'Lamination' || selectedTrip.serviceType === 'Double Glazing')) {
-                            const order = jobOrders.find(j => j.orderNo === p.orderId);
-                            const item = order?.items[p.itemIndex];
-                            if (!item) return false;
-                            const services = item.selectedServices || [];
-                            const glassType = item.glassType || 'Clear';
-                            const isLamTrip = selectedTrip.serviceType === 'Lamination';
-                            const needsService = isLamTrip ? (services.includes('Lamination') || services.includes('Laminated') || glassType === 'Laminated') : (services.includes('Double Glaze') || services.includes('Double Glazed') || services.includes('D/G'));
-                            if (!needsService) return false;
-                            const isTemperedSpec = glassType === 'Tempered' || services.includes('T/G') || services.includes('Tempered');
-                            if (isTemperedSpec) return p.status === 'Tempered' && !p.dispatchId;
-                            else return (p.status === 'QC-Passed' || p.status === 'Ready to Dispatch') && !p.dispatchId;
-                        }
-                        if (selectedTrip.serviceType === 'Tempering') return p.status === 'QC-Passed' && !p.dispatchId;
-                        return false;
-                    } else {
-                        if (p.status !== 'Dispatched') return false;
-                        const lastTrip = dispatches.find(d => d.id === p.dispatchId);
-                        if (!lastTrip) return false;
-                        return lastTrip.plantName === origin;
-                    }
-                 },
-                 (p) => {
-                   const isLoaded = p.dispatchId === activeDispatchIdForLoading;
-                   const selectedTrip = dispatches.find(d => d.id === activeDispatchIdForLoading);
-                   const isRemote = selectedTrip && selectedTrip.originLocation !== 'Factory';
-                   return <button onClick={() => togglePieceToDispatch(p.id)} className={`w-full py-2 rounded-lg text-[10px] font-black uppercase transition-all ${isLoaded ? 'bg-rose-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>{isLoaded ? 'Loaded' : (isRemote ? 'Remote Load' : 'Load to Trip')}</button>;
-                 },
-                 "Tempering Loading", "rose"
-               )}
+               {/* Job Orders List View */}
+               {activeDispatchIdForLoading && (() => {
+                 const selectedTrip = dispatches.find(d => d.id === activeDispatchIdForLoading);
+                 if (!selectedTrip) return <div className="py-12 text-center text-slate-300 font-bold uppercase text-xs italic">Select a trip above</div>;
+
+                 // Filter eligible pieces for this trip type
+                 const getEligible = (p: any) => {
+                   if (p.dispatchId === activeDispatchIdForLoading) return true;
+                   const origin = selectedTrip.originLocation || 'Factory';
+                   if (origin === 'Factory') {
+                     if (selectedTrip.serviceType === 'Site Delivery') return p.status === 'Ready to Dispatch' && !p.dispatchId;
+                     if (selectedTrip.serviceType === 'Lamination' || selectedTrip.serviceType === 'Double Glazing') {
+                       const order = jobOrders.find(j => j.orderNo === p.orderId); const item = order?.items[p.itemIndex]; if (!item) return false;
+                       const svcs = item.selectedServices || []; const gt = item.glassType || 'Clear';
+                       const isLam = selectedTrip.serviceType === 'Lamination';
+                       const needs = isLam ? (svcs.includes('Lamination') || svcs.includes('Laminated') || gt === 'Laminated') : (svcs.includes('Double Glaze') || svcs.includes('Double Glazed') || svcs.includes('D/G'));
+                       if (!needs) return false;
+                       const isTmp = gt === 'Tempered' || svcs.includes('T/G') || svcs.includes('Tempered');
+                       return isTmp ? (p.status === 'Tempered' && !p.dispatchId) : ((p.status === 'QC-Passed' || p.status === 'Ready to Dispatch') && !p.dispatchId);
+                     }
+                     if (selectedTrip.serviceType === 'Tempering') return p.status === 'QC-Passed' && !p.dispatchId;
+                     return false;
+                   } else { if (p.status !== 'Dispatched') return false; const lt = dispatches.find(d => d.id === p.dispatchId); return lt ? lt.plantName === origin : false; }
+                 };
+
+                 const eligiblePieces = pieces.filter(getEligible);
+                 const uniqueOrderIds = Array.from(new Set(eligiblePieces.map(p => p.orderId)));
+
+                 if (uniqueOrderIds.length === 0) return <div className="py-12 text-center text-slate-300 font-bold uppercase text-xs italic">No eligible orders for this trip type</div>;
+
+                 return (
+                   <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+                     <table className="w-full text-left">
+                       <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                         <tr><th className="px-5 py-3">Order</th><th className="px-5 py-3">Client / Project</th><th className="px-5 py-3 text-center">Eligible</th><th className="px-5 py-3 text-center">Loaded</th><th className="px-5 py-3 text-right">Action</th></tr>
+                       </thead>
+                       <tbody>
+                         {uniqueOrderIds.map(orderId => {
+                           const order = jobOrders.find(j => j.orderNo === orderId);
+                           const client = order ? clients.find(c => c.id === order.clientId) : null;
+                           const orderPieces = eligiblePieces.filter(p => p.orderId === orderId);
+                           const loadedCount = orderPieces.filter(p => p.dispatchId === activeDispatchIdForLoading).length;
+                           const isExpanded = expandedLoadingJob === orderId;
+                           return (
+                             <React.Fragment key={orderId}>
+                               <tr className={`hover:bg-slate-50 cursor-pointer transition-colors ${isExpanded ? 'bg-rose-50' : ''}`} onClick={() => setExpandedLoadingJob(isExpanded ? null : orderId)}>
+                                 <td className="px-5 py-3 font-black text-blue-600 text-sm">{orderId}</td>
+                                 <td className="px-5 py-3"><p className="text-xs font-bold uppercase text-slate-800">{order?.projectName || 'Order'}</p><p className="text-[10px] text-slate-400">{client?.name || ''}</p></td>
+                                 <td className="px-5 py-3 text-center font-black">{orderPieces.length}</td>
+                                 <td className="px-5 py-3 text-center"><span className={`px-3 py-1 rounded-full text-[10px] font-black ${loadedCount > 0 ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-400'}`}>{loadedCount}/{orderPieces.length}</span></td>
+                                 <td className="px-5 py-3 text-right"><button onClick={e => { e.stopPropagation(); orderPieces.forEach(p => { if (p.dispatchId !== activeDispatchIdForLoading) togglePieceToDispatch(p.id); }); }} className="bg-rose-600 text-white px-3 py-1 rounded-lg text-[9px] font-black uppercase">Load All</button></td>
+                               </tr>
+                               {isExpanded && orderPieces.map(p => {
+                                 const isLoaded = p.dispatchId === activeDispatchIdForLoading;
+                                 return (
+                                   <tr key={p.id} className="bg-slate-50/50 border-t border-dashed border-slate-200">
+                                     <td className="pl-10 pr-5 py-2 text-[10px] font-bold text-slate-500">{p.id}</td>
+                                     <td className="px-5 py-2 text-[10px] text-slate-500">{getGlassSize(p.specs)} | {p.specs?.thickness || ''}mm</td>
+                                     <td className="px-5 py-2 text-center text-[10px] text-slate-400">{p.status}</td>
+                                     <td className="px-5 py-2 text-center">{isLoaded && <CheckCircle2 size={14} className="text-rose-600 mx-auto"/>}</td>
+                                     <td className="px-5 py-2 text-right"><button onClick={() => togglePieceToDispatch(p.id)} className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase ${isLoaded ? 'bg-slate-200 text-slate-600' : 'bg-blue-600 text-white'}`}>{isLoaded ? 'Unload' : 'Load'}</button></td>
+                                   </tr>
+                                 );
+                               })}
+                             </React.Fragment>
+                           );
+                         })}
+                       </tbody>
+                     </table>
+                   </div>
+                 );
+               })()}
+
+               {!activeDispatchIdForLoading && <div className="py-20 text-center text-slate-300 font-bold uppercase text-xs italic">Select a trip from the dropdown above to start loading</div>}
             </div>
         )}
 

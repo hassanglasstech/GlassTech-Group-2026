@@ -84,7 +84,22 @@ const Dashboard: React.FC = () => {
 
     const cashFlow = ledger.filter(t => t.date.startsWith(currentMonth)).length;
 
-    return { activeStaff, monthSales, producedToday, pendingDispatch, lowStockCount, inventoryValue, cashFlow, pendingApprovalPOs, mismatchPOs, awaitingPaymentPOs, allPendingReqs };
+    // Stock alerts from FinanceService
+    const stockAlerts = FinanceService.getStockAlerts(company);
+    const criticalStock = stockAlerts.filter(a => a.critical).length;
+
+    // Overdue invoices
+    let overdueInvoices: any[] = [];
+    try { overdueInvoices = SalesService.getInvoices().filter((i: any) => i.company === company && i.status !== 'Paid' && new Date(i.dueDate) < new Date()); } catch {}
+
+    // Budget warnings
+    const costCenters = FinanceService.getCostCenters().filter(cc => cc.company === company && cc.budgetMonthly);
+    const budgetWarnings = costCenters.map(cc => FinanceService.checkBudget(company, cc.id)).filter(b => b.alert);
+
+    // Parked entries needing review
+    const parkedEntries = ledger.filter(t => t.status === 'Parked').length;
+
+    return { activeStaff, monthSales, producedToday, pendingDispatch, lowStockCount, inventoryValue, cashFlow, pendingApprovalPOs, mismatchPOs, awaitingPaymentPOs, allPendingReqs, stockAlerts, criticalStock, overdueInvoices, budgetWarnings, parkedEntries };
   }, [employees, quotations, pieces, store, ledger, company]);
 
   const tiles = [
@@ -197,7 +212,31 @@ const Dashboard: React.FC = () => {
                   </div>
                </div>
             )}
-            {!stats.pendingApprovalPOs?.length && !stats.mismatchPOs?.length && !stats.awaitingPaymentPOs?.length && !stats.allPendingReqs?.length && !stats.lowStockCount && (
+            {stats.overdueInvoices?.length > 0 && (
+               <div className="p-3 md:p-4 bg-rose-50 border-l-4 border-rose-400 rounded-xl flex items-start space-x-3 cursor-pointer hover:bg-rose-100 transition-colors" onClick={() => navigate('/accounts')}>
+                  <DollarSign className="text-rose-600 shrink-0" size={16}/>
+                  <div><p className="text-xs font-black text-rose-800 uppercase">Overdue Invoices</p><p className="text-[10px] text-rose-600 font-medium">{stats.overdueInvoices.length} invoice(s) past due date. Total: PKR {stats.overdueInvoices.reduce((s: number, i: any) => s + (i.balance || 0), 0).toLocaleString()}</p></div>
+               </div>
+            )}
+            {stats.budgetWarnings?.length > 0 && (
+               <div className="p-3 md:p-4 bg-orange-50 border-l-4 border-orange-500 rounded-xl flex items-start space-x-3 cursor-pointer hover:bg-orange-100 transition-colors" onClick={() => navigate('/accounts')}>
+                  <AlertTriangle className="text-orange-600 shrink-0" size={16}/>
+                  <div><p className="text-xs font-black text-orange-800 uppercase">Budget Alerts</p><p className="text-[10px] text-orange-600 font-medium">{stats.budgetWarnings.length} cost center(s) exceeding budget threshold.</p></div>
+               </div>
+            )}
+            {stats.criticalStock > 0 && (
+               <div className="p-3 md:p-4 bg-red-50 border-l-4 border-red-600 rounded-xl flex items-start space-x-3 cursor-pointer hover:bg-red-100 transition-colors" onClick={() => navigate('/inventory')}>
+                  <AlertTriangle className="text-red-600 shrink-0" size={16}/>
+                  <div><p className="text-xs font-black text-red-800 uppercase">Critical Stock</p><p className="text-[10px] text-red-600 font-medium">{stats.criticalStock} item(s) below minimum level. {stats.stockAlerts.length} total below reorder point.</p></div>
+               </div>
+            )}
+            {stats.parkedEntries > 0 && (
+               <div className="p-3 md:p-4 bg-purple-50 border-l-4 border-purple-500 rounded-xl flex items-start space-x-3 cursor-pointer hover:bg-purple-100 transition-colors" onClick={() => navigate('/accounts')}>
+                  <FileCheck className="text-purple-600 shrink-0" size={16}/>
+                  <div><p className="text-xs font-black text-purple-800 uppercase">Parked GL Entries</p><p className="text-[10px] text-purple-600 font-medium">{stats.parkedEntries} entries awaiting Finance review and posting.</p></div>
+               </div>
+            )}
+            {!stats.pendingApprovalPOs?.length && !stats.mismatchPOs?.length && !stats.awaitingPaymentPOs?.length && !stats.allPendingReqs?.length && !stats.lowStockCount && !stats.overdueInvoices?.length && !stats.budgetWarnings?.length && !stats.criticalStock && !stats.parkedEntries && (
               <div className="p-3 md:p-4 bg-emerald-50 border-l-4 border-emerald-400 rounded-xl flex items-start space-x-3">
                  <FileCheck className="text-emerald-600 shrink-0" size={16}/>
                  <div><p className="text-xs font-black text-emerald-800 uppercase">All Clear</p><p className="text-[10px] text-emerald-600 font-medium">No pending approvals or payment actions.</p></div>
