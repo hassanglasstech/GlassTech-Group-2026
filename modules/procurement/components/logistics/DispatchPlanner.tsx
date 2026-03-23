@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { Company, TemperingDispatch, ProductionPiece, Quotation, Client, PettyCashEntry, Vendor } from '@/modules/shared/types';
 import { AppService } from '@/modules/shared/services/appService';
 import { ProductionService } from '@/modules/production/services/productionService';
+import { SalesService } from '@/modules/sales/services/salesService';
+import { FinanceService } from '@/modules/finance/services/financeService';
 import { 
   ClipboardList, Plus, X, Activity, Truck, Calendar, Send, 
   ShieldCheck, Printer, Ban, Receipt, ArrowRightLeft, Trash2
@@ -108,7 +110,16 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
         refreshData();
         setIsPlannerOpen(false);
         resetForm();
-        alert(`Trip ${tripId} Created. Go to 'Destination Trip Loading' in Production to assign pieces.`);
+
+        // Store new trip dispatches for auto-loading in Production > Processing > Loading tab
+        localStorage.setItem('gtk_pending_trip_load', JSON.stringify({
+          tripId,
+          dispatchIds: newDispatches.map(d => d.id),
+          firstDispatchId: newDispatches[0]?.id || '',
+          timestamp: Date.now()
+        }));
+
+        alert(`Trip ${tripId} Created.\n\nGo to Glassco Production > Processing & Logistics > Loading tab.\nThe trip will auto-select for piece loading.`);
     };
 
     const resetForm = () => { setTripHeader({ date: new Date().toISOString().split('T')[0], time: '09:00', originLocation: 'Factory' }); setStops([]); };
@@ -135,6 +146,52 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
         });
         ProductionService.saveProductionPieces(updatedPieces);
         
+        // ── 2b. Auto-update Sales Order status when Site Delivery completes ──
+        if (targetDispatch.serviceType === 'Site Delivery') {
+          const deliveredPieceIds = updatedPieces.filter(p => p.dispatchId === id).map(p => p.orderId);
+          const affectedOrderNos = Array.from(new Set(deliveredPieceIds));
+          const freshPieces = updatedPieces; // already updated above
+
+          for (const orderNo of affectedOrderNos) {
+            const orderPieces = freshPieces.filter(p => p.orderId === orderNo);
+            const allDelivered = orderPieces.length > 0 && orderPieces.every(p => p.status === 'Delivered');
+
+            if (allDelivered) {
+              // Update Quotation/SO status → "Delivered"
+              const allQuotations = SalesService.getQuotations();
+              const updatedQ = allQuotations.map(q => {
+                if ((q.orderNo === orderNo || q.id === orderNo) && q.status === 'Approved') {
+                  return { ...q, isAlreadyDispatched: true, actualDeliveryDate: new Date().toISOString().split('T')[0] };
+                }
+                return q;
+              });
+              SalesService.saveQuotations(updatedQ);
+
+              // Event Registry: Delivery complete → ready for invoicing
+              const events = FinanceService.getFinancialEvents();
+              const order = allQuotations.find(q => q.orderNo === orderNo || q.id === orderNo);
+              const client = order?.clientId ? SalesService.getClients().find(c => c.id === order.clientId) : null;
+              FinanceService.saveFinancialEvents([...events, {
+                id: `EVT-DEL-${Date.now()}`, company, date: new Date().toISOString().split('T')[0],
+                sourceModule: 'Sales' as const,
+                description: `DELIVERY COMPLETE: ${orderNo} — ${client?.name || 'Client'} — All ${orderPieces.length} pieces delivered. Ready for invoicing.`,
+                amount: order?.items?.reduce((s: number, i: any) => s + (i.amount || 0), 0) || 0,
+                referenceId: orderNo, status: 'Pending' as const
+              }]);
+
+              // Notification for Finance
+              const notifs = JSON.parse(localStorage.getItem('gtk_notifications') || '[]');
+              notifs.push({
+                id: `NOTIF-DEL-${Date.now()}`, targetCompany: company,
+                title: 'Delivery Complete — Ready for Invoice',
+                message: `Order ${orderNo} (${client?.name || 'Client'}) — all pieces delivered. Go to Finance > Invoice Billing.`,
+                isRead: false, date: new Date().toISOString(), link: '/accounts'
+              });
+              localStorage.setItem('gtk_notifications', JSON.stringify(notifs));
+            }
+          }
+        }
+
         refreshData();
 
         // 3. Automated Service Order Trigger

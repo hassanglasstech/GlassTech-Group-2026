@@ -88,34 +88,52 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
     const discount = order.discountAmount || (subtotal * (order.discountPercent || 0) / 100);
     const finalAmount = subtotal - discount;
 
-    // GL Entry: Dr Accounts Receivable, Cr Sales Revenue
-    const allAccounts = FinanceService.getAccounts().filter(a => a.company === company);
-    const receivableAcc = allAccounts.find(a => a.name.includes('RECEIVABLE') || a.code.startsWith('122')) || allAccounts.find(a => a.type === 'Asset');
-    const revenueAcc = allAccounts.find(a => a.name.includes('SALES') || a.code.startsWith('411')) || allAccounts.find(a => a.type === 'Revenue');
+    // ── JIT Account Creation: Client-specific AR + Service Revenue ──
+    // AR: Assets → Current Assets → Trade Receivables → CLIENT NAME (L5)
+    const arParent = FinanceService.ensureAccount(company as any, 'ASSETS', 1, null, 'Asset', '10');
+    const arCurrent = FinanceService.ensureAccount(company as any, 'CURRENT ASSETS', 2, arParent.id, 'Asset', '11');
+    const arTrade = FinanceService.ensureAccount(company as any, 'TRADE RECEIVABLES', 3, arCurrent.id, 'Asset', '122');
+    const arControl = FinanceService.ensureAccount(company as any, 'CUSTOMERS CONTROL', 4, arTrade.id, 'Asset', '1221');
+    const clientAR = FinanceService.ensureAccount(
+      company as any, 
+      `${clientName.toUpperCase()}${order.projectName ? ' — ' + order.projectName.toUpperCase() : ''}`,
+      5, arControl.id, 'Asset', '12210'
+    );
 
-    if (!receivableAcc || !revenueAcc) {
-      return toast.error(`Setup COA first: Need Receivables & Sales Revenue accounts for ${company}`);
-    }
+    // Revenue: Service Revenue (not raw glass — we sell services)
+    const revParent = FinanceService.ensureAccount(company as any, 'REVENUE', 1, null, 'Revenue', '40');
+    const revSales = FinanceService.ensureAccount(company as any, 'SALES REVENUE', 2, revParent.id, 'Revenue', '41');
+    const revService = FinanceService.ensureAccount(company as any, 'SERVICE REVENUE', 3, revSales.id, 'Revenue', '411');
+    const revGlass = FinanceService.ensureAccount(company as any, 'GLASS PROCESSING SERVICES', 4, revService.id, 'Revenue', '4111');
+    const revenueAcc = FinanceService.ensureAccount(company as any, 'SERVICE INCOME', 5, revGlass.id, 'Revenue', '41110');
 
     const invoiceId = `INV-${company.substring(0, 3).toUpperCase()}-${Date.now().toString().slice(-6)}`;
     const txId = `GL-${invoiceId}`;
 
-    // Post GL entry
+    // ── GL Entry: PARKED (Finance reviews then posts) ──
     const glTx: LedgerTransaction = {
       id: txId, company, docType: 'DR', docDate: new Date().toISOString().split('T')[0],
       date: new Date().toISOString().split('T')[0],
-      description: `INVOICE ${invoiceId}: ${clientName} — ${order.orderNo || order.id}`,
-      referenceId: invoiceId, status: 'Posted',
+      description: `[PARKED] INVOICE ${invoiceId}: ${clientName} — ${order.orderNo || order.id}`,
+      referenceId: invoiceId, status: 'Parked',
+      reqId: order.id,
       details: [
-        { accountId: receivableAcc.id, debit: finalAmount, credit: 0, text: `AR: ${clientName}` },
-        { accountId: revenueAcc.id, debit: 0, credit: finalAmount, text: `Revenue: ${order.projectName || 'Sales'}` }
+        { accountId: clientAR.id, debit: finalAmount, credit: 0, text: `AR: ${clientName}${order.projectName ? ' | ' + order.projectName : ''}` },
+        { accountId: revenueAcc.id, debit: 0, credit: finalAmount, text: `Service Revenue: ${order.projectName || 'General'}` }
       ]
     };
 
-    const currentLedger = FinanceService.getLedger();
-    FinanceService.saveLedger([...currentLedger, glTx]);
+    FinanceService.saveLedger([...FinanceService.getLedger(), glTx]);
 
-    // Inter-company mirror (same logic as before)
+    // ── Event Registry entry ──
+    const events = FinanceService.getFinancialEvents();
+    FinanceService.saveFinancialEvents([...events, {
+      id: `EVT-${invoiceId}`, company, date: new Date().toISOString().split('T')[0],
+      sourceModule: 'Sales', description: `Invoice ${invoiceId} raised — ${clientName} — PKR ${finalAmount.toLocaleString()}`,
+      amount: finalAmount, referenceId: invoiceId, status: 'Pending'
+    }]);
+
+    // Inter-company mirror
     let targetCompany: Company | null = null;
     const cNameUpper = clientName.toUpperCase();
     if (cNameUpper.includes('GTI')) targetCompany = 'GTI';
@@ -133,9 +151,9 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
           id: `BILL-${txId}`, company: targetCompany, docType: 'KR',
           docDate: new Date().toISOString().split('T')[0], date: new Date().toISOString().split('T')[0],
           description: `AUTO-PURCHASE: From ${company} — ${invoiceId}`,
-          referenceId: txId, status: 'Posted',
+          referenceId: txId, status: 'Parked',
           details: [
-            { accountId: costAcc.id, debit: finalAmount, credit: 0, text: `Material from ${company}` },
+            { accountId: costAcc.id, debit: finalAmount, credit: 0, text: `Service from ${company}` },
             { accountId: payableAcc.id, debit: 0, credit: finalAmount, text: `Payable to ${company}` }
           ]
         };
@@ -155,16 +173,14 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
       status: 'Outstanding', glTxId: txId, payments: []
     };
 
-    const allInvoices = SalesService.getInvoices();
-    SalesService.saveInvoices([...allInvoices, invoice]);
+    SalesService.saveInvoices([...SalesService.getInvoices(), invoice]);
 
-    // Update Quotation status to 'Invoiced'
+    // Update Quotation status
     const allQuotations = SalesService.getQuotations();
-    const updatedQuotations = allQuotations.map(q => q.id === order.id ? { ...q, status: 'Invoiced' as any, invoiceNo: invoiceId } : q);
-    SalesService.saveQuotations(updatedQuotations);
+    SalesService.saveQuotations(allQuotations.map(q => q.id === order.id ? { ...q, status: 'Invoiced' as any, invoiceNo: invoiceId } : q));
 
     refreshData();
-    toast.success(`Invoice ${invoiceId} generated — PKR ${finalAmount.toLocaleString()} booked to AR`);
+    toast.success(`Invoice ${invoiceId} — Parked in GL. Finance will review & post. AR: ${clientName}`);
   };
 
   // ── RECORD PAYMENT RECEIPT ──
@@ -173,30 +189,74 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
     if (receiptForm.amount <= 0) return toast.error('Amount must be greater than 0');
     if (receiptForm.amount > receiptModalInvoice.balance) return toast.error(`Cannot exceed balance of PKR ${receiptModalInvoice.balance.toLocaleString()}`);
 
-    // GL Entry: Dr Cash/Bank, Cr Accounts Receivable
-    const allAccounts = FinanceService.getAccounts().filter(a => a.company === company);
-    const cashAcc = allAccounts.find(a => a.name.includes('CASH') || a.name.includes('BANK') || a.code.startsWith('111')) || allAccounts.find(a => a.type === 'Asset' && a.level === 5);
-    const receivableAcc = allAccounts.find(a => a.name.includes('RECEIVABLE') || a.code.startsWith('122')) || allAccounts.find(a => a.type === 'Asset');
+    // ── Payment method → specific GL account ──
+    const METHOD_ACCOUNT_MAP: Record<string, { code: string; name: string }> = {
+      'Cash':          { code: '1111', name: 'CASH IN HAND' },
+      'Bank Transfer':  { code: '1112', name: 'CASH AT BANK' },
+      'Cheque':         { code: '1112', name: 'CASH AT BANK' },
+      'Online':         { code: '1113', name: 'ONLINE COLLECTIONS' },
+    };
+    const methodMap = METHOD_ACCOUNT_MAP[receiptForm.method] || METHOD_ACCOUNT_MAP['Cash'];
 
-    if (!cashAcc || !receivableAcc) return toast.error('Setup COA: Need Cash/Bank and Receivables accounts');
+    // JIT: Create payment method account if needed
+    const cashParent = FinanceService.ensureAccount(company as any, 'ASSETS', 1, null, 'Asset', '10');
+    const cashCurrent = FinanceService.ensureAccount(company as any, 'CURRENT ASSETS', 2, cashParent.id, 'Asset', '11');
+    const cashBank = FinanceService.ensureAccount(company as any, 'CASH & BANK', 3, cashCurrent.id, 'Asset', '111');
+    const methodParent = FinanceService.ensureAccount(company as any, methodMap.name, 4, cashBank.id, 'Asset', methodMap.code);
+    const cashAcc = FinanceService.ensureAccount(company as any, `${methodMap.name} — MAIN`, 5, methodParent.id, 'Asset', `${methodMap.code}0`);
+
+    // Client AR account (same hierarchy as invoice)
+    const arParent = FinanceService.ensureAccount(company as any, 'ASSETS', 1, null, 'Asset', '10');
+    const arCurrent = FinanceService.ensureAccount(company as any, 'CURRENT ASSETS', 2, arParent.id, 'Asset', '11');
+    const arTrade = FinanceService.ensureAccount(company as any, 'TRADE RECEIVABLES', 3, arCurrent.id, 'Asset', '122');
+    const arControl = FinanceService.ensureAccount(company as any, 'CUSTOMERS CONTROL', 4, arTrade.id, 'Asset', '1221');
+    const clientAR = FinanceService.ensureAccount(
+      company as any,
+      receiptModalInvoice.clientName.toUpperCase(),
+      5, arControl.id, 'Asset', '12210'
+    );
 
     const receiptId = `REC-${Date.now().toString().slice(-6)}`;
     const txId = `GL-${receiptId}`;
 
+    // ── GL Entry: PARKED (Finance reviews then posts) ──
     const glTx: LedgerTransaction = {
       id: txId, company, docType: 'DZ', docDate: new Date().toISOString().split('T')[0],
       date: new Date().toISOString().split('T')[0],
-      description: `RECEIPT ${receiptId}: ${receiptModalInvoice.clientName} — ${receiptModalInvoice.id}`,
-      referenceId: receiptId, status: 'Posted',
+      description: `[PARKED] RECEIPT ${receiptId}: ${receiptModalInvoice.clientName} — ${receiptModalInvoice.id} via ${receiptForm.method}`,
+      referenceId: receiptId, status: 'Parked',
+      reqId: receiptModalInvoice.orderId,
       details: [
-        { accountId: cashAcc.id, debit: receiptForm.amount, credit: 0, text: `Cash received: ${receiptForm.method}${receiptForm.reference ? ` (${receiptForm.reference})` : ''}` },
-        { accountId: receivableAcc.id, debit: 0, credit: receiptForm.amount, text: `AR settled: ${receiptModalInvoice.id}` }
+        { accountId: cashAcc.id, debit: receiptForm.amount, credit: 0, text: `${receiptForm.method} received${receiptForm.reference ? ': ' + receiptForm.reference : ''}` },
+        { accountId: clientAR.id, debit: 0, credit: receiptForm.amount, text: `AR settled: ${receiptModalInvoice.clientName} — ${receiptModalInvoice.id}` }
       ]
     };
-
     FinanceService.saveLedger([...FinanceService.getLedger(), glTx]);
 
-    // Update Invoice
+    // ── Cash Journal entry (if method is Cash) ──
+    if (receiptForm.method === 'Cash') {
+      const cashEntries = FinanceService.getPettyCashEntries();
+      const lastBalance = cashEntries.filter((e: any) => e.company === company).sort((a: any, b: any) => b.id.localeCompare(a.id))[0]?.balance || 0;
+      const newEntry: any = {
+        id: `CJ-${receiptId}`, company, date: new Date().toISOString().split('T')[0],
+        description: `Cash received: ${receiptModalInvoice.clientName} — ${receiptModalInvoice.id}`,
+        type: 'Receipt', amount: receiptForm.amount, balance: lastBalance + receiptForm.amount,
+        recordedBy: 'System', status: 'Posted',
+        glAccountId: cashAcc.id, businessTransaction: 'Customer Payment',
+        referenceDoc: receiptId
+      };
+      FinanceService.savePettyCashEntries([...cashEntries, newEntry]);
+    }
+
+    // ── Event Registry entry ──
+    const events = FinanceService.getFinancialEvents();
+    FinanceService.saveFinancialEvents([...events, {
+      id: `EVT-${receiptId}`, company, date: new Date().toISOString().split('T')[0],
+      sourceModule: 'Sales', description: `Payment received: ${receiptModalInvoice.clientName} — PKR ${receiptForm.amount.toLocaleString()} via ${receiptForm.method}`,
+      amount: receiptForm.amount, referenceId: receiptId, status: 'Pending'
+    }]);
+
+    // ── Update Invoice ──
     const allInvoices = SalesService.getInvoices() as Invoice[];
     const newReceived = receiptModalInvoice.receivedAmount + receiptForm.amount;
     const newBalance = receiptModalInvoice.totalAmount - newReceived;
@@ -213,26 +273,20 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
         : inv
     );
     SalesService.saveInvoices(updatedInvoices);
-
-    // Save receipt separately
-    const allReceipts = SalesService.getPaymentReceipts();
-    SalesService.savePaymentReceipts([...allReceipts, payment]);
+    SalesService.savePaymentReceipts([...SalesService.getPaymentReceipts(), payment]);
 
     // Update Quotation status
-    if (newBalance <= 0) {
-      const allQ = SalesService.getQuotations();
-      const updQ = allQ.map(q => q.id === receiptModalInvoice.orderId ? { ...q, status: 'Paid' as any, receivedAmount: newReceived } : q);
-      SalesService.saveQuotations(updQ);
-    } else {
-      const allQ = SalesService.getQuotations();
-      const updQ = allQ.map(q => q.id === receiptModalInvoice.orderId ? { ...q, status: 'Partial Payment' as any, receivedAmount: newReceived } : q);
-      SalesService.saveQuotations(updQ);
-    }
+    const allQ = SalesService.getQuotations();
+    const updQ = allQ.map(q => q.id === receiptModalInvoice.orderId 
+      ? { ...q, status: (newBalance <= 0 ? 'Paid' : 'Partial Payment') as any, receivedAmount: newReceived } 
+      : q
+    );
+    SalesService.saveQuotations(updQ);
 
     refreshData();
     setReceiptModalInvoice(null);
     setReceiptForm({ amount: 0, method: 'Bank Transfer', reference: '' });
-    toast.success(`Payment PKR ${receiptForm.amount.toLocaleString()} recorded — ${newBalance <= 0 ? 'FULLY PAID' : `Balance: PKR ${newBalance.toLocaleString()}`}`);
+    toast.success(`PKR ${receiptForm.amount.toLocaleString()} recorded via ${receiptForm.method} — GL Parked. ${newBalance <= 0 ? 'FULLY PAID' : `Balance: PKR ${newBalance.toLocaleString()}`}`);
   };
 
   // ── Aging calculation ──

@@ -17,6 +17,22 @@ const ProcessingView: React.FC = () => {
 
   const [activeSubTab, setActiveSubTab] = useState<'tempering' | 'inward' | 'wip' | 'lamination' | 'double_glaze'>('tempering');
 
+  // ── Auto-detect pending trip from Logistics ──
+  React.useEffect(() => {
+    const pending = localStorage.getItem('gtk_pending_trip_load');
+    if (pending) {
+      try {
+        const data = JSON.parse(pending);
+        // Only auto-load if created within last 30 minutes
+        if (Date.now() - data.timestamp < 30 * 60 * 1000 && data.firstDispatchId) {
+          setActiveSubTab('tempering'); // Switch to Loading tab
+          setActiveDispatchIdForLoading(data.firstDispatchId);
+          localStorage.removeItem('gtk_pending_trip_load');
+        }
+      } catch {}
+    }
+  }, [dispatches]);
+
   const renderGrid = (filterFn: (p: any) => boolean, renderAction: (p: any) => React.ReactNode, title: string, color: string) => {
     if (selectedJobId) {
         const jobData = getJobDetails(selectedJobId, filterFn);
@@ -119,6 +135,32 @@ const ProcessingView: React.FC = () => {
                     <div className="space-y-2 relative z-10"><label className="text-[9px] font-black uppercase text-rose-200 ml-1">Select Outgoing Trip</label><select value={activeDispatchIdForLoading} onChange={e => setActiveDispatchIdForLoading(e.target.value)} className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm font-black outline-none w-64 text-white"><option value="" className="text-slate-900">-- Select Trip to Load --</option>{dispatches.filter(d => d.status === 'Ready to Dispatch' || d.status === 'Scheduled').map(d => (<option key={d.id} value={d.id} className="text-slate-900">{d.originLocation && d.originLocation !== 'Factory' ? `🔄 TRANSFER: ${d.originLocation} -> ` : (d.serviceType === 'Site Delivery' ? '📦 SITE: ' : '🔥 PLANT: ')}{d.plantName} ({d.vehicleNo})</option>))}</select></div>
                  </div>
                )}
+
+               {/* ── Loaded Summary Bar ── */}
+               {activeDispatchIdForLoading && !selectedJobId && (() => {
+                 const selectedTrip = dispatches.find(d => d.id === activeDispatchIdForLoading);
+                 const loadedPieces = pieces.filter(p => p.dispatchId === activeDispatchIdForLoading);
+                 const loadedSqFt = loadedPieces.reduce((s, p) => s + (p.totalSqFt || 0), 0);
+                 const uniqueOrders = Array.from(new Set(loadedPieces.map(p => p.orderId)));
+                 if (!selectedTrip) return null;
+                 return (
+                   <div className="bg-white border-2 border-rose-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                     <div className="flex items-center space-x-6">
+                       <div className="bg-rose-100 text-rose-600 p-3 rounded-xl"><Flame size={20}/></div>
+                       <div>
+                         <p className="text-xs font-black text-slate-800 uppercase">{selectedTrip.serviceType}: {selectedTrip.plantName}</p>
+                         <p className="text-[10px] text-slate-400 font-bold">{selectedTrip.id} | Origin: {selectedTrip.originLocation || 'Factory'}</p>
+                       </div>
+                     </div>
+                     <div className="flex items-center space-x-8 text-right">
+                       <div><p className="text-[9px] font-black text-slate-400 uppercase">Loaded</p><p className="text-xl font-black text-rose-600">{loadedPieces.length} <span className="text-[10px] text-slate-400">Pcs</span></p></div>
+                       <div><p className="text-[9px] font-black text-slate-400 uppercase">Area</p><p className="text-xl font-black text-slate-700">{loadedSqFt.toFixed(1)} <span className="text-[10px] text-slate-400">Ft²</span></p></div>
+                       <div><p className="text-[9px] font-black text-slate-400 uppercase">Orders</p><p className="text-xl font-black text-blue-600">{uniqueOrders.length}</p></div>
+                     </div>
+                   </div>
+                 );
+               })()}
+
                {renderGrid(
                  (p) => {
                     const selectedTrip = dispatches.find(d => d.id === activeDispatchIdForLoading);

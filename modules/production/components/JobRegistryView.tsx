@@ -33,7 +33,7 @@ const JobRegistryView: React.FC<JobRegistryViewProps> = ({
     selectedClientFilter, setSelectedClientFilter, filterDate, setFilterDate 
 }) => {
     const [currentPage, setCurrentPage] = useState(1);
-    const [statusFilter, setStatusFilter] = useState('All');
+    const [statusFilter, setStatusFilter] = useState('Active');
     const itemsPerPage = 10; 
 
     const getClientName = (clientId: string) => clients.find(c => c.id === clientId)?.name || 'Walk-in Partner';
@@ -63,9 +63,9 @@ const JobRegistryView: React.FC<JobRegistryViewProps> = ({
             const jobPieces = pieces.filter(p => p.orderId === j.orderNo);
             
             if (statusFilter === 'All') return true;
+            if (statusFilter === 'Active') return !(delivered === jobPieces.length && jobPieces.length > 0); // everything except fully delivered
             if (jobPieces.length === 0) return statusFilter === 'Pending';
             
-            const delivered = jobPieces.filter(p => p.status === 'Delivered').length;
             if (statusFilter === 'Delivered') return delivered === jobPieces.length;
             if (statusFilter === 'WIP') return delivered < jobPieces.length && (delivered > 0 || jobPieces.some(p => p.status !== 'Cut'));
             if (statusFilter === 'Pending') return delivered === 0 && jobPieces.every(p => p.status === 'Cut');
@@ -111,6 +111,7 @@ const JobRegistryView: React.FC<JobRegistryViewProps> = ({
                                     value={statusFilter}
                                     onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
                                 >
+                                    <option value="Active">Active (Pending + WIP)</option>
                                     <option value="All">All Status</option>
                                     <option value="Delivered">Delivered</option>
                                     <option value="WIP">WIP</option>
@@ -297,16 +298,33 @@ const JobRegistryView: React.FC<JobRegistryViewProps> = ({
                              </td>
                              <td className="px-6 py-4 align-top">
                                 {slaBadge ? (
-                                    <div className={`p-3 rounded-2xl border-2 ${slaBadge.color.replace('text', 'border')} animate-in zoom-in`}>
-                                       <div className="flex items-center space-x-2 mb-1"><CheckCircle2 size={16}/><p className="text-[10px] font-black uppercase">{slaBadge.label}</p></div>
-                                       <p className="text-base font-black leading-none my-1">{slaBadge.date}</p>
-                                       <p className="text-[9px] font-bold opacity-60 uppercase">{slaBadge.sub}</p>
+                                    <div className="space-y-1.5">
+                                       <div className={`flex items-center justify-between rounded px-2 py-1 border ${slaBadge.color.replace('text-', 'border-')} ${slaBadge.color}`}>
+                                          <span className="text-[9px] font-black uppercase">{slaBadge.label}</span>
+                                          <span className="text-[9px] font-bold">{slaBadge.sub}</span>
+                                       </div>
+                                       <div className="flex items-center justify-between bg-slate-100 rounded px-2 py-1 border border-slate-200">
+                                          <span className="text-[9px] font-black uppercase text-slate-500">Actual</span>
+                                          <span className="text-[9px] font-bold text-slate-700">{slaBadge.date}</span>
+                                       </div>
+                                       {j.dueDate && (
+                                         <div className="flex items-center justify-between bg-slate-50 rounded px-2 py-1 border border-slate-100">
+                                           <span className="text-[9px] font-black uppercase text-slate-400">Due</span>
+                                           <span className="text-[9px] font-bold text-slate-500">{j.dueDate}</span>
+                                         </div>
+                                       )}
                                     </div>
                                 ) : j.dueDate ? (
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between items-end"><span className="text-[9px] font-black uppercase text-slate-400">Target SLA</span><span className="text-[10px] font-black text-blue-600">ACTIVE</span></div>
-                                        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500" style={{ width: `${Math.min((jobPieces.filter(p => p.status === 'Delivered').length / (jobPieces.length || 1)) * 100, 100)}%` }}></div></div>
-                                        <div className="flex justify-between text-[8px] font-bold text-slate-400 uppercase"><span>Due: {j.dueDate}</span></div>
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center justify-between bg-blue-50 rounded px-2 py-1 border border-blue-100">
+                                           <span className="text-[9px] font-black uppercase text-blue-500">SLA</span>
+                                           <span className="text-[9px] font-bold text-blue-700">Active</span>
+                                        </div>
+                                        <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500" style={{ width: `${Math.min((jobPieces.filter(p => p.status === 'Delivered').length / (jobPieces.length || 1)) * 100, 100)}%` }}></div></div>
+                                        <div className="flex items-center justify-between bg-slate-50 rounded px-2 py-1 border border-slate-100">
+                                           <span className="text-[9px] font-black uppercase text-slate-400">Due</span>
+                                           <span className="text-[9px] font-bold text-rose-500">{j.dueDate}</span>
+                                        </div>
                                     </div>
                                 ) : (
                                     <span className="text-[10px] text-slate-300 font-bold italic">No Deadline</span>
