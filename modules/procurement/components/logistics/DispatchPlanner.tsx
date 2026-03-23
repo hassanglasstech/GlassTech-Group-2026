@@ -108,10 +108,13 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
         
         const newDispatches: TemperingDispatch[] = stops.map((stop) => {
             const chlId = AppService.generateSequenceID('CH', company, allDispatches);
+            // Auto-pick vendor rate from VendorHub
+            const matchedVendor = vendors.find(v => v.name.toUpperCase() === stop.plantName.toUpperCase());
+            const vendorRate = matchedVendor?.rates?.sort((a, b) => (b.effectiveDate || '').localeCompare(a.effectiveDate || ''))[0]?.rate || 0;
             return {
                 id: chlId, tripId: tripId, company, date: tripHeader.date, dispatchTime: tripHeader.time, originLocation: tripHeader.originLocation,
                 plantName: stop.plantName, pickLocation: stop.pickLocation, vehicleNo: vehiclePlate, driverName: driverName, serviceType: stop.serviceType,
-                pieceIds: [], totalSqFt: 0, status: initialStatus, chargesPerSqFt: 0, totalCharges: 0, expectedReturnDate: stop.expectedReturnDate
+                pieceIds: [], totalSqFt: 0, status: initialStatus, chargesPerSqFt: vendorRate, totalCharges: 0, expectedReturnDate: stop.expectedReturnDate
             };
         });
 
@@ -149,7 +152,13 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
           timestamp: Date.now()
         }));
 
-        alert(`Trip ${tripId} Created.\n\nGo to Glassco Production > Processing & Logistics > Loading tab.\nThe trip will auto-select for piece loading.`);
+        // Auto-navigate to Production Loading for tempering/lamination/DG trips
+        const svcType = newDispatches[0]?.serviceType || '';
+        if (['Tempering', 'Lamination', 'Double Glazing'].includes(svcType)) {
+          navigate('/production');
+        } else {
+          alert(`Trip ${tripId} Created. ${newDispatches.length} stop(s) added.`);
+        }
     };
 
     const resetForm = () => { setTripHeader({ date: new Date().toISOString().split('T')[0], time: '09:00', originLocation: 'Factory', vehicleId: '' }); setStops([]); };

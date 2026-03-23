@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Company, TemperingDispatch, ProductionPiece, PieceFault, Vendor, Quotation, VendorRate } from '../../../../../shared/types';
 import { ProductionService } from '../../../../../production/services/productionService';
 import { SalesService } from '../../../../../sales/services/salesService';
+import { FinanceService } from '../../../../../finance/services/financeService';
 import { 
-  LayoutGrid, List, Plus, X, Save, Trash2, Edit, Truck, Layers, Flame, Calculator, CheckCircle2, Ban, Clock, Globe, Filter, Search, Phone, Receipt, Calendar
+  LayoutGrid, List, Plus, X, Save, Trash2, Edit, Truck, Layers, Flame, Calculator, CheckCircle2, Ban, Clock, Globe, Filter, Search, Phone, Receipt, Calendar, FileText
 } from 'lucide-react';
 import SupplyChainDashboard from '../../../../components/vendors/SupplyChainDashboard';
 
@@ -12,7 +13,7 @@ interface GlasscoVendorHubProps {
 }
 
 const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
-  const [viewMode, setViewMode] = useState<'dashboard' | 'registry'>('dashboard');
+  const [viewMode, setViewMode] = useState<'dashboard' | 'registry' | 'service_orders'>('dashboard');
   const [activeTab, setActiveTab] = useState<'Tempering' | 'Glass' | 'Transport'>('Tempering');
   const [activeVendor, setActiveVendor] = useState<string | null>(null);
   
@@ -209,6 +210,9 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
         <button onClick={() => { setViewMode('registry'); setActiveVendor(null); }} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all whitespace-nowrap ${viewMode === 'registry' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
             <List size={16} /><span>Vendor Registry</span>
         </button>
+        <button onClick={() => { setViewMode('service_orders'); setActiveVendor(null); }} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all whitespace-nowrap ${viewMode === 'service_orders' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+            <FileText size={16} /><span>Service Orders</span>
+        </button>
       </div>
 
       {viewMode === 'dashboard' ? (
@@ -398,6 +402,54 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
           <button onClick={() => setReconcileTripId(null)} className="bg-slate-900 text-white px-12 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-blue-600 transition-all">Finish Audit</button>
         </div>
       </div></div>)}
+
+      {/* ═══ SERVICE ORDERS VIEW ═══ */}
+      {viewMode === 'service_orders' && (() => {
+        const ledger = FinanceService.getLedger().filter(t => t.company === company && t.description.includes('SERVICE ORDER'));
+        const soDispatches = dispatches.filter(d => d.status === 'Dispatched' && d.serviceType !== 'Site Delivery' && d.serviceType !== 'Supply');
+        return (
+          <div className="space-y-4 animate-in fade-in duration-300">
+            <div className="bg-emerald-600 text-white p-6 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-8 opacity-10"><FileText size={100}/></div>
+              <div><h2 className="text-xl font-black uppercase">Service Orders</h2><p className="text-[10px] font-bold text-emerald-200 uppercase tracking-widest mt-1">All external processing orders with vendor rates & GL entries</p></div>
+              <div className="flex space-x-4 text-right relative z-10">
+                <div><p className="text-[9px] font-bold text-emerald-200 uppercase">Total Orders</p><p className="text-2xl font-black">{soDispatches.length}</p></div>
+                <div><p className="text-[9px] font-bold text-emerald-200 uppercase">GL Entries</p><p className="text-2xl font-black">{ledger.length}</p></div>
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+              <table className="w-full text-left sap-table">
+                <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                  <tr><th className="px-5 py-3">Date</th><th className="px-5 py-3">Challan</th><th className="px-5 py-3">Vendor / Plant</th><th className="px-5 py-3">Service</th><th className="px-5 py-3 text-right">Pcs</th><th className="px-5 py-3 text-right">SqFt</th><th className="px-5 py-3 text-right">Rate/SqFt</th><th className="px-5 py-3 text-right">Total Cost</th><th className="px-5 py-3">GL Ref</th><th className="px-5 py-3 text-center">GL Status</th></tr>
+                </thead>
+                <tbody>
+                  {soDispatches.sort((a, b) => b.date.localeCompare(a.date)).map(d => {
+                    const dPieces = pieces.filter(p => p.dispatchId === d.id);
+                    const totalSqFt = d.totalSqFt || dPieces.reduce((s, p) => s + (p.totalSqFt || 0), 0);
+                    const cost = d.chargesPerSqFt > 0 ? totalSqFt * d.chargesPerSqFt : d.totalCharges || 0;
+                    const glEntry = ledger.find(t => t.referenceId === d.id);
+                    return (
+                      <tr key={d.id} className="hover:bg-slate-50">
+                        <td className="px-5 py-3 text-xs font-bold text-slate-500">{d.date}</td>
+                        <td className="px-5 py-3 font-black text-blue-600 text-xs">{d.id}</td>
+                        <td className="px-5 py-3 text-xs font-bold uppercase">{d.plantName}</td>
+                        <td className="px-5 py-3"><span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${d.serviceType === 'Tempering' ? 'bg-rose-100 text-rose-700' : d.serviceType === 'Lamination' ? 'bg-orange-100 text-orange-700' : 'bg-cyan-100 text-cyan-700'}`}>{d.serviceType}</span></td>
+                        <td className="px-5 py-3 text-right font-black">{dPieces.length}</td>
+                        <td className="px-5 py-3 text-right font-bold">{totalSqFt.toFixed(1)}</td>
+                        <td className="px-5 py-3 text-right font-bold text-slate-500">PKR {(d.chargesPerSqFt || 0).toLocaleString()}</td>
+                        <td className="px-5 py-3 text-right font-black text-emerald-600">{cost > 0 ? `PKR ${cost.toLocaleString()}` : '—'}</td>
+                        <td className="px-5 py-3 text-[9px] text-slate-400">{glEntry?.id || '—'}</td>
+                        <td className="px-5 py-3 text-center">{glEntry ? <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${glEntry.status === 'Posted' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{glEntry.status}</span> : <span className="text-slate-300 text-[9px] italic">No GL</span>}</td>
+                      </tr>
+                    );
+                  })}
+                  {soDispatches.length === 0 && <tr><td colSpan={10} className="text-center py-12 text-slate-300 font-bold uppercase text-xs italic">No service orders yet.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
