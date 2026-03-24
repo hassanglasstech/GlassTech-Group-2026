@@ -53,7 +53,6 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
         vehicleId: '',
     });
 
-    // Vehicle master for dropdown
     const allVehicles = InventoryService.getVehicles().filter(v => v.status === 'Active');
 
     const [stops, setStops] = useState<PlannedStop[]>([]);
@@ -99,7 +98,6 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
         const selectedVehicle = allVehicles.find(v => v.id === tripHeader.vehicleId);
         const vehiclePlate = selectedVehicle?.plateNo || 'TBD';
         const driverName = selectedVehicle?.driverName || 'TBD';
-
         const today = new Date().toISOString().split('T')[0];
         const isFuture = tripHeader.date > today;
         const initialStatus = isFuture ? 'Scheduled' : 'Ready to Dispatch';
@@ -108,7 +106,6 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
         
         const newDispatches: TemperingDispatch[] = stops.map((stop) => {
             const chlId = AppService.generateSequenceID('CH', company, allDispatches);
-            // Auto-pick vendor rate from VendorHub
             const matchedVendor = vendors.find(v => v.name.toUpperCase() === stop.plantName.toUpperCase());
             const vendorRate = matchedVendor?.rates?.sort((a, b) => (b.effectiveDate || '').localeCompare(a.effectiveDate || ''))[0]?.rate || 0;
             return {
@@ -120,22 +117,13 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
 
         ProductionService.saveTemperingDispatches([...allDispatches, ...newDispatches]);
 
-        // ── Auto-create VehicleTrip records ──
         if (selectedVehicle) {
           const existingTrips = InventoryService.getVehicleTrips();
           const newVehicleTrips = newDispatches.map(d => ({
-            id: `VT-${d.id}`,
-            vehicleId: selectedVehicle.id,
-            dispatchId: d.id,
-            company,
-            date: tripHeader.date,
-            destination: d.plantName,
-            serviceType: d.serviceType,
+            id: `VT-${d.id}`, vehicleId: selectedVehicle.id, dispatchId: d.id, company,
+            date: tripHeader.date, destination: d.plantName, serviceType: d.serviceType,
             fare: selectedVehicle.owner === 'Hired' ? selectedVehicle.hireRate : 0,
-            fuelCost: 0,
-            tollCharges: 0,
-            status: 'Scheduled' as const,
-            paidStatus: 'Unpaid' as const,
+            fuelCost: 0, tollCharges: 0, status: 'Scheduled' as const, paidStatus: 'Unpaid' as const,
           }));
           InventoryService.saveVehicleTrips([...existingTrips, ...newVehicleTrips]);
         }
@@ -144,20 +132,16 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
         setIsPlannerOpen(false);
         resetForm();
 
-        // Store new trip dispatches for auto-loading in Production > Processing > Loading tab
         localStorage.setItem('gtk_pending_trip_load', JSON.stringify({
-          tripId,
-          dispatchIds: newDispatches.map(d => d.id),
-          firstDispatchId: newDispatches[0]?.id || '',
-          timestamp: Date.now()
+          tripId, dispatchIds: newDispatches.map(d => d.id),
+          firstDispatchId: newDispatches[0]?.id || '', timestamp: Date.now()
         }));
 
-        // Auto-navigate to Production Loading for tempering/lamination/DG trips
         const svcType = newDispatches[0]?.serviceType || '';
         if (['Tempering', 'Lamination', 'Double Glazing'].includes(svcType)) {
           navigate('/production');
         } else {
-          alert(`Trip ${tripId} Created. ${newDispatches.length} stop(s) added.`);
+          alert(`Trip ${tripId} Created. ${newDispatches.length} stop(s).`);
         }
     };
 
@@ -185,48 +169,19 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
         });
         ProductionService.saveProductionPieces(updatedPieces);
         
-        // ── 2b. Auto-update Sales Order status when Site Delivery completes ──
+        // 2b. Auto-update Sales Order status when Site Delivery completes
         if (targetDispatch.serviceType === 'Site Delivery') {
           const deliveredPieceIds = updatedPieces.filter(p => p.dispatchId === id).map(p => p.orderId);
           const affectedOrderNos = Array.from(new Set(deliveredPieceIds));
-          const freshPieces = updatedPieces; // already updated above
-
           for (const orderNo of affectedOrderNos) {
-            const orderPieces = freshPieces.filter(p => p.orderId === orderNo);
-            const allDelivered = orderPieces.length > 0 && orderPieces.every(p => p.status === 'Delivered');
-
-            if (allDelivered) {
-              // Update Quotation/SO status → "Delivered"
-              const allQuotations = SalesService.getQuotations();
-              const updatedQ = allQuotations.map(q => {
-                if ((q.orderNo === orderNo || q.id === orderNo) && q.status === 'Approved') {
-                  return { ...q, isAlreadyDispatched: true, actualDeliveryDate: new Date().toISOString().split('T')[0] };
-                }
-                return q;
-              });
-              SalesService.saveQuotations(updatedQ);
-
-              // Event Registry: Delivery complete → ready for invoicing
+            const orderPieces = updatedPieces.filter(p => p.orderId === orderNo);
+            if (orderPieces.length > 0 && orderPieces.every(p => p.status === 'Delivered')) {
+              const allQ = SalesService.getQuotations();
+              SalesService.saveQuotations(allQ.map(q => (q.orderNo === orderNo || q.id === orderNo) && q.status === 'Approved' ? { ...q, isAlreadyDispatched: true, actualDeliveryDate: new Date().toISOString().split('T')[0] } : q));
               const events = FinanceService.getFinancialEvents();
-              const order = allQuotations.find(q => q.orderNo === orderNo || q.id === orderNo);
+              const order = allQ.find(q => q.orderNo === orderNo || q.id === orderNo);
               const client = order?.clientId ? SalesService.getClients().find(c => c.id === order.clientId) : null;
-              FinanceService.saveFinancialEvents([...events, {
-                id: `EVT-DEL-${Date.now()}`, company, date: new Date().toISOString().split('T')[0],
-                sourceModule: 'Sales' as const,
-                description: `DELIVERY COMPLETE: ${orderNo} — ${client?.name || 'Client'} — All ${orderPieces.length} pieces delivered. Ready for invoicing.`,
-                amount: order?.items?.reduce((s: number, i: any) => s + (i.amount || 0), 0) || 0,
-                referenceId: orderNo, status: 'Pending' as const
-              }]);
-
-              // Notification for Finance
-              const notifs = JSON.parse(localStorage.getItem('gtk_notifications') || '[]');
-              notifs.push({
-                id: `NOTIF-DEL-${Date.now()}`, targetCompany: company,
-                title: 'Delivery Complete — Ready for Invoice',
-                message: `Order ${orderNo} (${client?.name || 'Client'}) — all pieces delivered. Go to Finance > Invoice Billing.`,
-                isRead: false, date: new Date().toISOString(), link: '/accounts'
-              });
-              localStorage.setItem('gtk_notifications', JSON.stringify(notifs));
+              FinanceService.saveFinancialEvents([...events, { id: `EVT-DEL-${Date.now()}`, company, date: new Date().toISOString().split('T')[0], sourceModule: 'Sales' as const, description: `DELIVERY COMPLETE: ${orderNo} — ${client?.name || 'Client'}`, amount: 0, referenceId: orderNo, status: 'Pending' as const }]);
             }
           }
         }
@@ -453,19 +408,26 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
                                    <th className="px-6 py-3 w-32">Drop #</th>
                                    <th className="px-6 py-3">Destination</th>
                                    <th className="px-6 py-3">Type</th>
-                                   <th className="px-6 py-3 text-center">Load</th>
+                                   <th className="px-6 py-3 text-center">Pieces</th>
+                                   <th className="px-6 py-3 text-center">Orders</th>
+                                   <th className="px-6 py-3 text-right">SqFt</th>
                                    <th className="px-6 py-3 text-right">Action</th>
                                </tr>
                            </thead>
                            <tbody className="divide-y divide-slate-100 text-xs">
                                {group.stops.map((stop, idx) => {
-                                   const stopPieceCount = pieces.filter(p => p.dispatchId === stop.id || (stop.receivedPieceIds && stop.receivedPieceIds.includes(p.id))).length;
+                                   const stopPieces = pieces.filter(p => p.dispatchId === stop.id);
+                                   const stopPieceCount = stopPieces.length;
+                                   const stopOrderCount = new Set(stopPieces.map(p => p.orderId)).size;
+                                   const stopSqFt = stop.totalSqFt || stopPieces.reduce((s, p) => s + (p.totalSqFt || 0), 0);
                                    return (
                                    <tr key={stop.id} className="hover:bg-slate-50">
                                        <td className="px-6 py-3 font-mono font-bold text-slate-500">{stop.id}</td>
                                        <td className="px-6 py-3 font-bold text-slate-800 uppercase">{stop.plantName}</td>
                                        <td className="px-6 py-3"><span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-black uppercase">{stop.serviceType}</span></td>
-                                       <td className="px-6 py-3 text-center font-black">{stopPieceCount} Pcs</td>
+                                       <td className="px-6 py-3 text-center font-black">{stopPieceCount}</td>
+                                       <td className="px-6 py-3 text-center font-bold text-blue-600">{stopOrderCount}</td>
+                                       <td className="px-6 py-3 text-right font-bold text-slate-600">{stopSqFt.toFixed(1)}</td>
                                        <td className="px-6 py-3 text-right">
                                            <div className="flex justify-end space-x-2">
                                                {(stop.status === 'Ready to Dispatch' || stop.status === 'Scheduled') && (
@@ -515,15 +477,13 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
                                           </select>
                                       </div>
                                   </div>
-                              </div>
                               <div className="col-span-3 space-y-1">
                                   <label className="text-[10px] font-bold uppercase text-indigo-600">Assign Vehicle</label>
                                   <select className="sap-input w-full font-bold uppercase" value={tripHeader.vehicleId} onChange={e => setTripHeader({...tripHeader, vehicleId: e.target.value})}>
                                       <option value="">-- Select Vehicle --</option>
-                                      {allVehicles.map(v => (
-                                          <option key={v.id} value={v.id}>{v.plateNo} — {v.driverName} ({v.owner})</option>
-                                      ))}
+                                      {allVehicles.map(v => (<option key={v.id} value={v.id}>{v.plateNo} — {v.driverName} ({v.owner})</option>))}
                                   </select>
+                              </div>
                               </div>
                           </div>
                       </div>
@@ -623,17 +583,18 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
                <div className="print-only bg-white text-black p-0 font-sans leading-tight min-h-screen flex flex-col">
                 <style>{`
                       @media print {
-                          @page { size: A4; margin: 0; }
-                          body { margin: 0; padding: 0; }
+                          @page { size: A4; margin: 10mm 12mm; }
+                          body { margin: 10mm 12mm; padding: 0; }
                           html, body { height: auto !important; overflow: visible !important; background: white !important; }
                           body * { visibility: hidden; }
                           .print-only, .print-only * { visibility: visible; }
                           .print-only { position: absolute; top: 0; left: 0; width: 100%; background: white; z-index: 99999; }
-                          .print-container { width: 100% !important; padding: 15mm !important; box-sizing: border-box !important; }
+                          .print-container { width: 100% !important; padding: 8mm !important; box-sizing: border-box !important; }
                           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                           .bg-slate-50 { background-color: #f8fafc !important; }
                           .bg-slate-100 { background-color: #f1f5f9 !important; }
                           table { page-break-inside: auto; width: 100%; border-collapse: collapse; }
+                          thead { display: table-header-group; }
                           tr { page-break-inside: avoid; page-break-after: auto; }
                           .page-break-before { page-break-before: always; }
                       }
@@ -803,17 +764,18 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
             <div className="print-only bg-white text-black p-0 font-sans leading-tight min-h-screen flex flex-col">
                <style>{`
                    @media print {
-                       @page { size: A4; margin: 0; }
-                       body { margin: 0; padding: 0; }
+                       @page { size: A4; margin: 10mm 12mm; }
+                       body { margin: 10mm 12mm; padding: 0; }
                        html, body { height: auto !important; overflow: visible !important; background: white !important; }
                        body * { visibility: hidden; }
                        .print-only, .print-only * { visibility: visible; }
                        .print-only { display: block !important; position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; background: white !important; z-index: 99999 !important; }
-                       .print-container { width: 100% !important; padding: 15mm !important; box-sizing: border-box !important; }
+                       .print-container { width: 100% !important; padding: 8mm !important; box-sizing: border-box !important; }
                        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                        .bg-slate-50 { background-color: #f8fafc !important; }
                        .bg-slate-100 { background-color: #f1f5f9 !important; }
                        table { page-break-inside: auto; width: 100%; border-collapse: collapse; }
+                          thead { display: table-header-group; }
                        tr { page-break-inside: avoid; page-break-after: auto; }
                        .page-break-before { page-break-before: always; }
                    }
@@ -894,4 +856,4 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
     );
 };
 
-export default DispatchPlanner;
+export default React.memo(DispatchPlanner);

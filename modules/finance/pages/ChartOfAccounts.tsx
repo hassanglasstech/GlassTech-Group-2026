@@ -608,4 +608,4 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
   );
 };
 
-export default ChartOfAccounts;
+export default React.memo(ChartOfAccounts);

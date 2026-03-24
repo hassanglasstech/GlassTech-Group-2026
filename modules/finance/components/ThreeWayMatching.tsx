@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useDebounce } from '@/modules/shared/hooks/useDebounce';
 import { toast } from 'sonner';
 import { Company, PurchaseOrder, Requisition, LedgerTransaction, Account } from '@/modules/shared/types';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
@@ -42,6 +43,7 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
   const [reqs, setReqs]             = useState<Requisition[]>([]);
   const [accounts, setAccounts]     = useState<Account[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
   const [isModalOpen, setIsModalOpen]   = useState(false);
@@ -236,9 +238,9 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
   // ── Filtered list ─────────────────────────────────────────────────────────
   const filteredPOs = useMemo(() => {
     return pos.filter(po => {
-      const matchSearch = !searchTerm ||
-        po.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        po.toVendor.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchSearch = !debouncedSearchTerm ||
+        po.id.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+        po.toVendor.toLowerCase().includes(debouncedSearchTerm.toLowerCase());
       const matchStatus = statusFilter === 'All' || po.status === statusFilter ||
         (statusFilter === 'Mismatch' && computeMatch(po) === 'Mismatch');
       return matchSearch && matchStatus;
@@ -741,4 +743,4 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
   );
 };
 
-export default ThreeWayMatching;
+export default React.memo(ThreeWayMatching);

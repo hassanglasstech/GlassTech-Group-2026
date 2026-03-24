@@ -1225,4 +1225,4 @@ const Requisitions: React.FC = () => {
   );
 };
 
-export default Requisitions;
+export default React.memo(Requisitions);

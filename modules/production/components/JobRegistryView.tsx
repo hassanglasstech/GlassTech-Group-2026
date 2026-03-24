@@ -345,4 +345,4 @@ const JobRegistryView: React.FC<JobRegistryViewProps> = ({
     );
 };
 
-export default JobRegistryView;
+export default React.memo(JobRegistryView);

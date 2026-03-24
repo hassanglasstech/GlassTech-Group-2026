@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
+import { useDebounce } from '@/modules/shared/hooks/useDebounce';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { StoreItem } from '@/modules/shared/types';
 import { SalesService } from '@/modules/sales/services/salesService';
@@ -148,4 +149,4 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
     );
 };
 
-export default StockOverview;
+export default React.memo(StockOverview);

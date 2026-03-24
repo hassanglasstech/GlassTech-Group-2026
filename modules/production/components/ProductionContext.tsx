@@ -32,6 +32,7 @@ interface ProductionContextType {
   handleCuttingOutput: (piece: ProductionPiece) => void;
   handleInwardPiece: (pieceId: string) => void;
   togglePieceToDispatch: (pieceId: string) => void;
+  loadAllPiecesToDispatch: (pieceIds: string[]) => void;
   togglePieceForDelivery: (pieceId: string) => void;
   executeDirectDelivery: () => void;
   handleRecordFault: () => void;
@@ -195,6 +196,29 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
     setDispatches(updatedDispatches);
   };
 
+  // Batch load multiple pieces to active dispatch at once
+  const loadAllPiecesToDispatch = (pieceIds: string[]) => {
+    if (!activeDispatchIdForLoading) return toast.error("Choose a Trip first.", { duration: 4000 });
+    const targetTrip = dispatches.find(d => d.id === activeDispatchIdForLoading);
+    if (!targetTrip) return;
+
+    const allPcs = ProductionService.getProductionPieces();
+    const updatedPcs = allPcs.map(p => {
+      if (pieceIds.includes(p.id) && p.dispatchId !== activeDispatchIdForLoading) {
+        return { ...p, dispatchId: activeDispatchIdForLoading, lastUpdated: new Date().toISOString() };
+      }
+      return p;
+    });
+    ProductionService.saveProductionPieces(updatedPcs);
+    setPieces(updatedPcs.filter(p => p.company === company));
+
+    const newPieceIds = [...new Set([...targetTrip.pieceIds, ...pieceIds])];
+    const updDisp = dispatches.map(d => d.id === activeDispatchIdForLoading ? { ...d, pieceIds: newPieceIds } : d);
+    ProductionService.saveTemperingDispatches(updDisp);
+    setDispatches(updDisp);
+    toast.success(`${pieceIds.length} pieces loaded to ${targetTrip.plantName}`);
+  };
+
   const handleInwardPiece = (pieceId: string) => {
     if (!activeInwardDispatchId) return toast.error("Audit Error: Select an Inward Dispatch Trip first.", { duration: 4000 });
     const piece = pieces.find(p => p.id === pieceId);
@@ -335,7 +359,7 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
       company, pieces, jobOrders, clients, dispatches, gatePasses, spots, refreshData, isLoading,
       selectedJobId, setSelectedJobId, selectedClientFilter, setSelectedClientFilter, filterDate, setFilterDate,
       activeDispatchIdForLoading, setActiveDispatchIdForLoading, activeInwardDispatchId, setActiveInwardDispatchId,
-      handleUpdatePieceStatus, handleCuttingOutput, handleInwardPiece, togglePieceToDispatch, togglePieceForDelivery, executeDirectDelivery, handleRecordFault,
+      handleUpdatePieceStatus, handleCuttingOutput, handleInwardPiece, togglePieceToDispatch, loadAllPiecesToDispatch, togglePieceForDelivery, executeDirectDelivery, handleRecordFault,
       isBinModalOpen, setIsBinModalOpen, openBinModal, selectedPieceForBin, assignSpot, selectedSpotId, setSelectedSpotId,
       isDirectDeliveryModalOpen, setIsDirectDeliveryModalOpen, directDeliveryForm, setDirectDeliveryForm, selectedPiecesForDelivery,
       selectedPieceForFault, setSelectedPieceForFault, faultForm, setFaultForm,

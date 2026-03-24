@@ -17,7 +17,7 @@ export const NipponCatalogPrint: React.FC<Props> = ({ products }) => {
                         margin: 10mm; 
                     }
                     body {
-                        margin: 0;
+                        margin: 10mm 12mm;
                         padding: 0;
                     }
                     .catalog-grid {
@@ -26,7 +26,9 @@ export const NipponCatalogPrint: React.FC<Props> = ({ products }) => {
                         gap: 10mm;
                     }
                     .catalog-card {
-                        page-break-inside: avoid;
+                        page-break-inside: avoid; }
+                    thead { display: table-header-group; }
+                    tr { page-break-inside: avoid;
                         border: 1px solid #e2e8f0;
                         border-radius: 8px;
                         padding: 5mm;

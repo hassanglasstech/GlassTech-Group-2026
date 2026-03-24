@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useDebounce } from '@/modules/shared/hooks/useDebounce';
 import { Company, LedgerTransaction, Account, LedgerDocType, LedgerStatus, CostCenter } from '../../shared/types';
 import { FinanceService } from '../services/financeService';
 import { 
@@ -15,6 +16,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -85,7 +87,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
       return t.status === activeTab;
     });
     if (searchTerm) {
-      result = result.filter(t => t.description.toLowerCase().includes(searchTerm.toLowerCase()) || t.id.toLowerCase().includes(searchTerm.toLowerCase()));
+      result = result.filter(t => t.description.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) || t.id.toLowerCase().includes(debouncedSearchTerm.toLowerCase()));
     }
     return result;
   }, [transactions, searchTerm, activeTab]);
@@ -450,4 +452,4 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
   );
 };
 
-export default GeneralLedger;
+export default React.memo(GeneralLedger);

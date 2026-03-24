@@ -8,6 +8,7 @@ import {
     ShoppingCart, FilePlus, X, Info, CreditCard, Calendar, 
     Printer, ArrowLeft, CheckCircle2, Package, Clock, DollarSign, Filter, Receipt, Flame
 } from 'lucide-react';
+import Pagination from '@/components/Pagination';
 import { GlasscoPrintTemplate } from '../../glassco/core/GlasscoPrintTemplate';
 import { NipponPrintTemplate } from '../../nippon/prints/NipponPrintTemplate';
 import { UnifiedPaymentPrint } from '../../finance/components/prints/UnifiedPaymentPrint';
@@ -39,6 +40,8 @@ const SalesOrders: React.FC = () => {
     const [selectedChallanId, setSelectedChallanId] = useState('');
     const [isPrinting, setIsPrinting] = useState(false);
     const [printMode, setPrintMode] = useState<'Quotation' | 'SalesOrder'>('SalesOrder');
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 15;
     const [sortType, setSortType] = useState('date_desc');
     
     // Payment Receipt Printing
@@ -455,7 +458,7 @@ const SalesOrders: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                                {sortedOrders.map(order => {
+                                {sortedOrders.slice((currentPage-1)*itemsPerPage, currentPage*itemsPerPage).map(order => {
                                     const stats = getProgressStats(order.orderNo);
                                     const clientName = clients.find(c => c.id === order.clientId)?.name || 'Unknown';
                                     const totalAmount = order.items.reduce((s, i) => s + (i.amount || 0), 0);
@@ -487,12 +490,13 @@ const SalesOrders: React.FC = () => {
                                         </tr>
                                     );
                                 })}
-                                {approvedOrders.length === 0 && (
+                                {approvedOrders.length === 0 && sortedOrders.length === 0 && (
                                     <tr><td colSpan={6} className="px-6 py-20 text-center text-slate-300 italic font-black uppercase tracking-widest">No Active Industrial Orders.</td></tr>
                                 )}
                             </tbody>
                         </table>
                     </div>
+                    <Pagination totalItems={sortedOrders.length} itemsPerPage={itemsPerPage} currentPage={currentPage} onPageChange={setCurrentPage} />
                 </div>
             ) : (
                 <div className="animate-in slide-in-from-right duration-300 space-y-6">
@@ -700,4 +704,4 @@ const SalesOrders: React.FC = () => {
     );
 };
 
-export default SalesOrders;
+export default React.memo(SalesOrders);

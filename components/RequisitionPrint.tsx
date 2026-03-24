@@ -19,6 +19,9 @@ const RequisitionPrint: React.FC<RequisitionPrintProps> = ({ requisitions }) => 
     <div className="print-container hidden print:block bg-white text-black font-sans">
       <style>{`
         @media print {
+                          table { page-break-inside: auto; }
+                          thead { display: table-header-group; }
+                          tr { page-break-inside: avoid; }
           @page { size: A4; margin: 10mm; }
           body { -webkit-print-color-adjust: exact; }
           .no-print { display: none !important; }

@@ -434,4 +434,4 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
   );
 };
 
-export default PayrollManagement;
+export default React.memo(PayrollManagement);

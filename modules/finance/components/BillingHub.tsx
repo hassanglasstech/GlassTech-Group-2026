@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useDebounce } from '@/modules/shared/hooks/useDebounce';
 import { Company, Quotation, ProductionPiece, LedgerTransaction } from '../../shared/types';
 import { FinanceService } from '../services/financeService';
 import { SalesService } from '../../sales/services/salesService';
@@ -542,4 +543,4 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
   );
 };
 
-export default BillingHub;
+export default React.memo(BillingHub);

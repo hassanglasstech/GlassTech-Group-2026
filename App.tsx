@@ -245,10 +245,11 @@ const App: React.FC = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [justReconnected, setJustReconnected] = useState(false);
 
   useEffect(() => {
-    const handleOnline  = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+    const handleOnline  = () => { setIsOnline(true); setJustReconnected(true); toast.success('Connection restored — System online'); setTimeout(() => setJustReconnected(false), 4000); };
+    const handleOffline = () => { setIsOnline(false); setJustReconnected(false); toast.error('Connection lost — Working offline', { duration: 5000 }); };
     window.addEventListener('online',  handleOnline);
     window.addEventListener('offline', handleOffline);
     return () => {
@@ -343,10 +344,10 @@ const App: React.FC = () => {
               >
                 {isSyncing
                   ? <Loader2 size={18} className="animate-spin" />
-                  : <Globe size={18} className={isOnline ? 'text-white' : 'text-slate-500'} />
+                  : <Globe size={18} className={isOnline ? 'text-emerald-400' : 'text-rose-400 animate-pulse'} />
                 }
                 {!isOnline && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-rose-600 rounded-full border border-slate-700"/>
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-rose-500 rounded-full border border-slate-700 animate-pulse"/>
                 )}
               </button>
               <div className="relative hidden lg:block">
@@ -371,8 +372,15 @@ const App: React.FC = () => {
           </header>
 
           {!isOnline && (
-            <div className="bg-amber-500/90 text-white text-center text-xs font-bold uppercase tracking-widest py-1.5 px-4 no-print">
-              ⚡ Offline Mode — Changes saved locally, will sync when connected
+            <div className="bg-gradient-to-r from-rose-600 to-rose-500 text-white text-center text-xs font-black uppercase tracking-widest py-2 px-4 no-print flex items-center justify-center space-x-3 animate-in fade-in shadow-lg">
+              <span className="w-2.5 h-2.5 bg-white rounded-full animate-pulse"/>
+              <span>Offline Mode — All changes saved locally — Will sync when connected</span>
+              <span className="w-2.5 h-2.5 bg-white rounded-full animate-pulse"/>
+            </div>
+          )}
+          {isOnline && justReconnected && (
+            <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-center text-xs font-black uppercase tracking-widest py-2 px-4 no-print flex items-center justify-center space-x-3 animate-in fade-in shadow-lg">
+              <span>Connected — System Online</span>
             </div>
           )}
           <div className="flex-1 overflow-y-auto scroll-smooth pb-16 lg:pb-0">

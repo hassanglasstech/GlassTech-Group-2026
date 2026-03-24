@@ -402,4 +402,4 @@ const GoodsReceiptMIGO: React.FC<Omit<GoodsReceiptMIGOProps, 'company'>> = ({ pr
     );
 };
 
-export default GoodsReceiptMIGO;
+export default React.memo(GoodsReceiptMIGO);

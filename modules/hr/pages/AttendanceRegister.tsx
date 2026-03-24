@@ -773,4 +773,4 @@ const getStatusFromInput = (input: string): AttendanceStatus => {
   return 'Present';
 };
 
-export default AttendanceRegister;
+export default React.memo(AttendanceRegister);

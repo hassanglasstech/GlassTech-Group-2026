@@ -22,10 +22,10 @@ export const NipponJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces,
                 @media print {
                     @page { 
                         size: A4; 
-                        margin: 0; 
+                        margin: 10mm 12mm; 
                     }
                     body {
-                        margin: 0;
+                        margin: 10mm 12mm;
                         padding: 0;
                     }
                     html, body { height: auto !important; overflow: visible !important; background: white !important; }
@@ -36,7 +36,7 @@ export const NipponJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces,
                         top: 0 !important; 
                         left: 0 !important; 
                         width: 100% !important; 
-                        padding: 15mm !important;
+                        padding: 8mm !important;
                         box-sizing: border-box !important;
                         background: white !important; 
                         z-index: 99999 !important; 

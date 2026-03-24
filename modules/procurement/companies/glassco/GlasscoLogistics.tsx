@@ -38,8 +38,11 @@ const CompanyLogistics: React.FC<{ company: Company }> = ({ company }) => {
         @media print {
           .no-print { display: none !important; }
           .print-challan, .print-gate-pass { display: block !important; position: absolute; top: 0; left: 0; width: 100%; background: white !important; z-index: 9999; }
-          @page { size: A4; margin: 10mm; }
-          body { -webkit-print-color-adjust: exact; background: white; font-family: 'Arial', sans-serif; }
+          @page { size: A4; margin: 10mm 12mm; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white; }
+          table { page-break-inside: auto; }
+          thead { display: table-header-group; }
+          tr { page-break-inside: avoid; }
           .challan-table { width: 100%; border-collapse: collapse; font-size: 10px; }
           .challan-table th { background: #f3f4f6 !important; color: #000 !important; font-weight: 800; padding: 4px 6px; border: 1px solid #ccc; text-transform: uppercase; }
           .challan-table td { padding: 4px 6px; border: 1px solid #ccc; text-align: center; }

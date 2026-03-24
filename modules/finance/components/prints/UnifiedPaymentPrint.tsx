@@ -21,8 +21,11 @@ export const UnifiedPaymentPrint: React.FC<Props> = ({ data, company, partyName 
                     .print-only { display: none !important; }
                 }
                 @media print {
-                    @page { size: A4; margin: 0; }
-                    body { margin: 0; padding: 0; }
+                          table { page-break-inside: auto; }
+                          thead { display: table-header-group; }
+                          tr { page-break-inside: avoid; }
+                    @page { size: A4; margin: 10mm 12mm; }
+                    body { margin: 10mm 12mm; padding: 0; }
                     html, body { height: auto !important; overflow: visible !important; background: white !important; }
                     .print-only { 
                         display: block !important; 
@@ -34,6 +37,9 @@ export const UnifiedPaymentPrint: React.FC<Props> = ({ data, company, partyName 
                         z-index: 99999 !important;
                     }
                     @media print {
+                          table { page-break-inside: auto; }
+                          thead { display: table-header-group; }
+                          tr { page-break-inside: avoid; }
                         .print-only {
                             position: static !important;
                             width: 100% !important;

@@ -1,9 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useDebounce } from '@/modules/shared/hooks/useDebounce';
 import { Employee, Account, Company } from '@/modules/shared/types';
 import { HRService } from '@/modules/hr/services/hrService';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { UserPlus, Search, Edit2, Trash2, X, Briefcase, Wallet, UserCircle, FileUp, Download, Layers } from 'lucide-react';
+import Pagination from '@/components/Pagination';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 
@@ -11,7 +13,10 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const initialFormState: Partial<Employee> = {
@@ -202,8 +207,8 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
   };
 
   const filteredEmployees = employees.filter(e => 
-    e.personal.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    e.work.employeeCode.toLowerCase().includes(searchTerm.toLowerCase())
+    e.personal.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) || 
+    e.work.employeeCode.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
   );
 
   return (
@@ -372,4 +377,4 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
   );
 };
 
-export default EmployeeManagement;
+export default React.memo(EmployeeManagement);

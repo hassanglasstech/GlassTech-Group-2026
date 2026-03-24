@@ -51,7 +51,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
     setDispatches(ProductionService.getTemperingDispatches().filter(d => d.company === company || d.company === 'Factory'));
     setPieces(ProductionService.getProductionPieces());
     setJobOrders(SalesService.getQuotations());
-    setVendors(SalesService.getVendors());
+    setVendors(SalesService.getVendors().filter(v => !v.company || v.company === company));
   };
 
   const handleUpdateReturnDate = (dispatchId: string, date: string) => {
@@ -309,7 +309,11 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
         </div>
       </div></div>)}
 
-      {isRateModalOpen && !!selectedVendorForRates && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">
+      {isRateModalOpen && !!selectedVendorForRates && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]" onClick={() => { setIsRateModalOpen(false); setSelectedVendorForRates(null); }}><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
+          <div><h3 className="text-lg font-black uppercase">{selectedVendorForRates.name}</h3><p className="text-[10px] text-slate-400 font-bold uppercase">Rate Card Management</p></div>
+          <button onClick={() => { setIsRateModalOpen(false); setSelectedVendorForRates(null); }} className="text-white hover:text-rose-400 transition-colors"><X size={24}/></button>
+        </div>
         <div className="p-6 bg-slate-50 space-y-6">
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <h4 className="text-[10px] font-black uppercase text-slate-400 mb-2">New Rate Entry</h4>

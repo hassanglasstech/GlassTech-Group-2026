@@ -16,7 +16,7 @@ const ProcessingView: React.FC = () => {
     activeInwardDispatchId, setActiveInwardDispatchId,
     inwardAuditablePieces, selectedPiecesForDelivery,
     togglePieceForDelivery, setIsDirectDeliveryModalOpen, handleInwardPiece, openBinModal,
-    selectedJobId, setSelectedJobId, getJobDetails, togglePieceToDispatch
+    selectedJobId, setSelectedJobId, getJobDetails, togglePieceToDispatch, loadAllPiecesToDispatch
   } = useProductionContext();
 
   const [activeSubTab, setActiveSubTab] = useState<'tempering' | 'inward' | 'wip' | 'lamination' | 'double_glaze'>('tempering');
@@ -284,8 +284,8 @@ const ProcessingView: React.FC = () => {
                                <td className="px-5 py-3 font-black text-blue-600 text-sm">{orderId}</td>
                                <td className="px-5 py-3"><p className="text-xs font-bold uppercase text-slate-800">{order?.projectName || 'Order'}</p><p className="text-[10px] text-slate-400">{client?.name || ''}</p></td>
                                <td className="px-5 py-3 text-center font-black">{orderPieces.length}</td>
-                               <td className="px-5 py-3 text-center">{selectedTrip ? <span className={`px-3 py-1 rounded-full text-[10px] font-black ${loadedCount > 0 ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-400'}`}>{loadedCount}/{orderPieces.length}</span> : <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[9px] font-black uppercase">Ready</span>}</td>
-                               {selectedTrip && <td className="px-5 py-3 text-right"><button onClick={e => { e.stopPropagation(); orderPieces.forEach(p => { if (p.dispatchId !== activeDispatchIdForLoading) togglePieceToDispatch(p.id); }); }} className="bg-rose-600 text-white px-3 py-1 rounded-lg text-[9px] font-black uppercase">Load All</button></td>}
+                               <td className="px-5 py-3 text-center">{selectedTrip ? <span className={`px-3 py-1 rounded-full text-[10px] font-black ${loadedCount === orderPieces.length && loadedCount > 0 ? 'bg-emerald-100 text-emerald-700' : loadedCount > 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400'}`}>{loadedCount}/{orderPieces.length}</span> : <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[9px] font-black uppercase">Ready</span>}</td>
+                               {selectedTrip && <td className="px-5 py-3 text-right"><button onClick={e => { e.stopPropagation(); const unloaded = orderPieces.filter(p => p.dispatchId !== activeDispatchIdForLoading).map(p => p.id); if (unloaded.length > 0) loadAllPiecesToDispatch(unloaded); }} className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase ${loadedCount === orderPieces.length ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-600 text-white'}`}>{loadedCount === orderPieces.length ? 'All Loaded' : `Load All (${orderPieces.length - loadedCount})`}</button></td>}
                              </tr>
                              {isExpanded && orderPieces.map(p => {
                                const isLoaded = p.dispatchId === activeDispatchIdForLoading;

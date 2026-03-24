@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useDebounce } from '@/modules/shared/hooks/useDebounce';
 import { Company, PettyCashEntry, CostCenter, Account, LedgerTransaction, Requisition } from '@/modules/shared/types';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { Plus, Search, ArrowUpRight, ArrowDownLeft, X, Save, Wallet, Check, AlertTriangle, Fingerprint, Printer } from 'lucide-react';
+import Pagination from '@/components/Pagination';
 import { UnifiedPaymentPrint } from '@/modules/finance/components/prints/UnifiedPaymentPrint';
 
 const BUSINESS_TRANSACTIONS = [
@@ -30,7 +32,10 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [authorizedReqs, setAuthorizedReqs] = useState<Requisition[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [activeTab, setActiveTab] = useState<'Receipt' | 'Payment'>('Payment');
   
@@ -313,4 +318,4 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
   );
 };
 
-export default PettyCashBook;
+export default React.memo(PettyCashBook);

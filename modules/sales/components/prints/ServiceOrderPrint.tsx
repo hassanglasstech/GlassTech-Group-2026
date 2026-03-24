@@ -39,38 +39,20 @@ export const ServiceOrderPrint: React.FC<Props> = ({ dispatch, pieces, jobOrders
         return stats;
     }, [dispatchPieces, jobOrders]);
 
-    // Chunking Logic for Pagination
-    const MAX_ROWS = 25;
-    const chunks: typeof dispatchPieces[] = [];
-    let currentChunk: typeof dispatchPieces = [];
-    dispatchPieces.forEach((p) => {
-        currentChunk.push(p);
-        if (currentChunk.length === MAX_ROWS) {
-            chunks.push(currentChunk);
-            currentChunk = [];
-        }
-    });
-    if (currentChunk.length > 0) chunks.push(currentChunk);
-
     return (
         <div className="print-only bg-white text-black p-0 font-sans leading-tight min-h-screen flex flex-col">
             <style>{`
                 @media print {
-                    @page { size: A4; margin: 0; }
-                    body { margin: 0; padding: 0; }
-                    html, body { height: auto !important; overflow: visible !important; background: white !important; }
-                    /* HIDE EVERYTHING ELSE */
+                    @page { size: A4; margin: 10mm 12mm; }
+                    html, body { height: auto !important; overflow: visible !important; }
                     body * { visibility: hidden; }
-                    /* SHOW PRINT CONTAINER */
                     .print-only, .print-only * { visibility: visible; }
                     .print-only { position: absolute; top: 0; left: 0; width: 100%; background: white; z-index: 99999; }
-                    .print-container { width: 100% !important; padding: 15mm !important; box-sizing: border-box !important; }
+                    .print-container { width: 100% !important; padding: 8mm !important; box-sizing: border-box !important; }
                     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                    .bg-slate-50 { background-color: #f8fafc !important; }
-                    .bg-slate-100 { background-color: #f1f5f9 !important; }
                     table { page-break-inside: auto; width: 100%; border-collapse: collapse; }
+                    thead { display: table-header-group; }
                     tr { page-break-inside: avoid; page-break-after: auto; }
-                    .page-break-before { page-break-before: always; }
                 }
                 .font-pill-service { border: 2px solid #0f172a; border-radius: 9999px; padding: 6px 50px; font-weight: 900; letter-spacing: 0.2em; color: #0f172a; }
             `}</style>
@@ -148,49 +130,43 @@ export const ServiceOrderPrint: React.FC<Props> = ({ dispatch, pieces, jobOrders
                     </div>
                 </div>
 
-                {/* Table Chunks */}
+                {/* Single table — CSS handles page breaks automatically */}
                 <div className="flex-1">
-                    {chunks.map((chunk, chunkIdx) => (
-                        <div key={chunkIdx} className={chunkIdx > 0 ? 'page-break-before mt-8' : ''}>
-                            <table className="w-full text-left border-collapse text-[10px]">
-                                <thead>
-                                    <tr className="bg-slate-50 border-y border-slate-300 text-[9px] font-black uppercase tracking-widest text-slate-600">
-                                        <th className="py-2.5 px-2 text-center w-10">S.No</th>
-                                        <th className="py-2.5 px-2">Description & Ref Order</th>
-                                        <th className="py-2.5 px-2 text-center w-32">Size (Inches)</th>
-                                        <th className="py-2.5 px-2 text-center w-16">Qty</th>
-                                        <th className="py-2.5 px-2 text-center w-20">Process</th>
+                    <table className="w-full text-left border-collapse text-[10px]">
+                        <thead>
+                            <tr className="bg-slate-50 border-y border-slate-300 text-[9px] font-black uppercase tracking-widest text-slate-600">
+                                <th className="py-2.5 px-2 text-center w-10">S.No</th>
+                                <th className="py-2.5 px-2">Description & Ref Order</th>
+                                <th className="py-2.5 px-2 text-center w-32">Size (Inches)</th>
+                                <th className="py-2.5 px-2 text-center w-16">Qty</th>
+                                <th className="py-2.5 px-2 text-center w-20">Process</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                            {dispatchPieces.map((p, idx) => {
+                                const order = jobOrders.find(o => o.orderNo === p.orderId);
+                                const item = order?.items[p.itemIndex];
+                                const description = item ? [item.glassSize, item.glassColor, item.subCategory, item.glassType]
+                                    .filter(x => x && x !== 'N/A' && x !== 'Standard')
+                                    .join(' ') : 'Unknown';
+                                return (
+                                    <tr key={p.id}>
+                                        <td className="py-2 px-2 text-center text-slate-400 font-bold">{idx + 1}</td>
+                                        <td className="py-2 px-2">
+                                            <p className="font-black text-slate-800 uppercase leading-tight">{description}</p>
+                                            <p className="text-[7.5px] font-bold text-blue-600 uppercase mt-0.5 tracking-tighter">ID: {p.id}</p>
+                                            <p className="text-[7px] text-slate-400 font-bold uppercase italic">Ref: {p.orderId}</p>
+                                        </td>
+                                        <td className="py-2 px-2 text-center font-bold text-slate-700">
+                                            {item ? `${item.inchW}.${item.sootW || 0} x ${item.inchH}.${item.sootH || 0}` : '-'}
+                                        </td>
+                                        <td className="py-2 px-2 text-center font-black text-slate-900">1</td>
+                                        <td className="py-2 px-2 text-center font-bold text-slate-600 uppercase">{dispatch.serviceType}</td>
                                     </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-200">
-                                    {chunk.map((p, idx) => {
-                                        const order = jobOrders.find(o => o.orderNo === p.orderId);
-                                        const item = order?.items[p.itemIndex];
-                                        
-                                        const description = item ? [item.glassSize, item.glassColor, item.subCategory, item.glassType]
-                                            .filter(x => x && x !== 'N/A' && x !== 'Standard')
-                                            .join(' ') : 'Unknown';
-
-                                        return (
-                                            <tr key={p.id}>
-                                                <td className="py-2 px-2 text-center text-slate-400 font-bold">{chunkIdx * MAX_ROWS + idx + 1}</td>
-                                                <td className="py-2 px-2">
-                                                    <p className="font-black text-slate-800 uppercase leading-tight">{description}</p>
-                                                    <p className="text-[7.5px] font-bold text-blue-600 uppercase mt-0.5 tracking-tighter">ID: {p.id}</p>
-                                                    <p className="text-[7px] text-slate-400 font-bold uppercase italic">Ref: {p.orderId}</p>
-                                                </td>
-                                                <td className="py-2 px-2 text-center font-bold text-slate-700">
-                                                    {item ? `${item.inchW}.${item.sootW || 0} x ${item.inchH}.${item.sootH || 0}` : '-'}
-                                                </td>
-                                                <td className="py-2 px-2 text-center font-black text-slate-900">1</td>
-                                                <td className="py-2 px-2 text-center font-bold text-slate-600 uppercase">{dispatch.serviceType}</td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-                    ))}
+                                );
+                            })}
+                        </tbody>
+                    </table>
                 </div>
 
                 {/* Footer Section */}

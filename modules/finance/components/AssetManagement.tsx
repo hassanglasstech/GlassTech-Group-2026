@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useDebounce } from '@/modules/shared/hooks/useDebounce';
 import { Plus, Search, Wrench, Package, Truck, Monitor, Edit2, Trash2, X, Save, Clock, BarChart3, Download, Upload, FileDown } from 'lucide-react';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { toast } from 'sonner';
@@ -90,6 +91,7 @@ const AssetManagement: React.FC = () => {
     setAssets(all);
   }, [company]);
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [filterCategory, setFilterCategory] = useState<string>('All');
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [activeTab, setActiveTab] = useState<'register' | 'maintenance' | 'summary'>('register');
@@ -237,9 +239,9 @@ const AssetManagement: React.FC = () => {
   const filtered = assets.filter(a =>
     (filterCategory === 'All' || a.category === filterCategory) &&
     (filterStatus === 'All' || a.status === filterStatus) &&
-    (a.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     a.serialNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     a.location.toLowerCase().includes(searchTerm.toLowerCase()))
+    (a.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+     a.serialNo.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+     a.location.toLowerCase().includes(debouncedSearchTerm.toLowerCase()))
   );
 
   // Summary stats
@@ -562,4 +564,4 @@ const AssetManagement: React.FC = () => {
   );
 };
 
-export default AssetManagement;
+export default React.memo(AssetManagement);

@@ -136,4 +136,4 @@ const InventoryModule: React.FC = () => {
   );
 };
 
-export default InventoryModule;
+export default React.memo(InventoryModule);

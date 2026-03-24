@@ -70,10 +70,10 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                 @media print {
                     @page { 
                         size: A4; 
-                        margin: 0; 
+                        margin: 10mm 12mm; 
                     }
                     body {
-                        margin: 0;
+                        margin: 10mm 12mm;
                         padding: 0;
                     }
                     html, body {
@@ -99,7 +99,7 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                     }
                     .print-container { 
                         width: 100% !important; 
-                        padding: 15mm !important; 
+                        padding: 8mm !important; 
                         box-sizing: border-box !important;
                     }
                     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -114,6 +114,7 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                     .border-slate-300 { border-color: #cbd5e1 !important; }
                     
                     table { page-break-inside: auto; width: 100% !important; }
+                    thead { display: table-header-group; }
                     tr { page-break-inside: avoid; page-break-after: auto; }
                     .page-break-before { page-break-before: always; }
                 }

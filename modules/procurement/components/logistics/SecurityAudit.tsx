@@ -194,4 +194,4 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ gatePasses, pieces
     );
 };
 
-export default SecurityAudit;
+export default React.memo(SecurityAudit);

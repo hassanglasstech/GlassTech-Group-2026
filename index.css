@@ -330,11 +330,98 @@ input[type=number] { -moz-appearance: textfield; }
 /* ── Touch action for swipeable areas ───────────────────────────── */
 .swipeable { touch-action: pan-x; }
 
-/* ── Print ───────────────────────────────────────────────────────── */
+/* ── Print — Auto-Pagination System ──────────────────────────────── */
 @media print {
-  .print-hidden { display: none !important; }
-  .no-print     { display: none !important; }
-  .bottom-nav   { display: none !important; }
+  /* Hide UI chrome */
+  .print-hidden, .no-print, .bottom-nav,
+  nav, header, footer, aside,
+  button:not(.print-keep),
+  select, input, .sap-scroll-container,
+  [class*="sticky"], [class*="fixed"]:not(.print-container):not(.print-only) {
+    display: none !important;
+  }
+
+  /* Reset page */
+  @page {
+    size: A4;
+    margin: 10mm 12mm;
+  }
+
+  html, body {
+    width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    font-size: 10px !important;
+  }
+
+  /* Print container takes over full page */
+  .print-only, .print-container, .print-challan, .print-gate-pass {
+    display: block !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    z-index: 99999 !important;
+    background: white !important;
+  }
+  .print-only *, .print-container *, .print-challan *, .print-gate-pass * {
+    visibility: visible !important;
+  }
+
+  /* Table auto-pagination: thead repeats on every page */
+  table { border-collapse: collapse; width: 100%; }
+  thead { display: table-header-group !important; }
+  tfoot { display: table-footer-group !important; }
+  tbody { display: table-row-group !important; }
+
+  /* Prevent rows from breaking across pages */
+  tr { break-inside: avoid !important; page-break-inside: avoid !important; }
+  td, th { break-inside: avoid !important; page-break-inside: avoid !important; }
+
+  /* Prevent sections from breaking */
+  .break-avoid, .print-section { break-inside: avoid !important; page-break-inside: avoid !important; }
+
+  /* Force page break */
+  .page-break, .break-after { break-after: page !important; page-break-after: always !important; }
+  .break-before { break-before: page !important; page-break-before: always !important; }
+
+  /* Keep header with content */
+  h1, h2, h3, h4, h5, h6 { break-after: avoid !important; page-break-after: avoid !important; }
+
+  /* Shadows, rounded corners, animations off for cleaner print */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* Preserve colors for badges/tags */
+  .bg-rose-100, .bg-emerald-100, .bg-blue-100, .bg-amber-100,
+  .bg-slate-100, .bg-indigo-100, .bg-orange-100, .bg-cyan-100,
+  .bg-slate-50, .bg-rose-50, .bg-emerald-50 {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Links show URL */
+  a[href]:after { content: none !important; }
+
+  /* Ensure images don't break */
+  img { break-inside: avoid !important; max-width: 100% !important; }
+
+  /* Table borders visible in print */
+  .challan-table th, .challan-table td {
+    border: 1px solid #ccc !important;
+    padding: 4px 6px !important;
+  }
+  .challan-table th {
+    background: #f3f4f6 !important;
+    font-weight: 800 !important;
+  }
 }
 
 /* ── Animate in utility ──────────────────────────────────────────── */

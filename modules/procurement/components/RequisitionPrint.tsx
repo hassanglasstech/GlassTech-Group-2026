@@ -11,8 +11,11 @@ const RequisitionPrint: React.FC<Props> = ({ data, company }) => {
         <div className="print-only bg-white text-black p-0 font-sans leading-tight min-h-screen flex flex-col z-[99999] fixed inset-0">
             <style>{`
                 @media print {
-                    @page { size: A4; margin: 0; }
-                    body { margin: 0; padding: 0; }
+                          table { page-break-inside: auto; }
+                          thead { display: table-header-group; }
+                          tr { page-break-inside: avoid; }
+                    @page { size: A4; margin: 10mm 12mm; }
+                    body { margin: 10mm 12mm; padding: 0; }
                     html, body { height: auto !important; overflow: visible !important; background: white !important; }
                     body * { visibility: hidden; }
                     .print-only, .print-only * { visibility: visible; }

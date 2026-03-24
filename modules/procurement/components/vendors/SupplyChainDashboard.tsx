@@ -142,4 +142,4 @@ const SupplyChainDashboard: React.FC<SupplyChainDashboardProps> = ({
     );
 };
 
-export default SupplyChainDashboard;
+export default React.memo(SupplyChainDashboard);

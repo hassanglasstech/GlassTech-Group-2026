@@ -422,4 +422,4 @@ export const GateControl: React.FC<GateControlProps> = ({ company, gatePasses, d
     );
 };
 
-export default GateControl;
+export default React.memo(GateControl);

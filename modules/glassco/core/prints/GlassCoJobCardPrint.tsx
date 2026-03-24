@@ -56,10 +56,10 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
                 @media print {
                     @page { 
                         size: A4; 
-                        margin: 0; 
+                        margin: 10mm 12mm; 
                     }
                     body {
-                        margin: 0;
+                        margin: 10mm 12mm;
                         padding: 0;
                     }
                     html, body {
@@ -82,7 +82,7 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
                         width: 100%;
                         background: white;
                         z-index: 99999;
-                        padding: 15mm !important;
+                        padding: 8mm !important;
                         box-sizing: border-box !important;
                         display: block !important;
                     }

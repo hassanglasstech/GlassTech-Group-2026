@@ -175,4 +175,4 @@ const WarehouseModule: React.FC<{ company: Company }> = ({ company }) => {
   );
 };
 
-export default WarehouseModule;
+export default React.memo(WarehouseModule);
