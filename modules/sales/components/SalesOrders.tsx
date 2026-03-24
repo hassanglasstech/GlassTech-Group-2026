@@ -662,7 +662,7 @@ const SalesOrders: React.FC = () => {
                                                         {!item.isSection && `${item.inchW}.${item.sootW || 0} x ${item.inchH}.${item.sootH || 0}`}
                                                     </td>
                                                     <td className="px-6 py-4 text-center font-black text-slate-900">{item.qty || '-'}</td>
-                                                    <td className="px-6 py-4 text-right font-black text-slate-800">{item.amount > 0 ? item.amount.toLocaleString() : '-'}</td>
+                                                    <td className="px-6 py-4 text-right font-black text-slate-800">{(item.amount > 0) ? (Number(item.amount) || 0).toLocaleString() : '-'}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
