@@ -100,8 +100,8 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
     if (item.key === 'hub' && selectedCompany === 'Factory') return false;
     // Sales/Projects/Inventory not for Factory
     if (['sales','projects','inventory'].includes(item.key) && selectedCompany === 'Factory') return false;
-    // Admin: super_admin, gtk_admin, OR Factory company (for user management)
-    if (item.key === 'admin' && user?.role !== 'super_admin' && user?.role !== 'gtk_admin' && selectedCompany !== 'Factory') return false;
+    // Admin: only visible when Factory company is selected
+    if (item.key === 'admin' && selectedCompany !== 'Factory') return false;
     if (item.key === 'md-dashboard' && user?.role !== 'super_admin' && user?.role !== 'gtk_admin') return false;
     return true;
   });
