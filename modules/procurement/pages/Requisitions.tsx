@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSupabasePage } from '@/modules/shared/hooks/useSupabasePage';
+import Pagination from '../../../components/Pagination';
 import { Company } from '../../shared/types/core';
 import { RequisitionStatus } from '../../shared/constants';
 import { Requisition, RequisitionItem, StoreItem, Product, PurchaseOrder } from '../types/inventory';
@@ -149,7 +151,6 @@ const Requisitions: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'requests' | 'approvals' | 'orders'>('requests');
-  const [requisitions, setRequisitions] = useState<Requisition[]>([]);
   const [selectedRequisitions, setSelectedRequisitions] = useState<string[]>([]);
   const [showPrintView, setShowPrintView] = useState(false);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -160,6 +161,26 @@ const Requisitions: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loans, setLoans] = useState<LoanAdvance[]>([]);
+
+  // ── Server-side pagination for requisitions ───────────────────────
+  const REQ_PAGE_SIZE = 20;
+  const {
+    data: requisitions,
+    total: totalRequisitions,
+    loading: reqLoading,
+    page: reqPage,
+    setPage: setReqPage,
+    search: reqSearch,
+    setSearch: setReqSearch,
+    refresh: refreshRequisitions,
+  } = useSupabasePage({
+    table: 'requisitions',
+    company,
+    pageSize: REQ_PAGE_SIZE,
+    orderBy: 'updated_at',
+    orderDesc: true,
+    searchColumn: 'description',
+  });
   const [expandedId, setExpandedId] = useState<string | null>(null);
   
   const [customSubCategories, setCustomSubCategories] = useState<Record<string, string[]>>(() => {
@@ -228,9 +249,7 @@ const Requisitions: React.FC = () => {
   }, [searchParams, requisitions]);
 
   const refreshData = () => {
-    const allReqs = InventoryService.getRequisitions();
-    const relevantReqs = allReqs.filter(r => r && (r.company === company || r.targetCompany === company));
-    setRequisitions(relevantReqs.sort((a,b) => b.id.localeCompare(a.id)));
+    refreshRequisitions(); // reload from Supabase
     setPurchaseOrders(ProductionService.getPurchaseOrders().filter(p => p.fromCompany === company).sort((a,b) => b.date.localeCompare(a.date)));
 
     setTimeout(() => {
@@ -627,7 +646,13 @@ const Requisitions: React.FC = () => {
                 })}
               </tbody>
             </table>
-            {requisitions.length === 0 && <div className="py-20 text-center text-slate-400 font-bold uppercase italic">No requisitions found.</div>}
+            {requisitions.length === 0 && !reqLoading && <div className="py-20 text-center text-slate-400 font-bold uppercase italic">No requisitions found.</div>}
+          <Pagination
+            totalItems={totalRequisitions}
+            itemsPerPage={REQ_PAGE_SIZE}
+            currentPage={reqPage}
+            onPageChange={setReqPage}
+          />
           </div>
         </div>
       )}
