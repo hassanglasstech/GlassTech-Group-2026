@@ -202,7 +202,7 @@ export default function UserManager() {
     console.log('[UserManager] Inserting', payload);
     const { data, error } = await supabase
       .from('user_profiles')
-      .insert(payload)
+      .upsert(payload, { onConflict: 'id', ignoreDuplicates: false })
       .select();
 
     console.log('[UserManager] Insert result:', data, error);
