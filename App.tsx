@@ -100,8 +100,8 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
     if (item.key === 'hub' && selectedCompany === 'Factory') return false;
     // Sales/Projects/Inventory not for Factory
     if (['sales','projects','inventory'].includes(item.key) && selectedCompany === 'Factory') return false;
-    // Admin only for super_admin or gtk_admin
-    if (item.key === 'admin' && user?.role !== 'super_admin' && user?.role !== 'gtk_admin') return false;
+    // Admin: super_admin, gtk_admin, OR Factory company (for user management)
+    if (item.key === 'admin' && user?.role !== 'super_admin' && user?.role !== 'gtk_admin' && selectedCompany !== 'Factory') return false;
     if (item.key === 'md-dashboard' && user?.role !== 'super_admin' && user?.role !== 'gtk_admin') return false;
     return true;
   });
@@ -272,7 +272,7 @@ const App: React.FC = () => {
       // Schema version check + data integrity repair on startup
       checkSchemaVersion();
       DataIntegrity.autoRepairOnStartup();
-      await SyncService.initSync();
+      await SyncService.fetchFromCloud();
       await AppService.seedInitialData();
       AppService.checkAndTriggerAutoBackup();
     };
