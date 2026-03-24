@@ -1,4 +1,5 @@
 import { ProductionPiece, JobOrder, TemperingDispatch } from '../types/production';
+import { supabase } from '@/src/services/supabaseClient';
 import { PurchaseOrder, WarehouseSpot, GatePass, Company } from '../../shared/types';
 import { initDB } from '../../shared/services/db';
 
@@ -44,6 +45,49 @@ export const ProductionService = {
   getPurchaseOrders: (): PurchaseOrder[] => safeParse(KEYS.PURCHASE_ORDERS),
   savePurchaseOrders: (data: PurchaseOrder[]) => safeSave(KEYS.PURCHASE_ORDERS, data),
   getProductionPieces: (): ProductionPiece[] => safeParse(KEYS.PRODUCTION_PIECES),
+
+  // ── Paginated fetch from Supabase (use in list views) ────────────
+  getProductionPiecesPage: async (
+    company: string,
+    page: number = 1,
+    pageSize: number = 50,
+    statusFilter?: string
+  ): Promise<{ data: ProductionPiece[]; total: number }> => {
+    try {
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      let countQ = supabase
+        .from('production_pieces')
+        .select('*', { count: 'exact', head: true })
+        .eq('company', company);
+      if (statusFilter) countQ = countQ.eq('status', statusFilter);
+      const { count } = await countQ;
+
+      let dataQ = supabase
+        .from('production_pieces')
+        .select('*')
+        .eq('company', company)
+        .order('updated_at', { ascending: false })
+        .range(from, to);
+      if (statusFilter) dataQ = dataQ.eq('status', statusFilter);
+      const { data: rows } = await dataQ;
+
+      // Unwrap JSONB data column
+      const pieces = (rows || []).map((row: any) =>
+        row.data && typeof row.data === 'object' ? { ...row.data, id: row.id, company: row.company } : row
+      ) as ProductionPiece[];
+
+      return { data: pieces, total: count || 0 };
+    } catch (e) {
+      console.warn('[ProductionService] getProductionPiecesPage failed, using localStorage:', e);
+      const all = safeParse(KEYS.PRODUCTION_PIECES) as ProductionPiece[];
+      const filtered = company ? all.filter(p => (p as any).company === company) : all;
+      const statusFiltered = statusFilter ? filtered.filter(p => p.status === statusFilter) : filtered;
+      const from = (page - 1) * pageSize;
+      return { data: statusFiltered.slice(from, from + pageSize), total: statusFiltered.length };
+    }
+  },
   saveProductionPieces: (data: ProductionPiece[]) => {
     try {
         safeSave(KEYS.PRODUCTION_PIECES, data);
