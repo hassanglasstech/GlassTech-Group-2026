@@ -78,7 +78,7 @@ const SalesPipeline: React.FC = () => {
                     </div>
                     <div>
                         <h4 className="text-3xl font-black text-slate-800">{stats.totalQuotes}</h4>
-                        <p className="text-xs font-bold text-slate-500 uppercase mt-1">PKR {stats.totalValue.toLocaleString()}</p>
+                        <p className="text-xs font-bold text-slate-500 uppercase mt-1">PKR {(Number(stats.totalValue) || 0).toLocaleString()}</p>
                     </div>
                 </div>
 
@@ -89,7 +89,7 @@ const SalesPipeline: React.FC = () => {
                     </div>
                     <div>
                         <h4 className="text-3xl font-black text-emerald-600">{stats.wonQuotes}</h4>
-                        <p className="text-xs font-bold text-emerald-500 uppercase mt-1">PKR {stats.wonValue.toLocaleString()}</p>
+                        <p className="text-xs font-bold text-emerald-500 uppercase mt-1">PKR {(Number(stats.wonValue) || 0).toLocaleString()}</p>
                     </div>
                 </div>
 
@@ -100,7 +100,7 @@ const SalesPipeline: React.FC = () => {
                     </div>
                     <div>
                         <h4 className="text-3xl font-black text-amber-600">{stats.pendingQuotes}</h4>
-                        <p className="text-xs font-bold text-amber-500 uppercase mt-1">PKR {stats.pendingValue.toLocaleString()}</p>
+                        <p className="text-xs font-bold text-amber-500 uppercase mt-1">PKR {(Number(stats.pendingValue) || 0).toLocaleString()}</p>
                     </div>
                 </div>
 
