@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useDebounce } from '@/modules/shared/hooks/useDebounce';
+import { useSupabasePage } from '@/modules/shared/hooks/useSupabasePage';
 import { Company, LedgerTransaction, Account, LedgerDocType, LedgerStatus, CostCenter } from '../../shared/types';
 import { FinanceService } from '../services/financeService';
 import { 
@@ -12,22 +13,38 @@ import Pagination from '../../../components/Pagination';
 
 const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
   const [activeTab, setActiveTab] = useState<'Posted' | 'Parked' | 'System'>('Posted');
-  const [transactions, setTransactions] = useState<LedgerTransaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  
+
   // Cross-Company Posting State
   const [selectedTargetCompany, setSelectedTargetCompany] = useState<Company>(company);
   const [modalAccounts, setModalAccounts] = useState<Account[]>([]);
   const [modalCostCenters, setModalCostCenters] = useState<CostCenter[]>([]);
 
-  // Pagination State
-  const [currentPage, setCurrentPage] = useState(1);
+  // ── Server-side pagination via Supabase ───────────────────────────
   const itemsPerPage = 15;
+
+  const {
+    data: transactions,
+    total: totalTransactions,
+    loading: isLoading,
+    page: currentPage,
+    setPage: setCurrentPage,
+    search: searchTerm,
+    setSearch: setSearchTerm,
+    refresh: refreshLedger,
+  } = useSupabasePage<LedgerTransaction>({
+    table: 'ledger',
+    company,
+    pageSize: itemsPerPage,
+    filters: activeTab === 'System' ? {} : { status: activeTab },
+    orderBy: 'date',
+    orderDesc: true,
+    searchColumn: 'description',
+  });
+
+  const debouncedSearchTerm = searchTerm;
 
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
 
@@ -62,14 +79,12 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
       }
   }, [selectedTargetCompany, isModalOpen]);
 
-  const refreshData = async () => {
-    setIsLoading(true);
-    const ledgerData = FinanceService.getLedger();
-    const sorted = ledgerData.filter(t => t.company === company).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    setTransactions(sorted);
+  const refreshData = () => {
+    // Ledger data comes from useSupabasePage hook (server-side)
+    // Just reload accounts and cost centers from localStorage cache
     setAccounts(FinanceService.getAccounts().filter(a => a.company === company));
     setCostCenters(FinanceService.getCostCenters().filter(cc => cc.company === company));
-    setIsLoading(false);
+    refreshLedger(); // trigger hook re-fetch
   };
 
   const getAccountName = (id: string) => accounts.find(a => a.id === id)?.name || 'Unknown';
@@ -79,26 +94,13 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
   // Accounts for the dropdown in modal (filtered by selected target company)
   const postingAccounts = modalAccounts.filter(a => a.level === 4 || a.level === 5);
 
-  const filteredTransactions = useMemo(() => {
-    let result = transactions.filter(t => {
-      if (activeTab === 'System') {
-          return t.description.includes('Automated') || t.description.includes('Approved') || t.description.includes('PAYROLL');
-      }
-      return t.status === activeTab;
-    });
-    if (searchTerm) {
-      result = result.filter(t => t.description.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) || t.id.toLowerCase().includes(debouncedSearchTerm.toLowerCase()));
-    }
-    return result;
-  }, [transactions, searchTerm, activeTab]);
+  // Server-side: transactions already filtered+paginated by Supabase hook
+  // paginatedTransactions alias kept for JSX compatibility
+  const filteredTransactions = transactions;
+  const paginatedTransactions = transactions;
 
-  const paginatedTransactions = useMemo(() => {
-      const startIndex = (currentPage - 1) * itemsPerPage;
-      return filteredTransactions.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredTransactions, currentPage]);
-
-  // Reset pagination on search/tab change
-  useEffect(() => setCurrentPage(1), [searchTerm, activeTab]);
+  // Reset page when tab changes
+  useEffect(() => setCurrentPage(1), [activeTab]);
 
   const totalDebit = (formData.details || []).reduce((sum, d) => sum + (Number(d.debit) || 0), 0);
   const totalCredit = (formData.details || []).reduce((sum, d) => sum + (Number(d.credit) || 0), 0);
@@ -277,7 +279,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
         </div>
         
         <Pagination 
-            totalItems={filteredTransactions.length}
+            totalItems={totalTransactions}
             itemsPerPage={itemsPerPage}
             currentPage={currentPage}
             onPageChange={setCurrentPage}
