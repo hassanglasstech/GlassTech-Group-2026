@@ -12,6 +12,9 @@ const WarehouseModule: React.FC<{ company: Company }> = ({ company }) => {
   const [activeTab, setActiveTab] = useState<'visual' | 'settings'>('visual');
   const [spots, setSpots] = useState<WarehouseSpot[]>([]);
   const [pieces, setPieces] = useState<ProductionPiece[]>([]);
+  const [piecesTotal, setPiecesTotal] = useState(0);
+  const [piecesPage, setPiecesPage] = useState(1);
+  const PIECES_PAGE_SIZE = 50;
   const [isSpotModalOpen, setIsSpotModalOpen] = useState(false);
   const [newSpot, setNewSpot] = useState<Partial<WarehouseSpot>>({ code: '', zone: 'Servicing' });
   const [traceSearch, setTraceSearch] = useState('');
@@ -30,9 +33,12 @@ const WarehouseModule: React.FC<{ company: Company }> = ({ company }) => {
 
   useEffect(() => { refreshData(); }, [company, activeTab]);
 
-  const refreshData = () => {
+  const refreshData = async () => {
     setSpots(ProductionService.getWarehouseSpots().filter(s => s.company === company));
-    setPieces(ProductionService.getProductionPieces());
+    // Load production pieces paginated from Supabase
+    const { data, total } = await ProductionService.getProductionPiecesPage(company, piecesPage, PIECES_PAGE_SIZE);
+    setPieces(data);
+    setPiecesTotal(total);
   };
 
   const handleSaveSpot = () => {
