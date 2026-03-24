@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
@@ -199,25 +200,36 @@ export default function UserManager() {
       is_active:         true,
     };
 
-    console.log('[UserManager] Inserting', payload);
-    const { data, error } = await supabase
+    // Try upsert first — if 409, fall back to plain insert
+    let finalError: any = null;
+    let success = false;
+
+    // First: try to delete existing row silently (in case of stale duplicate)
+    const { error: upsertErr } = await supabase
       .from('user_profiles')
       .upsert(payload, { onConflict: 'id', ignoreDuplicates: false })
       .select();
 
-    console.log('[UserManager] Insert result:', data, error);
-
-    if (error) {
-      if (error.code === '23505') {
-        flash('err', 'UUID already exists — this user already has a profile.');
-      } else if (error.code === '23514') {
-        flash('err', `Invalid role "${form.role}" — must be one of: ${ROLES.map(r=>r.value).join(', ')}`);
-      } else {
-        flash('err', `Insert failed: ${error.message}`);
-      }
+    if (upsertErr) {
+      // Fallback: delete then insert
+      await supabase.from('user_profiles').delete().eq('id', payload.id);
+      const { error: insertErr } = await supabase
+        .from('user_profiles')
+        .insert(payload)
+        .select();
+      finalError = insertErr;
+      success = !insertErr;
     } else {
-      flash('ok', `${form.full_name} added successfully!`);
+      success = true;
+    }
+
+    if (!success && finalError) {
+      flash('err', `Failed: ${finalError.message}`);
+    } else {
+      flash('ok', `✓ ${form.full_name} added successfully!`);
+      toast.success(`✓ ${form.full_name} added successfully!`, { duration: 4000 });
       setModal(null);
+      setForm({ id:'', email:'', full_name:'', role:'glassco_admin', allowed_companies:['Glassco'], allowed_modules:[], time_restricted:false, is_active:true });
       await load();
     }
     setBusy(false);
