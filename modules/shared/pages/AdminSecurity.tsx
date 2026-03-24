@@ -105,7 +105,7 @@ const AdminSecurity: React.FC = () => {
           {[
             { id: 'command_center', label: 'Live Activity Feed', icon: Activity },
             { id: 'admin', label: 'Basis (DB Management)', icon: Database },
-            { id: 'users', label: 'User Roles (SU01)', icon: Users },
+            ...(company === 'Factory' ? [{ id: 'users', label: 'User Roles (SU01)', icon: Users }] : []),
           ].map(tab => (
             <button
               key={tab.id}
