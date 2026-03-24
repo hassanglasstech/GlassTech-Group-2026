@@ -103,7 +103,7 @@ const QuotationManager: React.FC = () => {
                     </td>
                     <td className="py-4 text-center font-bold text-slate-800">{item.qty}</td>
                     <td className="py-4 text-right font-medium text-slate-600">Rs {item.pricePerUnit}</td>
-                    <td className="py-4 text-right font-black text-slate-800">Rs {item.amount.toLocaleString()}</td>
+                    <td className="py-4 text-right font-black text-slate-800">Rs {(Number(item.amount) || 0).toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
