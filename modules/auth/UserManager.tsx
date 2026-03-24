@@ -200,34 +200,35 @@ export default function UserManager() {
       is_active:         true,
     };
 
-    // Try upsert first — if 409, fall back to plain insert
-    let finalError: any = null;
-    let success = false;
-
-    // First: try to delete existing row silently (in case of stale duplicate)
-    const { error: upsertErr } = await supabase
+    // Check if profile already exists, then insert or update
+    const { data: existing } = await supabase
       .from('user_profiles')
-      .upsert(payload, { onConflict: 'id', ignoreDuplicates: false })
-      .select();
+      .select('id')
+      .eq('id', payload.id)
+      .maybeSingle();
 
-    if (upsertErr) {
-      // Fallback: delete then insert
-      await supabase.from('user_profiles').delete().eq('id', payload.id);
-      const { error: insertErr } = await supabase
+    let finalError: any = null;
+
+    if (existing) {
+      // Already exists — update it
+      const { error } = await supabase
         .from('user_profiles')
-        .insert(payload)
-        .select();
-      finalError = insertErr;
-      success = !insertErr;
+        .update({ ...payload })
+        .eq('id', payload.id);
+      finalError = error;
     } else {
-      success = true;
+      // Does not exist — insert fresh
+      const { error } = await supabase
+        .from('user_profiles')
+        .insert(payload);
+      finalError = error;
     }
 
-    if (!success && finalError) {
+    if (finalError) {
       flash('err', `Failed: ${finalError.message}`);
     } else {
-      flash('ok', `✓ ${form.full_name} added successfully!`);
-      toast.success(`✓ ${form.full_name} added successfully!`, { duration: 4000 });
+      flash('ok', `✓ ${form.full_name} ${existing ? 'updated' : 'added'} successfully!`);
+      toast.success(`✓ ${form.full_name} ${existing ? 'updated' : 'added'} successfully!`, { duration: 4000 });
       setModal(null);
       setForm({ id:'', email:'', full_name:'', role:'glassco_admin', allowed_companies:['Glassco'], allowed_modules:[], time_restricted:false, is_active:true });
       await load();
