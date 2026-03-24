@@ -124,7 +124,7 @@ const ClientMaster: React.FC = () => {
                   <span className="text-xs font-mono font-bold text-slate-600">{client.ntn || 'UNREGISTERED'}</span>
                 </td>
                 <td className="px-4 py-3">
-                  <p className="text-xs font-black text-blue-600">PKR {client.creditLimit.toLocaleString()}</p>
+                  <p className="text-xs font-black text-blue-600">PKR {(Number(client.creditLimit) || 0).toLocaleString()}</p>
                 </td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${client.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
