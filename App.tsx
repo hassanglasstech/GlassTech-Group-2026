@@ -272,7 +272,7 @@ const App: React.FC = () => {
       // Schema version check + data integrity repair on startup
       checkSchemaVersion();
       DataIntegrity.autoRepairOnStartup();
-      await SyncService.fetchFromCloud();
+      await SyncService.initSync();
       await AppService.seedInitialData();
       AppService.checkAndTriggerAutoBackup();
     };
