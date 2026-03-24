@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
+import UserManager from '@/modules/auth/UserManager';
 import { toast } from 'sonner';
 import { Company, ActivityLog } from '../types';
 import { AppService } from '../services/appService';
@@ -207,6 +208,12 @@ const AdminSecurity: React.FC = () => {
             </div>
           </div>
         )}
+      {activeTab === 'users' && (
+        <div className="max-w-6xl">
+          <UserManager />
+        </div>
+      )}
+
       </div>
     </div>
   );
