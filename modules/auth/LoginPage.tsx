@@ -16,13 +16,24 @@ import {
 } from 'lucide-react';
 
 // ── Fetch user profile from DB ────────────────────────────────────────
-const fetchProfile = async (userId: string): Promise<UserProfile | null> => {
+const fetchProfile = async (userId: string, email?: string): Promise<UserProfile | null> => {
   try {
-    const { data, error } = await supabase
+    // Try by UUID first, then fallback to email match
+    let { data, error } = await supabase
       .from('user_profiles')
       .select('*')
       .eq('id', userId)
       .maybeSingle();
+
+    // If not found by UUID, try by email (handles localStorage-persisted sessions)
+    if (!data && !error && email) {
+      const { data: data2, error: err2 } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('email', email.toLowerCase())
+        .maybeSingle();
+      if (!err2 && data2) { data = data2; }
+    }
 
     // Log for debugging
     console.log('[Auth] fetchProfile:', { userId, data, error });
@@ -154,12 +165,12 @@ const LoginPage: React.FC = () => {
     setError('');
 
     // 1. Check profile exists and is active
-    const profile = await fetchProfile(userId);
+    const profile = await fetchProfile(userId, email);
     if (!profile) {
       // Check if table exists and profile issue
       const { data: check } = await supabase.from('user_profiles').select('count').single();
       console.log('[Auth] Profile table check:', check);
-      setError('Profile not found. Make sure your email is registered in user_profiles table.');
+      setError('Access not configured yet. Please contact Hassan (Admin) to get access.');
       await supabase.auth.signOut();
       setBusy(false);
       setStep('google');
@@ -206,7 +217,7 @@ const LoginPage: React.FC = () => {
     }
 
     // OTP verified — now fetch full profile and decide device setup
-    const profile = await fetchProfile(data.user.id);
+    const profile = await fetchProfile(data.user.id, data.user.email || '');
     if (!profile) {
       setError('Profile not found. Contact admin.');
       setBusy(false);
@@ -288,7 +299,7 @@ const LoginPage: React.FC = () => {
         // Re-authenticate with Supabase session
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          const profile = await fetchProfile(session.user.id);
+          const profile = await fetchProfile(session.user.id, session.user.email || '');
           if (profile) {
             if (profile.timeRestricted && !isOfficeHours()) {
               setError('Access restricted to office hours (Mon–Sat 9am–6pm PKT).');
@@ -321,7 +332,7 @@ const LoginPage: React.FC = () => {
     if (valid) {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        const profile = await fetchProfile(session.user.id);
+        const profile = await fetchProfile(session.user.id, session.user.email || '');
         if (profile) {
           if (profile.timeRestricted && !isOfficeHours()) {
             setError('Access restricted to office hours.');
