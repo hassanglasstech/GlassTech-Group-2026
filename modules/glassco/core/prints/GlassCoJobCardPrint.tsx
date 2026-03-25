@@ -52,7 +52,7 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
     let globalSerial = 0;
 
     return (
-        <div className="print-only bg-white text-black font-sans leading-tight flex flex-col">
+        <div className="print-only bg-white text-black font-sans leading-tight flex flex-col shadow-2xl print:shadow-none mx-auto print:m-0" style={{ width: '210mm', minHeight: '297mm' }}>
             <style>{`
                 @media screen {
                     .print-only { display: none !important; }
