@@ -7,7 +7,7 @@
  * 
  * Auto-sync:
  *   - On app start: fetch from Supabase → localStorage
- *   - On every save: write localStorage immediately + queue Supabase push 
+ *   - On every save: write localStorage immediately + queue Supabase push
  *   - On net reconnect: auto-push pending local changes
  *   - Conflict: last-write-wins using updated_at timestamp
  */
@@ -205,7 +205,15 @@ const pullTable = async (table: string, localKey: string): Promise<boolean> => {
       { context: `Pull:${table}`, maxRetries: 2, delayMs: 1000 }
     );
     if (rawData && rawData.length > 0) {
-      let data = rawData.map(mapFromSupabase);
+      // ── JSONB unwrap: for tables with a 'data' column, merge data into row ──
+      const FLAT = new Set(['employees', 'assets', 'ledger', 'petty_cash']);
+      let data = rawData.map((row: any) => {
+        if (!FLAT.has(table) && row.data && typeof row.data === 'object' && !Array.isArray(row.data)) {
+          // JSONB table — restore full object from data column
+          return { ...row.data, id: row.id, company: row.company || row.data?.company };
+        }
+        return mapFromSupabase(row);
+      });
       
       // ── Rebuild nested structure for employees ──────────────────
       // Supabase stores flat columns (name, cnic, phone, designation etc.)
