@@ -32,12 +32,12 @@ export const GlasscoServiceOrderPrint: React.FC<Props> = ({ po }) => {
                     .print-only, .print-only * { visibility: visible; }
                     .print-only { 
                         display: block !important; 
-                        position: absolute !important; 
-                        top: 0 !important; 
-                        left: 0 !important; 
+                        position: static !important; 
                         width: 100% !important; 
+                        height: auto !important;
                         background: white !important; 
-                        z-index: 99999 !important; 
+                        margin: 0 !important;
+                        padding: 0 !important;
                     }
                     .print-container { width: 100% !important; padding: 15mm !important; box-sizing: border-box !important; }
                     .font-pill-service { border: 2px solid #e11d48; border-radius: 9999px; padding: 6px 50px; font-weight: 900; letter-spacing: 0.2em; color: #e11d48; }
