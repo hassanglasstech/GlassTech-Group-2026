@@ -109,7 +109,15 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
       : allPieces.filter(p => p && p.orderId?.includes(companyCode));
 
     setPieces(companyPieces);
-    setJobOrders(SalesService.getQuotations().filter(q => q.company === company && q.status === 'Approved'));
+    // Show all active job orders — Approved, Invoiced, Partial Payment
+    const ACTIVE_STATUSES = ['Approved', 'Invoiced', 'Partial Payment', 'approved', 'invoiced'];
+    const allQuotes = SalesService.getQuotations();
+    const companyJobs = allQuotes.filter(q => {
+      const qCompany = q.company || (q as any).data?.company;
+      const qStatus = q.status || (q as any).data?.status;
+      return (qCompany === company) && ACTIVE_STATUSES.includes(qStatus);
+    });
+    setJobOrders(companyJobs);
     setClients(SalesService.getClients().filter(c => c.company === company));
     setDispatches(ProductionService.getTemperingDispatches().filter(d => d.company === company || d.company === 'Factory'));
     setGatePasses(ProductionService.getGatePasses().filter(g => g.company === company));
