@@ -263,9 +263,9 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                                                         {displaySize}
                                                     </td>
                                                     <td className="py-2 px-2 text-center font-black text-slate-900 text-[10px] border-r border-slate-100">{qtyDisplay}</td>
-                                                    <td className="py-2 px-2 text-center font-bold text-slate-500 text-[8px] border-r border-slate-100">{item.totalSqFt}</td>
-                                                    <td className="py-2 px-2 text-right font-bold text-slate-600 text-[9px] border-r border-slate-100">{item.pricePerUnit.toLocaleString()}</td>
-                                                    <td className="py-2 px-2 text-right font-black text-slate-900 text-[10px]">{item.amount.toLocaleString()}</td>
+                                                    <td className="py-2 px-2 text-center font-bold text-slate-500 text-[8px] border-r border-slate-100">{Number(item.totalSqFt||0).toFixed(2)}</td>
+                                                    <td className="py-2 px-2 text-right font-bold text-slate-600 text-[9px] border-r border-slate-100">{Number(item.pricePerUnit||0).toLocaleString()}</td>
+                                                    <td className="py-2 px-2 text-right font-black text-slate-900 text-[10px]">{Number(item.amount||0).toLocaleString()}</td>
                                                 </tr>
                                             );
                                         })}
