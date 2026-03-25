@@ -20,25 +20,19 @@ export const GlasscoServiceOrderPrint: React.FC<Props> = ({ po }) => {
             <style>{`
                 @media screen { .print-only { display: none !important; } }
                 @media print {
-                          table { page-break-inside: auto; }
-                          thead { display: table-header-group; }
-                          tr { page-break-inside: avoid; }
+                    table { page-break-inside: auto; }
+                    thead { display: table-header-group; }
+                    tr { page-break-inside: avoid; }
                     @page { size: A4; margin: 10mm 12mm; }
                     body { margin: 10mm 12mm; padding: 0; }
                     html, body { height: auto !important; overflow: visible !important; background: white !important; }
-                    /* HIDE EVERYTHING ELSE */
-                    body * { visibility: hidden; }
-                    /* SHOW PRINT CONTAINER */
-                    .print-only, .print-only * { visibility: visible; }
                     .print-only { 
                         display: block !important; 
-                        position: static !important; 
                         width: 100% !important; 
-                        height: auto !important;
                         background: white !important; 
-                        margin: 0 !important;
-                        padding: 0 !important;
+                        z-index: 99999 !important;
                     }
+                    .no-print, nav, aside, [class*="sidebar"], [class*="topbar"] { display: none !important; }
                     .print-container { width: 100% !important; padding: 15mm !important; box-sizing: border-box !important; }
                     .font-pill-service { border: 2px solid #e11d48; border-radius: 9999px; padding: 6px 50px; font-weight: 900; letter-spacing: 0.2em; color: #e11d48; }
                     .page-break-before { page-break-before: always; }
