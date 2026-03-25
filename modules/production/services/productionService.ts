@@ -19,18 +19,33 @@ import { toast } from 'sonner';
 export const ProductionService = {
   getProductionPiecesAsync: async (): Promise<ProductionPiece[]> => {
     try {
-      const db = await initDB();
-      const items = await db.getAll('productionPieces');
-      if (items.length === 0) {
-        const lsItems = safeParse(KEYS.PRODUCTION_PIECES);
-        if (lsItems.length > 0) {
-            await bgSaveToIDB('productionPieces', lsItems);
-            return lsItems;
-        }
+      const { data, error } = await supabase.from('production_pieces').select('*');
+      if (error || !data || data.length === 0) {
+        // Fallback to IDB/localStorage
+        try {
+          const db = await initDB();
+          const items = await db.getAll('productionPieces');
+          if (items.length > 0) return items;
+        } catch {}
+        return safeParse(KEYS.PRODUCTION_PIECES);
       }
-      return items;
+      // Map snake_case → camelCase
+      const mapped = data.map((r: any) => ({
+        id: r.id,
+        orderId: r.order_id,
+        itemIndex: Number(r.item_index || 0),
+        specs: r.specs || '',
+        status: r.status || 'Cut',
+        lastUpdated: r.last_updated || r.created_at || new Date().toISOString(),
+        fault: r.fault,
+        pendingServices: r.pending_services,
+        spotId: r.spot_id,
+        dispatchId: r.dispatch_id,
+      })) as ProductionPiece[];
+      safeSave(KEYS.PRODUCTION_PIECES, mapped);
+      return mapped;
     } catch (e) {
-      console.error("IDB Read Error", e);
+      console.error('[ProductionService] getProductionPiecesAsync failed:', e);
       return safeParse(KEYS.PRODUCTION_PIECES);
     }
   },
@@ -90,12 +105,27 @@ export const ProductionService = {
   },
   saveProductionPieces: (data: ProductionPiece[]) => {
     try {
-        safeSave(KEYS.PRODUCTION_PIECES, data);
+      safeSave(KEYS.PRODUCTION_PIECES, data);
     } catch(e) {
-        const active = data.filter(p => p.status !== 'Delivered' && p.status !== 'Broken');
-        safeSave(KEYS.PRODUCTION_PIECES, active);
+      const active = data.filter(p => p.status !== 'Delivered' && p.status !== 'Broken');
+      safeSave(KEYS.PRODUCTION_PIECES, active);
     }
     bgSaveToIDB('productionPieces', data);
+    // Push to Supabase in background
+    const mapped = data
+      .filter(p => p.id && (p as any).orderId)
+      .map(p => ({
+        id: p.id,
+        order_id: (p as any).orderId || '',
+        item_index: Number((p as any).itemIndex || 0),
+        specs: p.specs || '',
+        status: p.status || 'Cut',
+        last_updated: (p as any).lastUpdated || new Date().toISOString(),
+      }));
+    if (mapped.length > 0) {
+      supabase.from('production_pieces').upsert(mapped, { onConflict: 'id' })
+        .then(({ error }) => { if (error) console.warn('[Pieces] Supabase push:', error.message); });
+    }
   },
   getTemperingDispatches: (): TemperingDispatch[] => safeParse(KEYS.TEMPERING_DISPATCHES),
   saveTemperingDispatches: (data: TemperingDispatch[]) => safeSave(KEYS.TEMPERING_DISPATCHES, data),
