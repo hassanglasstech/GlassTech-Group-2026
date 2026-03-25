@@ -24,7 +24,7 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
     if (jobPieces.length === 0) {
         jobPieces = [];
         let serialCounter = 1;
-        quote.items.forEach((item, idx) => {
+        quote.items.forEach((item, itemIdx) => {
             if (item.isSection) return;
             const isDG = item.selectedServices?.some(s => s === 'D/G' || s === 'Double Glaze');
             const qty = Number(item.qty) || 0;
@@ -34,7 +34,7 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
                      jobPieces.push({
                          id: `${(quote.orderNo || quote.id || '').replace(/[^0-9]/g,'').slice(-4) || (quote.manualSerial || '0')}/${serialCounter}${sfx}`,
                          orderId: quote.orderNo || quote.id,
-                         itemIndex: idx,
+                         itemIndex: itemIdx,
                          specs: `${item.glassSize || ''} ${item.glassType || ''} ${sfx}`.trim(),
                          status: 'Cut',
                          lastUpdated: new Date().toISOString()
@@ -62,67 +62,29 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
                         size: A4; 
                         margin: 10mm 12mm; 
                     }
-                    body {
-                        margin: 10mm 12mm;
-                        padding: 0;
-                    }
-                    /* HIDE EVERYTHING ELSE */
                     body * {
                         visibility: hidden;
                     }
-                    /* SHOW PRINT CONTAINER */
                     .print-only, .print-only * {
                         visibility: visible;
+                    }
+                    .print-only {
+                        position: static !important;
+                        width: 100% !important;
+                        height: auto !important;
+                        background: white !important;
+                        padding: 0 !important;
                     }
                     html, body {
                         height: auto !important;
                         overflow: visible !important;
                         background: white !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
                     }
-                    /* HIDE EVERYTHING ELSE */
-                    body * {
-                        visibility: hidden;
-                    }
-                    /* SHOW PRINT CONTAINER */
-                    .print-only, .print-only * {
-                        visibility: visible;
-                    }
-                    .print-only {
-                        position: fixed;
-                        left: 0;
-                        top: 0;
-                        width: 100%;
-                        background: white;
-                        z-index: 99999;
-                        padding: 8mm !important;
-                        box-sizing: border-box !important;
-                        display: block !important;
-                    }
-                    @media print {
-                        .print-only {
-                            position: static !important;
-                            width: 100% !important;
-                            height: auto !important;
-                        }
-                        /* HIDE EVERYTHING ELSE */
-                    body * {
-                        visibility: hidden;
-                    }
-                    /* SHOW PRINT CONTAINER */
-                    .print-only, .print-only * {
-                        visibility: visible;
-                    }
-                    html, body {
-                            height: auto !important;
-                            overflow: visible !important;
-                        }
-                    }
-                    /* Ensure table borders print crisp */
                     table { border-collapse: collapse !important; width: 100%; }
                     th, td { border: 2px solid black !important; }
-                    
-                    /* Hide non-print elements explicitly if they persist */
-                    .no-print { display: none !important; }
+                    .no-print, nav, aside, [class*="sidebar"], [class*="topbar"] { display: none !important; }
                 }
             `}</style>
             
