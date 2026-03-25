@@ -75,30 +75,28 @@ export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName }) =>
                         size: A4; 
                         margin: 10mm 12mm; 
                     }
-                    body {
-                        margin: 10mm 12mm;
-                        padding: 0;
+                    /* Hide everything */
+                    body > *:not(.print-root) { display: none !important; }
+                    #root > *:not(:has(.print-only)) { display: none !important; }
+                    .no-print, .sap-shell, nav, header, aside, .sidebar,
+                    [class*="sidebar"], [class*="topbar"], [class*="nav"],
+                    [class*="no-print"] { display: none !important; }
+                    
+                    .print-only {
+                        display: block !important;
+                        position: fixed;
+                        left: 0; top: 0;
+                        width: 100%; height: auto;
+                        background: white;
+                        z-index: 99999;
+                        margin: 0; padding: 0;
                     }
                     html, body {
                         height: auto !important;
                         overflow: visible !important;
                         background: white !important;
-                    }
-                    /* HIDE EVERYTHING ELSE */
-                    body * {
-                        visibility: hidden;
-                    }
-                    /* SHOW PRINT CONTAINER */
-                    .print-only, .print-only * {
-                        visibility: visible;
-                    }
-                    .print-only {
-                        position: absolute;
-                        left: 0;
-                        top: 0;
-                        width: 100%;
-                        background: white;
-                        z-index: 99999;
+                        margin: 0 !important;
+                        padding: 0 !important;
                     }
                     .print-container { 
                         width: 100% !important; 
