@@ -87,6 +87,8 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                     }
                     .print-only {
                         display: block !important;
+                        
+                        
                         width: 100% !important;
                         background: white !important;
                         z-index: 99999 !important;
