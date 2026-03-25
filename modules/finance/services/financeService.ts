@@ -14,6 +14,7 @@ const KEYS = {
 };
 
 import { bgSaveToIDB, safeParse, safeSave, safeAsync } from '../../shared/services/utils';
+import { SyncService } from '@/src/services/SyncService';
 import { toast } from 'sonner';
 import { Logger } from '@/modules/shared/services/logger';
 
@@ -333,6 +334,7 @@ export const FinanceService = {
 
     const all = FinanceService.getLedger();
     FinanceService.saveLedger([...all, pv]);
+    SyncService.markDirty('ledger');
     Logger.action('Finance', 'CREATE_PARKED_PV', `Parked PV created: ${pv.id} for REQ ${requisition.id}`);
     return pv;
   },
@@ -371,6 +373,8 @@ export const FinanceService = {
       }
     }
 
+    SyncService.markDirty('ledger');
+    SyncService.markDirty('requisitions');
     Logger.action('Finance', 'POST_PV', `PV posted: ${pvId}${reqId ? ` (REQ: ${reqId})` : ''}`);
     return posted;
   },
