@@ -5,7 +5,9 @@ import { toast } from 'sonner';
 import { Company, Product, MaterialLedgerEntry, MvmntCode } from '@/modules/shared/types';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { SalesService } from '@/modules/sales/services/salesService';
-import { Truck, X, Layers, CheckCircle2, ClipboardList, Scale, PackageCheck, Globe, DollarSign, FileUp, Image as ImageIcon, ScanLine, Loader2, FileSearch, Download } from 'lucide-react';
+import { Truck, X, Layers, CheckCircle2, ClipboardList, Scale, PackageCheck, Globe, DollarSign, FileUp, Image as ImageIcon, ScanLine, Loader2, FileSearch, Download, AlertTriangle } from 'lucide-react';
+import { NCRService } from '@/modules/production/services/ncrService';
+import { SalesService as SalesServiceImport } from '@/modules/sales/services/salesService';
 import * as XLSX from 'xlsx';
 
 interface GoodsReceiptMIGOProps {
@@ -34,6 +36,18 @@ const GoodsReceiptMIGO: React.FC<Omit<GoodsReceiptMIGOProps, 'company'>> = ({ pr
         color: 'N/A',
         thickness: '5mm',
         sheetSize: ''
+    });
+
+    // Inward Inspection / Vendor Claim state
+    const [inwardInspection, setInwardInspection] = useState({
+        hasDefect: false,
+        defectQty: 0,
+        defectSqft: 0,
+        defectType: 'BR-04-Raw-Material-Defect' as const,
+        defectDescription: '',
+        vendorId: '',
+        estimatedValue: 0,
+        raiseNCR: false,
     });
     
     const [migoData, setMigoData] = useState({
@@ -264,9 +278,40 @@ const GoodsReceiptMIGO: React.FC<Omit<GoodsReceiptMIGOProps, 'company'>> = ({ pr
         if (itemIdx !== -1) allStore[itemIdx] = item; else allStore.push(item);
         InventoryService.saveStore(allStore);
         InventoryService.saveStockLedger([...InventoryService.getStockLedger(), newEntry]);
+
+        // ── Inward Inspection: create NCR + Vendor Claim if defect found ──
+        if (inwardInspection.hasDefect && inwardInspection.raiseNCR && inwardInspection.defectDescription.trim()) {
+            const vendor = inwardInspection.vendorId
+                ? SalesServiceImport.getVendors().find((v: any) => v.id === inwardInspection.vendorId)
+                : null;
+            try {
+                NCRService.createNCR({
+                    company,
+                    stage: 'Inward-Inspection',
+                    cause: 'BR-04-Raw-Material-Defect',
+                    description: `GRN Inward Defect — ${migoData.referenceDoc || newEntry.id}: ${inwardInspection.defectDescription}`,
+                    reportedBy: 'Store Incharge',
+                    sqftLost: Number(inwardInspection.defectSqft) || 0,
+                    glassType: grnSelection.category,
+                    thickness: grnSelection.thickness,
+                    estimatedValue: Number(inwardInspection.estimatedValue) || 0,
+                    action: 'Vendor-Claim',
+                    vendorId: inwardInspection.vendorId || undefined,
+                    vendorName: vendor?.name || undefined,
+                    purchaseRef: migoData.referenceDoc || newEntry.id,
+                    notes: `Defect qty: ${inwardInspection.defectQty} sheets`,
+                });
+                toast.warning(`⚠️ NCR + Vendor Claim created for inward defect.`, { duration: 5000 });
+            } catch (e) {
+                console.warn('[GRN] NCR creation failed:', e);
+            }
+        }
+
         refreshData();
         onClose();
         toast.success(`Posted GRN for ${finalQty} ${item.unit} successfully.`);
+        // Reset inspection
+        setInwardInspection({ hasDefect: false, defectQty: 0, defectSqft: 0, defectType: 'BR-04-Raw-Material-Defect', defectDescription: '', vendorId: '', estimatedValue: 0, raiseNCR: false });
     };
 
     let currentTotalQty = migoData.qty;
@@ -388,6 +433,90 @@ const GoodsReceiptMIGO: React.FC<Omit<GoodsReceiptMIGOProps, 'company'>> = ({ pr
                      </div>
                  )}
               </div>
+
+              {/* ── Inward Inspection / Defect Section ────────────────── */}
+              {entryMode === 'Manual' && migoMode === 'Glass' && (
+                <div className="px-10 py-5 border-t border-slate-100 bg-amber-50/40">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle size={16} className="text-amber-600"/>
+                      <span className="text-xs font-black text-amber-700 uppercase">Inward Inspection</span>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={inwardInspection.hasDefect}
+                        onChange={e => setInwardInspection(v => ({ ...v, hasDefect: e.target.checked }))}
+                        className="rounded"
+                      />
+                      <span className="text-xs font-bold text-amber-700">Defect / Breakage Found</span>
+                    </label>
+                  </div>
+
+                  {inwardInspection.hasDefect && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase">Defect Sheets</label>
+                          <input
+                            type="number" min="0"
+                            className="sap-input w-full mt-1"
+                            placeholder="No. of sheets"
+                            value={inwardInspection.defectQty || ''}
+                            onChange={e => setInwardInspection(v => ({ ...v, defectQty: +e.target.value }))}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase">Defect Sq.Ft</label>
+                          <input
+                            type="number" min="0" step="0.01"
+                            className="sap-input w-full mt-1"
+                            placeholder="0.00"
+                            value={inwardInspection.defectSqft || ''}
+                            onChange={e => setInwardInspection(v => ({ ...v, defectSqft: +e.target.value }))}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase">Est. Claim Value (PKR)</label>
+                          <input
+                            type="number" min="0"
+                            className="sap-input w-full mt-1"
+                            placeholder="0"
+                            value={inwardInspection.estimatedValue || ''}
+                            onChange={e => setInwardInspection(v => ({ ...v, estimatedValue: +e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Defect Description *</label>
+                        <input
+                          className="sap-input w-full mt-1"
+                          placeholder="e.g. 3 sheets broken on arrival, edges chipped..."
+                          value={inwardInspection.defectDescription}
+                          onChange={e => setInwardInspection(v => ({ ...v, defectDescription: e.target.value }))}
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer bg-amber-100 rounded-xl p-3 border border-amber-200">
+                        <input
+                          type="checkbox"
+                          checked={inwardInspection.raiseNCR}
+                          onChange={e => setInwardInspection(v => ({ ...v, raiseNCR: e.target.checked }))}
+                          className="rounded"
+                        />
+                        <div>
+                          <span className="text-xs font-black text-amber-800">Raise NCR + Vendor Claim</span>
+                          <p className="text-[9px] text-amber-600 mt-0.5">Auto-creates NCR record and vendor claim draft linked to this GRN</p>
+                        </div>
+                      </label>
+                      {inwardInspection.raiseNCR && (
+                        <div className="bg-white rounded-xl border border-amber-200 p-3 text-[10px] font-bold text-amber-700">
+                          ✓ On posting: NCR-YYYYMMDD-XXXX will be created with action = Vendor Claim (Draft)
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="px-10 py-8 bg-white border-t flex justify-end space-x-4 shrink-0">
                  <button onClick={onClose} className="px-8 py-3 text-slate-400 font-black uppercase text-xs tracking-widest">Discard</button>
