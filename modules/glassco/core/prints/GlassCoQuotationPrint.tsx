@@ -65,7 +65,7 @@ export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName }) =>
     }, [quote.items]);
 
     return (
-        <div className="print-only bg-white text-black p-0 font-sans leading-tight">
+        <div className="print-only bg-white text-black p-0 font-sans leading-tight shadow-2xl print:shadow-none mx-auto print:m-0" style={{ width: '210mm', minHeight: '297mm' }}>
             <style>{`
                 @media screen {
                     .print-only { display: none !important; }
