@@ -76,13 +76,18 @@ const MDDashboard: React.FC = () => {
   const selectedCompany = useAppStore(s => s.selectedCompany);
   const user = useAuthStore(s => s.user);
   const isFactory = selectedCompany === 'Factory';
+  const isSuperAdmin = user?.role === 'super_admin';
+  // super_admin sees all companies always; Factory user sees all; others see their own
+  const isGroupView = isFactory || isSuperAdmin;
   const [activeView, setActiveView] = useState<'overview'|'factory'>('overview');
-  // Non-factory users can only see overview
-  const effectiveView = isFactory ? activeView : 'overview';
+  const effectiveView = isGroupView ? activeView : 'overview';
   const [analyticsView, setAnalyticsView] = useState<AnalyticsView>('overview');
   const [drillCompany, setDrillCompany] = useState<string|null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const visibleCompanies = isFactory ? ALL_COMPANIES : [selectedCompany];
+  // visible companies: group view = all, others = allowed companies from profile
+  const visibleCompanies = isGroupView
+    ? ALL_COMPANIES
+    : (user?.allowedCompanies?.length ? user.allowedCompanies as Company[] : [selectedCompany]);
 
   const [ledger, setLedger] = useState<LedgerTransaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -93,14 +98,39 @@ const MDDashboard: React.FC = () => {
   const [pettyCash, setPettyCash] = useState<any[]>([]);
 
   useEffect(() => {
-    setIsLoading(true);
-    try {
-      setLedger(FinanceService.getLedger()); setAccounts(FinanceService.getAccounts());
-      setEmployees(HRService.getEmployees()); setQuotations(SalesService.getQuotations());
-      setRequisitions(InventoryService.getRequisitions()); setLoans(HRService.getLoans());
-      setPettyCash(FinanceService.getPettyCashEntries());
-    } catch(e) { console.warn('[MD]',e); }
-    setIsLoading(false);
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        // Pull fresh from Supabase first (if online), then read localStorage
+        const { supabase } = await import('@/src/services/supabaseClient');
+        const tables = ['ledger','accounts','employees','quotations','requisitions','loans','petty_cash'];
+        await Promise.all(tables.map(t =>
+          supabase.from(t).select('*').then(({ data }) => {
+            if (!data || data.length === 0) return;
+            const unwrapped = data.map((row: any) =>
+              row.data && typeof row.data === 'object' ? { ...row.data, id: row.id, company: row.company } : row
+            );
+            // Update localStorage cache
+            const keyMap: Record<string,string> = {
+              ledger:'gtk_erp_ledger', accounts:'gtk_erp_accounts', employees:'gtk_erp_employees',
+              quotations:'gtk_erp_quotations', requisitions:'gtk_erp_requisitions',
+              loans:'gtk_erp_loans', petty_cash:'gtk_erp_petty_cash'
+            };
+            if (keyMap[t]) localStorage.setItem(keyMap[t], JSON.stringify(unwrapped));
+          })
+        ));
+      } catch(e) { console.warn('[MD] Supabase fetch failed, using cache:', e); }
+
+      // Read from localStorage (now fresh)
+      try {
+        setLedger(FinanceService.getLedger()); setAccounts(FinanceService.getAccounts());
+        setEmployees(HRService.getEmployees()); setQuotations(SalesService.getQuotations());
+        setRequisitions(InventoryService.getRequisitions()); setLoans(HRService.getLoans());
+        setPettyCash(FinanceService.getPettyCashEntries());
+      } catch(e) { console.warn('[MD]',e); }
+      setIsLoading(false);
+    };
+    loadData();
   }, []);
 
   const filtered = useMemo(() => {
@@ -227,7 +257,7 @@ const MDDashboard: React.FC = () => {
           <select value={analyticsView} onChange={e=>{setAnalyticsView(e.target.value as AnalyticsView);setActiveView('overview');}} className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold uppercase text-slate-700 cursor-pointer hover:border-blue-300 transition-colors">
             {ANALYTICS_OPTIONS.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}
           </select>
-          {isFactory && <div className="bg-white rounded-xl border border-slate-200 p-1 flex">
+          {isGroupView && <div className="bg-white rounded-xl border border-slate-200 p-1 flex">
             <button onClick={()=>setActiveView('overview')} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all ${effectiveView==='overview'?'bg-blue-600 text-white shadow-sm':'text-slate-500 hover:bg-slate-50'}`}><BarChart3 size={14} className="inline mr-1.5"/>Charts</button>
             <button onClick={()=>setActiveView('factory')} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all ${effectiveView==='factory'?'bg-blue-600 text-white shadow-sm':'text-slate-500 hover:bg-slate-50'}`}><Factory size={14} className="inline mr-1.5"/>Companies</button>
           </div>}
