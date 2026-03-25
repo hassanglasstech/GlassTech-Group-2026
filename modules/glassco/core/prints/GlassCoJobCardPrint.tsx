@@ -66,6 +66,14 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
                         margin: 10mm 12mm;
                         padding: 0;
                     }
+                    /* HIDE EVERYTHING ELSE */
+                    body * {
+                        visibility: hidden;
+                    }
+                    /* SHOW PRINT CONTAINER */
+                    .print-only, .print-only * {
+                        visibility: visible;
+                    }
                     html, body {
                         height: auto !important;
                         overflow: visible !important;
@@ -96,7 +104,15 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
                             width: 100% !important;
                             height: auto !important;
                         }
-                        html, body {
+                        /* HIDE EVERYTHING ELSE */
+                    body * {
+                        visibility: hidden;
+                    }
+                    /* SHOW PRINT CONTAINER */
+                    .print-only, .print-only * {
+                        visibility: visible;
+                    }
+                    html, body {
                             height: auto !important;
                             overflow: visible !important;
                         }
