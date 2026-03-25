@@ -1,14 +1,63 @@
+/* ═══════════════════════════════════════════════════════════════════
+   GlassCo Print Override — uses #glassco-print-root (ID specificity)
+   to beat index.css's .print-only/.print-container position:absolute
+   ═══════════════════════════════════════════════════════════════════ */
+
 @media print {
-  .print-container {
+  /* 1. Print root wrapper — normal flow, not absolute */
+  #glassco-print-root {
     display: block !important;
+    position: static !important;
     width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
     background: white !important;
   }
-  .print-container table thead {
-    display: table-header-group;
+
+  /* 2. Override index.css position:absolute on .print-only & .print-container
+        ID+class = specificity 1,1,0 beats index.css class = 0,1,0 */
+  #glassco-print-root .print-only {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
   }
-  .print-container table tr {
-    break-inside: avoid;
-    page-break-inside: avoid;
+
+  #glassco-print-root .print-container {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* 3. Force ALL descendants visible */
+  #glassco-print-root * {
+    visibility: visible !important;
+  }
+
+  /* 4. Force table elements to their correct display types */
+  #glassco-print-root table {
+    display: table !important;
+    width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+  }
+  #glassco-print-root thead {
+    display: table-header-group !important;
+  }
+  #glassco-print-root tbody {
+    display: table-row-group !important;
+  }
+  #glassco-print-root tr {
+    display: table-row !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  #glassco-print-root td,
+  #glassco-print-root th {
+    display: table-cell !important;
   }
 }
