@@ -35,8 +35,14 @@ export const AsyncSalesService = {
     }
   },
   saveClients: async (data: Client[]): Promise<void> => {
-    await delay(100);
     safeSave(KEYS.CLIENTS, data);
+    const mapped = data.map((c: any) => ({
+      id: c.id, company: c.company||'', name: c.name||'',
+      contact_person: c.contactPerson||'', email: c.email||'',
+      phone: c.phone||'', address: c.address||'', ntn: c.ntn||'',
+      credit_limit: c.creditLimit||0, status: c.status||'Active',
+    }));
+    try { await supabase.from('clients').upsert(mapped, { onConflict: 'id' }); } catch {}
   },
   
   getProducts: async (): Promise<Product[]> => {
@@ -190,7 +196,14 @@ export const AsyncSalesService = {
     return safeParse(KEYS.VENDORS);
   },
   saveVendors: async (data: Vendor[]): Promise<void> => {
-    await delay(100);
     safeSave(KEYS.VENDORS, data);
+    const mapped = data.map((v: any) => ({
+      id: v.id, company: v.company||'', name: v.name||'',
+      nick_name: v.nickName||'', type: v.type||'Supplier',
+      address: v.address||'', contact_person: v.contactPerson||'',
+      phone: v.phone||'', registration_date: v.registrationDate||'',
+      rates: v.rates||[],
+    }));
+    try { await supabase.from('vendors').upsert(mapped, { onConflict: 'id' }); } catch {}
   },
 };
