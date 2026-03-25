@@ -88,11 +88,11 @@ const TABLE_MAP: Record<string, string> = {
   job_orders:         'gtk_erp_job_orders',
   gate_passes:        'gtk_erp_gate_pass',
   warehouse_spots:    'gtk_erp_warehouse_spots',
-  // NCR — Breakage Management
-  ncr_events:         'gtk_erp_ncr_events',
-  ncr_reproductions:  'gtk_erp_ncr_reproductions',
-  ncr_claims:         'gtk_erp_ncr_claims',
-  ncr_remnants:       'gtk_erp_ncr_remnants',
+  // NCR — add after running ncr_tables.sql in Supabase
+  // ncr_events:         'gtk_erp_ncr_events',
+  // ncr_reproductions:  'gtk_erp_ncr_reproductions',
+  // ncr_claims:         'gtk_erp_ncr_claims',
+  // ncr_remnants:       'gtk_erp_ncr_remnants',
   activity_logs:      'gtk_erp_activity_logs',
 };
 
@@ -147,28 +147,203 @@ const filterColumns = (table: string, data: any[]): any[] => {
   });
 };
 
-// Tables that have flat columns (not pure JSONB data column)
-const FLAT_PUSH_TABLES = new Set(['employees', 'assets', 'ledger', 'petty_cash']);
+// ── Push mappers: app object → Supabase flat row ─────────────────────
+const TABLE_PUSH: Record<string, (item: any) => any> = {
+  quotations: (q: any) => ({
+    id: q.id, company: q.company||'', date: q.date||'',
+    due_date: q.dueDate||q.due_date||null,
+    client_id: q.clientId||q.client_id||'',
+    project_name: q.projectName||q.project_name||'',
+    items: q.items||[], status: q.status||'Draft',
+    is_already_dispatched: q.isAlreadyDispatched||false,
+    discount_percent: q.discountPercent||0,
+    discount_amount: q.discountAmount||0,
+    manual_serial: q.manualSerial||null,
+    order_no: q.orderNo||null,
+    revised_fields: q.revisedFields||null,
+    received_amount: q.receivedAmount||0,
+    actual_delivery_date: q.actualDeliveryDate||null,
+    service_charges: q.serviceCharges||[],
+    manual_ref: q.manualRef||null,
+    subject: q.subject||'',
+    updated_at: q._updatedAt||q.updatedAt||new Date().toISOString(),
+  }),
+  production_pieces: (p: any) => ({
+    id: p.id,
+    order_id: p.orderId||p.order_id||'',
+    item_index: Number(p.itemIndex||p.item_index||0),
+    specs: p.specs||'',
+    status: p.status||'Cut',
+    last_updated: p.lastUpdated||p.last_updated||new Date().toISOString(),
+  }),
+  clients: (c: any) => ({
+    id: c.id, company: c.company||'', name: c.name||'',
+    contact_person: c.contactPerson||c.contact_person||'',
+    email: c.email||'', phone: c.phone||'',
+    address: c.address||'', ntn: c.ntn||'',
+    credit_limit: c.creditLimit||c.credit_limit||0,
+    status: c.status||'Active',
+  }),
+  vendors: (v: any) => ({
+    id: v.id, company: v.company||'', name: v.name||'',
+    nick_name: v.nickName||v.nick_name||'',
+    type: v.type||'Supplier', address: v.address||'',
+    contact_person: v.contactPerson||v.contact_person||'',
+    phone: v.phone||'',
+    registration_date: v.registrationDate||v.registration_date||'',
+    rates: v.rates||[],
+  }),
+  products: (p: any) => ({
+    id: p.id, company: p.company||'', category: p.category||'',
+    description: p.description||'', service_nick: p.serviceNick||'',
+    profile_code: p.profileCode||'', thickness: p.thickness||'',
+    sheet_size: p.sheetSize||'', cost_price: p.costPrice||0,
+    base_price: p.basePrice||0, unit: p.unit||'Sqft',
+    variants: p.variants||[], glass_type: p.glassType||'',
+    sub_category: p.subCategory||'', tempering_price: p.temperingPrice||0,
+    main_category: p.mainCategory||'', finish_color: p.finishColor||'',
+    model_no: p.modelNo||'', brand: p.brand||'',
+    direction: p.direction||'', tongue_length: p.tongueLength||'',
+    image_url: p.imageUrl||'',
+  }),
+  requisitions: (r: any) => ({
+    id: r.id, company: r.company||'', date: r.date||'',
+    header_text: r.headerText||r.header_text||'',
+    requisitioner: r.requisitioner||'', priority: r.priority||'Medium',
+    req_type: r.reqType||r.req_type||'Material',
+    items: r.items||[], total_value: r.totalValue||r.total_value||0,
+    status: r.status||'Pending', category: r.category||'',
+    approved_by: r.approvedBy||r.approved_by||'',
+    updated_at: r._updatedAt||r.updatedAt||new Date().toISOString(),
+  }),
+  store_items: (s: any) => ({
+    id: s.id, company: s.company||'', name: s.name||'',
+    category: s.category||'', quantity: s.quantity||0,
+    unrestricted_qty: s.unrestrictedQty||0, qi_qty: s.qiQty||0,
+    blocked_qty: s.blockedQty||0, reserved_qty: s.reservedQty||0,
+    unit: s.unit||'Sqft',
+    moving_average_price: s.movingAveragePrice||0,
+    total_value: s.totalValue||0, storage_bin: s.storageBin||'',
+    last_movement_date: s.lastMovementDate||'',
+    min_level: s.minLevel||0, reorder_point: s.reorderPoint||0,
+  }),
+  warehouse_spots: (s: any) => ({
+    id: s.id, company: s.company||'', code: s.code||'', zone: s.zone||'',
+  }),
+  gate_passes: (g: any) => ({
+    id: g.id, company: g.company||'',
+    type: g.type||'Outward', mvmnt_code: g.mvmntCode||g.mvmnt_code||'',
+    vehicle_no: g.vehicleNo||'', vehicle_type: g.vehicleType||'',
+    driver_name: g.driverName||'', material_details: g.materialDetails||'',
+    qty: g.qty||0, unit: g.unit||'',
+    tare_weight: g.tareWeight||0, gross_weight: g.grossWeight||0,
+    is_returnable: g.isReturnable||false,
+    timestamp: g.timestamp||new Date().toISOString(),
+    status: g.status||'Pending',
+    linked_dispatch_id: g.linkedDispatchId||null,
+    from_vendor: g.fromVendor||'',
+  }),
+  purchase_orders: (p: any) => ({
+    id: p.id, company: p.company||p.fromCompany||'',
+    from_company: p.fromCompany||p.from_company||'',
+    to_vendor: p.toVendor||p.to_vendor||'',
+    date: p.date||'', status: p.status||'Draft',
+    total_amount: p.totalAmount||0,
+    category: p.category||'', items: p.items||[],
+  }),
+};
+
+// ── Pull mappers: Supabase row → app object ───────────────────────────
+const TABLE_PULL: Record<string, (row: any) => any> = {
+  quotations: (r: any) => ({
+    ...r,
+    clientId: r.client_id, projectName: r.project_name,
+    dueDate: r.due_date, discountPercent: r.discount_percent,
+    discountAmount: r.discount_amount, manualSerial: r.manual_serial,
+    orderNo: r.order_no, revisedFields: r.revised_fields,
+    receivedAmount: r.received_amount,
+    actualDeliveryDate: r.actual_delivery_date,
+    serviceCharges: r.service_charges||[],
+    manualRef: r.manual_ref,
+    isAlreadyDispatched: r.is_already_dispatched,
+    items: r.items||[], status: r.status,
+  }),
+  production_pieces: (r: any) => ({
+    ...r,
+    orderId: r.order_id,
+    itemIndex: Number(r.item_index||0),
+    lastUpdated: r.last_updated,
+  }),
+  clients: (r: any) => ({
+    ...r,
+    contactPerson: r.contact_person,
+    creditLimit: r.credit_limit,
+  }),
+  vendors: (r: any) => ({
+    ...r,
+    nickName: r.nick_name,
+    contactPerson: r.contact_person,
+    registrationDate: r.registration_date,
+  }),
+  products: (r: any) => ({
+    ...r,
+    serviceNick: r.service_nick, profileCode: r.profile_code,
+    sheetSize: r.sheet_size, costPrice: r.cost_price,
+    basePrice: r.base_price, glassType: r.glass_type,
+    subCategory: r.sub_category, temperingPrice: r.tempering_price,
+    mainCategory: r.main_category, finishColor: r.finish_color,
+    modelNo: r.model_no, tongueLength: r.tongue_length,
+    imageUrl: r.image_url, variants: r.variants||[],
+  }),
+  requisitions: (r: any) => ({
+    ...r,
+    headerText: r.header_text, reqType: r.req_type,
+    totalValue: r.total_value, approvedBy: r.approved_by,
+    items: r.items||[],
+  }),
+  store_items: (r: any) => ({
+    ...r,
+    unrestrictedQty: r.unrestricted_qty, qiQty: r.qi_qty,
+    blockedQty: r.blocked_qty, reservedQty: r.reserved_qty,
+    movingAveragePrice: r.moving_average_price,
+    totalValue: r.total_value, storageBin: r.storage_bin,
+    lastMovementDate: r.last_movement_date,
+    minLevel: r.min_level, reorderPoint: r.reorder_point,
+  }),
+  warehouse_spots: (r: any) => ({ ...r }),
+  gate_passes: (r: any) => ({
+    ...r,
+    mvmntCode: r.mvmnt_code, vehicleNo: r.vehicle_no,
+    vehicleType: r.vehicle_type, driverName: r.driver_name,
+    materialDetails: r.material_details,
+    tareWeight: r.tare_weight, grossWeight: r.gross_weight,
+    isReturnable: r.is_returnable,
+    linkedDispatchId: r.linked_dispatch_id,
+    fromVendor: r.from_vendor,
+  }),
+  purchase_orders: (r: any) => ({
+    ...r,
+    fromCompany: r.from_company, toVendor: r.to_vendor,
+    totalAmount: r.total_amount,
+  }),
+};
 
 const pushTable = async (table: string, localKey: string): Promise<boolean> => {
-  if (LOCAL_ONLY_TABLES.has(table)) return true; // skip silently
+  if (LOCAL_ONLY_TABLES.has(table)) return true;
 
   const rawData = safeParse(localKey);
   if (!rawData || rawData.length === 0) return true;
 
   let data: any[];
-  if (FLAT_PUSH_TABLES.has(table)) {
-    // Flat tables — map to snake_case columns
+  const pusher = TABLE_PUSH[table];
+  if (pusher) {
+    data = rawData.map(pusher).filter((r: any) => r.id);
+  } else if (['employees','assets','ledger','petty_cash'].includes(table)) {
     const mapped = rawData.map(mapToSupabase);
     data = filterColumns(table, mapped);
   } else {
-    // JSONB tables — wrap full object in 'data' column
-    data = rawData.map((item: any) => ({
-      id: item.id,
-      company: item.company || '',
-      data: item,
-      updated_at: item._updatedAt || item.updatedAt || new Date().toISOString(),
-    })).filter((r: any) => r.id);
+    console.log(`[Sync] No push handler for ${table} — skipping`);
+    return true;
   }
   
   try {
@@ -219,13 +394,10 @@ const pullTable = async (table: string, localKey: string): Promise<boolean> => {
       { context: `Pull:${table}`, maxRetries: 2, delayMs: 1000 }
     );
     if (rawData && rawData.length > 0) {
-      // ── JSONB unwrap: for tables with a 'data' column, merge data into row ──
-      const FLAT = new Set(['employees', 'assets', 'ledger', 'petty_cash']);
+      const puller = TABLE_PULL[table];
       let data = rawData.map((row: any) => {
-        if (!FLAT.has(table) && row.data && typeof row.data === 'object' && !Array.isArray(row.data)) {
-          // JSONB table — restore full object from data column
-          return { ...row.data, id: row.id, company: row.company || row.data?.company };
-        }
+        if (puller) return puller(row);
+        // employees/assets/ledger — camelCase conversion
         return mapFromSupabase(row);
       });
       
