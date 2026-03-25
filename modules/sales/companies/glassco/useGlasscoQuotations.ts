@@ -271,7 +271,8 @@ export const useGlasscoQuotations = () => {
   const handlePrintRequest = (q: Quotation, mode: 'Quotation' | 'SalesOrder' | 'JobCard') => {
       setPrintMode(mode);
       setPrintingQuote(q);
-      setTimeout(() => { window.print(); setPrintingQuote(null); }, 700);
+      const delay = mode === 'JobCard' ? 2500 : 800;
+      setTimeout(() => { window.print(); setPrintingQuote(null); }, delay);
   };
 
   const handleDeleteQuotation = async (id: string) => {
