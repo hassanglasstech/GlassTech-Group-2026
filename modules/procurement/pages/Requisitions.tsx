@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 
 import { toast } from 'sonner';
+import { SyncService } from '@/src/services/SyncService';
 import { useAppStore } from '../../shared/store/appStore';
 
 import RequisitionPrint from '@/components/RequisitionPrint';
@@ -431,6 +432,8 @@ const Requisitions: React.FC = () => {
     const all = InventoryService.getRequisitions().filter(Boolean);
     const updated = all.map(r => r.id === id ? approvedPr : r);
     InventoryService.saveRequisitions(updated);
+    SyncService.markDirty('requisitions');
+    SyncService.markDirty('ledger');
 
     // Send notification back to Branch
     if (company === 'Factory' && pr.company !== 'Factory') {
