@@ -7,7 +7,7 @@
  * 
  * Auto-sync:
  *   - On app start: fetch from Supabase → localStorage
- *   - On every save: write localStorage immediately + queue Supabase push
+ *   - On every save: write localStorage immediately + queue Supabase push 
  *   - On net reconnect: auto-push pending local changes
  *   - Conflict: last-write-wins using updated_at timestamp
  */
