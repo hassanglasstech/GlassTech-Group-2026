@@ -9,7 +9,7 @@ interface Props {
 }
 
 export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces, products }) => {
-    let jobPieces = pieces.filter(p => p.orderId === quote.orderNo);
+    let jobPieces = pieces.filter(p => p.orderId === quote.orderNo || p.orderId === quote.id);
     // Sort ascending by piece number
     jobPieces.sort((a, b) => {
         const getNum = (id: string) => parseInt((id.split('/').pop() || '0').replace(/[^0-9]/g, '')) || 0;
@@ -143,7 +143,7 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
                         if (item.isSection) {
                             printableItems.push({ isSection: true, description: item.description });
                         }
-                        const itemPieces = jobPieces.filter(p => p.itemIndex === itemIdx);
+                        const itemPieces = jobPieces.filter(p => Number(p.itemIndex) === itemIdx);
                         const isTempered = item.selectedServices?.some(s => s === 'T/G' || s === 'Tempered');
                         const isMM = !!(item.mmW || item.mmH);
                         // const unitLabel = isMM ? 'MM' : 'INCH'; // Removed per request
