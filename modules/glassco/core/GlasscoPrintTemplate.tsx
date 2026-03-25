@@ -76,6 +76,9 @@ export const GlasscoPrintTemplate: React.FC<GlasscoPrintTemplateProps> = ({
 
     // Determine final mode based on input and status
     let finalMode = printMode;
+    if (printingQuote.status === 'Approved' && printMode !== 'JobCard') {
+        finalMode = 'SalesOrder';
+    }
 
     switch(finalMode) {
         case 'SalesOrder':
