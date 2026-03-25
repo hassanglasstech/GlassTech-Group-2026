@@ -85,21 +85,16 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                         overflow: visible !important;
                         background: white !important;
                     }
-                    /* HIDE EVERYTHING ELSE */
-                    body * {
-                        visibility: hidden;
-                    }
-                    /* SHOW PRINT CONTAINER */
-                    .print-only, .print-only * {
-                        visibility: visible;
-                    }
                     .print-only {
-                        position: absolute;
-                        left: 0;
-                        top: 0;
-                        width: 100%;
-                        background: white;
-                        z-index: 99999;
+                        display: block !important;
+                        position: fixed !important;
+                        left: 0 !important; top: 0 !important;
+                        width: 100% !important;
+                        background: white !important;
+                        z-index: 99999 !important;
+                    }
+                    .no-print, nav, aside, [class*="sidebar"], [class*="topbar"] {
+                        display: none !important;
                     }
                     .print-container { 
                         width: 100% !important; 
