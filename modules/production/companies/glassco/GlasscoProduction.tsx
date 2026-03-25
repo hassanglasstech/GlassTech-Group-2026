@@ -4,7 +4,7 @@ import { Scissors, Truck, ShieldCheck, Flame, BarChart3, AlertTriangle } from 'l
 import NCRModule from './components/ncr/NCRModule';
 
 // Split Views
-import FabricationView from './components/views/FabricationView';
+import FabricationView from './components/views/FabricationView'; 
 import ProcessingView from './components/views/ProcessingView';
 import DispatchView from './components/views/DispatchView';
 import DashboardView from './components/views/DashboardView';
