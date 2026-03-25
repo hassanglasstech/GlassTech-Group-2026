@@ -52,7 +52,7 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
     let globalSerial = 0;
 
     return (
-        <div className="print-only bg-white text-black font-sans leading-tight flex flex-col shadow-2xl print:shadow-none mx-auto print:m-0" style={{ width: '210mm', minHeight: '297mm' }}>
+        <div className="print-only bg-white text-black font-sans leading-tight flex flex-col">
             <style>{`
                 @media screen {
                     .print-only { display: none !important; }
@@ -62,29 +62,25 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
                         size: A4; 
                         margin: 10mm 12mm; 
                     }
-                    body * {
-                        visibility: hidden;
-                    }
-                    .print-only, .print-only * {
-                        visibility: visible;
-                    }
-                    .print-only {
-                        position: static !important;
-                        width: 100% !important;
-                        height: auto !important;
-                        background: white !important;
-                        padding: 0 !important;
+                    body {
+                        margin: 10mm 12mm;
+                        padding: 0;
                     }
                     html, body {
                         height: auto !important;
                         overflow: visible !important;
                         background: white !important;
-                        margin: 0 !important;
-                        padding: 0 !important;
                     }
+                    .print-only {
+                        display: block !important;
+                        width: 100% !important;
+                        background: white !important;
+                        z-index: 99999 !important;
+                    }
+                    .no-print, nav, aside, [class*="sidebar"], [class*="topbar"] { display: none !important; }
                     table { border-collapse: collapse !important; width: 100%; }
                     th, td { border: 2px solid black !important; }
-                    .no-print, nav, aside, [class*="sidebar"], [class*="topbar"] { display: none !important; }
+                    .page-break-before { page-break-before: always; }
                 }
             `}</style>
             
