@@ -62,25 +62,29 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
                         size: A4; 
                         margin: 10mm 12mm; 
                     }
-                    body {
-                        margin: 10mm 12mm;
-                        padding: 0;
+                    body * {
+                        visibility: hidden;
+                    }
+                    .print-only, .print-only * {
+                        visibility: visible;
+                    }
+                    .print-only {
+                        position: static !important;
+                        width: 100% !important;
+                        height: auto !important;
+                        background: white !important;
+                        padding: 0 !important;
                     }
                     html, body {
                         height: auto !important;
                         overflow: visible !important;
                         background: white !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
                     }
-                    .print-only {
-                        display: block !important;
-                        width: 100% !important;
-                        background: white !important;
-                        z-index: 99999 !important;
-                    }
-                    .no-print, nav, aside, [class*="sidebar"], [class*="topbar"] { display: none !important; }
                     table { border-collapse: collapse !important; width: 100%; }
                     th, td { border: 2px solid black !important; }
-                    .page-break-before { page-break-before: always; }
+                    .no-print, nav, aside, [class*="sidebar"], [class*="topbar"] { display: none !important; }
                 }
             `}</style>
             
