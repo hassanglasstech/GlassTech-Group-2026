@@ -182,7 +182,7 @@ const SalesOrders: React.FC = () => {
         setTimeout(() => {
             window.print();
             setIsPrinting(false);
-        }, 700);
+        }, 1200);
     };
 
     const handlePrintQuotation = () => {
@@ -191,7 +191,7 @@ const SalesOrders: React.FC = () => {
         setTimeout(() => {
             window.print();
             setIsPrinting(false);
-        }, 700);
+        }, 1200);
     };
 
     const handlePrintReceipt = () => {
