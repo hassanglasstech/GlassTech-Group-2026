@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ProductionProvider } from '@/modules/production/components/ProductionContext';
-import { Scissors, Truck, ShieldCheck, Flame, BarChart3 } from 'lucide-react';
+import { Scissors, Truck, ShieldCheck, Flame, BarChart3, AlertTriangle } from 'lucide-react';
+import NCRModule from './components/ncr/NCRModule';
 
 // Split Views
 import FabricationView from './components/views/FabricationView';
@@ -9,7 +10,7 @@ import DispatchView from './components/views/DispatchView';
 import DashboardView from './components/views/DashboardView';
 
 const GlasscoProductionContent: React.FC = () => {
-  const [activeView, setActiveView] = useState<'dashboard' | 'fabrication' | 'processing' | 'dispatch'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'fabrication' | 'processing' | 'dispatch' | 'ncr'>('dashboard');
 
   return (
     <div className="flex flex-col h-full -m-6">
@@ -39,6 +40,12 @@ const GlasscoProductionContent: React.FC = () => {
         >
           <ShieldCheck size={16}/> <span>Quality & Dispatch</span>
         </button>
+        <button 
+          onClick={() => setActiveView('ncr')} 
+          className={`flex items-center space-x-2 px-6 py-3 rounded-lg text-xs font-black uppercase tracking-widest transition-all border-b-4 ${activeView === 'ncr' ? 'border-rose-600 text-rose-700 bg-rose-50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+        >
+          <AlertTriangle size={16}/> <span>NCR</span>
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 bg-[#f8fafc]">
@@ -47,6 +54,7 @@ const GlasscoProductionContent: React.FC = () => {
           {activeView === 'fabrication' && <FabricationView />}
           {activeView === 'processing' && <ProcessingView />}
           {activeView === 'dispatch' && <DispatchView />}
+          {activeView === 'ncr' && <NCRModule />}
         </div>
       </div>
     </div>
