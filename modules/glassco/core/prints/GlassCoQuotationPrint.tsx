@@ -91,6 +91,21 @@ export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName }) =>
                         z-index: 99999;
                         margin: 0; padding: 0;
                     }
+                    @media print {
+                        .print-only {
+                            position: static !important;
+                            width: 100% !important;
+                            height: auto !important;
+                        }
+                    }
+                    /* HIDE EVERYTHING ELSE */
+                    body * {
+                        visibility: hidden;
+                    }
+                    /* SHOW PRINT CONTAINER */
+                    .print-only, .print-only * {
+                        visibility: visible;
+                    }
                     html, body {
                         height: auto !important;
                         overflow: visible !important;
