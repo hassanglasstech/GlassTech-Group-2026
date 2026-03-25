@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Quotation, Client, ProductionPiece, Product } from '../../shared/types';
 import { SalesService } from '../../sales/services/salesService';
 import { FinanceService } from '../../finance/services/financeService';
 import { ProductionService } from '../../production/services/productionService';
+import { supabase } from '../../../src/services/supabaseClient';
 import { GlassCoQuotationPrint } from './prints/GlassCoQuotationPrint';
 import { GlassCoSalesOrderPrint } from './prints/GlassCoSalesOrderPrint';
 import { GlassCoJobCardPrint } from './prints/GlassCoJobCardPrint';
@@ -26,9 +27,52 @@ export const GlasscoPrintTemplate: React.FC<GlasscoPrintTemplateProps> = ({
     const clientName = clients.find(c => c.id === printingQuote.clientId)?.name || 'Unknown Client';
     const ledger = FinanceService.getLedger();
 
-    // Memoize Data Fetching to ensure pieces are always available even if printed from non-production modules
-    const allPieces = useMemo(() => pieces || ProductionService.getProductionPieces(), [pieces]);
-    const allProducts = useMemo(() => products || SalesService.getProducts().filter(p => p.company === 'GlassCo'), [products]);
+    const [fetchedPieces, setFetchedPieces] = useState<ProductionPiece[]>([]);
+    const [fetchedProducts, setFetchedProducts] = useState<Product[]>(SalesService.getProducts());
+
+    useEffect(() => {
+        // Load pieces from Supabase for JobCard
+        if (!pieces && printMode === 'JobCard') {
+            const orderId = printingQuote.orderNo || printingQuote.id;
+            supabase.from('production_pieces')
+                .select('*')
+                .or(`order_id.eq.${orderId}`)
+                .then(({ data }) => {
+                    if (data && data.length > 0) {
+                        const mapped = data.map((r: any) => ({
+                            id: r.id,
+                            orderId: r.order_id,
+                            itemIndex: Number(r.item_index || 0),
+                            specs: r.specs || '',
+                            status: r.status || 'Cut',
+                            lastUpdated: r.last_updated || new Date().toISOString(),
+                        })) as ProductionPiece[];
+                        setFetchedPieces(mapped);
+                    }
+                });
+        }
+        // Load products
+        if (!products) {
+            supabase.from('products').select('*')
+                .then(({ data }) => {
+                    if (data && data.length > 0) {
+                        const mapped = data.map((r: any) => ({
+                            ...r,
+                            serviceNick: r.service_nick, profileCode: r.profile_code,
+                            sheetSize: r.sheet_size, costPrice: r.cost_price,
+                            basePrice: r.base_price, glassType: r.glass_type,
+                            subCategory: r.sub_category, temperingPrice: r.tempering_price,
+                            mainCategory: r.main_category, finishColor: r.finish_color,
+                            modelNo: r.model_no, variants: r.variants || [],
+                        }));
+                        setFetchedProducts(mapped.filter((p: any) => p.company === 'Glassco' || p.company === 'GlassCo'));
+                    }
+                });
+        }
+    }, [printingQuote.id, printMode]);
+
+    const allPieces = useMemo(() => pieces || fetchedPieces, [pieces, fetchedPieces]);
+    const allProducts = useMemo(() => products || fetchedProducts, [products, fetchedProducts]);
 
     // Determine final mode based on input and status
     let finalMode = printMode;
