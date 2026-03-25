@@ -9,6 +9,10 @@ interface Props {
 }
 
 export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces, products }) => {
+    const safeItems: any[] = Array.isArray(quote.items)
+        ? quote.items
+        : (typeof quote.items === 'string' ? (() => { try { return JSON.parse(quote.items as any); } catch { return []; } })() : []);
+    quote = { ...quote, items: safeItems };
     let jobPieces = pieces.filter(p => p.orderId === quote.orderNo || p.orderId === quote.id);
     // Sort ascending by piece number
     jobPieces.sort((a, b) => {
