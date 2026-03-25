@@ -57,18 +57,20 @@ const ProcessingView: React.FC = () => {
 
         return (
            <div className="space-y-6 animate-in fade-in slide-in-from-right duration-300">
-              <div className="flex items-center space-x-4 bg-white p-4 rounded-2xl border shadow-sm">
-                 <button onClick={() => setSelectedJobId(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ChevronLeft size={24}/></button>
-                 <div>
-                    <h3 className="text-xl font-black text-slate-800 uppercase">{jobData.projectName || 'Standard Order'}</h3>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{jobData.clientName} | {selectedJobId}</p>
+              <div className="bg-white p-4 rounded-2xl border shadow-sm">
+                 <div className="flex items-center gap-3 mb-3">
+                    <button onClick={() => setSelectedJobId(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors shrink-0 min-w-[40px] min-h-[40px] flex items-center justify-center"><ChevronLeft size={22}/></button>
+                    <div className="min-w-0 flex-1">
+                       <h3 className="text-base sm:text-xl font-black text-slate-800 uppercase truncate">{jobData.projectName || 'Standard Order'}</h3>
+                       <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest truncate">{jobData.clientName} | {selectedJobId}</p>
+                    </div>
                  </div>
-                 <div className="ml-auto flex items-center space-x-6 text-right">
-                    <div><p className="text-[10px] font-black text-slate-400 uppercase">Pending Qty</p><p className="text-lg font-black">{jobData.pendingQty} <span className="text-[10px] text-slate-400">Pcs</span></p></div>
-                    <div><p className="text-[10px] font-black text-slate-400 uppercase">Volume</p><p className="text-lg font-black">{jobData.pendingSqFt} <span className="text-[10px] text-slate-400">Ft²</span></p></div>
+                 <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100">
+                    <div className="bg-slate-50 rounded-xl p-3 text-center"><p className="text-[9px] font-black text-slate-400 uppercase mb-1">Pending Qty</p><p className="text-xl font-black text-slate-800">{jobData.pendingQty} <span className="text-[9px] text-slate-400">Pcs</span></p></div>
+                    <div className="bg-slate-50 rounded-xl p-3 text-center"><p className="text-[9px] font-black text-slate-400 uppercase mb-1">Volume</p><p className="text-xl font-black text-slate-800">{jobData.pendingSqFt} <span className="text-[9px] text-slate-400">Ft²</span></p></div>
                  </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                  {relevantPieces.map(p => {
                     const isWaitingAtTempering = p.status === 'Dispatched' && (activeSubTab === 'lamination' || activeSubTab === 'double_glaze' || activeSubTab === 'wip');
                     return (
@@ -92,11 +94,11 @@ const ProcessingView: React.FC = () => {
     if (uniqueIds.length === 0) return <div className="py-20 text-center text-slate-300 font-black uppercase text-xs italic">No jobs pending in this queue.</div>;
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in zoom-in duration-300">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 animate-in zoom-in duration-300">
            {uniqueIds.map(id => {
               const data = getJobDetails(id, filterFn);
               return (
-                 <div key={id} onClick={() => setSelectedJobId(id)} className={`bg-white p-6 rounded-[2rem] border-2 shadow-sm transition-all cursor-pointer group flex flex-col justify-between h-full relative overflow-hidden border-slate-200 hover:shadow-xl hover:border-blue-400`}>
+                 <div key={id} onClick={() => setSelectedJobId(id)} className={`bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border-2 shadow-sm transition-all cursor-pointer group flex flex-col justify-between h-full relative overflow-hidden border-slate-200 hover:shadow-xl hover:border-blue-400 active:scale-[0.98]`}>
                     <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-transform"><LayoutGrid size={100}/></div>
                     <div>
                        <div className="flex justify-between items-start mb-4 relative z-10">
@@ -124,22 +126,24 @@ const ProcessingView: React.FC = () => {
 
   return (
     <div className="space-y-6">
-        <div className="flex space-x-1 bg-white p-1 rounded-2xl border w-fit shadow-sm overflow-x-auto">
-            <button onClick={() => setActiveSubTab('tempering')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'tempering' ? 'bg-rose-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Flame size={16} className="inline mr-2"/> Loading</button>
-            <button onClick={() => setActiveSubTab('inward')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'inward' ? 'bg-blue-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><ArrowDownLeft size={16} className="inline mr-2"/> Inward Audit</button>
-            <button onClick={() => setActiveSubTab('wip')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'wip' ? 'bg-amber-500 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Hourglass size={16} className="inline mr-2"/> WIP (Tempering)</button>
-            <button onClick={() => setActiveSubTab('lamination')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'lamination' ? 'bg-orange-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Layers size={16} className="inline mr-2"/> Lamination</button>
-            <button onClick={() => setActiveSubTab('double_glaze')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'double_glaze' ? 'bg-cyan-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Layers size={16} className="inline mr-2"/> Double Glaze</button>
+        {/* Mobile-scrollable tabs */}
+        <div className="flex space-x-1 bg-white p-1 rounded-2xl border shadow-sm overflow-x-auto scrollbar-none -mx-1 px-1">
+            <button onClick={() => setActiveSubTab('tempering')} className={`px-3 sm:px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap flex items-center gap-1.5 min-h-[40px] ${activeSubTab === 'tempering' ? 'bg-rose-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Flame size={14}/><span className="hidden sm:inline">Loading</span><span className="sm:hidden">Load</span></button>
+            <button onClick={() => setActiveSubTab('inward')} className={`px-3 sm:px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap flex items-center gap-1.5 min-h-[40px] ${activeSubTab === 'inward' ? 'bg-blue-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><ArrowDownLeft size={14}/><span className="hidden sm:inline">Inward Audit</span><span className="sm:hidden">Inward</span></button>
+            <button onClick={() => setActiveSubTab('wip')} className={`px-3 sm:px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap flex items-center gap-1.5 min-h-[40px] ${activeSubTab === 'wip' ? 'bg-amber-500 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Hourglass size={14}/>WIP</button>
+            <button onClick={() => setActiveSubTab('lamination')} className={`px-3 sm:px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap flex items-center gap-1.5 min-h-[40px] ${activeSubTab === 'lamination' ? 'bg-orange-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Layers size={14}/><span className="hidden sm:inline">Lamination</span><span className="sm:hidden">Lam</span></button>
+            <button onClick={() => setActiveSubTab('double_glaze')} className={`px-3 sm:px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap flex items-center gap-1.5 min-h-[40px] ${activeSubTab === 'double_glaze' ? 'bg-cyan-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Layers size={14}/>D/G</button>
         </div>
 
         {activeSubTab === 'tempering' && (
             <div className="space-y-4 animate-in fade-in duration-300">
                {/* Header */}
-               <div className="bg-rose-600 text-white p-6 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-8 opacity-10"><Flame size={120} /></div>
-                  <div><h2 className="text-xl font-black uppercase">Trip Loading</h2><p className="text-[10px] font-bold text-rose-200 uppercase tracking-widest mt-1">Expand jobs, load pieces, finalize</p></div>
-                  <div className="flex items-center space-x-4 relative z-10">
-                    <div className="space-y-1"><label className="text-[9px] font-black uppercase text-rose-200">Active Trip</label><select value={activeDispatchIdForLoading} onChange={e => setActiveDispatchIdForLoading(e.target.value)} className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm font-black outline-none w-56 text-white"><option value="" className="text-slate-900">-- Select --</option>{dispatches.filter(d => d.status === 'Ready to Dispatch' || d.status === 'Scheduled').map(d => (<option key={d.id} value={d.id} className="text-slate-900">{d.serviceType === 'Site Delivery' ? '📦 ' : '🔥 '}{d.plantName} ({d.vehicleNo})</option>))}</select></div>
+               <div className="bg-rose-600 text-white p-4 sm:p-6 rounded-[2rem] shadow-xl relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-8 opacity-10 hidden sm:block"><Flame size={120} /></div>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 relative z-10">
+                  <div><h2 className="text-lg sm:text-xl font-black uppercase">Trip Loading</h2><p className="text-[10px] font-bold text-rose-200 uppercase tracking-widest mt-1">Select trip, load pieces, finalize</p></div>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 relative z-10">
+                    <div className="space-y-1"><label className="text-[9px] font-black uppercase text-rose-200">Active Trip</label><select value={activeDispatchIdForLoading} onChange={e => setActiveDispatchIdForLoading(e.target.value)} className="bg-white/10 border border-white/20 rounded-xl px-3 py-2.5 text-sm font-black outline-none w-full sm:w-56 text-white min-h-[44px]"><option value="" className="text-slate-900">-- Select --</option>{dispatches.filter(d => d.status === 'Ready to Dispatch' || d.status === 'Scheduled').map(d => (<option key={d.id} value={d.id} className="text-slate-900">{d.serviceType === 'Site Delivery' ? '📦 ' : '🔥 '}{d.plantName} ({d.vehicleNo})</option>))}</select></div>
                     {activeDispatchIdForLoading && (() => {
                       const loaded = pieces.filter(p => p.dispatchId === activeDispatchIdForLoading).length;
                       const selectedTrip = dispatches.find(d => d.id === activeDispatchIdForLoading);
@@ -225,7 +229,7 @@ const ProcessingView: React.FC = () => {
                         </button>
                       ) : null;
                     })()}
-                  </div>
+                  </div></div>
                </div>
 
                {/* Summary bar */}
@@ -270,7 +274,8 @@ const ProcessingView: React.FC = () => {
 
                  return (
                    <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-                     <table className="w-full text-left"><thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-500 tracking-widest"><tr><th className="px-5 py-3">Order</th><th className="px-5 py-3">Client / Project</th><th className="px-5 py-3 text-center">Pcs</th><th className="px-5 py-3 text-center">{selectedTrip ? 'Loaded' : 'Status'}</th>{selectedTrip && <th className="px-5 py-3 text-right">Action</th>}</tr></thead>
+                     <div className="overflow-x-auto">
+                     <table className="w-full text-left min-w-[400px]"><thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-500 tracking-widest"><tr><th className="px-3 sm:px-5 py-3">Order</th><th className="px-3 sm:px-5 py-3">Client / Project</th><th className="px-3 sm:px-5 py-3 text-center">Pcs</th><th className="px-3 sm:px-5 py-3 text-center">{selectedTrip ? 'Loaded' : 'Status'}</th>{selectedTrip && <th className="px-3 sm:px-5 py-3 text-right">Action</th>}</tr></thead>
                      <tbody>
                        {uniqueOrderIds.map(orderId => {
                          const order = jobOrders.find(j => j.orderNo === orderId);
@@ -281,11 +286,11 @@ const ProcessingView: React.FC = () => {
                          return (
                            <React.Fragment key={orderId}>
                              <tr className={`hover:bg-slate-50 cursor-pointer transition-colors ${isExpanded ? 'bg-rose-50' : ''}`} onClick={() => setExpandedLoadingJob(isExpanded ? null : orderId)}>
-                               <td className="px-5 py-3 font-black text-blue-600 text-sm">{orderId}</td>
-                               <td className="px-5 py-3"><p className="text-xs font-bold uppercase text-slate-800">{order?.projectName || 'Order'}</p><p className="text-[10px] text-slate-400">{client?.name || ''}</p></td>
+                               <td className="px-3 sm:px-5 py-3 font-black text-blue-600 text-sm">{orderId}</td>
+                               <td className="px-3 sm:px-5 py-3"><p className="text-xs font-bold uppercase text-slate-800">{order?.projectName || 'Order'}</p><p className="text-[10px] text-slate-400">{client?.name || ''}</p></td>
                                <td className="px-5 py-3 text-center font-black">{orderPieces.length}</td>
                                <td className="px-5 py-3 text-center">{selectedTrip ? <span className={`px-3 py-1 rounded-full text-[10px] font-black ${loadedCount === orderPieces.length && loadedCount > 0 ? 'bg-emerald-100 text-emerald-700' : loadedCount > 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400'}`}>{loadedCount}/{orderPieces.length}</span> : <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[9px] font-black uppercase">Ready</span>}</td>
-                               {selectedTrip && <td className="px-5 py-3 text-right"><button onClick={e => { e.stopPropagation(); const unloaded = orderPieces.filter(p => p.dispatchId !== activeDispatchIdForLoading).map(p => p.id); if (unloaded.length > 0) loadAllPiecesToDispatch(unloaded); }} className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase ${loadedCount === orderPieces.length ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-600 text-white'}`}>{loadedCount === orderPieces.length ? 'All Loaded' : `Load All (${orderPieces.length - loadedCount})`}</button></td>}
+                               {selectedTrip && <td className="px-5 py-3 text-right"><button onClick={e => { e.stopPropagation(); const unloaded = orderPieces.filter(p => p.dispatchId !== activeDispatchIdForLoading).map(p => p.id); if (unloaded.length > 0) loadAllPiecesToDispatch(unloaded); }} className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase min-h-[36px] ${loadedCount === orderPieces.length ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-600 text-white'}`}>{loadedCount === orderPieces.length ? 'All Loaded' : `Load All (${orderPieces.length - loadedCount})`}</button></td>}
                              </tr>
                              {isExpanded && orderPieces.map(p => {
                                const isLoaded = p.dispatchId === activeDispatchIdForLoading;
@@ -295,7 +300,7 @@ const ProcessingView: React.FC = () => {
                                    <td className="px-5 py-2 text-[10px] text-slate-500">{getGlassSize(p.specs)} | {p.specs?.thickness || ''}mm</td>
                                    <td className="px-5 py-2 text-center text-[10px] text-slate-400">{p.status}</td>
                                    <td className="px-5 py-2 text-center">{isLoaded && <CheckCircle2 size={14} className="text-rose-600 mx-auto"/>}</td>
-                                   {selectedTrip && <td className="px-5 py-2 text-right"><button onClick={() => togglePieceToDispatch(p.id)} className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase ${isLoaded ? 'bg-slate-200 text-slate-600' : 'bg-blue-600 text-white'}`}>{isLoaded ? 'Unload' : 'Load'}</button></td>}
+                                   {selectedTrip && <td className="px-5 py-2 text-right"><button onClick={() => togglePieceToDispatch(p.id)} className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase min-h-[36px] ${isLoaded ? 'bg-slate-200 text-slate-600' : 'bg-blue-600 text-white'}`}>{isLoaded ? 'Unload' : 'Load'}</button></td>}
                                  </tr>
                                );
                              })}
@@ -303,6 +308,7 @@ const ProcessingView: React.FC = () => {
                          );
                        })}
                      </tbody></table>
+                     </div>
                    </div>
                  );
                })()}
@@ -321,7 +327,7 @@ const ProcessingView: React.FC = () => {
 
         {activeSubTab === 'wip' && (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
-               {!selectedJobId && <div className="bg-amber-500 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10"><Hourglass size={120} /></div><div><h2 className="text-2xl font-black uppercase">WIP (Tempering Stack)</h2><p className="text-[10px] font-bold text-amber-100 uppercase tracking-widest mt-1">QC Passed Material Pending Tempering Trip</p></div></div>}
+               {!selectedJobId && <div className="bg-amber-500 text-white p-4 sm:p-8 rounded-[2rem] shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10 hidden sm:block"><Hourglass size={120} /></div><div className="relative z-10"><h2 className="text-lg sm:text-2xl font-black uppercase">WIP (Tempering Stack)</h2><p className="text-[10px] font-bold text-amber-100 uppercase tracking-widest mt-1">QC Passed Material Pending Tempering Trip</p></div></div>}
                {renderGrid(
                  (p) => {
                     const order = jobOrders.find(j => j.orderNo === p.orderId);
@@ -349,7 +355,7 @@ const ProcessingView: React.FC = () => {
 
         {activeSubTab === 'lamination' && (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
-               {!selectedJobId && <div className="bg-orange-600 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10"><Layers size={120} /></div><div><h2 className="text-2xl font-black uppercase">Lamination Queue</h2><p className="text-[10px] font-bold text-orange-200 uppercase tracking-widest mt-1">Staging for Lamination Service</p></div></div>}
+               {!selectedJobId && <div className="bg-orange-600 text-white p-4 sm:p-8 rounded-[2rem] shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10 hidden sm:block"><Layers size={120} /></div><div className="relative z-10"><h2 className="text-lg sm:text-2xl font-black uppercase">Lamination Queue</h2><p className="text-[10px] font-bold text-orange-200 uppercase tracking-widest mt-1">Staging for Lamination Service</p></div></div>}
                {renderGrid(
                  (p) => {
                     const order = jobOrders.find(j => j.orderNo === p.orderId);
@@ -371,7 +377,7 @@ const ProcessingView: React.FC = () => {
 
         {activeSubTab === 'double_glaze' && (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
-               {!selectedJobId && <div className="bg-cyan-600 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10"><Layers size={120} /></div><div><h2 className="text-2xl font-black uppercase">Double Glazing Queue</h2><p className="text-[10px] font-bold text-cyan-200 uppercase tracking-widest mt-1">Staging for D/G Service</p></div></div>}
+               {!selectedJobId && <div className="bg-cyan-600 text-white p-4 sm:p-8 rounded-[2rem] shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10 hidden sm:block"><Layers size={120} /></div><div className="relative z-10"><h2 className="text-lg sm:text-2xl font-black uppercase">Double Glazing Queue</h2><p className="text-[10px] font-bold text-cyan-200 uppercase tracking-widest mt-1">Staging for D/G Service</p></div></div>}
                {renderGrid(
                  (p) => {
                     const order = jobOrders.find(j => j.orderNo === p.orderId);
