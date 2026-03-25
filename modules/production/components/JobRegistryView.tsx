@@ -60,7 +60,7 @@ const JobRegistryView: React.FC<JobRegistryViewProps> = ({
             
             if (!matchesClient || !matchesPeriod) return false;
 
-            const jobPieces = pieces.filter(p => p.orderId === j.orderNo);
+            const jobPieces = pieces.filter(p => p.orderId === j.orderNo || p.orderId === j.id);
             const delivered = jobPieces.filter(p => p.status === 'Delivered').length;
             
             if (statusFilter === 'All') return true;
@@ -139,7 +139,7 @@ const JobRegistryView: React.FC<JobRegistryViewProps> = ({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                      {paginatedJobs.map(j => {
-                        const jobPieces = pieces.filter(p => p.orderId === j.orderNo);
+                        const jobPieces = pieces.filter(p => p.orderId === j.orderNo || p.orderId === j.id);
                         
                         // Extract numeric ID only, filtering out any revision part like -R1
                         const numericId = j.orderNo 
