@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { Company, Product, MaterialLedgerEntry, MvmntCode } from '@/modules/shared/types';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { SalesService } from '@/modules/sales/services/salesService';
-import { Truck, X, Layers, CheckCircle2, ClipboardList, Scale, PackageCheck, Globe, DollarSign, FileUp, Image as ImageIcon, ScanLine, Loader2, FileSearch, Download, AlertTriangle } from 'lucide-react';
+import { Truck, X, Layers, CheckCircle2, ClipboardList, Scale, PackageCheck, Globe, DollarSign, FileUp, Image as ImageIcon, ScanLine, Loader2, FileSearch, Download, AlertTriangle } from 'lucide-react'; 
 import { NCRService } from '@/modules/production/services/ncrService';
 import { SalesService as SalesServiceImport } from '@/modules/sales/services/salesService';
 import * as XLSX from 'xlsx';
