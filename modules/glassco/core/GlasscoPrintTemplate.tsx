@@ -80,15 +80,20 @@ export const GlasscoPrintTemplate: React.FC<GlasscoPrintTemplateProps> = ({
         finalMode = 'SalesOrder';
     }
 
+    let printContent;
     switch(finalMode) {
         case 'SalesOrder':
-            return <GlassCoSalesOrderPrint quote={printingQuote} clientName={clientName} ledger={ledger} />;
+            printContent = <GlassCoSalesOrderPrint quote={printingQuote} clientName={clientName} ledger={ledger} />;
+            break;
         case 'JobCard':
-            return <GlassCoJobCardPrint quote={printingQuote} clientName={clientName} pieces={allPieces} products={allProducts} />;
+            printContent = <GlassCoJobCardPrint quote={printingQuote} clientName={clientName} pieces={allPieces} products={allProducts} />;
+            break;
         case 'Quotation':
         default:
-            return <GlassCoQuotationPrint quote={printingQuote} clientName={clientName} />;
+            printContent = <GlassCoQuotationPrint quote={printingQuote} clientName={clientName} />;
     }
+
+    return <div id="glassco-print-root">{printContent}</div>;
 };
 
 export const PrintSummary: React.FC<{ items: any[] }> = ({ items }) => {
