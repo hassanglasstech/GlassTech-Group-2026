@@ -22,6 +22,10 @@ const SERVICE_FULL_NAMES: Record<string, string> = {
 };
 
 export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) => {
+    const safeItems: any[] = Array.isArray(quote.items)
+        ? quote.items
+        : (typeof quote.items === 'string' ? (() => { try { return JSON.parse(quote.items as any); } catch { return []; } })() : []);
+    quote = { ...quote, items: safeItems };
     const subTotal = quote.items.reduce((s, i) => s + i.amount, 0);
     const discountAmount = quote.discountAmount !== undefined && quote.discountAmount > 0 
         ? quote.discountAmount 
