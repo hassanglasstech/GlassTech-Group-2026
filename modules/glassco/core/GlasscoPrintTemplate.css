@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Quotation, Client, ProductionPiece, Product } from '../../shared/types';
 import { SalesService } from '../../sales/services/salesService';
 import { FinanceService } from '../../finance/services/financeService';
-import { ProductionService } from '../../production/services/productionService';
+import { ProductionService } from '../../production/services/productionService'; 
 import { supabase } from '../../../src/services/supabaseClient';
 import { GlassCoQuotationPrint } from './prints/GlassCoQuotationPrint';
 import { GlassCoSalesOrderPrint } from './prints/GlassCoSalesOrderPrint';
