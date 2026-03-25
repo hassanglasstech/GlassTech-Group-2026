@@ -147,15 +147,29 @@ const filterColumns = (table: string, data: any[]): any[] => {
   });
 };
 
+// Tables that have flat columns (not pure JSONB data column)
+const FLAT_PUSH_TABLES = new Set(['employees', 'assets', 'ledger', 'petty_cash']);
+
 const pushTable = async (table: string, localKey: string): Promise<boolean> => {
   if (LOCAL_ONLY_TABLES.has(table)) return true; // skip silently
 
   const rawData = safeParse(localKey);
   if (!rawData || rawData.length === 0) return true;
-  
-  // Map to snake_case for Supabase, then filter to known columns
-  const mapped = rawData.map(mapToSupabase);
-  const data = filterColumns(table, mapped);
+
+  let data: any[];
+  if (FLAT_PUSH_TABLES.has(table)) {
+    // Flat tables — map to snake_case columns
+    const mapped = rawData.map(mapToSupabase);
+    data = filterColumns(table, mapped);
+  } else {
+    // JSONB tables — wrap full object in 'data' column
+    data = rawData.map((item: any) => ({
+      id: item.id,
+      company: item.company || '',
+      data: item,
+      updated_at: item._updatedAt || item.updatedAt || new Date().toISOString(),
+    })).filter((r: any) => r.id);
+  }
   
   try {
     await withRetry(
