@@ -315,55 +315,6 @@ export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName }) =>
                     })()}
                 </div>
 
-                {/* Footer Section - Dynamic Positioning */}
-                <div className="mt-4 pt-2 border-t border-slate-900 break-inside-avoid">
-                    <div className="flex justify-between items-start">
-                        <div className="w-[60%]">
-                            <h4 className="text-[8px] font-black uppercase tracking-widest text-slate-900 mb-1 border-b border-slate-100 pb-0.5">Protocol & Terms</h4>
-                            <ul className="text-[7.5px] space-y-0.5 text-slate-600 font-bold leading-tight">
-                                <li className="flex items-start space-x-1">
-                                    <span className="text-slate-300">•</span>
-                                    <span>Rates valid for 3 days. Rounding protocol applies.</span>
-                                </li>
-                                <li className="flex items-start space-x-1">
-                                    <span className="text-slate-300">•</span>
-                                    <span>No return or exchange once glass is cut.</span>
-                                </li>
-                                <li className="flex items-start space-x-1">
-                                    <span className="text-rose-500">•</span>
-                                    <span className="text-slate-900">50% Advance mandatory to initiate production.</span>
-                                </li>
-                            </ul>
-                        </div>
-
-                        <div className="w-[35%] space-y-1">
-                            <div className="flex justify-between text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
-                                <span>Gross:</span>
-                                <span>PKR {(Number(subTotal) || 0).toLocaleString()}</span>
-                            </div>
-                            {(quote.discountAmount || quote.discountPercent) > 0 && (
-                                <div className="flex justify-between text-[9px] font-bold text-indigo-600 uppercase tracking-tighter">
-                                    <span>Disc:</span>
-                                    <span>- {(Number(discountAmount) || 0).toLocaleString()}</span>
-                                </div>
-                            )}
-                            <div className="flex justify-between items-end pt-1 border-t border-slate-200">
-                                <span className="text-[10px] font-black uppercase text-slate-900 tracking-tighter">Net:</span>
-                                <span className="text-lg font-black text-slate-900">PKR {(Number(netAmount) || 0).toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between items-end pt-1">
-                                <span className="text-[9px] font-black uppercase text-slate-500 tracking-tighter">50% Advance:</span>
-                                <span className="text-[11px] font-black text-slate-700">PKR {(netAmount / 2).toLocaleString()}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="mt-6 text-center">
-                        <p className="text-[7px] font-black uppercase tracking-[0.2em] text-slate-300 italic">
-                            Computer generated document. No signature required.
-                        </p>
-                    </div>
-                </div>
             </div>
         </div>
     );
