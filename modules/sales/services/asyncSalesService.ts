@@ -35,14 +35,8 @@ export const AsyncSalesService = {
     }
   },
   saveClients: async (data: Client[]): Promise<void> => {
+    await delay(100);
     safeSave(KEYS.CLIENTS, data);
-    const mapped = data.map((c: any) => ({
-      id: c.id, company: c.company||'', name: c.name||'',
-      contact_person: c.contactPerson||'', email: c.email||'',
-      phone: c.phone||'', address: c.address||'', ntn: c.ntn||'',
-      credit_limit: c.creditLimit||0, status: c.status||'Active',
-    }));
-    try { await supabase.from('clients').upsert(mapped, { onConflict: 'id' }); } catch {}
   },
   
   getProducts: async (): Promise<Product[]> => {
@@ -116,7 +110,8 @@ export const AsyncSalesService = {
           id: r.id, company: r.company, date: r.date,
           dueDate: r.due_date, clientId: r.client_id,
           projectName: r.project_name, subject: r.subject,
-          items: r.items || [], serviceCharges: r.service_charges,
+          items: Array.isArray(r.items) ? r.items : (typeof r.items === 'string' ? (() => { try { return JSON.parse(r.items); } catch { return []; } })() : []),
+          serviceCharges: Array.isArray(r.service_charges) ? r.service_charges : [],
           discountPercent: r.discount_percent, discountAmount: r.discount_amount,
           status: r.status, orderNo: r.order_no,
           isAlreadyDispatched: r.is_already_dispatched,
@@ -196,14 +191,7 @@ export const AsyncSalesService = {
     return safeParse(KEYS.VENDORS);
   },
   saveVendors: async (data: Vendor[]): Promise<void> => {
+    await delay(100);
     safeSave(KEYS.VENDORS, data);
-    const mapped = data.map((v: any) => ({
-      id: v.id, company: v.company||'', name: v.name||'',
-      nick_name: v.nickName||'', type: v.type||'Supplier',
-      address: v.address||'', contact_person: v.contactPerson||'',
-      phone: v.phone||'', registration_date: v.registrationDate||'',
-      rates: v.rates||[],
-    }));
-    try { await supabase.from('vendors').upsert(mapped, { onConflict: 'id' }); } catch {}
   },
 };
