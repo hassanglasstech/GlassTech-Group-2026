@@ -39,9 +39,6 @@ export const calculateAutoRate = (size: string, type: string, subType: string, s
     });
 
     const isTempered = services.some(s => normalize(s) === 't/g');
-    const isMirror = normalize(subType) === 'mirror' || normalize(type) === 'mirror';
-    const hasAPT = services.some(s => normalize(s) === 'apt');
-
     let baseRate = 0;
     if (glass) {
         baseRate = (isTempered && glass.temperingPrice) ? glass.temperingPrice : (glass.basePrice || 0);
@@ -52,11 +49,11 @@ export const calculateAutoRate = (size: string, type: string, subType: string, s
         const sNick = normalize(srvNick);
         if (sNick === 't/g') return;
         
-        // APT + Mirror → skip APT from per-sqft rate (charged separately per piece)
-        if (sNick === 'apt' && isMirror) return;
-
         // Skip some services if tempered (logic from original code)
         if (isTempered && ['notch', 'p/e', 'r/d', 'holes'].includes(sNick)) return;
+
+        // APT rate ALWAYS adds to per-sqft — no skipping here
+        // Mirror+APT extra per-piece charge is handled separately in calculateLineItemTotal
 
         let srv = products.find(p => 
             normalize(p.category) === 'service' && 
@@ -84,7 +81,7 @@ export const calculateLineItemTotal = (item: QuotationItem, products: Product[])
     const isMirror = normalize(item.subCategory) === 'mirror' || normalize(item.glassType) === 'mirror';
     const hasAPT = item.selectedServices?.some(s => normalize(s) === 'apt');
     
-    // APT + Mirror = Rs 1000 per piece (not per sqft)
+    // Mirror + APT = Rs 1000 per piece EXTRA (on top of normal APT per-sqft rate)
     const aptCharges = (hasAPT && isMirror) ? qty * 1000 : 0;
 
     // If it's manual SqFt, we don't recalculate the area but we do recalculate the amount
