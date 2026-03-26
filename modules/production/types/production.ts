@@ -47,6 +47,7 @@ export interface QuotationItem {
   sheetSize?: string; 
   isManualSqFt?: boolean; 
   glassColor?: string;
+  aptCharges?: number;
 }
 
 export interface GlassServiceCharge {
