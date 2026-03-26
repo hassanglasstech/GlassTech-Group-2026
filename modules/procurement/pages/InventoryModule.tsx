@@ -12,12 +12,13 @@ import GoodsReceiptMIGO from '@/modules/procurement/components/inventory/GoodsRe
 
 import NipponGoodsReceipt from '@/modules/procurement/components/inventory/NipponGoodsReceipt';
 import { 
-  LayoutGrid, ArrowUpRight, ShieldCheck, Truck, Database, Loader2
+  LayoutGrid, ArrowUpRight, ShieldCheck, Truck, Database, Loader2, FileText
 } from 'lucide-react';
+import GlasscoPurchaseOrder from '@/modules/procurement/companies/glassco/GlasscoPurchaseOrder';
 
 const InventoryModule: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'overview' | 'master' | 'issuance' | 'migo' | 'quality'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'po' | 'master' | 'issuance' | 'migo' | 'quality'>('overview');
   const [isLoading, setIsLoading] = useState(true);
   
   const [items, setItems] = useState<StoreItem[]>([]);
@@ -59,9 +60,10 @@ const InventoryModule: React.FC = () => {
 
   const tabs = [
     { id: 'overview', label: 'Stock Balances', icon: LayoutGrid },
-    { id: 'master', label: 'Material Master', icon: Database },
+    { id: 'po',       label: 'Purchase Orders', icon: FileText },
+    { id: 'master',   label: 'Material Master', icon: Database },
     { id: 'issuance', label: 'Goods Issue', icon: ArrowUpRight },
-    { id: 'quality', label: 'Quality Hub', icon: ShieldCheck }
+    { id: 'quality',  label: 'Quality Hub', icon: ShieldCheck }
   ];
 
   if (isLoading) return <div className="h-full flex items-center justify-center text-slate-400"><Loader2 className="animate-spin mr-2"/> Loading Inventory Data...</div>;
@@ -116,6 +118,12 @@ const InventoryModule: React.FC = () => {
                 ledger={ledger}
                 refreshData={refreshSync}
               />
+      )}
+
+      {activeTab === 'po' && company !== 'Nippon' && (
+        <div className="animate-in fade-in duration-300">
+          <GlasscoPurchaseOrder />
+        </div>
       )}
 
       {company === 'Nippon' ? (
