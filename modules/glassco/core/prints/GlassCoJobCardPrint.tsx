@@ -52,10 +52,10 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
     let globalSerial = 0;
 
     return (
-        <div className="print-only bg-white text-black font-sans leading-tight flex flex-col">
+        <div className="glassco-print-page bg-white text-black font-sans leading-tight flex flex-col">
             <style>{`
                 @media screen {
-                    .print-only { display: none !important; }
+                    .glassco-print-page { display: none !important; }
                 }
                 @media print {
                     @page { 
@@ -65,10 +65,10 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
                     body * {
                         visibility: hidden;
                     }
-                    .print-only, .print-only * {
+                    .glassco-print-page, .glassco-print-page * {
                         visibility: visible;
                     }
-                    .print-only {
+                    .glassco-print-page {
                         position: static !important;
                         width: 100% !important;
                         height: auto !important;
