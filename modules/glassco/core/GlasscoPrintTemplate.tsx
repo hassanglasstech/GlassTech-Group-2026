@@ -30,6 +30,14 @@ export const GlasscoPrintTemplate: React.FC<GlasscoPrintTemplateProps> = ({
     const [fetchedPieces, setFetchedPieces] = useState<ProductionPiece[]>([]);
     const [fetchedProducts, setFetchedProducts] = useState<Product[]>(SalesService.getProducts());
 
+    // Add body class for print CSS scoping — removes when unmounted
+    useEffect(() => {
+        document.body.classList.add('glassco-printing');
+        return () => {
+            document.body.classList.remove('glassco-printing');
+        };
+    }, []);
+
     useEffect(() => {
         // Load pieces from Supabase for JobCard
         if (!pieces && printMode === 'JobCard') {
