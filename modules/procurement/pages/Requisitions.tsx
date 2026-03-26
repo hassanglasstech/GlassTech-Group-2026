@@ -271,7 +271,7 @@ const Requisitions: React.FC = () => {
       setStoreItems(InventoryService.getStore().filter(s => s.company === company || s.company === 'Factory'));
       setProducts(SalesService.getProducts().filter(p => p.company === company || p.company === 'Factory'));
       setCostCenters(FinanceService.getCostCenters().filter(c => c.company === company));
-      setVendors(SalesService.getVendors());
+      setVendors(SalesService.getVendors().filter((v:any) => !v.company || v.company === company));
     }, 0);
 
     setEmployees(HRService.getEmployees().filter(e => e.company === company));
@@ -539,7 +539,7 @@ const Requisitions: React.FC = () => {
 
   // ── Direct PO: glass catalogue + search ───────────────────────────────
   const glassVendors = useMemo(() =>
-    vendors.filter((v:any) => v.type === 'Glass' || v.type === 'Supplier'), [vendors]);
+    vendors.filter((v:any) => (v.type === 'Glass' || v.type === 'Supplier') && (!v.company || v.company === company)), [vendors, company]);
   const transportVendorsList = useMemo(() =>
     vendors.filter((v:any) => v.type === 'Transport'), [vendors]);
 
@@ -1388,7 +1388,7 @@ const Requisitions: React.FC = () => {
                     <select className="sap-input w-full font-bold" value={selectedVendorForPO} onChange={e => setSelectedVendorForPO(e.target.value)}>
                       <option value="">— Select Glass Vendor —</option>
                       {glassVendors.map((v:any) => <option key={v.id} value={v.name}>{v.name}</option>)}
-                      {glassVendors.length === 0 && vendors.map((v:any) => <option key={v.id} value={v.name}>{v.name}</option>)}
+                      {glassVendors.length === 0 && <option disabled value=''>No Glass vendors — add in Vendor Hub (type = Glass)</option>}
                     </select>
                   </div>
                   <div className="space-y-1.5">
