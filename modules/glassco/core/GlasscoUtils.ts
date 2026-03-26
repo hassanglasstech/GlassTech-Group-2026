@@ -31,7 +31,6 @@ export const calculateAutoRate = (size: string, type: string, subType: string, s
         if (normPSub !== normSSub) return false;
         
         const pColor = normalize(p.finishColor || 'clear');
-        // N/A and empty both mean 'clear' (no special color)
         const normPColor = (pColor === 'n/a' || pColor === '' || pColor === 'na') ? 'clear' : pColor;
         const normSColor = (sColor === 'n/a' || sColor === '' || sColor === 'na') ? 'clear' : sColor;
         if (normPColor !== normSColor) return false;
@@ -40,6 +39,9 @@ export const calculateAutoRate = (size: string, type: string, subType: string, s
     });
 
     const isTempered = services.some(s => normalize(s) === 't/g');
+    const isMirror = normalize(subType) === 'mirror' || normalize(type) === 'mirror';
+    const hasAPT = services.some(s => normalize(s) === 'apt');
+
     let baseRate = 0;
     if (glass) {
         baseRate = (isTempered && glass.temperingPrice) ? glass.temperingPrice : (glass.basePrice || 0);
@@ -50,6 +52,9 @@ export const calculateAutoRate = (size: string, type: string, subType: string, s
         const sNick = normalize(srvNick);
         if (sNick === 't/g') return;
         
+        // APT + Mirror → skip APT from per-sqft rate (charged separately per piece)
+        if (sNick === 'apt' && isMirror) return;
+
         // Skip some services if tempered (logic from original code)
         if (isTempered && ['notch', 'p/e', 'r/d', 'holes'].includes(sNick)) return;
 
@@ -70,24 +75,28 @@ export const calculateAutoRate = (size: string, type: string, subType: string, s
 };
 
 export const calculateLineItemTotal = (item: QuotationItem, products: Product[]) => {
-    if (item.isSection) return { totalSqFt: 0, amount: 0 };
+    if (item.isSection) return { totalSqFt: 0, amount: 0, aptCharges: 0 };
 
     const qty = Number(item.qty) || 1;
     const isDG = item.selectedServices?.some(s => s === 'D/G' || s === 'Double Glaze' || s === 'Double Glazing');
     
+    const normalize = (s: any) => String(s || '').trim().toLowerCase();
+    const isMirror = normalize(item.subCategory) === 'mirror' || normalize(item.glassType) === 'mirror';
+    const hasAPT = item.selectedServices?.some(s => normalize(s) === 'apt');
+    
+    // APT + Mirror = Rs 1000 per piece (not per sqft)
+    const aptCharges = (hasAPT && isMirror) ? qty * 1000 : 0;
+
     // If it's manual SqFt, we don't recalculate the area but we do recalculate the amount
     if (item.isManualSqFt) {
         const amount = Math.round((item.totalSqFt * (item.pricePerUnit || 0)));
-        return { totalSqFt: item.totalSqFt, amount };
+        return { totalSqFt: item.totalSqFt, amount, aptCharges };
     }
 
     // Billing Area based on Updated Rounding Logic
-    // Width: <= 72 -> 6", > 72 -> 12"
-    // Height: < 120 -> 6", >= 120 -> 12"
     const billW = getBillingDimension(item.width, 72, true);
     const billH = getBillingDimension(item.height, 120, false);
     
-    // Calculate total SqFt (Supporting decimals)
     const totalSqFt = Number(((billW * billH) / 144 * qty * (isDG ? 2 : 1)).toFixed(2));
     
     let extraCost = 0;
@@ -98,5 +107,5 @@ export const calculateLineItemTotal = (item: QuotationItem, products: Product[])
     }
 
     const amount = Math.round((totalSqFt * (item.pricePerUnit || 0)) + extraCost);
-    return { totalSqFt, amount };
+    return { totalSqFt, amount, aptCharges };
 };
