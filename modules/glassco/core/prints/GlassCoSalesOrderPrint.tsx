@@ -15,10 +15,11 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
     quote = { ...quote, items: safeItems };
 
     const subTotal = quote.items.reduce((s, i) => s + i.amount, 0);
+    const aptChargesTotal = quote.items.reduce((s, i) => s + ((i as any).aptCharges || 0), 0);
     const discountAmount = quote.discountAmount !== undefined && quote.discountAmount > 0 
         ? quote.discountAmount 
         : (subTotal * (quote.discountPercent || 0)) / 100;
-    const netAmount = subTotal - discountAmount;
+    const netAmount = subTotal + aptChargesTotal - discountAmount;
     const advanceAmount = quote.receivedAmount || 0;
     const displayId = quote.orderNo || quote.id;
     const isMM = quote.items.some(i => !i.isSection && (i.mmW || i.mmH));
@@ -44,10 +45,7 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
     return (
         <div className="glassco-print-page bg-white text-black p-0 font-sans leading-tight">
             <table className="w-full text-left border-collapse text-[10px]" style={{ tableLayout: 'fixed' }}>
-                
-                {/* ═══ THEAD: Repeats on every page ═══ */}
                 <thead>
-                    {/* Row 1: Document Header */}
                     <tr>
                         <th colSpan={7} style={{ padding: '0 8mm', fontWeight: 'normal' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px', paddingTop: '4px' }}>
@@ -60,11 +58,9 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                                     <div style={{ fontSize: '7px', fontWeight: 700, color: '#1e293b' }}>Contact: 0303-2428128</div>
                                 </div>
                             </div>
-
                             <div style={{ display: 'flex', justifyContent: 'center', margin: '6px 0' }}>
                                 <span className="font-pill-so" style={{ fontSize: '9px', textTransform: 'uppercase' }}>S A L E S &nbsp; O R D E R</span>
                             </div>
-
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '8px' }}>
                                 <div>
                                     <div style={{ color: '#94a3b8', fontWeight: 700, fontSize: '6px', textTransform: 'uppercase' }}>BILLING TO:</div>
@@ -79,7 +75,6 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                                     <div><span style={{ color: '#94a3b8', fontWeight: 700 }}>CHALLAN NO: </span><span style={{ fontWeight: 900, color: '#334155' }}>________________</span></div>
                                 </div>
                             </div>
-
                             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 10px', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <div style={{ display: 'flex', gap: '16px', borderRight: '1px solid #e2e8f0', paddingRight: '16px' }}>
                                     <div>
@@ -101,8 +96,6 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                             </div>
                         </th>
                     </tr>
-
-                    {/* Row 2: Column Headers */}
                     <tr style={{ background: '#f8fafc', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1', fontSize: '8px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#475569' }}>
                         <th style={{ padding: '6px', textAlign: 'center', width: '5%' }}>S.No</th>
                         <th style={{ padding: '6px', width: '40%' }}>Product Description & Processing Specs</th>
@@ -113,27 +106,21 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                         <th style={{ padding: '6px', textAlign: 'right', width: '12%' }}>Amount</th>
                     </tr>
                 </thead>
-
-                {/* ═══ TBODY: ALL items — zero chunking ═══ */}
                 <tbody>
                     {quote.items.map((item, idx) => {
                         if (item.isSection) {
                             return (
                                 <tr key={idx} style={{ background: '#f1f5f9', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1' }}>
-                                    <td colSpan={7} style={{ padding: '5px 14px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#334155', fontStyle: 'italic', fontSize: '8px' }}>
-                                        {item.description}
-                                    </td>
+                                    <td colSpan={7} style={{ padding: '5px 14px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#334155', fontStyle: 'italic', fontSize: '8px' }}>{item.description}</td>
                                 </tr>
                             );
                         }
-
                         serialNum++;
                         const servicesList = formatServices(item.selectedServices);
                         const isDoubleGlazed = item.selectedServices?.some((s: string) => s === 'Double Glaze' || s === 'D/G' || s === 'Double Glazing');
                         const qtyDisplay = isDoubleGlazed ? `${item.qty} Set` : item.qty;
                         const description = formatGlassDescription(item);
                         const displaySize = formatBillingSize(item);
-
                         return (
                             <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0', pageBreakInside: 'avoid' }}>
                                 <td style={{ padding: '6px', textAlign: 'center', color: '#94a3b8', fontWeight: 700, borderRight: '1px solid #f1f5f9' }}>{serialNum}</td>
@@ -152,7 +139,7 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                 </tbody>
             </table>
 
-            {/* ═══ FOOTER: Once after all rows ═══ */}
+            {/* FOOTER */}
             <div className="print-footer" style={{ marginTop: '12px', paddingTop: '8px', borderTop: '2px solid #0f172a', padding: '0 8mm', pageBreakInside: 'avoid' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div style={{ width: '58%' }}>
@@ -167,6 +154,11 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
                             <span>Gross:</span><span>PKR {(Number(subTotal) || 0).toLocaleString()}</span>
                         </div>
+                        {aptChargesTotal > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase' }}>
+                                <span>APT Charges:</span><span>+ PKR {aptChargesTotal.toLocaleString()}</span>
+                            </div>
+                        )}
                         {(quote.discountAmount || quote.discountPercent) > 0 && (
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase' }}>
                                 <span>Disc:</span><span>- {(Number(discountAmount) || 0).toLocaleString()}</span>
@@ -189,13 +181,11 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
                         )}
                     </div>
                 </div>
-
                 <div style={{ marginTop: '24px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
                     <div style={{ borderTop: '1px solid #0f172a', paddingTop: '4px', textAlign: 'center', fontSize: '6px', fontWeight: 900, textTransform: 'uppercase', color: '#94a3b8' }}>Verification</div>
                     <div style={{ borderTop: '1px solid #0f172a', paddingTop: '4px', textAlign: 'center', fontSize: '6px', fontWeight: 900, textTransform: 'uppercase', color: '#94a3b8' }}>Accounts</div>
                     <div style={{ borderTop: '1px solid #0f172a', paddingTop: '4px', textAlign: 'center', fontSize: '6px', fontWeight: 900, textTransform: 'uppercase', color: '#0f172a' }}>Authorized</div>
                 </div>
-
                 <div style={{ marginTop: '14px', textAlign: 'center' }}>
                     <p style={{ fontSize: '6px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#cbd5e1', fontStyle: 'italic' }}>
                         Computer generated sales document. Valid for Production Floor.
