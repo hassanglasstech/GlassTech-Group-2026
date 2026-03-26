@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Quotation, ProductionPiece, TemperingDispatch, Client } from '@/modules/shared/types';
-import { Filter, CheckCircle2, Truck, AlertTriangle, CalendarDays } from 'lucide-react';
+import { Filter, CheckCircle2, Truck, AlertTriangle, CalendarDays, Search } from 'lucide-react';
 import { getGlassSize, isInternal, isDispatchOverdue } from './ProductionUtils';
 import Pagination from '@/components/Pagination';
 
@@ -34,6 +34,7 @@ const JobRegistryView: React.FC<JobRegistryViewProps> = ({
 }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [statusFilter, setStatusFilter] = useState('Active');
+    const [searchTerm, setSearchTerm] = useState('');
     const itemsPerPage = 10; 
 
     const getClientName = (clientId: string) => clients.find(c => c.id === clientId)?.name || 'Walk-in Partner';
@@ -60,6 +61,17 @@ const JobRegistryView: React.FC<JobRegistryViewProps> = ({
             
             if (!matchesClient || !matchesPeriod) return false;
 
+            // Search by order no, client name, project, or piece ID
+            if (searchTerm) {
+                const lower = searchTerm.toLowerCase();
+                const ref = (j.orderNo || j.id || '').toLowerCase();
+                const clientName = (clients.find(c => c.id === j.clientId)?.name || '').toLowerCase();
+                const project = (j.projectName || '').toLowerCase();
+                const jobPcs = pieces.filter(p => p.orderId === (j.orderNo || j.id));
+                const pieceMatch = jobPcs.some(p => p.id.toLowerCase().includes(lower));
+                if (!ref.includes(lower) && !clientName.includes(lower) && !project.includes(lower) && !pieceMatch) return false;
+            }
+
             const jobPieces = pieces.filter(p => p.orderId === j.orderNo || p.orderId === j.id);
             const delivered = jobPieces.filter(p => p.status === 'Delivered').length;
             
@@ -73,13 +85,13 @@ const JobRegistryView: React.FC<JobRegistryViewProps> = ({
 
             return true;
         });
+        // Latest first
         return result.sort((a,b) => {
-            // Improved sorting: Extract base numeric part, ignoring revisions
-            const idA = a.orderNo ? a.orderNo.split('-').filter(p => !p.startsWith('R')).pop() || '' : '';
-            const idB = b.orderNo ? b.orderNo.split('-').filter(p => !p.startsWith('R')).pop() || '' : '';
-            return idA.localeCompare(idB, undefined, { numeric: true });
+            const dateA = a.date ? new Date(a.date).getTime() : 0;
+            const dateB = b.date ? new Date(b.date).getTime() : 0;
+            return dateB - dateA;
         });
-    }, [jobOrders, selectedClientFilter, filterDate, statusFilter, pieces]);
+    }, [jobOrders, selectedClientFilter, filterDate, statusFilter, pieces, searchTerm]);
 
     const paginatedJobs = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
@@ -88,6 +100,20 @@ const JobRegistryView: React.FC<JobRegistryViewProps> = ({
 
     return (
         <div className="bg-white rounded-[2rem] border shadow-sm overflow-hidden animate-in fade-in duration-500 flex flex-col min-h-[600px]">
+           {/* Search Bar */}
+           <div className="p-4 border-b bg-slate-50 flex items-center space-x-3">
+               <div className="relative flex-1 max-w-sm">
+                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                   <input 
+                       type="text" 
+                       placeholder="Search order no, piece no, client..." 
+                       className="sap-input w-full pl-9 py-1.5 text-xs font-bold uppercase border border-slate-200 rounded-lg"
+                       value={searchTerm}
+                       onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                   />
+               </div>
+               <span className="text-[10px] font-black text-slate-400 uppercase">{filteredJobs.length} Jobs</span>
+           </div>
            <div className="flex-1 overflow-x-auto">
                <table className="w-full text-left sap-table">
                   <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 tracking-widest border-b">
