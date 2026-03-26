@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { Quotation, Client, ProductionPiece, Product } from '../../shared/types';
 import { SalesService } from '../../sales/services/salesService';
 import { FinanceService } from '../../finance/services/financeService';
@@ -24,6 +25,12 @@ export const GlasscoPrintTemplate: React.FC<GlasscoPrintTemplateProps> = ({
     const ledger = FinanceService.getLedger();
     const [fetchedPieces, setFetchedPieces] = useState<ProductionPiece[]>([]);
     const [fetchedProducts, setFetchedProducts] = useState<Product[]>(SalesService.getProducts());
+
+    // Add body class for CSS scoping — removed on unmount
+    useEffect(() => {
+        document.body.classList.add('glassco-printing');
+        return () => { document.body.classList.remove('glassco-printing'); };
+    }, []);
 
     useEffect(() => {
         if (!pieces && printMode === 'JobCard') {
@@ -75,7 +82,14 @@ export const GlasscoPrintTemplate: React.FC<GlasscoPrintTemplateProps> = ({
             content = <GlassCoQuotationPrint quote={printingQuote} clientName={clientName} />;
     }
 
-    return <div id="glassco-print-root">{content}</div>;
+    // PORTAL: Render at document.body — OUTSIDE the React #root tree
+    // #glassco-print-root becomes direct child of <body>
+    // CSS: body.glassco-printing > *:not(#glassco-print-root) { display: none }
+    // = entire app hidden, only print content shows. ZERO ERP screenshot leak.
+    return ReactDOM.createPortal(
+        <div id="glassco-print-root">{content}</div>,
+        document.body
+    );
 };
 
 export const PrintSummary: React.FC<{ items: any[] }> = ({ items }) => {
