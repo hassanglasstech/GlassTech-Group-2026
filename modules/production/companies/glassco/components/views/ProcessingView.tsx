@@ -93,9 +93,18 @@ const ProcessingView: React.FC = () => {
     const uniqueIds = Array.from(new Set<string>(pieces.filter(filterFn).map(p => p.orderId)));
     if (uniqueIds.length === 0) return <div className="py-20 text-center text-slate-300 font-black uppercase text-xs italic">No jobs pending in this queue.</div>;
 
+    // Sort latest first
+    const sortedIds = [...uniqueIds].sort((a, b) => {
+        const jobA = jobOrders.find(j => j.orderNo === a);
+        const jobB = jobOrders.find(j => j.orderNo === b);
+        const dateA = jobA?.date ? new Date(jobA.date).getTime() : 0;
+        const dateB = jobB?.date ? new Date(jobB.date).getTime() : 0;
+        return dateB - dateA;
+    });
+
     return (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 animate-in zoom-in duration-300">
-           {uniqueIds.map(id => {
+           {sortedIds.map(id => {
               const data = getJobDetails(id, filterFn);
               return (
                  <div key={id} onClick={() => setSelectedJobId(id)} className={`bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border-2 shadow-sm transition-all cursor-pointer group flex flex-col justify-between h-full relative overflow-hidden border-slate-200 hover:shadow-xl hover:border-blue-400 active:scale-[0.98]`}>
