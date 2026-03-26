@@ -1,40 +1,29 @@
-/* ═══════════════════════════════════════════════════════════════════
-   GlassCo Enterprise Print Architecture
-   
-   Strategy: Let the BROWSER handle pagination.
-   - Single continuous <table> per document
-   - <thead> repeats on every page automatically
-   - <tbody> rows flow naturally across pages
-   - Footer appears once after the table
-   - NO manual chunking, NO fixed heights, NO position:absolute
-   
-   Uses #glassco-print-root ID to beat index.css class selectors.
-   Uses .glassco-print-page to avoid index.css .print-only rules.
-   ═══════════════════════════════════════════════════════════════════ */
-
 /* Screen: hide print content */
 .glassco-print-page {
   display: none !important;
 }
 
 @media print {
-  /* ── 1. Page setup ──────────────────────────────────────────── */
+  /* ── 1. THE ULTIMATE UNLOCKER (Kills Flexbox Pagination Lock) ─────── */
+  html, body, #root, #__next, main, div,
+  .h-screen, .max-h-screen, .min-h-screen, .h-full,
+  .overflow-hidden, .overflow-y-auto, .overflow-x-auto, .overflow-auto,
+  .flex, .grid /* <--- YEH SAB SE ZAROORI HAIN (Disable Flex/Grid) */ {
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+    display: block !important; /* Forces normal document flow for pagination */
+  }
+
+  /* ── 2. Page setup ──────────────────────────────────────────── */
   @page { 
     size: A4; 
     margin: 10mm 12mm; 
   }
 
-  /* ── 2. Hide EVERYTHING except print root ───────────────────── */
-  body * {
-    visibility: hidden;
-  }
-
-  #glassco-print-root,
-  #glassco-print-root * {
-    visibility: visible !important;
-  }
-
-  /* ── 3. Print root: static flow, no absolute ────────────────── */
+  /* ── 3. Print root: static flow ─────────────────────────────── */
   #glassco-print-root {
     display: block !important;
     position: static !important;
@@ -42,16 +31,13 @@
     height: auto !important;
     overflow: visible !important;
     background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   /* ── 4. Show print page content ─────────────────────────────── */
   #glassco-print-root .glassco-print-page {
     display: block !important;
-    position: static !important;
-    width: 100% !important;
-    height: auto !important;
-    overflow: visible !important;
-    background: white !important;
   }
 
   /* ── 5. Enterprise Table Pagination ─────────────────────────── */
@@ -61,27 +47,19 @@
     page-break-inside: auto !important;
   }
 
-  #glassco-print-root thead {
-    display: table-header-group !important;  /* Repeats on every page */
+  #glassco-print-root thead { display: table-header-group !important; }
+  #glassco-print-root tfoot { display: table-footer-group !important; }
+  #glassco-print-root tbody { display: table-row-group !important; }
+  
+  #glassco-print-root tr { 
+    page-break-inside: avoid !important; 
+    break-inside: avoid !important; 
+    page-break-after: auto !important; 
   }
-
-  #glassco-print-root tfoot {
-    display: table-footer-group !important;
-  }
-
-  #glassco-print-root tbody {
-    display: table-row-group !important;
-  }
-
-  #glassco-print-root tr {
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-
-  #glassco-print-root td,
-  #glassco-print-root th {
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
+  
+  #glassco-print-root td, #glassco-print-root th { 
+    page-break-inside: avoid !important; 
+    break-inside: avoid !important; 
   }
 
   /* ── 6. Footer stays together ───────────────────────────────── */
@@ -91,14 +69,15 @@
   }
 
   /* ── 7. Color preservation ──────────────────────────────────── */
-  #glassco-print-root * {
+  #glassco-print-root *, #glassco-print-root {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  /* ── 8. Hide UI elements ────────────────────────────────────── */
-  .no-print, nav, aside, 
-  [class*="sidebar"], [class*="topbar"] {
+  /* ── 8. Hide UI elements (App Hiding Logic) ─────────────────── */
+  /* Ensures no ghost space is left by the React app shell */
+  .no-print, nav, aside, header, footer,
+  [class*="sidebar"], [class*="topbar"], [class*="navbar"] {
     display: none !important;
   }
 
