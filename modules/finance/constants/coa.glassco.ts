@@ -117,6 +117,12 @@ export const GLASSCO_COA: COAAccount[] = [
           leaf('21141','Due to Factory (Shehzore)','Liability','Cr'),
           leaf('21142','Due to GTK','Liability','Cr'),
         ]},
+        // GR/IR Clearing — SAP-standard suspense account
+        // Cr on GRN posting | Dr on vendor invoice registration | Balance = received not yet invoiced
+        { code:'2115', name:'GR/IR Clearing', level:4, type:'Liability', children:[
+          leaf('21151','GR/IR — Glass Material','Liability','Cr'),
+          leaf('21152','GR/IR — Freight & Transport','Liability','Cr'),
+        ]},
       ]},
       { code:'212', name:'Tax Liabilities', level:3, type:'Liability', isControl:true, normalBalance:'Cr', children:[
         { code:'2121', name:'Tax Payable', level:4, type:'Liability', children:[
