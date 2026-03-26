@@ -93,10 +93,10 @@ const ProcessingView: React.FC = () => {
     const uniqueIds = Array.from(new Set<string>(pieces.filter(filterFn).map(p => p.orderId)));
     if (uniqueIds.length === 0) return <div className="py-20 text-center text-slate-300 font-black uppercase text-xs italic">No jobs pending in this queue.</div>;
 
-    // Sort latest first
+    // Sort latest first — safe null check
     const sortedIds = [...uniqueIds].sort((a, b) => {
-        const jobA = jobOrders.find(j => j.orderNo === a);
-        const jobB = jobOrders.find(j => j.orderNo === b);
+        const jobA = jobOrders.find(j => j?.orderNo === a);
+        const jobB = jobOrders.find(j => j?.orderNo === b);
         const dateA = jobA?.date ? new Date(jobA.date).getTime() : 0;
         const dateB = jobB?.date ? new Date(jobB.date).getTime() : 0;
         return dateB - dateA;
