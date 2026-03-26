@@ -5,10 +5,11 @@ import { toast } from 'sonner';
 import { Company, Product, MaterialLedgerEntry, MvmntCode } from '@/modules/shared/types';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { SalesService } from '@/modules/sales/services/salesService';
-import { Truck, X, Layers, CheckCircle2, ClipboardList, Scale, PackageCheck, Globe, DollarSign, FileUp, Image as ImageIcon, ScanLine, Loader2, FileSearch, Download, AlertTriangle } from 'lucide-react'; 
+import { Truck, X, Layers, CheckCircle2, ClipboardList, Scale, PackageCheck, Globe, DollarSign, FileUp, Image as ImageIcon, ScanLine, Loader2, FileSearch, Download, AlertTriangle, Tag, Printer } from 'lucide-react'; 
 import { NCRService } from '@/modules/production/services/ncrService';
 import { SalesService as SalesServiceImport } from '@/modules/sales/services/salesService';
 import * as XLSX from 'xlsx';
+import { GlassCoSheetTagPrint } from '@/modules/glassco/core/prints/GlassCoSheetTagPrint';
 
 interface GoodsReceiptMIGOProps {
     company: Company;
@@ -18,10 +19,59 @@ interface GoodsReceiptMIGOProps {
     refreshData: () => void;
 }
 
+// ── Tag Generation Utility ───────────────────────────────────────────────────
+/**
+ * Generates per-sheet tags in format: GLS-{THICKNESS}-{MMYY}-{BATCH}-{SERIAL}
+ * e.g.  GLS-5MM-0326-001-01  GLS-5MM-0326-001-02
+ *
+ * batchSeq is a zero-padded 3-digit counter derived from how many GRN entries
+ * already exist for this material+month combo (simple approach using ledger length).
+ */
+export function generateSheetTags(
+    thickness: string,
+    sheetCount: number,
+    batchSeq: string
+): string[] {
+    const now = new Date();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yy = String(now.getFullYear()).slice(-2);
+    const mmyy = `${mm}${yy}`;
+    // Normalise thickness: "5mm" → "5MM", "10mm" → "10MM"
+    const thickTag = thickness.replace(/\s/g, '').toUpperCase();
+
+    const tags: string[] = [];
+    for (let i = 1; i <= sheetCount; i++) {
+        const serial = String(i).padStart(2, '0');
+        tags.push(`GLS-${thickTag}-${mmyy}-${batchSeq}-${serial}`);
+    }
+    return tags;
+}
+
+/**
+ * Returns the next batch sequence string (001, 002 …) for this material in
+ * the current month by counting existing GRN (mvmntCode 101) ledger entries
+ * that already have sheetTags for the same materialId.
+ */
+function nextBatchSeq(ledger: MaterialLedgerEntry[], materialId: string): string {
+    const now = new Date();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yy = String(now.getFullYear()).slice(-2);
+    const mmyy = `${mm}${yy}`;
+
+    const count = ledger.filter(e =>
+        e.materialId === materialId &&
+        e.mvmntCode === '101' &&
+        e.sheetTags &&
+        e.sheetTags.length > 0 &&
+        e.sheetTags[0]?.includes(`-${mmyy}-`)
+    ).length;
+    return String(count + 1).padStart(3, '0');
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
 const GoodsReceiptMIGO: React.FC<Omit<GoodsReceiptMIGOProps, 'company'>> = ({ products, isOpen, onClose, refreshData }) => {
     const company = useAppStore(state => state.selectedCompany);
     const [entryMode, setEntryMode] = useState<'Manual' | 'VendorImport'>('Manual');
-    // Default to General for Nippon, Glass for others
     const [migoMode, setMigoMode] = useState<'Glass' | 'General'>(company === 'Nippon' ? 'General' : 'Glass');
     const [isImportMode, setIsImportMode] = useState(false);
     
@@ -30,15 +80,19 @@ const GoodsReceiptMIGO: React.FC<Omit<GoodsReceiptMIGOProps, 'company'>> = ({ pr
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [importedItems, setImportedItems] = useState<any[]>([]);
 
+    // ── Tag Print State ──────────────────────────────────────────────────────
+    const [showTagPrint, setShowTagPrint] = useState(false);
+    const [pendingTagEntry, setPendingTagEntry] = useState<MaterialLedgerEntry | null>(null);
+    const [pendingVendorName, setPendingVendorName] = useState<string>('');
+
     const [grnSelection, setGrnSelection] = useState({
-        category: 'Plain', // Matches Plain, Color, Mirror, Fluted
+        category: 'Plain',
         subCategory: 'Standard',
         color: 'N/A',
         thickness: '5mm',
         sheetSize: ''
     });
 
-    // Inward Inspection / Vendor Claim state
     const [inwardInspection, setInwardInspection] = useState({
         hasDefect: false,
         defectQty: 0,
@@ -68,7 +122,6 @@ const GoodsReceiptMIGO: React.FC<Omit<GoodsReceiptMIGOProps, 'company'>> = ({ pr
         totalDuty: 0
     });
 
-    // Reset mode when company changes if modal is persistent or re-used
     useEffect(() => {
         setMigoMode(company === 'Nippon' ? 'General' : 'Glass');
     }, [company]);
@@ -273,13 +326,55 @@ const GoodsReceiptMIGO: React.FC<Omit<GoodsReceiptMIGOProps, 'company'>> = ({ pr
         item.unrestrictedQty += finalQty;
         item.totalValue = newTotalValue;
         item.movingAveragePrice = Number((newTotalValue / newTotalQty).toFixed(2));
-        
-        const newEntry: MaterialLedgerEntry = { id: `MAT-${Date.now().toString().slice(-6)}`, company, materialId: item.id, timestamp: new Date().toISOString(), mvmntCode: '101', qty: finalQty, uom: item.unit, valuation: item.movingAveragePrice, balanceAfter: item.quantity, referenceDoc: migoData.referenceDoc, user: 'Admin Store', batchNo: migoData.batchNo, storageBin: migoData.storageBin || item.storageBin, remarks: migoData.remarks };
+
+        // ── Auto-generate Sheet Tags (Glass GRN only) ────────────────────────
+        let generatedTags: string[] = [];
+        let batchSeqStr = '001';
+        if (migoMode === 'Glass' && sheetCount > 0) {
+            const existingLedger = InventoryService.getStockLedger();
+            batchSeqStr = nextBatchSeq(existingLedger, migoData.materialId);
+            generatedTags = generateSheetTags(grnSelection.thickness, sheetCount, batchSeqStr);
+        }
+
+        // ── Resolve vendor name for tag print ────────────────────────────────
+        const vendorName = inwardInspection.vendorId
+            ? (SalesServiceImport.getVendors().find((v: any) => v.id === inwardInspection.vendorId)?.name || '')
+            : '';
+
+        const newEntry: MaterialLedgerEntry = {
+            id: `MAT-${Date.now().toString().slice(-6)}`,
+            company,
+            materialId: item.id,
+            timestamp: new Date().toISOString(),
+            mvmntCode: '101',
+            qty: finalQty,
+            uom: item.unit,
+            valuation: item.movingAveragePrice,
+            balanceAfter: item.quantity,
+            referenceDoc: migoData.referenceDoc,
+            user: 'Admin Store',
+            batchNo: migoData.batchNo,
+            storageBin: migoData.storageBin || item.storageBin,
+            remarks: migoData.remarks,
+            // ── Sheet Tags ───────────────────────────────────────────────────
+            ...(generatedTags.length > 0 && {
+                sheetTags: generatedTags,
+                sheetTagMeta: {
+                    thickness: grnSelection.thickness,
+                    sheetSize: grnSelection.sheetSize,
+                    vendorName,
+                    grnRef: migoData.referenceDoc || `MAT-${Date.now().toString().slice(-6)}`,
+                    grnDate: new Date().toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }),
+                    batchSeq: batchSeqStr,
+                }
+            })
+        };
+
         if (itemIdx !== -1) allStore[itemIdx] = item; else allStore.push(item);
         InventoryService.saveStore(allStore);
         InventoryService.saveStockLedger([...InventoryService.getStockLedger(), newEntry]);
 
-        // ── Inward Inspection: create NCR + Vendor Claim if defect found ──
+        // ── Inward Inspection: create NCR + Vendor Claim ──────────────────────
         if (inwardInspection.hasDefect && inwardInspection.raiseNCR && inwardInspection.defectDescription.trim()) {
             const vendor = inwardInspection.vendorId
                 ? SalesServiceImport.getVendors().find((v: any) => v.id === inwardInspection.vendorId)
@@ -308,9 +403,23 @@ const GoodsReceiptMIGO: React.FC<Omit<GoodsReceiptMIGOProps, 'company'>> = ({ pr
         }
 
         refreshData();
-        onClose();
-        toast.success(`Posted GRN for ${finalQty} ${item.unit} successfully.`);
-        // Reset inspection
+
+        // ── Show tag print prompt if tags were generated ──────────────────────
+        if (generatedTags.length > 0) {
+            setPendingTagEntry(newEntry);
+            setPendingVendorName(vendorName);
+            toast.success(`GRN posted. ${generatedTags.length} sheet tags generated.`, {
+                duration: 4000,
+                action: {
+                    label: '🏷 Print Tags',
+                    onClick: () => setShowTagPrint(true),
+                }
+            });
+        } else {
+            toast.success(`Posted GRN for ${finalQty} ${item.unit} successfully.`);
+            onClose();
+        }
+
         setInwardInspection({ hasDefect: false, defectQty: 0, defectSqft: 0, defectType: 'BR-04-Raw-Material-Defect', defectDescription: '', vendorId: '', estimatedValue: 0, raiseNCR: false });
     };
 
@@ -324,6 +433,42 @@ const GoodsReceiptMIGO: React.FC<Omit<GoodsReceiptMIGOProps, 'company'>> = ({ pr
     const currentLandedRate = currentTotalQty > 0 ? currentTotalCost / currentTotalQty : 0;
 
     if (!isOpen) return null;
+
+    // ── Tag Print overlay ─────────────────────────────────────────────────────
+    if (showTagPrint && pendingTagEntry) {
+        return (
+            <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 z-[500]">
+                <div className="bg-white rounded-[2.5rem] w-full max-w-5xl h-[94vh] shadow-2xl flex flex-col overflow-hidden">
+                    <div className="px-10 py-5 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                        <div className="flex items-center space-x-4">
+                            <div className="p-3 bg-blue-600 rounded-2xl"><Tag size={22}/></div>
+                            <div>
+                                <h3 className="text-xl font-black uppercase tracking-tight">Glass Sheet Tags</h3>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{pendingTagEntry.sheetTags?.length} Tags · {pendingTagEntry.sheetTagMeta?.batchSeq && `Batch ${pendingTagEntry.sheetTagMeta.batchSeq}`}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                            <button
+                                onClick={() => window.print()}
+                                className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black uppercase text-xs flex items-center space-x-2 shadow-lg hover:bg-blue-700 transition-colors"
+                            >
+                                <Printer size={16}/> <span>Print Tags</span>
+                            </button>
+                            <button
+                                onClick={() => { setShowTagPrint(false); onClose(); }}
+                                className="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center transition-all"
+                            >
+                                <X size={20}/>
+                            </button>
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto bg-slate-100 p-6">
+                        <GlassCoSheetTagPrint entry={pendingTagEntry} vendorName={pendingVendorName} />
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 z-[400]">
@@ -396,6 +541,19 @@ const GoodsReceiptMIGO: React.FC<Omit<GoodsReceiptMIGOProps, 'company'>> = ({ pr
                             {migoData.materialId && (
                                 <div className={`p-4 border rounded-2xl flex items-center space-x-2 ${migoMode === 'Glass' ? 'bg-emerald-50 border-emerald-100' : 'bg-orange-50 border-orange-100'}`}>
                                     <CheckCircle2 size={16} className={migoMode === 'Glass' ? 'text-emerald-600' : 'text-orange-600'}/><span className={`text-xs font-black uppercase ${migoMode === 'Glass' ? 'text-emerald-800' : 'text-orange-800'}`}>ID: {migoData.materialId} | Matched</span>
+                                </div>
+                            )}
+
+                            {/* Tag Preview Banner (Glass mode only) */}
+                            {migoMode === 'Glass' && migoData.qty > 0 && grnSelection.thickness && (
+                                <div className="flex items-center space-x-2 bg-blue-50 border border-blue-100 rounded-2xl p-3">
+                                    <Tag size={14} className="text-blue-600 shrink-0"/>
+                                    <div>
+                                        <p className="text-[10px] font-black text-blue-800 uppercase">Sheet Tags Preview</p>
+                                        <p className="text-[10px] text-blue-600 font-mono mt-0.5">
+                                            GLS-{grnSelection.thickness.replace(/\s/g,'').toUpperCase()}-{String(new Date().getMonth()+1).padStart(2,'0')}{String(new Date().getFullYear()).slice(-2)}-XXX-01 … -{String(migoData.qtyMode === 'Sheets' ? migoData.qty : '?').padStart(2,'0')}
+                                        </p>
+                                    </div>
                                 </div>
                             )}
                             </section>
