@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSupabasePage } from '@/modules/shared/hooks/useSupabasePage';
 import Pagination from '../../../components/Pagination';
 import { Company } from '../../shared/types/core';
@@ -20,7 +20,8 @@ import {
   Plus, Search, CheckCircle2, ClipboardList, ShieldCheck,
   Check, Hash, User, ShieldAlert, FileText, Save, Trash2, 
   Zap, Briefcase, Warehouse, XCircle, ArrowRight, DollarSign, Building, Folder, ShoppingCart, Truck, Tag,
-  BookOpen, Banknote, AlertTriangle, ChevronDown, ChevronUp, X, Calculator, AlertCircle
+  BookOpen, Banknote, AlertTriangle, ChevronDown, ChevronUp, X, Calculator, AlertCircle,
+  Printer, Send, Building2, Package
 } from 'lucide-react';
 
 import { toast } from 'sonner';
@@ -212,9 +213,22 @@ const Requisitions: React.FC = () => {
   const [selectedProjectForPO, setSelectedProjectForPO] = useState('');
   const [selectedCostHead, setSelectedCostHead] = useState<'Glass' | 'Aluminium' | 'Hardware' | 'Installation'>('Hardware');
 
-  const [directPoItems, setDirectPoItems] = useState<{desc: string, qty: number, rate: number, amount: number}[]>([
-      { desc: '', qty: 1, rate: 0, amount: 0 }
-  ]);
+  // Direct PO — glass-aware line items
+  const blankPoLine = () => ({
+    id: `L${Date.now()}${Math.random().toString(36).slice(2,4)}`,
+    desc: '', qty: 0, rate: 0, amount: 0,
+    // glass fields
+    searchQuery: '', showSuggestions: false,
+    productId: '', category: '', subCategory: '', thickness: '', sheetSize: '',
+    sqftPerSheet: 0, totalSqft: 0, freightPKR: 0, lastMAP: 0, stockOnHand: 0, remarks: '',
+  });
+  const [directPoItems, setDirectPoItems] = useState<any[]>(() => Array.from({length:5}, blankPoLine));
+  const [poDate, setPoDate] = useState(new Date().toISOString().split('T')[0]);
+  const [poDelivDate, setPoDelivDate] = useState('');
+  const [poPayTerms, setPoPayTerms] = useState('30 Days Net');
+  const [poRemarks, setPoRemarks] = useState('');
+  const [poPrintData, setPoPrintData] = useState<any>(null);
+  const suggRefs = useRef<Record<string,HTMLDivElement|null>>({});
 
   const [formHeader, setFormHeader] = useState({
     headerText: '', requisitioner: '', priority: 'Normal' as any,
@@ -523,20 +537,130 @@ const Requisitions: React.FC = () => {
       toast.error(`Success: Purchase Order ${poId} generated.`, { duration: 4000 });
   };
 
+  // ── Direct PO: glass catalogue + search ───────────────────────────────
+  const glassVendors = useMemo(() =>
+    vendors.filter((v:any) => v.type === 'Glass' || v.type === 'Supplier'), [vendors]);
+  const transportVendorsList = useMemo(() =>
+    vendors.filter((v:any) => v.type === 'Transport'), [vendors]);
+
+  const glassCatalogue = useMemo(() => {
+    const items: any[] = [];
+    const seen = new Set<string>();
+    const storeItems = InventoryService.getStore().filter((s:any) => s.company === company);
+    SalesService.getProducts()
+      .filter((p:any) => (p.company === company || !p.company) && (p.category === 'Glass' || p.glassType) && p.thickness && p.sheetSize)
+      .forEach((p:any) => {
+        const key = `${p.glassType||p.category}-${p.subCategory||'Std'}-${p.thickness}-${p.sheetSize}`;
+        if (seen.has(key)) return; seen.add(key);
+        const store = storeItems.find((s:any) => s.id === p.id);
+        items.push({ key, label: [p.glassType||p.category, p.subCategory||'', p.thickness, p.sheetSize+'"'].filter(Boolean).join(' ').trim(),
+          category: p.glassType||p.category||'Plain', subCategory: p.subCategory||'Standard',
+          thickness: p.thickness, sheetSize: p.sheetSize, productId: p.id,
+          lastMAP: store?.movingAveragePrice||p.costPrice||0, stockOnHand: store?.unrestrictedQty||0, source:'master' });
+      });
+    InventoryService.getStockLedger()
+      .filter((e:any) => e.company === company && e.mvmntCode === '101' && e.sheetTagMeta)
+      .forEach((e:any) => {
+        const meta = e.sheetTagMeta; const cat = e.glassCategory||'Plain';
+        if (!meta?.thickness||!meta?.sheetSize) return;
+        const key = `hist-${cat}-${meta.thickness}-${meta.sheetSize}`;
+        if (seen.has(key)) return; seen.add(key);
+        const store = storeItems.find((s:any) => s.id === e.materialId);
+        items.push({ key, label: `${cat} ${meta.thickness} ${meta.sheetSize}"`,
+          category: cat, subCategory:'Standard', thickness: meta.thickness, sheetSize: meta.sheetSize,
+          productId: e.materialId, lastMAP: store?.movingAveragePrice||e.valuation||0,
+          stockOnHand: store?.unrestrictedQty||0, source:'stock' });
+      });
+    return items;
+  }, [company, vendors]);
+
+  const getPoSuggestions = (query: string) => {
+    if (!query.trim()) return glassCatalogue.slice(0,12);
+    const tokens = query.toLowerCase().replace(/['"]/g,'').split(/\s+/).filter(Boolean);
+    return glassCatalogue.filter((item:any) => {
+      const hay = [item.label,item.category,item.subCategory,item.thickness,item.sheetSize].join(' ').toLowerCase();
+      return tokens.every((t:string) => hay.includes(t));
+    }).slice(0,10);
+  };
+
+  const sqftOf = (size: string) => { const [w,h] = size.split('x').map(Number); return w&&h ? Number(((w*h)/144).toFixed(3)) : 0; };
+
+  const updatePoLine = (id: string, patch: any) => {
+    setDirectPoItems(prev => prev.map((l:any) => {
+      if (l.id !== id) return l;
+      const u = { ...l, ...patch };
+      const spf = sqftOf(u.sheetSize)||u.sqftPerSheet||0;
+      const totalSqft = Number((u.qty * spf).toFixed(2));
+      const amount = Number((totalSqft * u.rate + (u.freightPKR||0)).toFixed(2));
+      return { ...u, sqftPerSheet: spf, totalSqft, amount };
+    }));
+  };
+
+  const pickPoSuggestion = (lineId: string, s: any) => {
+    setDirectPoItems(prev => prev.map((l:any) => {
+      if (l.id !== lineId) return l;
+      const spf = sqftOf(s.sheetSize);
+      const totalSqft = Number((l.qty * spf).toFixed(2));
+      const amount = Number((totalSqft * (l.rate||s.lastMAP) + (l.freightPKR||0)).toFixed(2));
+      return { ...l, searchQuery: s.label, showSuggestions: false, productId: s.productId,
+        desc: s.label, category: s.category, subCategory: s.subCategory,
+        thickness: s.thickness, sheetSize: s.sheetSize, sqftPerSheet: spf,
+        totalSqft, lastMAP: s.lastMAP, stockOnHand: s.stockOnHand,
+        rate: l.rate > 0 ? l.rate : s.lastMAP, amount };
+    }));
+  };
+
   const handleCreateDirectPO = () => {
-      if (!selectedVendorForPO) return toast.error("Select a Vendor.", { duration: 4000 });
-      const totalAmount = directPoItems.reduce((s, i) => s + (i.qty * i.rate), 0);
-      if (totalAmount <= 0) return toast.error("Total amount cannot be zero.", { duration: 4000 });
-      const poId = createAndPostPO(selectedVendorForPO, selectedProjectForPO, selectedCostHead, totalAmount, directPoItems.map(i => ({ description: i.desc, qty: i.qty, rate: i.rate })));
+      if (!selectedVendorForPO) return toast.error('Select a Vendor.', { duration: 4000 });
+      const filledLines = directPoItems.filter((l:any) => l.qty > 0 && l.rate > 0);
+      if (!filledLines.length) return toast.error('At least one line with qty and rate required.', { duration: 4000 });
+      const totalAmount = filledLines.reduce((s:number, l:any) => s + l.amount, 0);
+      const totalSheets = filledLines.reduce((s:number, l:any) => s + l.qty, 0);
+      const totalFreight = filledLines.reduce((s:number, l:any) => s + (l.freightPKR||0), 0);
+      const vendor = vendors.find((v:any) => v.name === selectedVendorForPO || v.id === selectedVendorForPO);
+
+      // Build PO ID using PO date
+      const d = poDate ? new Date(poDate) : new Date();
+      const pfx = `PO-GLS-${String(d.getMonth()+1).padStart(2,'0')}${String(d.getFullYear()).slice(-2)}-`;
+      const allPOs = ProductionService.getPurchaseOrders();
+      const nums = allPOs.filter((p:any)=>p.id?.startsWith(pfx)).map((p:any)=>parseInt(p.id.replace(pfx,''))||0);
+      const poId = `${pfx}${String(nums.length ? Math.max(...nums)+1 : 1).padStart(3,'0')}`;
+
+      const newPO: any = {
+        id: poId, fromCompany: company,
+        toVendor: vendor?.name || selectedVendorForPO,
+        date: poDate, status: 'Sent', totalAmount, category: 'Glass',
+        matchStatus: 'Pending',
+        vendorId: vendor?.id || selectedVendorForPO,
+        deliveryDate: poDelivDate, payTerms: poPayTerms,
+        headerRemarks: poRemarks, totalSheets, totalFreight,
+        items: filledLines.map((l:any) => ({
+          description: l.desc || `${l.category} ${l.thickness} ${l.sheetSize}"`,
+          qty: l.totalSqft || l.qty, rate: l.rate, costCenter: 'STORE',
+          specs: JSON.stringify({
+            category: l.category, subCategory: l.subCategory,
+            thickness: l.thickness, sheetSize: l.sheetSize,
+            sheetCount: l.qty, sqftPerSheet: l.sqftPerSheet,
+            freightPKR: l.freightPKR||0, lineTotal: l.amount, remarks: l.remarks||'',
+          }),
+        })),
+      };
+
+      ProductionService.savePurchaseOrders([...allPOs, newPO]);
+      refreshData();
       setIsDirectPOOpen(false);
-      setDirectPoItems([{ desc: '', qty: 1, rate: 0, amount: 0 }]);
-      toast.error(`Success: Direct PO ${poId} Created.`, { duration: 4000 });
+      setDirectPoItems(Array.from({length:5}, blankPoLine));
+      setPoDate(new Date().toISOString().split('T')[0]);
+      setPoDelivDate(''); setPoRemarks('');
+      toast.success(`PO ${poId} created successfully.`, { duration: 4000 });
+      setTimeout(() => setPoPrintData(newPO), 300);
   };
 
   const updateDirectItem = (idx: number, field: string, val: any) => {
+      // kept for backward compat — glass lines use updatePoLine instead
       const newItems = [...directPoItems];
       const item: any = { ...newItems[idx], [field]: val };
-      item.amount = item.qty * item.rate;
+      item.amount = (item.qty||0) * (item.rate||0);
       newItems[idx] = item;
       setDirectPoItems(newItems);
   };
@@ -1233,21 +1357,293 @@ const Requisitions: React.FC = () => {
           </div>
       )}
 
+      {/* ── Direct PO Modal — Glass smart search ──────────────────────── */}
       {isDirectPOOpen && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
-              <div className="bg-white rounded-[2.5rem] w-full max-w-4xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
-                  <div className="px-10 py-6 bg-emerald-600 text-white flex justify-between items-center shrink-0"><div><h3 className="text-xl font-black uppercase">Direct Purchase Order</h3></div><button onClick={() => setIsDirectPOOpen(false)}><XCircle size={24}/></button></div>
-                  <div className="flex-1 overflow-y-auto p-10 bg-slate-50 space-y-6">
-                      <div className="grid grid-cols-2 gap-6 bg-white p-6 rounded-2xl border shadow-sm">
-                          <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Vendor</label><select className="w-full p-3 bg-slate-50 border rounded-xl font-bold uppercase outline-none" value={selectedVendorForPO} onChange={e => setSelectedVendorForPO(e.target.value)}><option value="">-- Select Vendor --</option>{vendors.map(v => <option key={v.id} value={v.name}>{v.name}</option>)}</select></div>
-                          <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Budget Head</label><select className="w-full p-3 bg-slate-50 border rounded-xl font-bold uppercase outline-none" value={selectedCostHead} onChange={e => setSelectedCostHead(e.target.value as any)}><option value="Hardware">Hardware</option><option value="Glass">Glass</option><option value="Aluminium">Aluminium</option><option value="Installation">Installation</option></select></div>
-                          <div className="col-span-2 space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Project Link (Optional)</label><select className="w-full p-3 bg-indigo-50 border border-indigo-100 rounded-xl font-bold uppercase outline-none text-indigo-800" value={selectedProjectForPO} onChange={e => setSelectedProjectForPO(e.target.value)}><option value="">-- General Stock --</option>{projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select></div>
-                      </div>
-                      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden"><div className="p-4 bg-slate-50 border-b flex justify-between items-center"><h4 className="font-black text-slate-700 uppercase text-xs">Line Items</h4><button onClick={() => setDirectPoItems([...directPoItems, {desc: '', qty: 1, rate: 0, amount: 0}])} className="text-emerald-600 font-bold text-xs">+ Add Item</button></div><table className="w-full text-left sap-table"><thead><tr><th className="w-10 px-4 py-3">#</th><th className="px-4 py-3">Description</th><th className="w-24 text-center px-4 py-3">Qty</th><th className="w-32 text-right px-4 py-3">Rate</th><th className="w-32 text-right px-4 py-3">Total</th><th className="w-10 px-4 py-3"></th></tr></thead><tbody>{directPoItems.map((item, idx) => (<tr key={idx}><td className="text-center font-bold text-slate-400 px-4 py-2">{idx+1}</td><td className="px-4 py-2"><input type="text" className="w-full p-1 bg-transparent font-bold outline-none uppercase" value={item.desc} onChange={e => updateDirectItem(idx, 'desc', e.target.value)} placeholder="Item Name"/></td><td className="px-4 py-2"><input type="number" className="w-full p-1 bg-transparent font-bold text-center outline-none" value={item.qty} onChange={e => updateDirectItem(idx, 'qty', Number(e.target.value))}/></td><td className="px-4 py-2"><input type="number" className="w-full p-1 bg-transparent font-bold text-right outline-none" value={item.rate} onChange={e => updateDirectItem(idx, 'rate', Number(e.target.value))}/></td><td className="text-right font-black text-slate-800 px-4 py-2">{item.amount.toLocaleString()}</td><td className="text-center px-4 py-2"><button onClick={() => { if(directPoItems.length > 1) setDirectPoItems(directPoItems.filter((_, i) => i !== idx)) }} className="text-slate-300 hover:text-red-500"><Trash2 size={14}/></button></td></tr>))}</tbody></table></div>
-                  </div>
-                  <div className="px-10 py-6 bg-white border-t flex justify-between items-center"><div><p className="text-[10px] font-black uppercase text-slate-400">Total Amount</p><p className="text-2xl font-black text-emerald-600">PKR {directPoItems.reduce((s, i) => s + i.amount, 0).toLocaleString()}</p></div><div className="flex space-x-3"><button onClick={() => setIsDirectPOOpen(false)} className="px-6 py-3 text-slate-400 font-bold uppercase text-xs">Cancel</button><button onClick={handleCreateDirectPO} className="bg-emerald-600 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl flex items-center space-x-2"><CheckCircle2 size={16}/> <span>Issue PO</span></button></div></div>
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
+          <div className="bg-white rounded-[2rem] w-full max-w-5xl max-h-[92vh] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-200">
+
+            {/* Header */}
+            <div className="px-8 py-5 bg-slate-900 text-white flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-emerald-600 rounded-xl"><Package size={18}/></div>
+                <div>
+                  <h3 className="text-lg font-black uppercase tracking-tight">Glass Purchase Order</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Direct PO · Glass items only</p>
+                </div>
               </div>
+              <button onClick={() => setIsDirectPOOpen(false)} className="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center"><XCircle size={20}/></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-7 bg-slate-50 space-y-5">
+
+              {/* PO Header fields */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                <div className="flex items-center gap-2 pb-4 border-b mb-4">
+                  <Building2 size={15} className="text-blue-600"/>
+                  <span className="text-xs font-black uppercase tracking-widest">PO Details</span>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-400">Glass Vendor *</label>
+                    <select className="sap-input w-full font-bold" value={selectedVendorForPO} onChange={e => setSelectedVendorForPO(e.target.value)}>
+                      <option value="">— Select Glass Vendor —</option>
+                      {glassVendors.map((v:any) => <option key={v.id} value={v.name}>{v.name}</option>)}
+                      {glassVendors.length === 0 && vendors.map((v:any) => <option key={v.id} value={v.name}>{v.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-400">PO Date</label>
+                    <input type="date" className="sap-input w-full" value={poDate} onChange={e => setPoDate(e.target.value)}/>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-400">Expected Delivery</label>
+                    <input type="date" className="sap-input w-full" value={poDelivDate} onChange={e => setPoDelivDate(e.target.value)}/>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-400">Payment Terms</label>
+                    <select className="sap-input w-full font-bold" value={poPayTerms} onChange={e => setPoPayTerms(e.target.value)}>
+                      {['Cash','7 Days Net','15 Days Net','30 Days Net','45 Days Net','60 Days Net','Against Delivery'].map(t => <option key={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-400">Project (Optional)</label>
+                    <select className="sap-input w-full font-bold" value={selectedProjectForPO} onChange={e => setSelectedProjectForPO(e.target.value)}>
+                      <option value="">— General Stock —</option>
+                      {projects.map((p:any) => <option key={p.id} value={p.id}>{p.title}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-400">Remarks</label>
+                    <input type="text" className="sap-input w-full uppercase" placeholder="Special instructions…" value={poRemarks} onChange={e => setPoRemarks(e.target.value)}/>
+                  </div>
+                </div>
+              </div>
+
+              {/* Line Items */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                <div className="flex items-center justify-between pb-3 border-b mb-3">
+                  <div>
+                    <span className="text-xs font-black uppercase tracking-widest">Line Items</span>
+                    <span className="text-[9px] text-slate-400 font-bold ml-3">Type anything — "5mm", "plain 84", "mirror 6mm"</span>
+                  </div>
+                  <button onClick={() => setDirectPoItems((prev:any) => [...prev, blankPoLine()])}
+                    className="flex items-center gap-1 bg-emerald-600 text-white px-3 py-1.5 rounded-xl font-black text-xs hover:bg-emerald-700">
+                    <Plus size={12}/> Add Line
+                  </button>
+                </div>
+
+                {/* Column labels */}
+                <div className="grid text-[9px] font-black uppercase text-slate-400 mb-1.5 px-1 gap-2"
+                  style={{gridTemplateColumns:'1fr 80px 68px 86px 82px 86px 28px'}}>
+                  <span>Glass Specification</span>
+                  <span className="text-right">Sheets</span>
+                  <span className="text-right">SqFt</span>
+                  <span className="text-right">Rate/sqft</span>
+                  <span className="text-right">Freight</span>
+                  <span className="text-right">Total</span>
+                  <span></span>
+                </div>
+
+                <div className="space-y-2">
+                  {directPoItems.map((line:any, idx:number) => {
+                    const suggs = getPoSuggestions(line.searchQuery||'');
+                    const isFilled = line.qty > 0;
+                    return (
+                      <div key={line.id||idx}
+                        ref={(el:any) => { suggRefs.current[line.id||idx] = el; }}
+                        className={`rounded-xl border transition-colors ${isFilled ? 'border-emerald-200 bg-emerald-50/20' : 'border-slate-100 bg-slate-50/40'}`}>
+                        <div className="p-2.5 grid gap-2 items-start" style={{gridTemplateColumns:'1fr 80px 68px 86px 82px 86px 28px'}}>
+
+                          {/* Search */}
+                          <div className="relative">
+                            <div className="flex items-center gap-1.5 mb-1 min-h-[16px]">
+                              <span className="text-[9px] font-black text-slate-400">#{idx+1}</span>
+                              {line.thickness && <span className="text-[9px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">{line.category} · {line.thickness} · {line.sheetSize}"</span>}
+                              {line.stockOnHand > 0 && <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">{Number(line.stockOnHand).toFixed(0)} sqft stock</span>}
+                            </div>
+                            <input type="text" className="sap-input w-full text-xs font-bold"
+                              placeholder="e.g. plain 5mm, mirror 84x144, 6mm clear…"
+                              value={line.searchQuery||''} autoComplete="off"
+                              onChange={(e:any) => updatePoLine(line.id, {searchQuery: e.target.value, showSuggestions: true})}
+                              onFocus={() => updatePoLine(line.id, {showSuggestions: true})}/>
+                            {line.showSuggestions && (
+                              <div className="absolute z-50 top-full left-0 right-0 mt-0.5 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden">
+                                {suggs.length === 0
+                                  ? <div className="px-3 py-2.5 text-[10px] text-slate-400 italic">No matches in Product Master or GRN history</div>
+                                  : suggs.map((s:any) => (
+                                    <button key={s.key} className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-slate-50 last:border-0 flex items-center justify-between"
+                                      onMouseDown={(e:any) => { e.preventDefault(); pickPoSuggestion(line.id, s); }}>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-black text-slate-800 uppercase">{s.label}</span>
+                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${s.source==='master' ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>{s.source==='master' ? 'Master' : 'History'}</span>
+                                      </div>
+                                      <div className="text-right text-[9px] ml-3">
+                                        {s.lastMAP > 0 && <div className="font-black text-emerald-700">MAP {s.lastMAP.toFixed(0)}</div>}
+                                        {s.stockOnHand > 0 && <div className="text-slate-400">{s.stockOnHand.toFixed(0)} sqft</div>}
+                                      </div>
+                                    </button>
+                                  ))
+                                }
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Sheets */}
+                          <input type="number" min="0" className="sap-input text-xs font-black text-right mt-[16px]" placeholder="0"
+                            value={line.qty||''} onChange={(e:any) => updatePoLine(line.id, {qty: Number(e.target.value)})}/>
+
+                          {/* SqFt computed */}
+                          <div className={`sap-input text-xs font-black text-right mt-[16px] cursor-not-allowed ${line.totalSqft > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-300'}`}>
+                            {line.totalSqft > 0 ? line.totalSqft.toFixed(1) : '—'}
+                          </div>
+
+                          {/* Rate */}
+                          <div className="mt-[16px]">
+                            {line.lastMAP > 0 && <div className="text-[8px] font-bold text-emerald-600 text-right mb-0.5">MAP {line.lastMAP.toFixed(0)}</div>}
+                            <input type="number" min="0" className={`sap-input text-xs font-black text-right w-full ${!line.lastMAP ? 'mt-[12px]' : ''}`}
+                              placeholder="0.00" value={line.rate||''}
+                              onChange={(e:any) => updatePoLine(line.id, {rate: Number(e.target.value)})}/>
+                          </div>
+
+                          {/* Freight */}
+                          <input type="number" min="0" className="sap-input text-xs font-bold text-right text-blue-600 mt-[16px]" placeholder="0"
+                            value={line.freightPKR||''} onChange={(e:any) => updatePoLine(line.id, {freightPKR: Number(e.target.value)})}/>
+
+                          {/* Total */}
+                          <div className={`text-sm font-black text-right pr-1 mt-[16px] ${line.amount > 0 ? 'text-emerald-700' : 'text-slate-200'}`}>
+                            {line.amount > 0 ? Math.round(line.amount).toLocaleString() : '—'}
+                          </div>
+
+                          {/* Remove */}
+                          <button onClick={() => directPoItems.length > 1 && setDirectPoItems((prev:any) => prev.filter((_:any,i:number) => i !== idx))}
+                            className={`w-6 h-6 rounded-lg flex items-center justify-center mt-[16px] ${directPoItems.length > 1 ? 'text-red-300 hover:text-red-600 hover:bg-red-50' : 'text-slate-100 cursor-not-allowed'}`}>
+                            <Trash2 size={11}/>
+                          </button>
+                        </div>
+                        {isFilled && (
+                          <div className="px-2.5 pb-2.5 flex items-center gap-2">
+                            <span className="text-[9px] font-black uppercase text-slate-400 shrink-0">Note:</span>
+                            <input type="text" className="sap-input text-[11px] flex-1 py-1" placeholder="Batch, colour, special note…"
+                              value={line.remarks||''} onChange={(e:any) => updatePoLine(line.id, {remarks: e.target.value})}/>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Summary */}
+                <div className="mt-4 pt-4 border-t flex justify-between items-center">
+                  <div className="flex gap-4 text-xs">
+                    <span className="font-bold text-slate-500">Lines: <span className="font-black text-slate-800">{directPoItems.filter((l:any)=>l.qty>0).length}/{directPoItems.length}</span></span>
+                    <span className="font-bold text-slate-500">Sheets: <span className="font-black text-slate-800">{directPoItems.filter((l:any)=>l.qty>0).reduce((s:number,l:any)=>s+l.qty,0)}</span></span>
+                    <span className="font-bold text-slate-500">SqFt: <span className="font-black text-slate-800">{directPoItems.reduce((s:number,l:any)=>s+(l.totalSqft||0),0).toFixed(1)}</span></span>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[9px] font-black uppercase text-slate-400">Grand Total</div>
+                    <div className="text-xl font-black text-emerald-700">PKR {Math.round(directPoItems.reduce((s:number,l:any)=>s+(l.amount||0),0)).toLocaleString()}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-7 py-5 bg-white border-t flex justify-between items-center shrink-0">
+              <button onClick={() => setIsDirectPOOpen(false)} className="px-6 py-2.5 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-700">Cancel</button>
+              <button onClick={handleCreateDirectPO}
+                className="bg-blue-600 text-white px-10 py-3 rounded-2xl font-black uppercase text-xs shadow-xl flex items-center gap-2 hover:bg-blue-700">
+                <Send size={15}/> Issue PO + Print
+              </button>
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* ── PO Print overlay ──────────────────────────────────────────────── */}
+      {poPrintData && (
+        <div className="fixed inset-0 bg-slate-900/80 flex items-start justify-center z-[500] overflow-y-auto py-6 px-4">
+          <div className="bg-white w-[794px] shadow-2xl rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-3 bg-slate-900 text-white">
+              <span className="text-sm font-black uppercase">PO Print Preview — {poPrintData.id}</span>
+              <div className="flex gap-3">
+                <button onClick={() => window.print()} className="flex items-center gap-2 bg-blue-600 px-4 py-1.5 rounded-lg text-xs font-black uppercase hover:bg-blue-700"><Printer size={14}/> Print</button>
+                <button onClick={() => setPoPrintData(null)} className="w-7 h-7 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20"><X size={16}/></button>
+              </div>
+            </div>
+            <div className="p-10 text-black" style={{fontFamily:'Arial,sans-serif',minHeight:'257mm'}}>
+              <div className="flex justify-between items-start pb-5 mb-6" style={{borderBottom:'3px solid #0f172a'}}>
+                <div>
+                  <div style={{fontSize:22,fontWeight:900,textTransform:'uppercase',color:'#0f172a'}}>GlassTech Group</div>
+                  <div style={{fontSize:12,fontWeight:700,color:'#64748b',marginTop:2}}>GlassCo Pvt. Ltd. — Karachi, Pakistan</div>
+                  <div style={{marginTop:10,display:'inline-block',background:'#1d4ed8',color:'#fff',fontSize:11,fontWeight:900,textTransform:'uppercase',padding:'3px 12px',borderRadius:4}}>Purchase Order</div>
+                </div>
+                <div style={{textAlign:'right'}}>
+                  <div style={{fontSize:20,fontWeight:900,fontFamily:'monospace',color:'#0f172a'}}>{poPrintData.id}</div>
+                  <div style={{fontSize:11,color:'#64748b',marginTop:3,fontWeight:700}}>Date: {poPrintData.date}</div>
+                  {poPrintData.deliveryDate && <div style={{fontSize:11,color:'#dc2626',fontWeight:700,marginTop:2}}>Delivery By: {poPrintData.deliveryDate}</div>}
+                </div>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:20}}>
+                <div style={{border:'1px solid #e2e8f0',borderRadius:6,padding:12}}>
+                  <div style={{fontSize:9,fontWeight:900,textTransform:'uppercase',color:'#94a3b8',marginBottom:6}}>Vendor / Supplier</div>
+                  <div style={{fontSize:14,fontWeight:900,textTransform:'uppercase'}}>{poPrintData.toVendor}</div>
+                </div>
+                <div style={{border:'1px solid #e2e8f0',borderRadius:6,padding:12}}>
+                  <div style={{fontSize:9,fontWeight:900,textTransform:'uppercase',color:'#94a3b8',marginBottom:6}}>Order Details</div>
+                  <div style={{fontSize:11,fontWeight:700}}>Payment: {poPrintData.payTerms||'—'}</div>
+                  <div style={{fontSize:11,fontWeight:700,marginTop:3}}>Total Sheets: {poPrintData.totalSheets||'—'}</div>
+                  {poPrintData.headerRemarks && <div style={{fontSize:10,color:'#64748b',marginTop:4,fontStyle:'italic'}}>{poPrintData.headerRemarks}</div>}
+                </div>
+              </div>
+              <table style={{width:'100%',borderCollapse:'collapse',marginBottom:20,fontSize:11}}>
+                <thead>
+                  <tr style={{background:'#0f172a',color:'#fff'}}>
+                    {['#','Description','Thick','Size','Sheets','SqFt','Rate/SqFt','Freight','Total'].map((h,i) => (
+                      <th key={h} style={{padding:'7px 8px',fontWeight:900,textTransform:'uppercase',fontSize:9,textAlign:['Sheets','SqFt','Rate/SqFt','Freight','Total'].includes(h)?'right':'left',width:i===0?24:undefined}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {poPrintData.items.map((item:any,i:number) => {
+                    let m:any={};try{m=JSON.parse(item.specs||'{}')}catch{}
+                    return (
+                      <tr key={i} style={{background:i%2===0?'#fff':'#f8fafc',borderBottom:'0.5px solid #e2e8f0'}}>
+                        <td style={{padding:'7px 8px',color:'#94a3b8',fontWeight:700}}>{i+1}</td>
+                        <td style={{padding:'7px 8px',fontWeight:900,textTransform:'uppercase'}}>{item.description}{m.remarks&&<div style={{fontSize:9,color:'#64748b',fontStyle:'italic',marginTop:1}}>{m.remarks}</div>}</td>
+                        <td style={{padding:'7px 8px',fontWeight:700,textAlign:'center'}}>{m.thickness||'—'}</td>
+                        <td style={{padding:'7px 8px',fontWeight:700,textAlign:'center'}}>{m.sheetSize?m.sheetSize+'"':'—'}</td>
+                        <td style={{padding:'7px 8px',fontWeight:900,textAlign:'right'}}>{m.sheetCount||'—'}</td>
+                        <td style={{padding:'7px 8px',textAlign:'right'}}>{Number(item.qty||0).toFixed(1)}</td>
+                        <td style={{padding:'7px 8px',textAlign:'right',fontWeight:700}}>PKR {(item.rate||0).toLocaleString()}</td>
+                        <td style={{padding:'7px 8px',textAlign:'right',color:'#1d4ed8'}}>PKR {(m.freightPKR||0).toLocaleString()}</td>
+                        <td style={{padding:'7px 8px',textAlign:'right',fontWeight:900,color:'#059669'}}>PKR {Math.round(m.lineTotal||0).toLocaleString()}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{borderTop:'2px solid #0f172a',background:'#f8fafc'}}>
+                    <td colSpan={8} style={{padding:'9px 8px',textAlign:'right',fontWeight:900,textTransform:'uppercase',fontSize:11,color:'#475569'}}>Grand Total</td>
+                    <td style={{padding:'9px 8px',textAlign:'right',fontWeight:900,fontSize:14,color:'#059669'}}>PKR {Math.round(poPrintData.totalAmount).toLocaleString()}</td>
+                  </tr>
+                </tfoot>
+              </table>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:40,marginTop:50}}>
+                {['Prepared By','Approved By','Vendor Acknowledgement'].map(label=>(
+                  <div key={label} style={{borderTop:'2px solid #0f172a',paddingTop:8}}>
+                    <div style={{fontSize:9,fontWeight:900,textTransform:'uppercase',color:'#64748b'}}>{label}</div>
+                    <div style={{marginTop:30,fontSize:9,color:'#cbd5e1'}}>Signature / Stamp</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{marginTop:30,paddingTop:10,borderTop:'0.5px solid #e2e8f0',display:'flex',justifyContent:'space-between',fontSize:9,color:'#94a3b8',fontWeight:700}}>
+                <span>GlassTech Group — GlassCo Pvt. Ltd. | Karachi, Pakistan</span>
+                <span>Printed: {new Date().toLocaleDateString('en-PK',{day:'2-digit',month:'short',year:'numeric'})}</span>
+              </div>
+            </div>
+          </div>
+          <style>{`@media print { .no-print{display:none!important;} @page{size:A4 portrait;margin:12mm;} }`}</style>
+        </div>
       )}
     </div>
   );
