@@ -93,6 +93,16 @@ export interface MaterialLedgerEntry {
   grossWeight?: number;
   netWeight?: number;
   cbm?: number;
+  // ── Glass Sheet Tagging ─────────────────────────────────────────────
+  sheetTags?: string[];          // Auto-generated per-sheet tags: GLS-{thickness}-{MMYY}-{batch}-{serial}
+  sheetTagMeta?: {               // Tag metadata for print
+    thickness: string;
+    sheetSize: string;
+    vendorName?: string;
+    grnRef: string;
+    grnDate: string;
+    batchSeq: string;            // e.g. "001"
+  };
 }
 
 export interface RequisitionItem { 
@@ -150,13 +160,13 @@ export interface Requisition {
   type?: string;
 
   // Financial Impact Fields (Phase 3)
-  requiresCashPayment?: boolean;     // Does this REQ need a cash payment?
-  estimatedAmount?: number;          // Expected payment amount
+  requiresCashPayment?: boolean;
+  estimatedAmount?: number;
   paymentStatus?: 'Pending' | 'Paid' | 'Partial' | 'Not Required';
-  paidAmount?: number;               // Amount actually paid
-  paymentRef?: string;               // Cash journal / GL doc reference
-  paymentDate?: string;              // Date payment was made
-  glAccountHint?: string;            // Suggested GL account code
+  paidAmount?: number;
+  paymentRef?: string;
+  paymentDate?: string;
+  glAccountHint?: string;
 }
 
 export interface PurchaseOrder { 
@@ -177,16 +187,16 @@ export interface PurchaseOrder {
     specs?: string; 
   }[];
   // Three-Way Matching Fields
-  reqId?: string;              // Linked Requisition
-  grnRef?: string;             // GRN / MIGO document number
-  grnDate?: string;            // Date goods received
-  grnQty?: number;             // Quantity received
-  vendorInvoiceNo?: string;    // Vendor's invoice number
-  vendorInvoiceDate?: string;  // Invoice date
-  vendorInvoiceAmount?: number;// Invoice amount
+  reqId?: string;
+  grnRef?: string;
+  grnDate?: string;
+  grnQty?: number;
+  vendorInvoiceNo?: string;
+  vendorInvoiceDate?: string;
+  vendorInvoiceAmount?: number;
   matchStatus?: 'Pending' | '2-Way' | '3-Way' | 'Mismatch' | 'On-Hold';
-  matchNotes?: string;         // Any variance notes
-  apInvoiceId?: string;        // Posted AP journal doc ID
+  matchNotes?: string;
+  apInvoiceId?: string;
   approvalLevel?: 'L1' | 'L2' | 'L3';
   approvalHistory?: { level: string; by: string; date: string; action: string; note?: string }[];
 }
