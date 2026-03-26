@@ -228,9 +228,10 @@ export const useGlasscoQuotations = () => {
         }
     }
 
-    const { totalSqFt, amount } = calculateLineItemTotal(item, products);
+    const { totalSqFt, amount, aptCharges } = calculateLineItemTotal(item, products);
     item.totalSqFt = totalSqFt;
     item.amount = amount;
+    (item as any).aptCharges = aptCharges || 0;
 
     nextItems[index] = item;
     setFormData(prev => ({ ...prev, items: nextItems }));
