@@ -6,7 +6,7 @@ import { ProductionService } from '../../production/services/productionService';
 import { InventoryService } from '../../procurement/services/inventoryService';
 import { 
     ShoppingCart, FilePlus, X, Info, CreditCard, Calendar, 
-    Printer, ArrowLeft, CheckCircle2, Package, Clock, DollarSign, Filter, Receipt, Flame
+    Printer, ArrowLeft, CheckCircle2, Package, Clock, DollarSign, Filter, Receipt, Flame, Search, Trash2
 } from 'lucide-react';
 import Pagination from '@/components/Pagination';
 import { GlasscoPrintTemplate } from '../../glassco/core/GlasscoPrintTemplate';
@@ -16,11 +16,17 @@ import { GlasscoServiceOrderPrint } from '../../glassco/core/prints/GlasscoServi
 import { useLocation } from 'react-router-dom';
 
 import { useAppStore } from '../../shared/store/appStore';
+import { useAuthStore } from '../../auth/authStore';
 import { toast } from 'sonner';
 
 const SalesOrders: React.FC = () => {
     const company = useAppStore(state => state.selectedCompany);
+    const user = useAuthStore(state => state.user);
+    const isSuperAdmin = user?.role === 'super_admin';
     const location = useLocation();
+    
+    // --- SEARCH ---
+    const [searchTerm, setSearchTerm] = useState('');
     
     // --- AUTOMATED SERVICE ORDER QUEUE ---
     const [autoServiceQueue, setAutoServiceQueue] = useState<string[]>([]);
@@ -134,6 +140,17 @@ const SalesOrders: React.FC = () => {
     const sortedOrders = useMemo(() => {
         let result = [...approvedOrders];
         
+        // Search filter
+        if (searchTerm) {
+            const lower = searchTerm.toLowerCase();
+            result = result.filter(o => {
+                const ref = (o.orderNo || o.id || '').toLowerCase();
+                const clientName = clients.find(c => c.id === o.clientId)?.name?.toLowerCase() || '';
+                const project = (o.projectName || '').toLowerCase();
+                return ref.includes(lower) || clientName.includes(lower) || project.includes(lower);
+            });
+        }
+        
         if (sortType === 'date_desc') {
             result.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         } else if (sortType === 'date_asc') {
@@ -151,7 +168,45 @@ const SalesOrders: React.FC = () => {
         }
         
         return result;
-    }, [approvedOrders, sortType, clients, allPieces]);
+    }, [approvedOrders, sortType, clients, allPieces, searchTerm]);
+
+    // ── Super Admin: Delete order with full cascade ──
+    const handleDeleteOrder = (order: Quotation) => {
+        if (!isSuperAdmin) { toast.error("Only Super Admin can delete orders."); return; }
+        
+        const orderRef = order.orderNo || order.id;
+        const orderPieces = allPieces.filter(p => p.orderId === orderRef);
+        
+        // Check restrictions
+        const hasDelivered = orderPieces.some(p => p.status === 'Delivered');
+        if (hasDelivered) { toast.error("Cannot delete — some pieces already delivered."); return; }
+        
+        const hasCuttingStarted = orderPieces.some(p => p.status !== 'Cut' && p.status !== 'Pending');
+        if (hasCuttingStarted) { toast.error("Cannot delete — production already started (pieces processed beyond cutting)."); return; }
+        
+        if (!confirm(`⚠️ PERMANENT DELETE\n\nOrder: ${orderRef}\nThis will delete:\n• The sales order/quotation\n• All ${orderPieces.length} production pieces\n• All linked dispatches\n\nThis action cannot be undone.`)) return;
+        
+        // 1. Delete production pieces
+        const remainingPieces = allPieces.filter(p => p.orderId !== orderRef);
+        ProductionService.saveProductionPieces(remainingPieces);
+        
+        // 2. Delete linked dispatches
+        const allDispatches = ProductionService.getTemperingDispatches();
+        const remainingDispatches = allDispatches.filter(d => {
+            const dispatchPieces = allPieces.filter(p => p.dispatchId === d.id);
+            return !dispatchPieces.every(p => p.orderId === orderRef);
+        });
+        ProductionService.saveTemperingDispatches(remainingDispatches);
+        
+        // 3. Delete the quotation/order itself
+        const allQuos = SalesService.getQuotations();
+        SalesService.saveQuotations(allQuos.filter(q => q.id !== order.id));
+        
+        // 4. Reset UI
+        setSelectedOrder(null);
+        refreshData();
+        toast.success(`Order ${orderRef} and all linked data permanently deleted.`);
+    };
 
     const handleSelectOrder = (order: Quotation) => {
         setSelectedOrder(order);
@@ -428,6 +483,16 @@ const SalesOrders: React.FC = () => {
                         </div>
                         <div className="flex items-center space-x-4">
                             <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                                <input 
+                                    type="text" 
+                                    placeholder="Search order no, client..." 
+                                    className="sap-input pl-9 py-1.5 text-xs font-bold uppercase border border-slate-200 rounded-lg w-56"
+                                    value={searchTerm}
+                                    onChange={e => setSearchTerm(e.target.value)}
+                                />
+                            </div>
+                            <div className="relative">
                                 <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                                 <select 
                                     className="sap-input pl-9 py-1.5 text-[10px] font-black uppercase appearance-none cursor-pointer hover:bg-slate-50 border border-slate-200 rounded-lg pr-4"
@@ -485,7 +550,18 @@ const SalesOrders: React.FC = () => {
                                             </td>
                                             <td className="px-6 py-4 text-right font-black text-slate-900">{(Number(totalAmount) || 0).toLocaleString()}</td>
                                             <td className="px-6 py-4 text-center">
-                                                <button className="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow hover:bg-blue-600 transition-all">Open Details</button>
+                                                <div className="flex items-center justify-center space-x-2">
+                                                    <button className="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow hover:bg-blue-600 transition-all">Open Details</button>
+                                                    {isSuperAdmin && (
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); handleDeleteOrder(order); }}
+                                                            className="p-1.5 text-rose-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                                                            title="Delete Order (Super Admin)"
+                                                        >
+                                                            <Trash2 size={14}/>
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -554,6 +630,14 @@ const SalesOrders: React.FC = () => {
                             >
                                 <Printer size={16}/> <span>Print Sales Order</span>
                             </button>
+                            {isSuperAdmin && selectedOrder && (
+                                <button 
+                                    onClick={() => handleDeleteOrder(selectedOrder)}
+                                    className="bg-rose-50 text-rose-600 px-6 py-3 rounded-2xl font-black uppercase text-xs tracking-widest border border-rose-200 hover:bg-rose-600 hover:text-white transition-all flex items-center space-x-2"
+                                >
+                                    <Trash2 size={16}/> <span>Delete</span>
+                                </button>
+                            )}
                         </div>
                     </div>
 
