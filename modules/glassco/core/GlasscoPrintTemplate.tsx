@@ -1,5 +1,4 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import ReactDOM from 'react-dom';
 import { Quotation, Client, ProductionPiece, Product } from '../../shared/types';
 import { SalesService } from '../../sales/services/salesService';
 import { FinanceService } from '../../finance/services/financeService';
@@ -8,7 +7,6 @@ import { supabase } from '../../../src/services/supabaseClient';
 import { GlassCoQuotationPrint } from './prints/GlassCoQuotationPrint';
 import { GlassCoSalesOrderPrint } from './prints/GlassCoSalesOrderPrint';
 import { GlassCoJobCardPrint } from './prints/GlassCoJobCardPrint';
-import './GlasscoPrintTemplate.css';
 
 interface GlasscoPrintTemplateProps {
     printingQuote: Quotation;
@@ -18,6 +16,58 @@ interface GlasscoPrintTemplateProps {
     printMode?: 'Quotation' | 'SalesOrder' | 'JobCard';
 }
 
+const PRINT_STYLES = `
+  .glassco-print-page { display: none !important; }
+
+  @media print {
+    html, body, #root, #__next, main {
+      height: auto !important; min-height: auto !important; max-height: none !important;
+      overflow: visible !important; position: static !important; display: block !important;
+    }
+    body > div, #root > div, #root > div > div, #root > div > main,
+    .h-screen, .max-h-screen, .min-h-screen, .h-full,
+    .overflow-hidden, .overflow-y-auto, .overflow-x-auto, .overflow-auto {
+      height: auto !important; min-height: auto !important; max-height: none !important;
+      overflow: visible !important; position: static !important; display: block !important;
+    }
+    @page { size: A4; margin: 10mm 12mm; }
+    body * { visibility: hidden !important; }
+    #glassco-print-root, #glassco-print-root * { visibility: visible !important; }
+    .no-print, nav, aside, header, footer,
+    [class*="sidebar"], [class*="topbar"], [class*="navbar"], [class*="bottom-nav"] { display: none !important; }
+    #glassco-print-root {
+      display: block !important; position: static !important; width: 100% !important;
+      height: auto !important; overflow: visible !important; background: white !important;
+    }
+    #glassco-print-root .glassco-print-page {
+      display: block !important; position: static !important; width: 100% !important;
+      height: auto !important; overflow: visible !important; background: white !important;
+    }
+    #glassco-print-root .print-only, #glassco-print-root .print-container {
+      position: static !important; top: auto !important; left: auto !important;
+    }
+    #glassco-print-root table { width: 100% !important; border-collapse: collapse !important; page-break-inside: auto !important; }
+    #glassco-print-root thead { display: table-header-group !important; }
+    #glassco-print-root tfoot { display: table-footer-group !important; }
+    #glassco-print-root tbody { display: table-row-group !important; }
+    #glassco-print-root tr { page-break-inside: avoid !important; break-inside: avoid !important; page-break-after: auto !important; }
+    #glassco-print-root td, #glassco-print-root th { page-break-inside: avoid !important; break-inside: avoid !important; }
+    #glassco-print-root .print-footer { break-inside: avoid !important; page-break-inside: avoid !important; }
+    #glassco-print-root *, #glassco-print-root { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    .bg-slate-50 { background-color: #f8fafc !important; }
+    .bg-slate-100 { background-color: #f1f5f9 !important; }
+    .bg-slate-200 { background-color: #e2e8f0 !important; }
+    .bg-slate-900 { background-color: #0f172a !important; }
+    .text-slate-400 { color: #94a3b8 !important; }
+    .text-slate-500 { color: #64748b !important; }
+    .text-slate-900 { color: #0f172a !important; }
+    .border-slate-200 { border-color: #e2e8f0 !important; }
+    .border-slate-300 { border-color: #cbd5e1 !important; }
+    .font-pill-qt { border: 1.5px solid #1e293b; border-radius: 9999px; padding: 2px 30px; font-weight: 900; letter-spacing: 0.1em; }
+    .font-pill-so { border: 1.5px solid #0f172a; border-radius: 9999px; padding: 2px 30px; font-weight: 900; letter-spacing: 0.1em; color: #0f172a; }
+  }
+`;
+
 export const GlasscoPrintTemplate: React.FC<GlasscoPrintTemplateProps> = ({ 
     printingQuote, clients, pieces, products, printMode = 'Quotation' 
 }) => {
@@ -25,12 +75,6 @@ export const GlasscoPrintTemplate: React.FC<GlasscoPrintTemplateProps> = ({
     const ledger = FinanceService.getLedger();
     const [fetchedPieces, setFetchedPieces] = useState<ProductionPiece[]>([]);
     const [fetchedProducts, setFetchedProducts] = useState<Product[]>(SalesService.getProducts());
-
-    // Add body class for CSS scoping — removed on unmount
-    useEffect(() => {
-        document.body.classList.add('glassco-printing');
-        return () => { document.body.classList.remove('glassco-printing'); };
-    }, []);
 
     useEffect(() => {
         if (!pieces && printMode === 'JobCard') {
@@ -65,30 +109,20 @@ export const GlasscoPrintTemplate: React.FC<GlasscoPrintTemplateProps> = ({
     const allProducts = useMemo(() => products || fetchedProducts, [products, fetchedProducts]);
 
     let finalMode = printMode;
-    if (printingQuote.status === 'Approved' && printMode !== 'JobCard') {
-        finalMode = 'SalesOrder';
-    }
+    if (printingQuote.status === 'Approved' && printMode !== 'JobCard') finalMode = 'SalesOrder';
 
     let content;
     switch(finalMode) {
-        case 'SalesOrder':
-            content = <GlassCoSalesOrderPrint quote={printingQuote} clientName={clientName} ledger={ledger} />;
-            break;
-        case 'JobCard':
-            content = <GlassCoJobCardPrint quote={printingQuote} clientName={clientName} pieces={allPieces} products={allProducts} />;
-            break;
-        case 'Quotation':
-        default:
-            content = <GlassCoQuotationPrint quote={printingQuote} clientName={clientName} />;
+        case 'SalesOrder': content = <GlassCoSalesOrderPrint quote={printingQuote} clientName={clientName} ledger={ledger} />; break;
+        case 'JobCard': content = <GlassCoJobCardPrint quote={printingQuote} clientName={clientName} pieces={allPieces} products={allProducts} />; break;
+        default: content = <GlassCoQuotationPrint quote={printingQuote} clientName={clientName} />;
     }
 
-    // PORTAL: Render at document.body — OUTSIDE the React #root tree
-    // #glassco-print-root becomes direct child of <body>
-    // CSS: body.glassco-printing > *:not(#glassco-print-root) { display: none }
-    // = entire app hidden, only print content shows. ZERO ERP screenshot leak.
-    return ReactDOM.createPortal(
-        <div id="glassco-print-root">{content}</div>,
-        document.body
+    return (
+        <>
+            <style dangerouslySetInnerHTML={{ __html: PRINT_STYLES }} />
+            <div id="glassco-print-root">{content}</div>
+        </>
     );
 };
 
@@ -97,18 +131,11 @@ export const PrintSummary: React.FC<{ items: any[] }> = ({ items }) => {
         if (item.isSection) return acc;
         return { totalSqFt: acc.totalSqFt + (Number(item.totalSqFt) || 0), totalQty: acc.totalQty + (Number(item.qty) || 0) };
     }, { totalSqFt: 0, totalQty: 0 });
-
     return (
         <div className="bg-slate-900 text-white px-4 py-2 rounded-xl flex items-center space-x-4 shadow-lg border border-white/10 w-full no-print">
-            <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase text-slate-400 leading-none mb-1">Items</span>
-                <span className="text-xs font-black leading-none">{stats.totalQty}</span>
-            </div>
+            <div className="flex flex-col"><span className="text-[8px] font-black uppercase text-slate-400 leading-none mb-1">Items</span><span className="text-xs font-black leading-none">{stats.totalQty}</span></div>
             <div className="h-6 w-px bg-white/10"></div>
-            <div className="flex flex-col">
-                <span className="text-[8px] font-black uppercase text-slate-400 leading-none mb-1">Total Ft²</span>
-                <span className="text-xs font-black text-blue-400 leading-none">{stats.totalSqFt.toFixed(2)}</span>
-            </div>
+            <div className="flex flex-col"><span className="text-[8px] font-black uppercase text-slate-400 leading-none mb-1">Total Ft²</span><span className="text-xs font-black text-blue-400 leading-none">{stats.totalSqFt.toFixed(2)}</span></div>
         </div>
     );
 };
