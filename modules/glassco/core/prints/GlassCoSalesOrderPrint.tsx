@@ -66,32 +66,33 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName }) =
     }, [quote.items]);
 
     return (
-        <div className="print-only bg-white text-black p-0 font-sans leading-tight">
+        <div className="glassco-print-page bg-white text-black p-0 font-sans leading-tight">
             <style>{`
                 @media screen {
-                    .print-only { display: none !important; }
+                    .glassco-print-page { display: none !important; }
                 }
                 @media print {
                     @page { 
                         size: A4; 
                         margin: 10mm 12mm; 
                     }
-                    body {
-                        margin: 10mm 12mm;
-                        padding: 0;
+                    body * {
+                        visibility: hidden;
+                    }
+                    .glassco-print-page, .glassco-print-page * {
+                        visibility: visible;
+                    }
+                    .glassco-print-page {
+                        display: block !important;
+                        position: static !important;
+                        width: 100% !important;
+                        height: auto !important;
+                        background: white !important;
                     }
                     html, body {
                         height: auto !important;
                         overflow: visible !important;
                         background: white !important;
-                    }
-                    .print-only {
-                        display: block !important;
-                        
-                        
-                        width: 100% !important;
-                        background: white !important;
-                        z-index: 99999 !important;
                     }
                     .no-print, nav, aside, [class*="sidebar"], [class*="topbar"] {
                         display: none !important;
