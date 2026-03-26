@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useProductionContext } from '@/modules/production/components/ProductionContext';
 import AnalyticsView from '@/modules/production/components/AnalyticsView';
 import { ShieldAlert, PackageCheck, Ban, BarChart3, ChevronLeft, User, LayoutGrid, X, AlertTriangle } from 'lucide-react';
-import JobCard from '@/modules/production/components/sub/JobCard';
 import { NCRService } from '@/modules/production/services/ncrService';
 import { toast } from 'sonner';
 
@@ -151,12 +150,22 @@ const DispatchView: React.FC = () => {
   const renderGrid = (filterFn: (p: any) => boolean, renderAction: (p: any) => React.ReactNode) => {
     if (selectedJobId) {
         const jobData = getJobDetails(selectedJobId, filterFn);
-        const relevantPieces = (pieces || []).filter(p => p.orderId === selectedJobId && filterFn(p));
-        if (!jobData) return null;
+        const relevantPieces = (pieces || []).filter(p => p?.orderId === selectedJobId && filterFn(p));
+        if (!jobData || relevantPieces.length === 0) { setSelectedJobId(null); return null; }
+        
         return (
             <div className="space-y-4">
-                <button onClick={() => setSelectedJobId(null)} className="flex items-center space-x-2 text-slate-500 hover:text-slate-900 transition-colors"><ChevronLeft size={16}/><span className="text-xs font-black uppercase">Back</span></button>
-                <JobCard job={jobData.job} pieces={relevantPieces} onSelectJob={() => {}} isSelected={true} clients={[]} />
+                <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center space-x-4">
+                    <button onClick={() => setSelectedJobId(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ChevronLeft size={20}/></button>
+                    <div>
+                        <h3 className="text-lg font-black text-slate-800 uppercase">{jobData.projectName || 'Standard Order'}</h3>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{jobData.clientName} | {selectedJobId}</p>
+                    </div>
+                    <div className="ml-auto flex items-center space-x-4 text-right">
+                        <div><p className="text-[9px] font-black text-slate-400 uppercase">Qty</p><p className="text-lg font-black">{jobData.pendingQty}</p></div>
+                        <div><p className="text-[9px] font-black text-slate-400 uppercase">Ft²</p><p className="text-lg font-black">{jobData.pendingSqFt}</p></div>
+                    </div>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                     {relevantPieces.map(p => (
                         <div key={p.id} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm space-y-3">
@@ -172,28 +181,36 @@ const DispatchView: React.FC = () => {
             </div>
         );
     }
-    const filteredJobs = (jobOrders || []).filter(j => (pieces || []).some(p => p.orderId === j.orderNo && filterFn(p)));
-    if (filteredJobs.length === 0) return <div className="py-20 text-center text-slate-300 font-black uppercase text-xs italic">No pieces in this stage.</div>;
+    
+    // Group view — list unique order IDs that have matching pieces
+    const uniqueOrderIds = Array.from(new Set((pieces || []).filter(p => p && filterFn(p)).map(p => p.orderId)));
+    if (uniqueOrderIds.length === 0) return <div className="py-20 text-center text-slate-300 font-black uppercase text-xs italic">No pieces in this stage.</div>;
+    
+    // Sort latest first
+    const sortedOrderIds = [...uniqueOrderIds].sort((a, b) => {
+        const jobA = jobOrders.find(j => j?.orderNo === a);
+        const jobB = jobOrders.find(j => j?.orderNo === b);
+        return (jobB?.date ? new Date(jobB.date).getTime() : 0) - (jobA?.date ? new Date(jobA.date).getTime() : 0);
+    });
+    
     return (
-        <div className="space-y-3">
-            {filteredJobs.map(j => {
-                const jobPieces = (pieces || []).filter(p => p.orderId === j.orderNo && filterFn(p));
-                const jobData = getJobDetails(j.orderNo || j.id, filterFn);
-                if (!jobData) return null;
+        <div className="space-y-4">
+            {sortedOrderIds.map(orderId => {
+                const jobPieces = (pieces || []).filter(p => p?.orderId === orderId && filterFn(p));
+                if (jobPieces.length === 0) return null;
+                const jobData = getJobDetails(orderId, filterFn);
+                
                 return (
-                    <div key={j.id}>
-                        <JobCard job={jobData.job} pieces={jobPieces} onSelectJob={setSelectedJobId} isSelected={false} clients={[]}/>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mt-3 pl-2">
-                            {jobPieces.map(p => (
-                                <div key={p.id} className="bg-white border border-slate-100 rounded-xl p-3 shadow-sm space-y-2">
-                                    <div className="flex justify-between items-start">
-                                        <span className="font-black text-blue-600 text-xs">{p.id}</span>
-                                        <button onClick={() => openBinModal(p)} className="text-[9px] font-bold text-slate-400 border border-slate-200 rounded px-1.5 py-0.5">BIN</button>
-                                    </div>
-                                    <p className="text-[10px] text-slate-400 leading-tight truncate">{p.specs}</p>
-                                    {renderAction(p)}
-                                </div>
-                            ))}
+                    <div key={orderId} onClick={() => setSelectedJobId(orderId)} className="bg-white p-5 rounded-2xl border-2 border-slate-200 shadow-sm cursor-pointer hover:border-blue-400 hover:shadow-lg transition-all">
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <h4 className="font-black text-slate-800 uppercase text-sm">{jobData?.projectName || 'Standard Order'}</h4>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{jobData?.clientName || 'Unknown'} | {orderId}</p>
+                            </div>
+                            <div className="flex items-center space-x-4 text-right">
+                                <div><p className="text-[9px] font-black text-slate-400 uppercase">Pieces</p><p className="text-lg font-black text-slate-800">{jobPieces.length}</p></div>
+                                <span className="bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full text-[10px] font-black uppercase">{jobData?.totalProgress || 0}%</span>
+                            </div>
                         </div>
                     </div>
                 );
