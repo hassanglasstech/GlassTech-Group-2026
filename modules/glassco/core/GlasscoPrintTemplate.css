@@ -4,17 +4,32 @@
 }
 
 @media print {
-  /* ── 1. THE ULTIMATE UNLOCKER (Kills Flexbox Pagination Lock) ─────── */
-  html, body, #root, #__next, main, div,
-  .h-screen, .max-h-screen, .min-h-screen, .h-full,
-  .overflow-hidden, .overflow-y-auto, .overflow-x-auto, .overflow-auto,
-  .flex, .grid /* <--- YEH SAB SE ZAROORI HAIN (Disable Flex/Grid) */ {
+  /* ── 1. ULTIMATE UNLOCKER — App Shell Only ───────────────────
+     Unlocks h-screen, overflow-hidden, flex/grid on APP containers
+     BUT scoped: does NOT touch elements INSIDE #glassco-print-root
+     so print content's own flex layouts (header, summary bar) survive */
+  html, body, #root, #__next, main {
     height: auto !important;
     min-height: auto !important;
     max-height: none !important;
     overflow: visible !important;
     position: static !important;
-    display: block !important; /* Forces normal document flow for pagination */
+    display: block !important;
+  }
+
+  /* App shell wrappers — kill flex/grid that trap content */
+  body > div,
+  #root > div,
+  #root > div > div,
+  #root > div > main,
+  .h-screen, .max-h-screen, .min-h-screen, .h-full,
+  .overflow-hidden, .overflow-y-auto, .overflow-x-auto, .overflow-auto {
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+    display: block !important;
   }
 
   /* ── 2. Page setup ──────────────────────────────────────────── */
@@ -23,7 +38,14 @@
     margin: 10mm 12mm; 
   }
 
-  /* ── 3. Print root: static flow ─────────────────────────────── */
+  /* ── 3. Hide ALL UI — no ghost space ────────────────────────── */
+  .no-print, nav, aside, header, footer,
+  [class*="sidebar"], [class*="topbar"], [class*="navbar"],
+  [class*="bottom-nav"] {
+    display: none !important;
+  }
+
+  /* ── 4. Print root: static flow ─────────────────────────────── */
   #glassco-print-root {
     display: block !important;
     position: static !important;
@@ -35,12 +57,12 @@
     padding: 0 !important;
   }
 
-  /* ── 4. Show print page content ─────────────────────────────── */
+  /* ── 5. Show print page content ─────────────────────────────── */
   #glassco-print-root .glassco-print-page {
     display: block !important;
   }
 
-  /* ── 5. Enterprise Table Pagination ─────────────────────────── */
+  /* ── 6. Enterprise Table Pagination ─────────────────────────── */
   #glassco-print-root table {
     width: 100% !important;
     border-collapse: collapse !important;
@@ -62,23 +84,16 @@
     break-inside: avoid !important; 
   }
 
-  /* ── 6. Footer stays together ───────────────────────────────── */
+  /* ── 7. Footer stays together ───────────────────────────────── */
   #glassco-print-root .print-footer {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
   }
 
-  /* ── 7. Color preservation ──────────────────────────────────── */
+  /* ── 8. Color preservation ──────────────────────────────────── */
   #glassco-print-root *, #glassco-print-root {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
-  }
-
-  /* ── 8. Hide UI elements (App Hiding Logic) ─────────────────── */
-  /* Ensures no ghost space is left by the React app shell */
-  .no-print, nav, aside, header, footer,
-  [class*="sidebar"], [class*="topbar"], [class*="navbar"] {
-    display: none !important;
   }
 
   /* ── 9. Force Tailwind colors in print ──────────────────────── */
