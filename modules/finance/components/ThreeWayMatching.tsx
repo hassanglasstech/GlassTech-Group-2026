@@ -86,6 +86,38 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
   const handleConfirmGRN = () => {
     if (!grnForm.grnRef || !grnForm.grnDate) return toast.error('GRN Reference and Date required.', { duration: 4000 });
     if (!selectedPO) return;
+
+    // ── GL: Dr Inventory / Cr GR/IR Clearing (only if GRN not already posted via MIGO) ──
+    // If maal MIGO se already post hua hai to grnService ne ye entry already bana di hogi.
+    // ThreeWayMatching mein sirf PO-level GRN link karte hain — duplicate GL avoid karne ke liye
+    // hum sirf GL entry banate hain agar MIGO se koi matching WE- journal nahi mila.
+    const existingGLs = FinanceService.getLedger().filter(
+      gl => gl.referenceId === grnForm.grnRef && (gl.docType === 'WE' as any)
+    );
+    if (existingGLs.length === 0 && selectedPO.totalAmount > 0) {
+      // GRN was not posted via MIGO — post GL now
+      const invAccs  = accounts.filter(a => a.code?.startsWith('115') && a.level === 5);
+      const grirAcc  = accounts.find(a => a.code === '21151');
+      if (invAccs.length > 0 && grirAcc) {
+        const invAcc = invAccs[0]; // first raw inventory account
+        const grnAmount = grnForm.grnQty || selectedPO.totalAmount;
+        const grnGLId = `WE-${grnForm.grnRef}-TW`;
+        const grnGL: LedgerTransaction = {
+          id: grnGLId, company, docType: 'KR',
+          docDate: grnForm.grnDate,
+          date: grnForm.grnDate,
+          description: `GRN Confirm (3WM): ${selectedPO.toVendor} | ${grnForm.grnRef} | PO: ${selectedPO.id}`,
+          referenceId: grnForm.grnRef,
+          status: 'Posted',
+          details: [
+            { accountId: invAcc.id, debit: grnAmount, credit: 0, text: `Inventory in: ${selectedPO.toVendor} — ${grnForm.grnRef}` },
+            { accountId: grirAcc.id, debit: 0, credit: grnAmount, text: `GR/IR clearing: ${grnForm.grnRef} (clear on invoice)` },
+          ],
+        };
+        FinanceService.recordTransaction(grnGL);
+      }
+    }
+
     const all = ProductionService.getPurchaseOrders();
     const updated = all.map(p => p.id === selectedPO.id
       ? { ...p, grnRef: grnForm.grnRef, grnDate: grnForm.grnDate, grnQty: grnForm.grnQty || p.totalAmount,
@@ -97,10 +129,12 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
     refreshData();
     setSelectedPO(prev => prev ? { ...prev, ...grnForm, status: 'GRN Done' as any } : null);
     setActiveStep('invoice');
-    toast.error(`✓ GRN ${grnForm.grnRef} recorded for ${selectedPO.id}.`, { duration: 4000 });
+    toast.success(`✓ GRN ${grnForm.grnRef} linked to ${selectedPO.id}.`, { duration: 4000 });
   };
 
-  // ── Invoice Register ──────────────────────────────────────────────────────
+  // ── Invoice Register (MIRO equivalent) ──────────────────────────────────
+  // GL on 3-Way match: Dr GR/IR Clearing / Cr Accounts Payable Vendor
+  // This clears the suspense GR/IR account created at GRN time.
   const handleRegisterInvoice = () => {
     if (!invForm.vendorInvoiceNo || !invForm.vendorInvoiceAmount) return toast.error('Invoice number and amount required.', { duration: 4000 });
     if (!selectedPO) return;
@@ -108,6 +142,56 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
     const diff = Math.abs(invForm.vendorInvoiceAmount - selectedPO.totalAmount);
     const matchSt = diff / Math.max(selectedPO.totalAmount, 1) > tolerance ? 'Mismatch' : '3-Way';
     const newStatus = matchSt === 'Mismatch' ? 'On Hold' : 'Matched';
+
+    // ── GL Entry: Dr GR/IR / Cr Accounts Payable (only on clean match) ─────
+    if (matchSt === '3-Way') {
+      const grirAcc    = accounts.find(a => a.code === '21151');
+      const payableAcc = accounts.find(a => a.code === '21111' || a.code?.startsWith('2111'));
+      if (grirAcc && payableAcc) {
+        const invoiceAmt = invForm.vendorInvoiceAmount;
+        const mirId = `IR-${invForm.vendorInvoiceNo}-${Date.now().toString().slice(-5)}`;
+        const miroGL: LedgerTransaction = {
+          id: mirId, company, docType: 'KR',
+          docDate: new Date().toISOString().split('T')[0],
+          date: new Date().toISOString().split('T')[0],
+          description: `Invoice Match (MIRO): ${selectedPO.toVendor} | Inv ${invForm.vendorInvoiceNo} | PO ${selectedPO.id}`,
+          referenceId: invForm.vendorInvoiceNo,
+          status: 'Posted',
+          details: [
+            {
+              accountId: grirAcc.id, debit: invoiceAmt, credit: 0,
+              text: `Clear GR/IR: ${selectedPO.grnRef || ''} — invoice received`,
+            },
+            {
+              accountId: payableAcc.id, debit: 0, credit: invoiceAmt,
+              text: `AP: ${selectedPO.toVendor} — Inv ${invForm.vendorInvoiceNo}`,
+            },
+          ],
+        };
+        FinanceService.recordTransaction(miroGL);
+      }
+
+      // Freight GR/IR clear — if PO had freight, clear 21152 → 21113
+      const grirFrtAcc = accounts.find(a => a.code === '21152');
+      const otherPayAcc = accounts.find(a => a.code === '21113');
+      const freightAmt: number = (selectedPO as any).totalFreight || 0;
+      if (grirFrtAcc && otherPayAcc && freightAmt > 0) {
+        const frtMirId = `IR-FRT-${invForm.vendorInvoiceNo}`;
+        const frtGL: LedgerTransaction = {
+          id: frtMirId, company, docType: 'KR',
+          docDate: new Date().toISOString().split('T')[0],
+          date: new Date().toISOString().split('T')[0],
+          description: `Freight Invoice Match: ${selectedPO.id} | Inv ${invForm.vendorInvoiceNo}`,
+          referenceId: invForm.vendorInvoiceNo,
+          status: 'Posted',
+          details: [
+            { accountId: grirFrtAcc.id, debit: freightAmt, credit: 0, text: `Clear GR/IR freight: ${selectedPO.id}` },
+            { accountId: otherPayAcc.id, debit: 0, credit: freightAmt, text: `Transport payable: ${selectedPO.id}` },
+          ],
+        };
+        FinanceService.recordTransaction(frtGL);
+      }
+    }
 
     const all = ProductionService.getPurchaseOrders();
     const updated = all.map(p => p.id === selectedPO.id
@@ -119,10 +203,10 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
     setSelectedPO(fresh);
     refreshData();
     if (matchSt === 'Mismatch') {
-      toast.error(`⚠ MISMATCH: Invoice PKR ${invForm.vendorInvoiceAmount.toLocaleString()}} vs PO PKR ${selectedPO.totalAmount.toLocaleString()}.\nPO placed On Hold. Review required.`, { duration: 4000 });
+      toast.error(`⚠ MISMATCH: Invoice PKR ${invForm.vendorInvoiceAmount.toLocaleString()} vs PO PKR ${selectedPO.totalAmount.toLocaleString()}. PO On Hold.`, { duration: 5000 });
       setActiveStep('match');
     } else {
-      toast.error(`✓ 3-Way Match successful. PO ${selectedPO.id} status → Matched.`, { duration: 4000 });
+      toast.success(`✓ Invoice matched. GL posted: Dr GR/IR / Cr Payable. PO → Matched.`, { duration: 5000 });
       setActiveStep('approval');
     }
   };
@@ -157,10 +241,10 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
     if (!selectedPO) return;
     if (!payGLId) return toast.error('Select Bank / Cash GL account for payment.', { duration: 4000 });
 
-    const payableAcc = accounts.find(a =>
-      a.name.includes('PAYABLE') || a.code.startsWith('211')
-    );
-    if (!payableAcc) return toast.error('Accounts Payable GL not found. Check COA setup.', { duration: 4000 });
+    // Find AP account — prefer 21111 (Glass Importers), fallback to any 2111x
+    const payableAcc = accounts.find(a => a.code === '21111')
+      || accounts.find(a => a.code?.startsWith('2111'));
+    if (!payableAcc) return toast.error('Accounts Payable GL (21111) not found. Check GlassCo COA.', { duration: 4000 });
 
     const txId = `KZ-${Date.now().toString().slice(-6)}`;
     const ledgerTx: LedgerTransaction = {
