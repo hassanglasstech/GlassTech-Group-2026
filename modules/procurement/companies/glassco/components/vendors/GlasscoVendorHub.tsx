@@ -124,7 +124,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
       if (editingId) {
           updatedVendors = updatedVendors.map(v => v.id === editingId ? { ...v, ...newVendorForm } as Vendor : v);
       } else {
-          updatedVendors.push({ ...newVendorForm as Vendor, id: `VEND-${Date.now()}` });
+          updatedVendors.push({ ...newVendorForm as Vendor, id: `VEND-${Date.now()}`, company } as Vendor);
       }
 
       SalesService.saveVendors(updatedVendors);
