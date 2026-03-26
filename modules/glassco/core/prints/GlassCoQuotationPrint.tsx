@@ -7,318 +7,187 @@ interface Props {
     clientName: string;
 }
 
-const SERVICE_FULL_NAMES: Record<string, string> = {
-    'T/G': 'Tempered',
-    'P/E': 'Machine Polishing',
-    'P/F': 'Flat Polishing',
-    'R/D': 'Rough Grinding',
-    'Notch': 'CNC Notching',
-    'Holes': 'Drilled Holes',
-    'Double Glaze': 'Double Glazing',
-    'D/G': 'Double Glazing',
-    'L/G': 'Lamination',
-    'Frosted': 'Frosting'
-};
-
 export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName }) => {
-    // Safety: parse items if stored as string
     const safeItems: any[] = Array.isArray(quote.items)
         ? quote.items
         : (typeof quote.items === 'string' ? (() => { try { return JSON.parse(quote.items as any); } catch { return []; } })() : []);
-    const safeQuote = { ...quote, items: safeItems };
-    quote = safeQuote;
+    quote = { ...quote, items: safeItems };
+
     const subTotal = quote.items.reduce((s, i) => s + i.amount, 0);
     const discountAmount = quote.discountAmount !== undefined && quote.discountAmount > 0 
         ? quote.discountAmount 
         : (subTotal * (quote.discountPercent || 0)) / 100;
     const netAmount = subTotal - discountAmount;
-    const advanceAmount = netAmount * 0.5;
-
-    // Display Logic for ID: Show the ID as is (QT, SO, or DRF)
     const displayId = quote.orderNo || quote.id;
+    const isMM = quote.items.some(i => !i.isSection && (i.mmW || i.mmH));
 
-    // Calculate Summary Bar metrics
     const summary = useMemo(() => {
-        const stats = {
-            totalQty: 0,
-            totalSqFt: 0,
-            breakdown: {} as Record<string, number>
-        };
-
+        const stats = { totalQty: 0, totalSqFt: 0, breakdown: {} as Record<string, number> };
         quote.items.forEach(item => {
             if (item.isSection) return;
             const qty = Number(item.qty) || 0;
             stats.totalQty += qty;
             stats.totalSqFt += (Number(item.totalSqFt) || 0);
-            
-            const isTempered = item.selectedServices?.some(s => s === 'T/G' || s === 'Tempered');
+            const isTempered = item.selectedServices?.some((s: string) => s === 'T/G' || s === 'Tempered');
             const glassTypeDisplay = (item.glassType === 'Plain' && isTempered) ? 'Clear' : item.glassType;
-
             const key = [item.glassSize, item.glassColor, item.subCategory, glassTypeDisplay]
-                .filter(p => p && p !== 'N/A' && p !== 'Standard')
-                .join(' ')
-                .toUpperCase();
+                .filter(p => p && p !== 'N/A' && p !== 'Standard').join(' ').toUpperCase();
             stats.breakdown[key] = (stats.breakdown[key] || 0) + qty;
         });
-
         return stats;
     }, [quote.items]);
 
+    let serialNum = 0;
+
     return (
         <div className="glassco-print-page bg-white text-black p-0 font-sans leading-tight">
-            <style>{`
-                @media screen {
-                    .glassco-print-page { display: none !important; }
-                }
-                @media print {
-                    @page { 
-                        size: A4; 
-                        margin: 10mm 12mm; 
-                    }
-                    body * {
-                        visibility: hidden;
-                    }
-                    .glassco-print-page, .glassco-print-page * {
-                        visibility: visible;
-                    }
-                    .glassco-print-page {
-                        position: static !important;
-                        width: 100% !important;
-                        height: auto !important;
-                        background: white !important;
-                        margin: 0 !important;
-                        padding: 0 !important;
-                    }
-                    html, body {
-                        height: auto !important;
-                        overflow: visible !important;
-                        background: white !important;
-                        margin: 0 !important;
-                        padding: 0 !important;
-                    }
-                    .no-print, nav, header, aside,
-                    [class*="sidebar"], [class*="topbar"], [class*="nav"] { display: none !important; }
-                    .print-container { 
-                        width: 100% !important; 
-                        padding: 8mm !important; 
-                        box-sizing: border-box !important;
-                    }
-                    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                    
-                    .bg-slate-50 { background-color: #f8fafc !important; }
-                    .bg-slate-100 { background-color: #f1f5f9 !important; }
-                    .bg-slate-900 { background-color: #0f172a !important; }
-                    .text-slate-400 { color: #94a3b8 !important; }
-                    .text-slate-500 { color: #64748b !important; }
-                    .text-slate-900 { color: #0f172a !important; }
-                    .border-slate-200 { border-color: #e2e8f0 !important; }
-                    .border-slate-300 { border-color: #cbd5e1 !important; }
-                    
-                    table { page-break-inside: auto; width: 100% !important; }
-                    thead { display: table-header-group; }
-                    tr { page-break-inside: avoid; page-break-after: auto; }
-                    .page-break-before { page-break-before: always; }
-                }
-                .font-pill { border: 1.5px solid #1e293b; border-radius: 9999px; padding: 2px 30px; font-weight: 900; letter-spacing: 0.1em; }
-            `}</style>
-            
-            <div className="print-container">
-                {/* Header Section - Compact */}
-                <div className="flex justify-between items-start mb-2">
-                    <div>
-                        <h1 className="text-2xl font-bold tracking-tighter text-slate-900">GlassTech</h1>
-                        <p className="text-[8px] font-bold uppercase tracking-widest text-slate-500">Complete Architectural Glass Solutions</p>
-                    </div>
-                    <div className="text-right">
-                        <h2 className="text-2xl font-bold tracking-tighter text-slate-900">GlassCo</h2>
-                        <p className="text-[8px] font-bold text-slate-800">Contact: 0303-2428128</p>
-                    </div>
-                </div>
+            {/* ═══ SINGLE CONTINUOUS TABLE — browser handles pagination ═══ */}
+            <table className="w-full text-left border-collapse text-[10px]" style={{ tableLayout: 'fixed' }}>
+                
+                {/* ═══ THEAD: Repeats on every printed page ═══ */}
+                <thead>
+                    {/* Row 1: Document Header (logo, client, summary) */}
+                    <tr>
+                        <th colSpan={7} style={{ padding: '0 8mm', fontWeight: 'normal' }}>
+                            {/* Company Header */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px', paddingTop: '4px' }}>
+                                <div>
+                                    <div style={{ fontSize: '20px', fontWeight: 800, letterSpacing: '-0.05em', color: '#0f172a' }}>GlassTech</div>
+                                    <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#64748b' }}>Complete Architectural Glass Solutions</div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: '20px', fontWeight: 800, letterSpacing: '-0.05em', color: '#0f172a' }}>GlassCo</div>
+                                    <div style={{ fontSize: '7px', fontWeight: 700, color: '#1e293b' }}>Contact: 0303-2428128</div>
+                                </div>
+                            </div>
 
-                {/* Pill Title - Compact */}
-                <div className="flex justify-center my-2">
-                    <div className="font-pill text-[10px] uppercase text-slate-900">Q U O T A T I O N</div>
-                </div>
+                            {/* Pill Title */}
+                            <div style={{ display: 'flex', justifyContent: 'center', margin: '6px 0' }}>
+                                <span className="font-pill-qt" style={{ fontSize: '9px', textTransform: 'uppercase' }}>Q U O T A T I O N</span>
+                            </div>
 
-                {/* Inquiry Info Row - Compact */}
-                <div className="flex justify-between mb-3 text-[9px]">
-                    <div className="space-y-0.5">
-                        <p className="text-slate-400 font-bold uppercase tracking-tighter text-[7px]">INQUIRY FROM:</p>
-                        <h3 className="text-lg font-black text-slate-900 leading-none uppercase">{clientName}</h3>
-                        <p className="text-blue-700 font-black uppercase text-[8px]">{quote.projectName || 'STANDARD ORDER'}</p>
+                            {/* Client & Ref Info */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '8px' }}>
+                                <div>
+                                    <div style={{ color: '#94a3b8', fontWeight: 700, fontSize: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>INQUIRY FROM:</div>
+                                    <div style={{ fontSize: '16px', fontWeight: 900, color: '#0f172a', textTransform: 'uppercase', lineHeight: 1 }}>{clientName}</div>
+                                    <div style={{ color: '#1d4ed8', fontWeight: 900, textTransform: 'uppercase', fontSize: '7px', marginTop: '2px' }}>{quote.projectName || 'STANDARD ORDER'}</div>
+                                </div>
+                                <div style={{ textAlign: 'right', fontSize: '8px' }}>
+                                    <div><span style={{ color: '#94a3b8', fontWeight: 700 }}>REF NO: </span><span style={{ color: '#1d4ed8', fontWeight: 900 }}>{displayId}</span></div>
+                                    <div><span style={{ color: '#94a3b8', fontWeight: 700 }}>DATE: </span><span style={{ fontWeight: 900, color: '#334155' }}>{quote.date}</span></div>
+                                    {quote.dueDate && <div><span style={{ color: '#94a3b8', fontWeight: 700 }}>DUE DATE: </span><span style={{ fontWeight: 900, color: '#dc2626' }}>{quote.dueDate}</span></div>}
+                                </div>
+                            </div>
+
+                            {/* Summary Bar */}
+                            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 10px', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div style={{ display: 'flex', gap: '16px', borderRight: '1px solid #e2e8f0', paddingRight: '16px' }}>
+                                    <div>
+                                        <div style={{ fontSize: '6px', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Total Qty</div>
+                                        <div style={{ fontSize: '12px', fontWeight: 900, color: '#0f172a' }}>{summary.totalQty} <span style={{ fontSize: '7px', color: '#94a3b8', fontWeight: 400 }}>Pcs</span></div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '6px', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Total Area</div>
+                                        <div style={{ fontSize: '12px', fontWeight: 900, color: '#1d4ed8' }}>{summary.totalSqFt.toFixed(2)} <span style={{ fontSize: '7px', color: '#94a3b8', fontWeight: 400 }}>Sq.Ft</span></div>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'flex-end', flex: 1, paddingLeft: '16px' }}>
+                                    {Object.entries(summary.breakdown).map(([key, val]) => (
+                                        <span key={key} style={{ background: 'white', border: '1px solid #f1f5f9', borderRadius: '4px', padding: '2px 6px', fontSize: '6px', fontWeight: 900 }}>
+                                            <span style={{ color: '#94a3b8' }}>{key}: </span><span style={{ color: '#334155' }}>{val}</span>
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        </th>
+                    </tr>
+
+                    {/* Row 2: Column Headers */}
+                    <tr style={{ background: '#f8fafc', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1', fontSize: '8px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#475569' }}>
+                        <th style={{ padding: '6px 6px', textAlign: 'center', width: '5%' }}>S.No</th>
+                        <th style={{ padding: '6px 6px', width: '40%' }}>Description & Specifications</th>
+                        <th style={{ padding: '6px 6px', textAlign: 'center', width: '15%' }}>Size ({isMM ? 'mm' : 'Inches'})</th>
+                        <th style={{ padding: '6px 6px', textAlign: 'center', width: '8%' }}>Qty</th>
+                        <th style={{ padding: '6px 6px', textAlign: 'center', width: '10%' }}>Sq.Ft</th>
+                        <th style={{ padding: '6px 6px', textAlign: 'right', width: '10%' }}>Rate</th>
+                        <th style={{ padding: '6px 6px', textAlign: 'right', width: '12%' }}>Amount</th>
+                    </tr>
+                </thead>
+
+                {/* ═══ TBODY: ALL items — browser paginates automatically ═══ */}
+                <tbody>
+                    {quote.items.map((item, idx) => {
+                        if (item.isSection) {
+                            return (
+                                <tr key={idx} style={{ background: '#f1f5f9', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1' }}>
+                                    <td colSpan={7} style={{ padding: '5px 14px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#334155', fontStyle: 'italic', fontSize: '8px' }}>
+                                        {item.description}
+                                    </td>
+                                </tr>
+                            );
+                        }
+
+                        serialNum++;
+                        const servicesList = formatServices(item.selectedServices);
+                        const isDoubleGlazed = item.selectedServices?.some((s: string) => s === 'Double Glaze' || s === 'D/G' || s === 'Double Glazing');
+                        const qtyDisplay = isDoubleGlazed ? `${item.qty} Set` : item.qty;
+                        const description = formatGlassDescription(item);
+                        const displaySize = formatGlassSize(item);
+
+                        return (
+                            <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0', pageBreakInside: 'avoid' }}>
+                                <td style={{ padding: '6px', textAlign: 'center', color: '#94a3b8', fontWeight: 700, borderRight: '1px solid #f1f5f9' }}>{serialNum}</td>
+                                <td style={{ padding: '6px', borderRight: '1px solid #f1f5f9' }}>
+                                    <div style={{ fontWeight: 900, color: '#1e293b', textTransform: 'uppercase', lineHeight: 1.2, fontSize: '9px' }}>{description}</div>
+                                    <div style={{ fontSize: '6px', fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', marginTop: '2px', letterSpacing: '-0.02em' }}>{servicesList}</div>
+                                </td>
+                                <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700, color: '#334155', fontSize: '7px', borderRight: '1px solid #f1f5f9' }}>{displaySize}</td>
+                                <td style={{ padding: '6px', textAlign: 'center', fontWeight: 900, color: '#0f172a', fontSize: '9px', borderRight: '1px solid #f1f5f9' }}>{qtyDisplay}</td>
+                                <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700, color: '#64748b', fontSize: '7px', borderRight: '1px solid #f1f5f9' }}>{Number(item.totalSqFt||0).toFixed(2)}</td>
+                                <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700, color: '#475569', fontSize: '8px', borderRight: '1px solid #f1f5f9' }}>{Number(item.pricePerUnit||0).toLocaleString()}</td>
+                                <td style={{ padding: '6px', textAlign: 'right', fontWeight: 900, color: '#0f172a', fontSize: '9px' }}>{Number(item.amount||0).toLocaleString()}</td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
+
+            {/* ═══ FOOTER: Prints once after all rows ═══ */}
+            <div className="print-footer" style={{ marginTop: '12px', paddingTop: '8px', borderTop: '2px solid #0f172a', padding: '0 8mm', pageBreakInside: 'avoid' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ width: '58%' }}>
+                        <div style={{ fontSize: '7px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#0f172a', marginBottom: '4px', borderBottom: '1px solid #f1f5f9', paddingBottom: '3px' }}>Protocol & Terms</div>
+                        <div style={{ fontSize: '7px', color: '#475569', fontWeight: 700, lineHeight: 1.6 }}>
+                            <div>• Rates valid for 3 days. Rounding protocol applies.</div>
+                            <div>• No return or exchange once glass is cut.</div>
+                            <div style={{ color: '#0f172a' }}>• 50% Advance mandatory to initiate production.</div>
+                        </div>
                     </div>
-                    <div className="text-right space-y-0.5">
-                        <div className="flex justify-end space-x-2">
-                            <span className="text-slate-400 font-bold uppercase">REF NO:</span>
-                            <span className="text-blue-700 font-black">{displayId}</span>
+                    <div style={{ width: '36%' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                            <span>Gross:</span><span>PKR {(Number(subTotal) || 0).toLocaleString()}</span>
                         </div>
-                        <div className="flex justify-end space-x-2">
-                            <span className="text-slate-400 font-bold uppercase">DATE:</span>
-                            <span className="font-black text-slate-700">{quote.date}</span>
-                        </div>
-                        {quote.dueDate && (
-                            <div className="flex justify-end space-x-2">
-                                <span className="text-slate-400 font-bold uppercase">DUE DATE:</span>
-                                <span className="font-black text-rose-600">{quote.dueDate}</span>
+                        {(quote.discountAmount || quote.discountPercent) > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase' }}>
+                                <span>Disc:</span><span>- {(Number(discountAmount) || 0).toLocaleString()}</span>
                             </div>
                         )}
-                    </div>
-                </div>
-
-                {/* Summary Metrics Bar - Compact */}
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 mb-3 flex items-center justify-between">
-                    <div className="flex space-x-4 border-r border-slate-200 pr-4">
-                        <div>
-                            <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Total Qty</p>
-                            <p className="text-sm font-black text-slate-900">{summary.totalQty} <span className="text-[8px] text-slate-400 font-normal">Pcs</span></p>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingTop: '4px', borderTop: '1px solid #e2e8f0', marginTop: '4px' }}>
+                            <span style={{ fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', color: '#0f172a' }}>Net:</span>
+                            <span style={{ fontSize: '16px', fontWeight: 900, color: '#0f172a' }}>PKR {(Number(netAmount) || 0).toLocaleString()}</span>
                         </div>
-                        <div>
-                            <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Total Area</p>
-                            <p className="text-sm font-black text-blue-700">{summary.totalSqFt.toFixed(2)} <span className="text-[8px] text-slate-400 font-normal">Sq.Ft</span></p>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingTop: '4px' }}>
+                            <span style={{ fontSize: '8px', fontWeight: 900, textTransform: 'uppercase', color: '#64748b' }}>50% Advance:</span>
+                            <span style={{ fontSize: '10px', fontWeight: 900, color: '#334155' }}>PKR {(netAmount / 2).toLocaleString()}</span>
                         </div>
                     </div>
-                    <div className="flex flex-wrap gap-x-2 gap-y-0.5 justify-end flex-1 pl-4">
-                        {Object.entries(summary.breakdown).map(([key, val]) => (
-                            <div key={key} className="flex items-center space-x-1 bg-white border border-slate-100 rounded px-1.5 py-0.5">
-                                <span className="text-[7px] font-black text-slate-400 uppercase">{key}:</span>
-                                <span className="text-[8px] font-black text-slate-700">{val}</span>
-                            </div>
-                        ))}
-                    </div>
                 </div>
-
-                {/* Main Items Table */}
-                <div className="mt-2">
-                    {(() => {
-                        const MAX_ROWS = 25;
-                        const chunks: any[][] = [];
-                        let currentChunk: any[] = [];
-                        let serialNum = 0;
-
-                        quote.items.forEach((item, index) => {
-                            currentChunk.push(item);
-                            if (currentChunk.length === MAX_ROWS && index < quote.items.length - 1) {
-                                chunks.push(currentChunk);
-                                currentChunk = [];
-                            }
-                        });
-                        if (currentChunk.length > 0) chunks.push(currentChunk);
-
-                        const isMM = quote.items.some(i => !i.isSection && (i.mmW || i.mmH));
-                        return chunks.map((chunk, chunkIdx) => (
-                            <div key={chunkIdx} className={chunkIdx > 0 ? 'page-break-before mt-8' : ''}>
-                                <table className="w-full text-left border-collapse text-[10px] table-fixed">
-                                    <thead>
-                                        <tr className="bg-slate-50 border-y border-slate-300 text-[9px] font-black uppercase text-slate-600">
-                                            <th className="py-2 px-2 text-center w-[5%]">S.No</th>
-                                            <th className="py-2 px-2 w-[40%]">Description & Specifications</th>
-                                            <th className="py-2 px-2 text-center w-[15%]">Size ({isMM ? 'mm' : 'Inches'})</th>
-                                            <th className="py-2 px-2 text-center w-[8%]">Qty</th>
-                                            <th className="py-2 px-2 text-center w-[10%]">Sq.Ft</th>
-                                            <th className="py-2 px-2 text-right w-[10%]">Rate</th>
-                                            <th className="py-2 px-2 text-right w-[12%]">Amount</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-200">
-                                        {chunk.map((item, idx) => {
-                                            if (!item.isSection) serialNum++;
-                                            
-                                            if (item.isSection) {
-                                                return (
-                                                    <tr key={idx} className="bg-slate-100 border-y border-slate-300">
-                                                        <td colSpan={7} className="py-1.5 px-4 font-black uppercase tracking-widest text-slate-700 italic text-[9px]">
-                                                            {item.description}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            }
-
-                                            const servicesList = formatServices(item.selectedServices);
-
-                                            const isDoubleGlazed = item.selectedServices?.some((s: string) => s === 'Double Glaze' || s === 'D/G' || s === 'Double Glazing');
-                                            const qtyDisplay = isDoubleGlazed ? `${item.qty} Set` : item.qty;
-
-                                            const description = formatGlassDescription(item);
-                                            const displaySize = formatGlassSize(item);
-
-                                            return (
-                                                <tr key={idx} className="break-inside-avoid">
-                                                    <td className="py-2 px-2 text-center text-slate-400 font-bold border-r border-slate-100">{serialNum}</td>
-                                                    <td className="py-2 px-2 border-r border-slate-100">
-                                                        <p className="font-black text-slate-800 uppercase leading-tight text-[10px]">
-                                                            {description}
-                                                        </p>
-                                                        <p className="text-[7px] font-bold text-blue-700 uppercase mt-0.5 tracking-tighter">
-                                                            {servicesList}
-                                                        </p>
-                                                    </td>
-                                                    <td className="py-2 px-2 text-center font-bold text-slate-700 text-[8px] border-r border-slate-100">
-                                                        {displaySize}
-                                                    </td>
-                                                    <td className="py-2 px-2 text-center font-black text-slate-900 text-[10px] border-r border-slate-100">{qtyDisplay}</td>
-                                                    <td className="py-2 px-2 text-center font-bold text-slate-500 text-[8px] border-r border-slate-100">{Number(item.totalSqFt||0).toFixed(2)}</td>
-                                                    <td className="py-2 px-2 text-right font-bold text-slate-600 text-[9px] border-r border-slate-100">{Number(item.pricePerUnit||0).toLocaleString()}</td>
-                                                    <td className="py-2 px-2 text-right font-black text-slate-900 text-[10px]">{Number(item.amount||0).toLocaleString()}</td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                                {chunkIdx === chunks.length - 1 && (
-                                    <div className="mt-4 pt-2 border-t border-slate-900 break-inside-avoid">
-                                        <div className="flex justify-between items-start">
-                                            <div className="w-[60%]">
-                                                <h4 className="text-[8px] font-black uppercase tracking-widest text-slate-900 mb-1 border-b border-slate-100 pb-0.5">Protocol & Terms</h4>
-                                                <ul className="text-[7.5px] space-y-0.5 text-slate-600 font-bold leading-tight">
-                                                    <li className="flex items-start space-x-1">
-                                                        <span className="text-slate-300">•</span>
-                                                        <span>Rates valid for 3 days. Rounding protocol applies.</span>
-                                                    </li>
-                                                    <li className="flex items-start space-x-1">
-                                                        <span className="text-slate-300">•</span>
-                                                        <span>No return or exchange once glass is cut.</span>
-                                                    </li>
-                                                    <li className="flex items-start space-x-1">
-                                                        <span className="text-rose-500">•</span>
-                                                        <span className="text-slate-900">50% Advance mandatory to initiate production.</span>
-                                                    </li>
-                                                </ul>
-                                            </div>
-
-                                            <div className="w-[35%] space-y-1">
-                                                <div className="flex justify-between text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
-                                                    <span>Gross:</span>
-                                                    <span>PKR {(Number(subTotal) || 0).toLocaleString()}</span>
-                                                </div>
-                                                {(quote.discountAmount || quote.discountPercent) > 0 && (
-                                                    <div className="flex justify-between text-[9px] font-bold text-indigo-600 uppercase tracking-tighter">
-                                                        <span>Disc:</span>
-                                                        <span>- {(Number(discountAmount) || 0).toLocaleString()}</span>
-                                                    </div>
-                                                )}
-                                                <div className="flex justify-between items-end pt-1 border-t border-slate-200">
-                                                    <span className="text-[10px] font-black uppercase text-slate-900 tracking-tighter">Net:</span>
-                                                    <span className="text-lg font-black text-slate-900">PKR {(Number(netAmount) || 0).toLocaleString()}</span>
-                                                </div>
-                                                <div className="flex justify-between items-end pt-1">
-                                                    <span className="text-[9px] font-black uppercase text-slate-500 tracking-tighter">50% Advance:</span>
-                                                    <span className="text-[11px] font-black text-slate-700">PKR {(netAmount / 2).toLocaleString()}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="mt-6 text-center">
-                                            <p className="text-[7px] font-black uppercase tracking-[0.2em] text-slate-300 italic">
-                                                Computer generated document. No signature required.
-                                            </p>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        ));
-                    })()}
+                <div style={{ marginTop: '20px', textAlign: 'center' }}>
+                    <p style={{ fontSize: '6px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#cbd5e1', fontStyle: 'italic' }}>
+                        Computer generated document. No signature required.
+                    </p>
                 </div>
-
             </div>
         </div>
     );
