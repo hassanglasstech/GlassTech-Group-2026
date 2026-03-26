@@ -1,10 +1,36 @@
 /* ═══════════════════════════════════════════════════════════════════
-   GlassCo Print Override — uses #glassco-print-root (ID specificity)
-   to beat index.css's .print-only/.print-container position:absolute
+   GlassCo Print System — Scoped via body.glassco-printing class
+   
+   WHY THIS FILE EXISTS:
+   index.css line 374 forces: .print-only { position: absolute !important }
+   index.css line 381 forces: .print-only * { visibility: visible !important }
+   
+   These two rules together:
+   1. position:absolute → collapses multi-page content into 1 page
+   2. visibility:visible on ALL .print-only descendants → shows ERP UI
+   
+   This file uses body.glassco-printing (class) + #glassco-print-root (ID)
+   for CSS specificity that BEATS index.css class-only selectors.
    ═══════════════════════════════════════════════════════════════════ */
 
 @media print {
-  /* 1. Print root wrapper — normal flow, not absolute */
+
+  /* ── Step 1: Hide EVERYTHING when GlassCo printing ──────────── 
+     Specificity: 0,1,1 → beats index.css .print-only * (0,1,0) */
+  body.glassco-printing * {
+    visibility: hidden !important;
+  }
+
+  /* ── Step 2: Show ONLY GlassCo print content ────────────────── 
+     Specificity: 1,1,1 → highest, guaranteed visible */
+  body.glassco-printing #glassco-print-root,
+  body.glassco-printing #glassco-print-root * {
+    visibility: visible !important;
+  }
+
+  /* ── Step 3: Override index.css position:absolute ────────────── 
+     ID selector (1,1,0) beats class selector (0,1,0) 
+     position:static = REQUIRED for multi-page pagination */
   #glassco-print-root {
     display: block !important;
     position: static !important;
@@ -14,8 +40,6 @@
     background: white !important;
   }
 
-  /* 2. Override index.css position:absolute on .print-only & .print-container
-        ID+class = specificity 1,1,0 beats index.css class = 0,1,0 */
   #glassco-print-root .print-only {
     display: block !important;
     position: static !important;
@@ -23,6 +47,9 @@
     height: auto !important;
     overflow: visible !important;
     background: white !important;
+    top: auto !important;
+    left: auto !important;
+    z-index: auto !important;
   }
 
   #glassco-print-root .print-container {
@@ -31,14 +58,11 @@
     width: 100% !important;
     height: auto !important;
     overflow: visible !important;
+    padding: 8mm !important;
+    box-sizing: border-box !important;
   }
 
-  /* 3. Force ALL descendants visible */
-  #glassco-print-root * {
-    visibility: visible !important;
-  }
-
-  /* 4. Force table elements to their correct display types */
+  /* ── Step 4: Force table elements to proper display types ──── */
   #glassco-print-root table {
     display: table !important;
     width: 100% !important;
@@ -59,5 +83,22 @@
   #glassco-print-root td,
   #glassco-print-root th {
     display: table-cell !important;
+  }
+
+  /* ── Step 5: Page break support for multi-page printing ──── */
+  #glassco-print-root .page-break-before {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+
+  /* ── Step 6: Color preservation ────────────────────────────── */
+  #glassco-print-root * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* ── Step 7: Hide no-print elements inside print root ─────── */
+  #glassco-print-root .no-print {
+    display: none !important;
   }
 }
