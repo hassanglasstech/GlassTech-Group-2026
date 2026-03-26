@@ -4,45 +4,37 @@
 }
 
 @media print {
-  /* ── 1. UNLOCK ALL PARENT CONTAINERS ─────────────────────────
-     Kills h-screen, overflow-hidden, flex that clip to 1 page */
-  html, body, #root, #__next, main {
-    height: auto !important;
-    min-height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-    position: static !important;
-    display: block !important;
-  }
 
-  body > div, #root > div, #root > div > div, #root > div > main,
-  .h-screen, .max-h-screen, .min-h-screen, .h-full,
-  .overflow-hidden, .overflow-y-auto, .overflow-x-auto, .overflow-auto {
-    height: auto !important;
-    min-height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-    position: static !important;
-    display: block !important;
-  }
-
-  /* ── 2. Page setup ──────────────────────────────────────────── */
-  @page { size: A4; margin: 10mm 12mm; }
-
-  /* ── 3. HIDE EVERYTHING — then show only print root ─────────
-     visibility:hidden hides content but keeps layout flow intact
-     which is fine because parent unlock already set height:auto */
-  body * { visibility: hidden; }
-  #glassco-print-root, #glassco-print-root * { visibility: visible !important; }
-
-  /* Also display:none the big UI chunks to remove ghost space */
-  .no-print, nav, aside, header, footer,
-  [class*="sidebar"], [class*="topbar"], [class*="navbar"],
-  [class*="bottom-nav"] {
+  /* ── 1. PORTAL-BASED HIDING ──────────────────────────────────
+     GlasscoPrintTemplate uses ReactDOM.createPortal(content, document.body)
+     So #glassco-print-root is a DIRECT child of <body>
+     
+     body.glassco-printing is added by useEffect in the component.
+     
+     This single rule hides the ENTIRE React app (#root and everything)
+     and shows ONLY the print portal. No visibility tricks. No z-index.
+     No specificity wars with index.css. Just display:none. Gone. */
+  
+  body.glassco-printing > *:not(#glassco-print-root) {
     display: none !important;
   }
 
-  /* ── 4. Print root: static flow ─────────────────────────────── */
+  /* ── 2. UNLOCK parent height clipping ────────────────────────── */
+  html, body {
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+  }
+
+  /* ── 3. Page setup ──────────────────────────────────────────── */
+  @page { 
+    size: A4; 
+    margin: 10mm 12mm; 
+  }
+
+  /* ── 4. Print root: normal document flow ─────────────────────── */
   #glassco-print-root {
     display: block !important;
     position: static !important;
