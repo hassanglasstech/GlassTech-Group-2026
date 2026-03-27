@@ -348,6 +348,7 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                                         className="w-full p-3 rounded-xl border font-black"
                                     >
                                         <option value={0}>-</option>
+                                        <option value={78}>78"</option>
                                         <option value={84}>84"</option>
                                         <option value={96}>96"</option>
                                     </select>
@@ -364,27 +365,7 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                                     </select>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-3 gap-4">
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-bold uppercase text-slate-400">Unit Cost (SqFt)</label>
-                                    <input type="number" value={glassForm.costPrice} onChange={e => setGlassForm({...glassForm, costPrice: e.target.value})} className="w-full p-3 rounded-xl border font-black text-slate-600" placeholder="0.00" />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-bold uppercase text-slate-400">Base Selling Rate</label>
-                                    <input type="number" value={glassForm.salesPrice} onChange={e => setGlassForm({...glassForm, salesPrice: e.target.value})} className="w-full p-3 rounded-xl border font-black text-blue-600" placeholder="0.00" />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className={`text-[10px] font-bold uppercase ${temperingDisabled ? 'text-slate-300' : 'text-emerald-600'}`}>With Tempering Rate</label>
-                                    <input 
-                                        type="number" 
-                                        disabled={temperingDisabled}
-                                        value={temperingDisabled ? '' : glassForm.temperingPrice} 
-                                        onChange={e => setGlassForm({...glassForm, temperingPrice: e.target.value})} 
-                                        className={`w-full p-3 rounded-xl border font-black ${temperingDisabled ? 'bg-slate-100 border-slate-200 text-slate-300 italic' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`} 
-                                        placeholder={temperingDisabled ? 'N/A' : '0.00'} 
-                                    />
-                                </div>
-                            </div>
+
                         </>
                     ) : (
                         <>
