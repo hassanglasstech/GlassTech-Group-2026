@@ -1,223 +1,367 @@
 /**
- * GlassCoSheetTagPrint.tsx
- * ─────────────────────────────────────────────────────────────────────────────
- * Renders A4-ready glass sheet inventory tags.
- * Layout: 3 columns × 4 rows = 12 tags per A4 page.
- * Each tag shows: Tag ID (barcode-style), serial, company header, vendor,
- * thickness, sheet size, GRN ref, date.
+ * GlassCoSheetTagPrint.tsx — Phase 3
  *
- * Usage (inside a printable container):
- *   <GlassCoSheetTagPrint entry={ledgerEntry} vendorName="XYZ Imports" />
+ * Prints sheet tags in batch after GRN tag generation.
+ * Tag contains: ID only — NO status printed.
+ * Status, defect info, usable area — system only.
  *
- * Call window.print() to print — the @media print styles suppress the
- * on-screen wrapper and render only .sheet-tag-print-root.
+ * Layout: 3 columns × 4 rows = 12 tags per A4 page
+ * Each tag: ~62mm × 62mm (business card size)
  */
 
 import React from 'react';
-import { MaterialLedgerEntry } from '@/modules/procurement/types/inventory';
+
+// ── Types ─────────────────────────────────────────────────────────────────
+export interface SheetTagData {
+  tagId: string;           // e.g. GLS-5MM-0326-001-01
+  grnId: string;
+  grnDate: string;
+  vendorName: string;
+  dcNo: string;
+  thickness: string;
+  sheetSize: string;       // e.g. 84x144
+  sqftPerSheet: number;
+  weightKg?: number;       // per sheet weight (optional)
+  batchSeq: string;
+}
 
 interface Props {
-    entry: MaterialLedgerEntry;
-    vendorName?: string;
+  tags: SheetTagData[];
+  onClose: () => void;
 }
 
-// ── Barcode-style visual (CSS-only stripes) ──────────────────────────────────
-const BarcodeStripes: React.FC<{ value: string }> = ({ value }) => {
-    // Deterministic stripe widths from char codes — purely decorative
-    const stripes = Array.from(value).map((c, i) => {
-        const code = c.charCodeAt(0);
-        return { width: (code % 3) + 1, dark: i % 2 === 0 };
-    });
-    return (
-        <div style={{ display: 'flex', alignItems: 'stretch', height: '36px', gap: '1px', overflow: 'hidden', borderRadius: '2px' }}>
-            {stripes.map((s, i) => (
-                <div
-                    key={i}
-                    style={{
-                        width: `${s.width * 2}px`,
-                        background: s.dark ? '#0f172a' : '#cbd5e1',
-                        flexShrink: 0,
-                    }}
-                />
-            ))}
-        </div>
-    );
-};
-
-// ── Single Tag ───────────────────────────────────────────────────────────────
-const SheetTag: React.FC<{ tagId: string; serial: number; meta: NonNullable<MaterialLedgerEntry['sheetTagMeta']>; vendorName: string }> = ({
-    tagId, serial, meta, vendorName
-}) => (
-    <div style={{
-        border: '1.5px solid #1e293b',
-        borderRadius: '6px',
-        padding: '8px 10px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '4px',
-        background: '#ffffff',
-        boxSizing: 'border-box',
-        width: '100%',
-        height: '100%',
-        pageBreakInside: 'avoid',
-        fontFamily: "'Arial', sans-serif",
-    }}>
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1.5px solid #0f172a', paddingBottom: '4px', marginBottom: '2px' }}>
-            <div>
-                <div style={{ fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#0f172a' }}>GlassTech Group</div>
-                <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', color: '#475569', marginTop: '1px' }}>GlassCo Pvt. Ltd. · Karachi</div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '7px', fontWeight: 900, color: '#1d4ed8', textTransform: 'uppercase' }}>SHEET TAG</div>
-                <div style={{ fontSize: '9px', fontWeight: 900, color: '#0f172a' }}>#{String(serial).padStart(3, '0')}</div>
-            </div>
-        </div>
-
-        {/* Tag ID — prominent */}
-        <div style={{ background: '#0f172a', color: '#ffffff', borderRadius: '3px', padding: '3px 6px', textAlign: 'center' }}>
-            <div style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '0.12em', fontFamily: 'monospace' }}>{tagId}</div>
-        </div>
-
-        {/* Barcode visual */}
-        <BarcodeStripes value={tagId} />
-
-        {/* Data rows */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px', marginTop: '2px' }}>
-            <Cell label="Thickness" value={meta.thickness.toUpperCase()} />
-            <Cell label="Sheet Size" value={meta.sheetSize ? `${meta.sheetSize}"` : '—'} />
-            <Cell label="GRN Ref" value={meta.grnRef || '—'} />
-            <Cell label="Date" value={meta.grnDate || '—'} />
-        </div>
-
-        {/* Vendor — full width */}
-        <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: '3px', marginTop: '2px' }}>
-            <div style={{ fontSize: '7px', fontWeight: 900, textTransform: 'uppercase', color: '#64748b' }}>Vendor</div>
-            <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{vendorName || '—'}</div>
-        </div>
-
-        {/* Batch indicator */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'auto' }}>
-            <div style={{ fontSize: '7px', fontWeight: 900, color: '#94a3b8', letterSpacing: '0.05em' }}>BATCH {meta.batchSeq}</div>
-        </div>
-    </div>
-);
-
-const Cell: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-    <div>
-        <div style={{ fontSize: '6.5px', fontWeight: 900, textTransform: 'uppercase', color: '#94a3b8' }}>{label}</div>
-        <div style={{ fontSize: '8.5px', fontWeight: 700, color: '#0f172a', marginTop: '1px' }}>{value}</div>
-    </div>
-);
-
-// ── Print stylesheet injected once ───────────────────────────────────────────
-const PRINT_STYLE = `
-@media print {
-  body > *:not(.sheet-tag-print-root) { display: none !important; }
-  .sheet-tag-print-root { display: block !important; }
-  @page { size: A4 portrait; margin: 10mm; }
-}
+// ── Print styles ───────────────────────────────────────────────────────────
+const PRINT_CSS = `
+  @media print {
+    body > *:not(#tag-print-root) { display: none !important; }
+    #tag-print-root { display: block !important; }
+    @page { size: A4 portrait; margin: 8mm; }
+    .no-print { display: none !important; }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  }
+  @media screen {
+    #tag-print-root { background: #f1f5f9; padding: 24px; }
+  }
 `;
 
-// ── Main export ──────────────────────────────────────────────────────────────
-export const GlassCoSheetTagPrint: React.FC<Props> = ({ entry, vendorName = '' }) => {
-    const tags = entry.sheetTags || [];
-    const meta = entry.sheetTagMeta;
+// ── Single Tag ─────────────────────────────────────────────────────────────
+const SheetTag: React.FC<{ tag: SheetTagData; index: number }> = ({ tag, index }) => {
+  // Parse tag parts: GLS-5MM-0326-001-01
+  const parts = tag.tagId.split('-');
+  // Serial is last segment
+  const serial = parts[parts.length - 1];
+  const batchPart = parts.slice(0, -1).join('-');
 
-    if (tags.length === 0 || !meta) {
-        return (
-            <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8', fontFamily: 'Arial' }}>
-                <p style={{ fontSize: '14px', fontWeight: 700 }}>No sheet tags found on this GRN entry.</p>
-                <p style={{ fontSize: '11px', marginTop: '8px' }}>Tags are generated automatically when GRN is posted in Glass Sheet mode with Sheets qty mode.</p>
-            </div>
-        );
-    }
+  return (
+    <div style={{
+      width: '62mm',
+      height: '62mm',
+      border: '1.5px solid #0f172a',
+      borderRadius: '4px',
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+      pageBreakInside: 'avoid',
+      breakInside: 'avoid',
+      background: 'white',
+      fontFamily: 'Arial, sans-serif',
+    }}>
 
-    // Split into pages of 12
-    const pages: string[][] = [];
-    for (let i = 0; i < tags.length; i += 12) {
-        pages.push(tags.slice(i, i + 12));
-    }
+      {/* Header bar — GlassTech branding */}
+      <div style={{
+        background: '#0f172a',
+        color: 'white',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '2.5mm 3mm',
+      }}>
+        <div>
+          <div style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '-0.03em' }}>GlassTech</div>
+          <div style={{ fontSize: '5.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em' }}>GlassCo</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: '5.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Sheet Tag</div>
+          <div style={{ fontSize: '6px', fontWeight: 900, color: '#60a5fa' }}>#{String(index + 1).padStart(3, '0')}</div>
+        </div>
+      </div>
 
-    return (
-        <>
-            <style dangerouslySetInnerHTML={{ __html: PRINT_STYLE }} />
-            <div
-                className="sheet-tag-print-root"
-                style={{ background: '#f8fafc', padding: '16px', fontFamily: 'Arial, sans-serif' }}
-            >
-                {/* Screen header */}
-                <div style={{ marginBottom: '16px', padding: '12px 16px', background: '#1e293b', color: '#fff', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} className="no-print">
-                    <div>
-                        <div style={{ fontSize: '13px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Sheet Tag Sheet — GRN {meta.grnRef}</div>
-                        <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>{tags.length} tags · {meta.thickness} · {meta.sheetSize}" · Batch {meta.batchSeq}</div>
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#64748b' }}>{pages.length} page{pages.length > 1 ? 's' : ''}</div>
-                </div>
+      {/* Tag ID — large, dominant */}
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: '2mm 3mm',
+        borderBottom: '1px solid #e2e8f0',
+      }}>
+        <div style={{ fontSize: '5.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '1mm' }}>
+          Tag ID
+        </div>
+        {/* Batch prefix */}
+        <div style={{ fontSize: '8px', fontWeight: 700, color: '#475569', letterSpacing: '0.05em', fontFamily: 'Courier, monospace' }}>
+          {batchPart}
+        </div>
+        {/* Serial — biggest */}
+        <div style={{ fontSize: '26px', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.05em', lineHeight: 1, fontFamily: 'Courier, monospace' }}>
+          -{serial}
+        </div>
+      </div>
 
-                {pages.map((pageTagIds, pageIdx) => (
-                    <div
-                        key={pageIdx}
-                        style={{
-                            background: '#ffffff',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '8px',
-                            padding: '16px',
-                            marginBottom: '24px',
-                            pageBreakAfter: 'always',
-                        }}
-                    >
-                        {/* Page header (print only styling via CSS) */}
-                        <div style={{ marginBottom: '12px', borderBottom: '2px solid #0f172a', paddingBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                            <div>
-                                <div style={{ fontSize: '14px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.06em' }}>GlassTech Group — GlassCo</div>
-                                <div style={{ fontSize: '9px', fontWeight: 700, color: '#475569', marginTop: '2px', textTransform: 'uppercase' }}>
-                                    Glass Sheet Inventory Tags · {meta.thickness} · {meta.sheetSize}" · Batch {meta.batchSeq}
-                                </div>
-                            </div>
-                            <div style={{ textAlign: 'right', fontSize: '9px', color: '#64748b' }}>
-                                <div style={{ fontWeight: 700 }}>GRN: {meta.grnRef}</div>
-                                <div>{meta.grnDate}</div>
-                                <div>Page {pageIdx + 1} / {pages.length}</div>
-                            </div>
-                        </div>
+      {/* Specs row */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr 1fr',
+        borderBottom: '1px solid #e2e8f0',
+      }}>
+        {[
+          { label: 'Thick', val: tag.thickness },
+          { label: 'Size', val: `${tag.sheetSize}"` },
+          { label: 'SqFt', val: tag.sqftPerSheet.toFixed(1) },
+        ].map(item => (
+          <div key={item.label} style={{
+            padding: '1.5mm 2mm',
+            textAlign: 'center',
+            borderRight: '1px solid #e2e8f0',
+          }}>
+            <div style={{ fontSize: '5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{item.label}</div>
+            <div style={{ fontSize: '8px', fontWeight: 900, color: '#1e293b' }}>{item.val}</div>
+          </div>
+        ))}
+      </div>
 
-                        {/* 3 × 4 grid */}
-                        <div style={{
-                            display: 'grid',
-                            gridTemplateColumns: '1fr 1fr 1fr',
-                            gap: '8px',
-                        }}>
-                            {pageTagIds.map((tagId, tagIdx) => {
-                                const globalSerial = pageIdx * 12 + tagIdx + 1;
-                                return (
-                                    <div key={tagId} style={{ minHeight: '170px' }}>
-                                        <SheetTag
-                                            tagId={tagId}
-                                            serial={globalSerial}
-                                            meta={meta}
-                                            vendorName={vendorName}
-                                        />
-                                    </div>
-                                );
-                            })}
-                            {/* Fill empty cells to maintain grid alignment */}
-                            {Array.from({ length: 12 - pageTagIds.length }).map((_, i) => (
-                                <div key={`empty-${i}`} style={{ minHeight: '170px', border: '1px dashed #e2e8f0', borderRadius: '6px' }} />
-                            ))}
-                        </div>
-
-                        {/* Page footer */}
-                        <div style={{ marginTop: '12px', borderTop: '1px solid #e2e8f0', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '8px', color: '#94a3b8', fontWeight: 700 }}>
-                            <span>GLASSTECH GROUP — STORE COPY</span>
-                            <span>Tags {pageIdx * 12 + 1}–{pageIdx * 12 + pageTagIds.length} of {tags.length}</span>
-                            <span>Printed: {new Date().toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </>
-    );
+      {/* Footer — GRN ref + vendor */}
+      <div style={{ padding: '1.5mm 3mm', background: '#f8fafc' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: '5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>GRN</div>
+            <div style={{ fontSize: '6px', fontWeight: 900, color: '#334155', fontFamily: 'Courier, monospace' }}>{tag.grnId}</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Vendor / DC</div>
+            <div style={{ fontSize: '6px', fontWeight: 900, color: '#334155' }}>{tag.vendorName.slice(0, 14)} / {tag.dcNo}</div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5mm' }}>
+          <div style={{ fontSize: '5px', color: '#94a3b8', fontWeight: 700 }}>Date: <span style={{ color: '#475569' }}>{tag.grnDate}</span></div>
+          {tag.weightKg && tag.weightKg > 0 && (
+            <div style={{ fontSize: '5px', color: '#94a3b8', fontWeight: 700 }}>Wt: <span style={{ color: '#475569' }}>{tag.weightKg.toFixed(2)} kg</span></div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 };
+
+// ── Remnant Tag ────────────────────────────────────────────────────────────
+export interface RemnantTagData {
+  tagId: string;          // e.g. REM-5MM-0326-001
+  parentTagId: string;
+  grnId: string;
+  thickness: string;
+  shape: 'Rectangle' | 'L-Shape';
+  sqft: number;
+  binLocation: string;
+  dimensions: {
+    widthInch?: number; heightInch?: number;
+    rect1Width?: number; rect1Height?: number;
+    rect2Width?: number; rect2Height?: number;
+  };
+  createdAt: string;
+}
+
+const RemnantTag: React.FC<{ tag: RemnantTagData; index: number }> = ({ tag, index }) => {
+  const dimText = tag.shape === 'Rectangle'
+    ? `${tag.dimensions.widthInch}"×${tag.dimensions.heightInch}"`
+    : `L: ${tag.dimensions.rect1Width}"×${tag.dimensions.rect1Height}" + ${tag.dimensions.rect2Width}"×${tag.dimensions.rect2Height}"`;
+
+  return (
+    <div style={{
+      width: '62mm', height: '62mm',
+      border: '2px dashed #059669',
+      borderRadius: '4px',
+      display: 'flex', flexDirection: 'column',
+      overflow: 'hidden', pageBreakInside: 'avoid', breakInside: 'avoid',
+      background: 'white', fontFamily: 'Arial, sans-serif',
+    }}>
+      {/* Header */}
+      <div style={{ background: '#059669', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2.5mm 3mm' }}>
+        <div>
+          <div style={{ fontSize: '10px', fontWeight: 900 }}>GlassTech</div>
+          <div style={{ fontSize: '5.5px', fontWeight: 700, color: '#a7f3d0', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Remnant Tag</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: '6px', fontWeight: 900, color: '#d1fae5' }}>REMNANT</div>
+          <div style={{ fontSize: '6px', fontWeight: 700, color: '#a7f3d0' }}>#{String(index + 1).padStart(3, '0')}</div>
+        </div>
+      </div>
+
+      {/* Remnant ID */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '2mm 3mm', borderBottom: '1px solid #d1fae5' }}>
+        <div style={{ fontSize: '5.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '1mm' }}>Remnant ID</div>
+        <div style={{ fontSize: '11px', fontWeight: 900, color: '#065f46', fontFamily: 'Courier, monospace', textAlign: 'center' }}>{tag.tagId}</div>
+        <div style={{ fontSize: '8px', fontWeight: 700, color: '#475569', marginTop: '1mm' }}>{dimText}</div>
+      </div>
+
+      {/* Specs */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', borderBottom: '1px solid #d1fae5' }}>
+        {[
+          { label: 'Thick', val: tag.thickness },
+          { label: 'SqFt', val: tag.sqft.toFixed(1) },
+          { label: 'Shape', val: tag.shape === 'Rectangle' ? 'Rect' : 'L' },
+        ].map(item => (
+          <div key={item.label} style={{ padding: '1.5mm 2mm', textAlign: 'center', borderRight: '1px solid #d1fae5' }}>
+            <div style={{ fontSize: '5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>{item.label}</div>
+            <div style={{ fontSize: '8px', fontWeight: 900, color: '#065f46' }}>{item.val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Footer */}
+      <div style={{ padding: '1.5mm 3mm', background: '#f0fdf4' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: '5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Bin Location</div>
+            <div style={{ fontSize: '7px', fontWeight: 900, color: '#065f46' }}>{tag.binLocation || '—'}</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Parent</div>
+            <div style={{ fontSize: '5.5px', fontWeight: 900, color: '#475569', fontFamily: 'Courier, monospace' }}>{tag.parentTagId.slice(-8)}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT — Sheet Tag Print
+// ══════════════════════════════════════════════════════════════════════════
+export const GlassCoSheetTagPrint: React.FC<Props> = ({ tags, onClose }) => {
+  const handlePrint = () => window.print();
+
+  return (
+    <>
+      <style>{PRINT_CSS}</style>
+
+      {/* Screen toolbar */}
+      <div className="no-print fixed top-0 left-0 right-0 z-50 bg-slate-900 text-white flex items-center justify-between px-6 py-3 shadow-xl">
+        <div>
+          <span className="text-sm font-black uppercase">Sheet Tag Print Preview</span>
+          <span className="text-[10px] text-slate-400 ml-3">{tags.length} tags — {Math.ceil(tags.length / 12)} page(s)</span>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={handlePrint}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase px-5 py-2 rounded-xl flex items-center gap-2">
+            🖨 Print Tags
+          </button>
+          <button onClick={onClose}
+            className="bg-white/10 hover:bg-white/20 text-white text-xs font-black uppercase px-4 py-2 rounded-xl">
+            ✕ Close
+          </button>
+        </div>
+      </div>
+
+      {/* Print content */}
+      <div id="tag-print-root" className="pt-16 pb-8 no-screen-pad" style={{ fontFamily: 'Arial, sans-serif' }}>
+        {/* Group into pages of 12 */}
+        {Array.from({ length: Math.ceil(tags.length / 12) }, (_, pageIdx) => {
+          const pageTags = tags.slice(pageIdx * 12, (pageIdx + 1) * 12);
+          return (
+            <div key={pageIdx} style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 62mm)',
+              gap: '5mm',
+              justifyContent: 'center',
+              padding: '0',
+              pageBreakAfter: pageIdx < Math.ceil(tags.length / 12) - 1 ? 'always' : 'auto',
+              marginBottom: pageIdx < Math.ceil(tags.length / 12) - 1 ? '0' : '0',
+            }}>
+              {pageTags.map((tag, i) => (
+                <SheetTag key={tag.tagId} tag={tag} index={pageIdx * 12 + i}/>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════════════════
+// REMNANT TAG PRINT — separate usage
+// ══════════════════════════════════════════════════════════════════════════
+interface RemnantPrintProps {
+  tags: RemnantTagData[];
+  onClose: () => void;
+}
+
+export const GlassCoRemnantTagPrint: React.FC<RemnantPrintProps> = ({ tags, onClose }) => {
+  return (
+    <>
+      <style>{PRINT_CSS}</style>
+
+      <div className="no-print fixed top-0 left-0 right-0 z-50 bg-slate-900 text-white flex items-center justify-between px-6 py-3">
+        <div>
+          <span className="text-sm font-black uppercase">Remnant Tag Print</span>
+          <span className="text-[10px] text-slate-400 ml-3">{tags.length} remnant(s)</span>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={() => window.print()} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase px-5 py-2 rounded-xl">🖨 Print</button>
+          <button onClick={onClose} className="bg-white/10 text-white text-xs font-black uppercase px-4 py-2 rounded-xl">✕ Close</button>
+        </div>
+      </div>
+
+      <div id="tag-print-root" className="pt-16">
+        {Array.from({ length: Math.ceil(tags.length / 12) }, (_, pageIdx) => {
+          const pageTags = tags.slice(pageIdx * 12, (pageIdx + 1) * 12);
+          return (
+            <div key={pageIdx} style={{
+              display: 'grid', gridTemplateColumns: 'repeat(3, 62mm)',
+              gap: '5mm', justifyContent: 'center',
+              pageBreakAfter: pageIdx < Math.ceil(tags.length / 12) - 1 ? 'always' : 'auto',
+            }}>
+              {pageTags.map((tag, i) => (
+                <RemnantTag key={tag.tagId} tag={tag} index={pageIdx * 12 + i}/>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+};
+
+// ── Helper — build tag data from GRN sheet entries ─────────────────────────
+export function buildTagsFromGRN(
+  grnId: string,
+  grnDate: string,
+  vendorName: string,
+  dcNo: string,
+  lines: {
+    tagIds: string[];
+    thickness: string;
+    sheetSize: string;
+    sqftPerSheet: number;
+    perSheetWeightKg: number;
+    batchSeq: string;
+  }[]
+): SheetTagData[] {
+  const tags: SheetTagData[] = [];
+  lines.forEach(line => {
+    line.tagIds.forEach(tagId => {
+      tags.push({
+        tagId, grnId, grnDate, vendorName, dcNo,
+        thickness: line.thickness,
+        sheetSize: line.sheetSize,
+        sqftPerSheet: line.sqftPerSheet,
+        weightKg: line.perSheetWeightKg,
+        batchSeq: line.batchSeq,
+      });
+    });
+  });
+  return tags;
+}
 
 export default GlassCoSheetTagPrint;
