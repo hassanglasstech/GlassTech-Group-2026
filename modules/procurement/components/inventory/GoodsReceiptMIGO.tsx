@@ -1,692 +1,1039 @@
+/**
+ * GoodsReceiptMIGO.tsx — Phase 2 Complete Rebuild
+ * Glass GRN: Vendor, PO link, DC/Bilty, per-line sqmtr/sqft/weight,
+ * per-sheet inspection (OK/Defective/Broken), defect photos,
+ * freight A/B, post → stock + GL + NCR + vendor claim draft
+ */
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { toast } from 'sonner';
-import { Company, Product, MaterialLedgerEntry, MvmntCode } from '@/modules/shared/types';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { SalesService } from '@/modules/sales/services/salesService';
-import { Truck, X, Layers, CheckCircle2, ClipboardList, Scale, PackageCheck, Globe, DollarSign, FileUp, Image as ImageIcon, ScanLine, Loader2, FileSearch, Download, AlertTriangle, Tag, Printer } from 'lucide-react'; 
+import { ProductionService } from '@/modules/production/services/productionService';
 import { NCRService } from '@/modules/production/services/ncrService';
-import { SalesService as SalesServiceImport } from '@/modules/sales/services/salesService';
-import * as XLSX from 'xlsx';
-import { GlassCoSheetTagPrint } from '@/modules/glassco/core/prints/GlassCoSheetTagPrint';
+import {
+  StoreItem, MaterialLedgerEntry, GRNSheetEntry, VendorDefectReport,
+  PurchaseOrder
+} from '@/modules/procurement/types/inventory';
+import {
+  X, Plus, Trash2, ChevronDown, ChevronRight, Camera, AlertTriangle,
+  Package, Truck, FileText, CheckCircle2, Search, Printer, Building2,
+  Tag, Scale, Info
+} from 'lucide-react';
+import { Product } from '@/modules/shared/types';
 
-interface GoodsReceiptMIGOProps {
-    company: Company;
-    products: Product[];
-    isOpen: boolean;
-    onClose: () => void;
-    refreshData: () => void;
+// ── Constants ─────────────────────────────────────────────────────────────
+const DEFECT_CODES = [
+  { value: 'BR-01', label: 'BR-01 — Transit Damage' },
+  { value: 'BR-02', label: 'BR-02 — Edge Chipping' },
+  { value: 'BR-03', label: 'BR-03 — Surface Scratch' },
+  { value: 'BR-04', label: 'BR-04 — Manufacturing Defect' },
+  { value: 'BR-05', label: 'BR-05 — Complete Break' },
+];
+
+const SQFT_TO_SQM = 0.092903;
+
+// ── Types ─────────────────────────────────────────────────────────────────
+interface GRNLine {
+  id: string;
+  // Search
+  searchQuery: string;
+  showSuggestions: boolean;
+  // Resolved item
+  productId: string;
+  description: string;
+  category: string;
+  thickness: string;
+  sheetSize: string;          // "84x144"
+  // Quantities
+  sheetCount: number;
+  sqftPerSheet: number;       // auto from size
+  totalSqft: number;          // sheetCount × sqftPerSheet
+  totalSqmtr: number;         // editable — for vendor challan verify
+  weightKg: number;           // total weight this line
+  // Pricing
+  ratePKR: number;
+  lineValue: number;
+  // Computed weights (set on post)
+  perSheetWeightKg: number;
+  perSqftWeightKg: number;
+  // Tags generated
+  tagIds: string[];
+  // Sheet inspections (one per sheet)
+  sheetInspections: SheetInspection[];
+  expanded: boolean;
 }
 
-// ── Tag Generation Utility ───────────────────────────────────────────────────
-/**
- * Generates per-sheet tags in format: GLS-{THICKNESS}-{MMYY}-{BATCH}-{SERIAL}
- * e.g.  GLS-5MM-0326-001-01  GLS-5MM-0326-001-02
- *
- * batchSeq is a zero-padded 3-digit counter derived from how many GRN entries
- * already exist for this material+month combo (simple approach using ledger length).
- */
-export function generateSheetTags(
-    thickness: string,
-    sheetCount: number,
-    batchSeq: string
-): string[] {
-    const now = new Date();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const yy = String(now.getFullYear()).slice(-2);
-    const mmyy = `${mm}${yy}`;
-    // Normalise thickness: "5mm" → "5MM", "10mm" → "10MM"
-    const thickTag = thickness.replace(/\s/g, '').toUpperCase();
-
-    const tags: string[] = [];
-    for (let i = 1; i <= sheetCount; i++) {
-        const serial = String(i).padStart(2, '0');
-        tags.push(`GLS-${thickTag}-${mmyy}-${batchSeq}-${serial}`);
-    }
-    return tags;
+interface SheetInspection {
+  tagId: string;
+  serial: number;
+  status: 'OK' | 'Defective' | 'Broken';
+  defectCode: string;
+  usableSqft: number;
+  cutterNote: string;
+  photos: string[];
 }
 
-/**
- * Returns the next batch sequence string (001, 002 …) for this material in
- * the current month by counting existing GRN (mvmntCode 101) ledger entries
- * that already have sheetTags for the same materialId.
- */
-function nextBatchSeq(ledger: MaterialLedgerEntry[], materialId: string): string {
-    const now = new Date();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const yy = String(now.getFullYear()).slice(-2);
-    const mmyy = `${mm}${yy}`;
-
-    const count = ledger.filter(e =>
-        e.materialId === materialId &&
-        e.mvmntCode === '101' &&
-        e.sheetTags &&
-        e.sheetTags.length > 0 &&
-        e.sheetTags[0]?.includes(`-${mmyy}-`)
-    ).length;
-    return String(count + 1).padStart(3, '0');
+interface SuggestionItem {
+  label: string;
+  productId: string;
+  category: string;
+  thickness: string;
+  sheetSize: string;
+  lastMAP: number;
+  stockOnHand: number;
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
-const GoodsReceiptMIGO: React.FC<Omit<GoodsReceiptMIGOProps, 'company'>> = ({ products, isOpen, onClose, refreshData }) => {
-    const company = useAppStore(state => state.selectedCompany);
-    const [entryMode, setEntryMode] = useState<'Manual' | 'VendorImport'>('Manual');
-    const [migoMode, setMigoMode] = useState<'Glass' | 'General'>(company === 'Nippon' ? 'General' : 'Glass');
-    const [isImportMode, setIsImportMode] = useState(false);
-    
-    // Vendor Import State
-    const [isParsing, setIsParsing] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const [importedItems, setImportedItems] = useState<any[]>([]);
+// ── Helpers ───────────────────────────────────────────────────────────────
+function sqftOf(size: string): number {
+  const [w, h] = size.split('x').map(Number);
+  return w && h ? Number(((w * h) / 144).toFixed(3)) : 0;
+}
 
-    // ── Tag Print State ──────────────────────────────────────────────────────
-    const [showTagPrint, setShowTagPrint] = useState(false);
-    const [pendingTagEntry, setPendingTagEntry] = useState<MaterialLedgerEntry | null>(null);
-    const [pendingVendorName, setPendingVendorName] = useState<string>('');
+function blankLine(): GRNLine {
+  return {
+    id: `GL${Date.now()}${Math.random().toString(36).slice(2, 5)}`,
+    searchQuery: '', showSuggestions: false,
+    productId: '', description: '', category: '', thickness: '', sheetSize: '',
+    sheetCount: 0, sqftPerSheet: 0, totalSqft: 0, totalSqmtr: 0,
+    weightKg: 0, ratePKR: 0, lineValue: 0,
+    perSheetWeightKg: 0, perSqftWeightKg: 0,
+    tagIds: [], sheetInspections: [], expanded: false,
+  };
+}
 
-    const [grnSelection, setGrnSelection] = useState({
-        category: 'Plain',
-        subCategory: 'Standard',
-        color: 'N/A',
-        thickness: '5mm',
-        sheetSize: ''
-    });
+function calcLine(l: GRNLine): GRNLine {
+  const spf = sqftOf(l.sheetSize) || l.sqftPerSheet;
+  const totalSqft = Number((l.sheetCount * spf).toFixed(2));
+  const totalSqmtr = Number((totalSqft * SQFT_TO_SQM).toFixed(3));
+  const lineValue = Number((totalSqft * l.ratePKR).toFixed(2));
+  const perSheetWeightKg = l.sheetCount > 0 ? Number((l.weightKg / l.sheetCount).toFixed(3)) : 0;
+  const perSqftWeightKg = totalSqft > 0 ? Number((l.weightKg / totalSqft).toFixed(4)) : 0;
+  return { ...l, sqftPerSheet: spf, totalSqft, totalSqmtr, lineValue, perSheetWeightKg, perSqftWeightKg };
+}
 
-    const [inwardInspection, setInwardInspection] = useState({
-        hasDefect: false,
-        defectQty: 0,
-        defectSqft: 0,
-        defectType: 'BR-04-Raw-Material-Defect' as const,
-        defectDescription: '',
-        vendorId: '',
-        estimatedValue: 0,
-        raiseNCR: false,
-    });
-    
-    const [migoData, setMigoData] = useState({
-        mvmntCode: '101' as MvmntCode,
-        materialId: '',
-        qty: 0,
-        qtyMode: 'Sheets' as 'SqFt' | 'Sheets',
-        valuation: 0, 
-        transportCost: 0, 
-        referenceDoc: '',
-        storageBin: '',
-        batchNo: '',
-        remarks: '',
-        huId: '',
-        currency: 'USD',
-        exchangeRate: 278.50,
-        foreignRate: 0,
-        totalDuty: 0
-    });
+function generateGRNId(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(-2);
+  const seq = String(Math.floor(Math.random() * 900) + 100);
+  return `GRN-GLS-${mm}${yy}-${seq}`;
+}
 
-    useEffect(() => {
-        setMigoMode(company === 'Nippon' ? 'General' : 'Glass');
-    }, [company]);
+function generateTagId(thickness: string, mmyy: string, batch: string, serial: number): string {
+  const th = thickness.replace('mm', '').padStart(2, '0');
+  return `GLS-${th}MM-${mmyy}-${batch}-${String(serial).padStart(2, '0')}`;
+}
 
-    const isMirror = grnSelection.category === 'Mirror';
-    const isColor = grnSelection.category === 'Color';
-    const isPlain = grnSelection.category === 'Plain';
-    const isFluted = grnSelection.category === 'Fluted';
+// ── Props ─────────────────────────────────────────────────────────────────
+interface Props {
+  products: Product[];
+  isOpen: boolean;
+  onClose: () => void;
+  refreshData: () => void;
+}
 
-    const uniqueCategories = ['Plain', 'Color', 'Mirror', 'Fluted'];
-  
-    const availableSubCategories = useMemo(() => {
-        if (isMirror) return ['Belgium', 'CFG', 'Euro Grey', 'Brown'];
-        if (isColor) return ['One Side', 'Tinted'];
-        return ['Standard'];
-    }, [grnSelection.category]);
+// ══════════════════════════════════════════════════════════════════════════
+const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshData }) => {
+  const company = useAppStore(s => s.selectedCompany);
 
-    const availableColors = useMemo(() => {
-        if (isColor) {
-            if (grnSelection.subCategory === 'One Side') return ['Imported Grey', 'Brown'];
-            if (grnSelection.subCategory === 'Tinted') return ['Brown', 'Grey'];
-        }
-        return ['N/A'];
-    }, [grnSelection.category, grnSelection.subCategory]);
+  // ── Header state ─────────────────────────────────────────────────────
+  const [vendorId, setVendorId]         = useState('');
+  const [poId, setPoId]                 = useState('');
+  const [dcNo, setDcNo]                 = useState('');
+  const [biltyNo, setBiltyNo]           = useState('');
+  const [vendorSoNo, setVendorSoNo]     = useState('');
+  const [vehicleNo, setVehicleNo]       = useState('');
+  const [driverName, setDriverName]     = useState('');
+  const [driverPhone, setDriverPhone]   = useState('');
+  const [grnDate, setGrnDate]           = useState(new Date().toISOString().split('T')[0]);
 
-    const uniqueThicknesses = useMemo(() => {
-        const filtered = products.filter(p => 
-            p.glassType === grnSelection.category && 
-            (p.subCategory === grnSelection.subCategory || (availableSubCategories.length === 1 && p.subCategory === 'Standard'))
-        );
-        const thicknesses = Array.from(new Set(filtered.map(p => p.thickness).filter(Boolean)));
-        return thicknesses.length > 0 ? thicknesses : ['5mm', '6mm', '8mm', '10mm', '12mm', '19mm'];
-    }, [grnSelection.category, grnSelection.subCategory, products]);
+  // ── Lines ─────────────────────────────────────────────────────────────
+  const [lines, setLines] = useState<GRNLine[]>(() => Array.from({ length: 3 }, blankLine));
 
-    const generalProducts = useMemo(() => {
-        return products.filter(p => p.category !== 'Glass' && p.category !== 'Service');
-    }, [products]);
+  // ── Footer ────────────────────────────────────────────────────────────
+  const [freightPKR, setFreightPKR]     = useState(0);
+  const [freightType, setFreightType]   = useState<'Vendor Included' | 'Own Expense'>('Vendor Included');
+  const [otherCharges, setOtherCharges] = useState(0);
+  const [otherChargesDesc, setOtherChargesDesc] = useState('');
+  const [cashPaymentRef, setCashPaymentRef] = useState('');
 
-    // Auto-Select Material ID (Glass)
-    useEffect(() => {
-        if (migoMode === 'Glass' && migoData.mvmntCode === '101' && grnSelection.category && grnSelection.thickness && grnSelection.sheetSize) {
-           const matchedProduct = products.find(p => 
-              p.glassType === grnSelection.category && 
-              (p.subCategory === grnSelection.subCategory || (availableSubCategories.length === 1 && p.subCategory === 'Standard')) &&
-              p.thickness === grnSelection.thickness &&
-              p.sheetSize === grnSelection.sheetSize &&
-              (isColor ? p.finishColor === grnSelection.color : true)
-           );
-           if (matchedProduct) {
-              setMigoData(prev => ({ ...prev, materialId: matchedProduct.id }));
-           } else {
-              setMigoData(prev => ({ ...prev, materialId: '' }));
-           }
-        }
-    }, [grnSelection, products, migoData.mvmntCode, migoMode]);
+  // ── Tags generated flag ───────────────────────────────────────────────
+  const [tagsGenerated, setTagsGenerated] = useState(false);
+  const [grnId] = useState(() => generateGRNId());
 
-    // Auto-fill valuation for General Items
-    useEffect(() => {
-        if (migoMode === 'General' && migoData.materialId && !isImportMode) {
-            const prod = products.find(p => p.id === migoData.materialId);
-            if (prod && prod.costPrice) {
-                setMigoData(prev => ({ ...prev, valuation: prod.costPrice || 0 }));
-            }
-        }
-    }, [migoMode, migoData.materialId, products, isImportMode]);
+  // ── Suggestion refs ───────────────────────────────────────────────────
+  const suggRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-    // Auto-Calculate Valuation when Import Params Change
-    useEffect(() => {
-        if (isImportMode) {
-            const basePKR = (migoData.foreignRate || 0) * (migoData.exchangeRate || 1);
-            const dutyPerUnit = migoData.qty > 0 ? (migoData.totalDuty / migoData.qty) : 0;
-            const finalVal = basePKR + dutyPerUnit;
-            setMigoData(prev => ({ ...prev, valuation: Number(finalVal.toFixed(2)) }));
-        }
-    }, [isImportMode, migoData.foreignRate, migoData.exchangeRate, migoData.totalDuty, migoData.qty]);
+  // ── Data ─────────────────────────────────────────────────────────────
+  const glassVendors = useMemo(() =>
+    SalesService.getVendors().filter((v: any) =>
+      (!v.company || v.company === company) &&
+      (v.type === 'Glass' || v.type === 'Supplier')
+    ), [company]);
 
-    const handleExcelExport = () => {
-        const template = [
-            { 'Item Code': 'LCZS631', 'Description': 'Example Handle Black', 'Qty': 100, 'Price (RMB)': 15.50, 'Color': 'Black', 'Direction': 'Right', 'Tongue Length': '55mm' }
-        ];
-        const ws = XLSX.utils.json_to_sheet(template);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Import Template");
-        XLSX.writeFile(wb, "Nippon_Stock_Import_Template.xlsx");
-    };
+  const glassPOs: PurchaseOrder[] = useMemo(() =>
+    ProductionService.getPurchaseOrders().filter(p =>
+      p.fromCompany === company &&
+      p.category === 'Glass' &&
+      (p.status === 'Sent' || p.status === 'GRN Pending')
+    ), [company]);
 
-    const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        setIsParsing(true);
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-            try {
-                const bstr = evt.target?.result;
-                const wb = XLSX.read(bstr, { type: 'binary' });
-                const ws = wb.Sheets[wb.SheetNames[0]];
-                const data: any[] = XLSX.utils.sheet_to_json(ws);
-                const mappedItems = data.map((row, idx) => ({
-                    id: `IMP-${idx}-${Date.now()}`,
-                    code: row['Item Code'] || row['Code'] || 'UNKNOWN',
-                    desc: row['Description'] || row['Desc'] || 'Imported Item',
-                    qty: Number(row['Qty']) || Number(row['Quantity']) || 0,
-                    price: Number(row['Price (RMB)']) || Number(row['Price']) || 0,
-                    color: row['Color'] || '',
-                    direction: row['Direction'] || '',
-                    tongueLength: row['Tongue Length'] || '',
-                    img: 'https://placehold.co/50x50/f1f5f9/334155?text=Img',
-                    status: 'Ready'
-                }));
-                setImportedItems(mappedItems);
-                setIsParsing(false);
-                toast.success(`Successfully parsed ${mappedItems.length} items from Excel.`);
-            } catch (error) {
-                toast.error("Error parsing Excel file.");
-                setIsParsing(false);
-            }
-        };
-        reader.readAsBinaryString(file);
-    };
+  const selectedVendor = useMemo(() =>
+    glassVendors.find((v: any) => v.id === vendorId), [vendorId, glassVendors]);
 
-    const handleBulkPost = () => {
-        if (importedItems.length === 0) return;
-        const allStore = InventoryService.getStore();
-        const allLedger = InventoryService.getStockLedger();
-        const allProducts = SalesService.getProducts();
-        const newLedgerEntries: MaterialLedgerEntry[] = [];
-        let updatedStore = [...allStore];
-        let updatedProducts = [...allProducts];
+  const selectedPO = useMemo(() =>
+    glassPOs.find(p => p.id === poId), [poId, glassPOs]);
 
-        importedItems.forEach(item => {
-            let prod = updatedProducts.find(p => p.modelNo === item.code);
-            let storeItem = updatedStore.find(s => s.id === prod?.id);
-            if (!prod) {
-                const newId = `IMP-${item.code}-${Date.now()}`;
-                prod = { id: newId, company, category: 'Hardware', description: item.desc.toUpperCase(), basePrice: 0, costPrice: item.price, unit: 'PCS' as any, variants: [], modelNo: item.code, brand: 'NIPPON IMPORT', finishColor: item.color, direction: item.direction, tongueLength: item.tongueLength };
-                updatedProducts.push(prod);
-                storeItem = { id: newId, company, name: prod.description, category: 'Hardware', quantity: 0, unrestrictedQty: 0, qiQty: 0, blockedQty: 0, reservedQty: 0, consignmentQty: 0, unit: 'PCS', minLevel: 100, reorderPoint: 50, movingAveragePrice: 0, totalValue: 0, storageBin: 'INVOICE-IMPORT', lastMovementDate: new Date().toISOString() };
-                updatedStore.push(storeItem);
-            }
-            if (storeItem) {
-                const newVal = item.qty * item.price;
-                storeItem.quantity += item.qty;
-                storeItem.unrestrictedQty += item.qty;
-                storeItem.totalValue += newVal;
-                storeItem.movingAveragePrice = storeItem.totalValue / storeItem.quantity;
-                newLedgerEntries.push({ id: `GRN-${Date.now()}-${item.code}`, company, materialId: storeItem.id, timestamp: new Date().toISOString(), mvmntCode: '101', qty: item.qty, uom: 'PCS', valuation: item.price, balanceAfter: storeItem.quantity, referenceDoc: 'BULK-IMPORT', user: 'Auto Import', remarks: `Excel Import: ${item.desc}` });
-            }
+  // Build suggestion catalogue from product master + GRN history
+  const catalogue: SuggestionItem[] = useMemo(() => {
+    const items: SuggestionItem[] = [];
+    const seen = new Set<string>();
+    const storeItems = InventoryService.getStore().filter((s: StoreItem) => s.company === company);
+
+    SalesService.getProducts()
+      .filter((p: any) =>
+        (p.company === company || !p.company) &&
+        (p.category === 'Glass' || p.glassType) &&
+        p.thickness && p.sheetSize
+      )
+      .forEach((p: any) => {
+        const key = `${p.glassType || p.category}-${p.thickness}-${p.sheetSize}`;
+        if (seen.has(key)) return; seen.add(key);
+        const store = storeItems.find((s: StoreItem) => s.id === p.id);
+        items.push({
+          label: [p.glassType || p.category, p.subCategory || '', p.thickness, `${p.sheetSize}"`].filter(Boolean).join(' ').trim(),
+          productId: p.id, category: p.glassType || p.category || 'Plain',
+          thickness: p.thickness, sheetSize: p.sheetSize,
+          lastMAP: store?.movingAveragePrice || p.costPrice || 0,
+          stockOnHand: store?.unrestrictedQty || 0,
         });
+      });
+    return items;
+  }, [company]);
 
-        SalesService.saveProducts(updatedProducts);
-        InventoryService.saveStore(updatedStore);
-        InventoryService.saveStockLedger([...allLedger, ...newLedgerEntries]);
-        refreshData();
-        onClose();
-        toast.success(`Successfully imported and posted ${importedItems.length} items.`);
+  function getSuggestions(query: string): SuggestionItem[] {
+    if (!query.trim()) return catalogue.slice(0, 10);
+    const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+    return catalogue.filter(item => {
+      const hay = [item.label, item.category, item.thickness, item.sheetSize].join(' ').toLowerCase();
+      return tokens.every(t => hay.includes(t));
+    }).slice(0, 10);
+  }
+
+  // Close suggestions on outside click
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      const inside = Object.values(suggRefs.current).some(r => r?.contains(e.target as Node));
+      if (!inside) setLines(prev => prev.map(l => ({ ...l, showSuggestions: false })));
     };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
 
-    const handleMigoPost = () => {
-        if (!migoData.materialId || migoData.qty <= 0) {
-            toast.error("Validation Failed: Material and Quantity are required.");
-            return;
-        }
-        const allStore = InventoryService.getStore();
-        const itemIdx = allStore.findIndex(i => i.id === migoData.materialId);
-        const prod = products.find(p => p.id === migoData.materialId);
-        let item = itemIdx !== -1 ? { ...allStore[itemIdx] } : null;
-        if (!item && prod) {
-            item = { id: prod.id, company, name: prod.description, category: (prod.category as any) || 'Raw', quantity: 0, unrestrictedQty: 0, qiQty: 0, blockedQty: 0, reservedQty: 0, consignmentQty: 0, unit: prod.unit || 'Unit', minLevel: 0, reorderPoint: 0, movingAveragePrice: 0, totalValue: 0, storageBin: 'New', lastMovementDate: new Date().toISOString() }
-        }
-        if (!item) {
-            toast.error("Material Master mismatch.");
-            return;
-        }
-        
-        let finalQty = migoData.qty;
-        let sheetCount = 0;
-        if (migoMode === 'Glass') {
-            let sqFtPerSheet = item.conversionFactor || 0;
-            if (sqFtPerSheet === 0 && grnSelection.sheetSize) {
-                const [w, h] = grnSelection.sheetSize.split('x').map(Number);
-                if (w && h) sqFtPerSheet = (w * h) / 144;
-            }
-            if (migoData.qtyMode === 'Sheets') {
-                if (sqFtPerSheet === 0) {
-                    toast.error("Sheet size missing in Master Data.");
-                    return;
-                }
-                sheetCount = migoData.qty;
-                finalQty = Number((migoData.qty * sqFtPerSheet).toFixed(2));
-            } else {
-                if (sqFtPerSheet > 0) sheetCount = Number((migoData.qty / sqFtPerSheet).toFixed(1));
-            }
-            item.conversionFactor = sqFtPerSheet;
-        }
-    
-        const transportCost = Number(migoData.transportCost || 0);
-        const materialCost = finalQty * (migoData.valuation || 0);
-        const totalBatchCost = materialCost + transportCost;
-        const newTotalValue = item.totalValue + totalBatchCost;
-        const newTotalQty = item.quantity + finalQty;
-        item.quantity = newTotalQty;
-        item.unrestrictedQty += finalQty;
-        item.totalValue = newTotalValue;
-        item.movingAveragePrice = Number((newTotalValue / newTotalQty).toFixed(2));
+  // When PO selected — auto-fill lines
+  useEffect(() => {
+    if (!selectedPO) return;
+    const poLines = selectedPO.items || [];
+    if (!poLines.length) return;
 
-        // ── Auto-generate Sheet Tags (Glass GRN only) ────────────────────────
-        let generatedTags: string[] = [];
-        let batchSeqStr = '001';
-        if (migoMode === 'Glass' && sheetCount > 0) {
-            const existingLedger = InventoryService.getStockLedger();
-            batchSeqStr = nextBatchSeq(existingLedger, migoData.materialId);
-            generatedTags = generateSheetTags(grnSelection.thickness, sheetCount, batchSeqStr);
-        }
+    // Auto-fill freight type from PO if available
+    if ((selectedPO as any).freightType) setFreightType((selectedPO as any).freightType);
+    if ((selectedPO as any).totalFreight) setFreightPKR((selectedPO as any).totalFreight);
 
-        // ── Resolve vendor name for tag print ────────────────────────────────
-        const vendorName = inwardInspection.vendorId
-            ? (SalesServiceImport.getVendors().find((v: any) => v.id === inwardInspection.vendorId)?.name || '')
-            : '';
+    const newLines: GRNLine[] = poLines.map(item => {
+      let meta: any = {};
+      try { meta = JSON.parse(item.specs || '{}'); } catch {}
+      const sheetSize = meta.sheetSize || '';
+      const thickness = meta.thickness || '';
+      const spf = sqftOf(sheetSize);
+      const sheetCount = meta.sheetCount || 0;
+      const totalSqft = Number((sheetCount * spf).toFixed(2));
+      return calcLine({
+        ...blankLine(),
+        searchQuery: item.description || '',
+        description: item.description || '',
+        productId: meta.productId || '',
+        category: meta.category || '',
+        thickness,
+        sheetSize,
+        sheetCount,
+        sqftPerSheet: spf,
+        totalSqft,
+        totalSqmtr: Number((totalSqft * SQFT_TO_SQM).toFixed(3)),
+        ratePKR: item.rate || 0,
+        lineValue: Number((totalSqft * (item.rate || 0)).toFixed(2)),
+      });
+    });
 
-        const newEntry: MaterialLedgerEntry = {
-            id: `MAT-${Date.now().toString().slice(-6)}`,
-            company,
-            materialId: item.id,
-            timestamp: new Date().toISOString(),
-            mvmntCode: '101',
-            qty: finalQty,
-            uom: item.unit,
-            valuation: item.movingAveragePrice,
-            balanceAfter: item.quantity,
-            referenceDoc: migoData.referenceDoc,
-            user: 'Admin Store',
-            batchNo: migoData.batchNo,
-            storageBin: migoData.storageBin || item.storageBin,
-            remarks: migoData.remarks,
-            // ── Sheet Tags ───────────────────────────────────────────────────
-            ...(generatedTags.length > 0 && {
-                sheetTags: generatedTags,
-                sheetTagMeta: {
-                    thickness: grnSelection.thickness,
-                    sheetSize: grnSelection.sheetSize,
-                    vendorName,
-                    grnRef: migoData.referenceDoc || `MAT-${Date.now().toString().slice(-6)}`,
-                    grnDate: new Date().toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }),
-                    batchSeq: batchSeqStr,
-                }
-            })
+    // Pad to minimum 3 lines
+    while (newLines.length < 3) newLines.push(blankLine());
+    setLines(newLines);
+    setTagsGenerated(false);
+    toast.success(`PO ${selectedPO.id} — ${poLines.length} lines loaded`);
+  }, [poId]);
+
+  // ── Line operations ───────────────────────────────────────────────────
+  const updateLine = (id: string, patch: Partial<GRNLine>) =>
+    setLines(prev => prev.map(l => l.id === id ? calcLine({ ...l, ...patch }) : l));
+
+  const pickSuggestion = (lineId: string, s: SuggestionItem) => {
+    setLines(prev => prev.map(l => {
+      if (l.id !== lineId) return l;
+      return calcLine({
+        ...l,
+        searchQuery: s.label, showSuggestions: false,
+        productId: s.productId, description: s.label,
+        category: s.category, thickness: s.thickness, sheetSize: s.sheetSize,
+        sqftPerSheet: sqftOf(s.sheetSize),
+        ratePKR: l.ratePKR > 0 ? l.ratePKR : s.lastMAP,
+      });
+    }));
+  };
+
+  const addLine = () => setLines(prev => [...prev, blankLine()]);
+  const removeLine = (id: string) =>
+    lines.length > 1 && setLines(prev => prev.filter(l => l.id !== id));
+
+  // ── Generate Tags ─────────────────────────────────────────────────────
+  const handleGenerateTags = () => {
+    const filled = lines.filter(l => l.sheetCount > 0 && l.thickness);
+    if (!filled.length) { toast.error('Enter at least one line with sheets and thickness'); return; }
+    if (!vendorId) { toast.error('Select vendor first'); return; }
+    if (!dcNo)    { toast.error('DC number required before generating tags'); return; }
+
+    const d = new Date(grnDate);
+    const mmyy = `${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getFullYear()).slice(-2)}`;
+    const batchSeq = grnId.split('-').pop() || '001';
+
+    let globalSerial = 1;
+    const updatedLines = lines.map(l => {
+      if (!l.sheetCount || !l.thickness) return l;
+      const tags: string[] = [];
+      const inspections: SheetInspection[] = [];
+      for (let i = 0; i < l.sheetCount; i++) {
+        const tagId = generateTagId(l.thickness, mmyy, batchSeq, globalSerial++);
+        tags.push(tagId);
+        inspections.push({
+          tagId, serial: globalSerial - 1,
+          status: 'OK', defectCode: '', usableSqft: l.sqftPerSheet,
+          cutterNote: '', photos: [],
+        });
+      }
+      return { ...l, tagIds: tags, sheetInspections: inspections, expanded: true };
+    });
+
+    setLines(updatedLines);
+    setTagsGenerated(true);
+    const totalTags = updatedLines.reduce((s, l) => s + l.tagIds.length, 0);
+    toast.success(`${totalTags} tags generated — ready to print`);
+  };
+
+  // ── Update sheet inspection ───────────────────────────────────────────
+  const updateInspection = (lineId: string, tagId: string, patch: Partial<SheetInspection>) => {
+    setLines(prev => prev.map(l => {
+      if (l.id !== lineId) return l;
+      return {
+        ...l,
+        sheetInspections: l.sheetInspections.map(s =>
+          s.tagId === tagId
+            ? { ...s, ...patch,
+                usableSqft: patch.status === 'OK' ? l.sqftPerSheet
+                  : (patch.usableSqft !== undefined ? patch.usableSqft : s.usableSqft) }
+            : s
+        )
+      };
+    }));
+  };
+
+  // Photo capture (base64)
+  const handlePhoto = async (lineId: string, tagId: string) => {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*'; input.capture = 'environment';
+    input.onchange = async (e: any) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result as string;
+        setLines(prev => prev.map(l => {
+          if (l.id !== lineId) return l;
+          return {
+            ...l,
+            sheetInspections: l.sheetInspections.map(s =>
+              s.tagId === tagId ? { ...s, photos: [...s.photos, base64] } : s
+            )
+          };
+        }));
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  };
+
+  // ── Totals ────────────────────────────────────────────────────────────
+  const filledLines = lines.filter(l => l.sheetCount > 0);
+  const totalSheets  = filledLines.reduce((s, l) => s + l.sheetCount, 0);
+  const totalSqft    = filledLines.reduce((s, l) => s + l.totalSqft, 0);
+  const totalSqmtr   = filledLines.reduce((s, l) => s + l.totalSqmtr, 0);
+  const totalWeight  = filledLines.reduce((s, l) => s + l.weightKg, 0);
+  const totalMaterial = filledLines.reduce((s, l) => s + l.lineValue, 0);
+  const grandTotal   = totalMaterial + freightPKR + otherCharges;
+
+  // Defect summary
+  const allInspections = lines.flatMap(l => l.sheetInspections);
+  const defectCount  = allInspections.filter(s => s.status !== 'OK').length;
+  const brokenCount  = allInspections.filter(s => s.status === 'Broken').length;
+
+  // ── POST GRN ─────────────────────────────────────────────────────────
+  const handlePost = () => {
+    if (!vendorId)          { toast.error('Vendor required'); return; }
+    if (!dcNo)              { toast.error('DC number required'); return; }
+    if (!filledLines.length){ toast.error('At least one line required'); return; }
+    if (!tagsGenerated)     { toast.error('Generate tags first before posting'); return; }
+    if (freightType === 'Vendor Included' && freightPKR > 0 && !cashPaymentRef) {
+      toast.error('Cash payment reference required for Vendor Included freight'); return;
+    }
+    if (otherCharges > 0 && !otherChargesDesc) {
+      toast.error('Other charges description required'); return;
+    }
+
+    const allStore = InventoryService.getStore();
+    const allLedger = InventoryService.getStockLedger();
+    const grnSheetEntries: GRNSheetEntry[] = [];
+
+    const d = new Date(grnDate);
+    const mmyy = `${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getFullYear()).slice(-2)}`;
+    const batchSeq = grnId.split('-').pop() || '001';
+
+    filledLines.forEach((line, lineIdx) => {
+      // Get or create store item
+      let itemIdx = allStore.findIndex(s => s.id === line.productId);
+      let item: StoreItem;
+
+      // Calculate per-sheet and per-sqft weights
+      const perSheetKg = line.sheetCount > 0 ? Number((line.weightKg / line.sheetCount).toFixed(3)) : 0;
+      const perSqftKg  = line.totalSqft > 0  ? Number((line.weightKg / line.totalSqft).toFixed(4)) : 0;
+
+      // Classify inspections
+      const okSheets  = line.sheetInspections.filter(s => s.status === 'OK');
+      const defSheets = line.sheetInspections.filter(s => s.status === 'Defective' || s.status === 'Broken');
+
+      const okSqft       = okSheets.reduce((s, i) => s + line.sqftPerSheet, 0);
+      const defUsableSqft = defSheets.reduce((s, i) => s + (i.usableSqft || 0), 0);
+
+      const okValue  = Number((okSqft * line.ratePKR).toFixed(2));
+      const defValue = Number((defUsableSqft * line.ratePKR).toFixed(2));
+      const totalStockValue = okValue + defValue;
+
+      if (itemIdx !== -1) {
+        item = { ...allStore[itemIdx] };
+      } else {
+        // Create new store item
+        const prod = SalesService.getProducts().find((p: any) => p.id === line.productId);
+        item = {
+          id: line.productId || `STORE-${Date.now()}-${lineIdx}`,
+          company, name: line.description,
+          category: 'Raw', quantity: 0, unrestrictedQty: 0, qiQty: 0,
+          blockedQty: 0, reservedQty: 0, consignmentQty: 0,
+          unit: 'SqFt', minLevel: 0, reorderPoint: 0,
+          movingAveragePrice: line.ratePKR, totalValue: 0,
+          storageBin: 'MAIN', lastMovementDate: grnDate,
+          defectiveSheets: 0, defectiveQty: 0, defectiveSqft: 0,
+          defectiveValue: 0, remnantCount: 0, remnantSqft: 0,
+          scrapSqft: 0, scrapWeightKG: 0,
         };
+      }
 
-        if (itemIdx !== -1) allStore[itemIdx] = item; else allStore.push(item);
-        InventoryService.saveStore(allStore);
-        InventoryService.saveStockLedger([...InventoryService.getStockLedger(), newEntry]);
+      // Update MAP
+      const newTotalValue = item.totalValue + totalStockValue;
+      const newTotalQty   = item.quantity + okSqft + defUsableSqft;
+      item.movingAveragePrice = newTotalQty > 0 ? Number((newTotalValue / newTotalQty).toFixed(2)) : line.ratePKR;
+      item.totalValue         = newTotalValue;
+      item.quantity           = newTotalQty;
 
-        // ── Inward Inspection: create NCR + Vendor Claim ──────────────────────
-        if (inwardInspection.hasDefect && inwardInspection.raiseNCR && inwardInspection.defectDescription.trim()) {
-            const vendor = inwardInspection.vendorId
-                ? SalesServiceImport.getVendors().find((v: any) => v.id === inwardInspection.vendorId)
-                : null;
-            try {
-                NCRService.createNCR({
-                    company,
-                    stage: 'Inward-Inspection',
-                    cause: 'BR-04-Raw-Material-Defect',
-                    description: `GRN Inward Defect — ${migoData.referenceDoc || newEntry.id}: ${inwardInspection.defectDescription}`,
-                    reportedBy: 'Store Incharge',
-                    sqftLost: Number(inwardInspection.defectSqft) || 0,
-                    glassType: grnSelection.category,
-                    thickness: grnSelection.thickness,
-                    estimatedValue: Number(inwardInspection.estimatedValue) || 0,
-                    action: 'Vendor-Claim',
-                    vendorId: inwardInspection.vendorId || undefined,
-                    vendorName: vendor?.name || undefined,
-                    purchaseRef: migoData.referenceDoc || newEntry.id,
-                    notes: `Defect qty: ${inwardInspection.defectQty} sheets`,
-                });
-                toast.warning(`⚠️ NCR + Vendor Claim created for inward defect.`, { duration: 5000 });
-            } catch (e) {
-                console.warn('[GRN] NCR creation failed:', e);
-            }
-        }
+      // OK qty
+      item.unrestrictedQty = (item.unrestrictedQty || 0) + okSqft;
 
-        refreshData();
+      // Defective qty
+      item.defectiveSheets = (item.defectiveSheets || 0) + defSheets.length;
+      item.defectiveSqft   = (item.defectiveSqft   || 0) + defUsableSqft;
+      item.defectiveQty    = item.defectiveSqft;
+      item.defectiveValue  = (item.defectiveValue  || 0) + defValue;
 
-        // ── Show tag print prompt if tags were generated ──────────────────────
-        if (generatedTags.length > 0) {
-            setPendingTagEntry(newEntry);
-            setPendingVendorName(vendorName);
-            toast.success(`GRN posted. ${generatedTags.length} sheet tags generated.`, {
-                duration: 4000,
-                action: {
-                    label: '🏷 Print Tags',
-                    onClick: () => setShowTagPrint(true),
-                }
+      // Weight reference
+      item.perSheetWeightKg = perSheetKg;
+      item.perSqftWeightKg  = perSqftKg;
+      item.lastMovementDate = grnDate;
+
+      if (itemIdx !== -1) allStore[itemIdx] = item; else allStore.push(item);
+
+      // ── Material Ledger Entry ─────────────────────────────────────
+      const ledgerEntry: MaterialLedgerEntry = {
+        id: `MAT-${grnId}-L${lineIdx + 1}`,
+        company, materialId: item.id,
+        timestamp: new Date(grnDate).toISOString(),
+        mvmntCode: '101',
+        qty: okSqft + defUsableSqft,
+        uom: 'SqFt', valuation: item.movingAveragePrice,
+        balanceAfter: item.quantity,
+        referenceDoc: grnId, user: 'Store',
+        remarks: `GRN ${grnId} — ${line.description}`,
+        // GRN extended fields
+        dcNo, biltyNo, vendorSoNo, vehicleNo, driverName, driverPhone,
+        freightType, freightPKR,
+        otherChargesPKR: otherCharges, otherChargesDesc,
+        lineWeightKg: line.weightKg,
+        perSheetWeightKg: perSheetKg, perSqftWeightKg: perSqftKg,
+        vendorId, vendorName: selectedVendor?.name || '',
+        poId, sheetCount: line.sheetCount,
+        glassCategory: line.category,
+        sheetTags: line.tagIds,
+        sheetTagMeta: {
+          thickness: line.thickness, sheetSize: line.sheetSize,
+          vendorName: selectedVendor?.name || '',
+          grnRef: grnId, grnDate,
+          batchSeq,
+        },
+      };
+      allLedger.push(ledgerEntry);
+
+      // ── GRN Sheet Entries (per sheet) ──────────────────────────────
+      line.sheetInspections.forEach(insp => {
+        const entry: GRNSheetEntry = {
+          id: insp.tagId,
+          grnId, company,
+          tagId: insp.tagId,
+          lineIndex: lineIdx,
+          materialId: item.id,
+          thickness: line.thickness,
+          sheetSize: line.sheetSize,
+          sqftPerSheet: line.sqftPerSheet,
+          status: insp.status,
+          defectCode: insp.defectCode as any || undefined,
+          defectDescription: insp.defectCode
+            ? DEFECT_CODES.find(d => d.value === insp.defectCode)?.label || ''
+            : '',
+          usableSqft: insp.status === 'OK' ? line.sqftPerSheet : insp.usableSqft,
+          cutterNote: insp.cutterNote,
+          photos: insp.photos,
+          inspectedBy: 'Store Incharge',
+          inspectedAt: new Date().toISOString(),
+          claimAmount: insp.status !== 'OK'
+            ? Number(((line.sqftPerSheet - (insp.usableSqft || 0)) * line.ratePKR).toFixed(2))
+            : 0,
+          claimStatus: insp.status !== 'OK' ? 'Pending' : 'Pending',
+        };
+        grnSheetEntries.push(entry);
+
+        // NCR for fully broken sheets
+        if (insp.status === 'Broken' && (insp.usableSqft || 0) === 0) {
+          try {
+            NCRService.createNCR({
+              company, stage: 'Inward-Inspection',
+              cause: 'BR-05-Complete-Break',
+              description: `GRN ${grnId} — Tag ${insp.tagId}: Complete break, zero usable area`,
+              reportedBy: 'Store Incharge',
+              sqftLost: line.sqftPerSheet,
+              glassType: line.category, thickness: line.thickness,
+              estimatedValue: Number((line.sqftPerSheet * line.ratePKR).toFixed(2)),
+              action: 'Vendor-Claim',
+              vendorId, vendorName: selectedVendor?.name,
+              purchaseRef: grnId,
             });
-        } else {
-            toast.success(`Posted GRN for ${finalQty} ${item.unit} successfully.`);
-            onClose();
+          } catch (e) { console.warn('[GRN] NCR creation failed:', e); }
         }
+      });
+    });
 
-        setInwardInspection({ hasDefect: false, defectQty: 0, defectSqft: 0, defectType: 'BR-04-Raw-Material-Defect', defectDescription: '', vendorId: '', estimatedValue: 0, raiseNCR: false });
-    };
+    // ── Vendor Defect Report Draft ──────────────────────────────────
+    const defectEntries = grnSheetEntries
+      .filter(e => e.status !== 'OK')
+      .map(e => {
+        const line = filledLines.find(l => l.tagIds.includes(e.tagId))!;
+        return {
+          tagId: e.tagId,
+          defectCode: e.defectCode || '',
+          defectDescription: e.defectDescription || '',
+          originalSqft: line.sqftPerSheet,
+          usableSqft: e.usableSqft || 0,
+          originalValue: Number((line.sqftPerSheet * line.ratePKR).toFixed(2)),
+          usableValue: Number(((e.usableSqft || 0) * line.ratePKR).toFixed(2)),
+          adjustmentAmount: e.claimAmount || 0,
+          photos: e.photos || [],
+        };
+      });
 
-    let currentTotalQty = migoData.qty;
-    if (migoMode === 'Glass' && migoData.qtyMode === 'Sheets' && grnSelection.sheetSize) {
-        const [w, h] = grnSelection.sheetSize.split('x').map(Number);
-        currentTotalQty = ((w * h) / 144) * migoData.qty;
+    if (defectEntries.length > 0) {
+      const report: VendorDefectReport = {
+        id: `VDR-${grnId}`,
+        company, grnId, vendorId,
+        vendorName: selectedVendor?.name || '',
+        reportDate: grnDate,
+        defectEntries,
+        totalAdjustment: defectEntries.reduce((s, e) => s + e.adjustmentAmount, 0),
+        preparedBy: 'Store Incharge',
+        status: 'Draft',
+      };
+      InventoryService.upsertVendorDefectReport(report);
     }
-    const currentMaterialCost = currentTotalQty * migoData.valuation;
-    const currentTotalCost = currentMaterialCost + (migoData.transportCost || 0);
-    const currentLandedRate = currentTotalQty > 0 ? currentTotalCost / currentTotalQty : 0;
 
-    if (!isOpen) return null;
+    // ── Update PO status ────────────────────────────────────────────
+    if (poId) {
+      const allPOs = ProductionService.getPurchaseOrders();
+      ProductionService.savePurchaseOrders(
+        allPOs.map(p => p.id === poId
+          ? { ...p, status: 'GRN Done' as any, grnRef: grnId, grnDate }
+          : p
+        )
+      );
+    }
 
-    // ── Tag Print overlay ─────────────────────────────────────────────────────
-    if (showTagPrint && pendingTagEntry) {
-        return (
-            <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 z-[500]">
-                <div className="bg-white rounded-[2.5rem] w-full max-w-5xl h-[94vh] shadow-2xl flex flex-col overflow-hidden">
-                    <div className="px-10 py-5 bg-slate-900 text-white flex justify-between items-center shrink-0">
-                        <div className="flex items-center space-x-4">
-                            <div className="p-3 bg-blue-600 rounded-2xl"><Tag size={22}/></div>
-                            <div>
-                                <h3 className="text-xl font-black uppercase tracking-tight">Glass Sheet Tags</h3>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{pendingTagEntry.sheetTags?.length} Tags · {pendingTagEntry.sheetTagMeta?.batchSeq && `Batch ${pendingTagEntry.sheetTagMeta.batchSeq}`}</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center space-x-3">
-                            <button
-                                onClick={() => window.print()}
-                                className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black uppercase text-xs flex items-center space-x-2 shadow-lg hover:bg-blue-700 transition-colors"
-                            >
-                                <Printer size={16}/> <span>Print Tags</span>
-                            </button>
-                            <button
-                                onClick={() => { setShowTagPrint(false); onClose(); }}
-                                className="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center transition-all"
-                            >
-                                <X size={20}/>
-                            </button>
-                        </div>
-                    </div>
-                    <div className="flex-1 overflow-y-auto bg-slate-100 p-6">
-                        <GlassCoSheetTagPrint entry={pendingTagEntry} vendorName={pendingVendorName} />
-                    </div>
-                </div>
+    // ── Save ────────────────────────────────────────────────────────
+    InventoryService.saveStore(allStore);
+    InventoryService.saveStockLedger([...InventoryService.getStockLedger(), ...allLedger]);
+
+    const existingSheets = InventoryService.getGRNSheetEntries();
+    InventoryService.saveGRNSheetEntries([...existingSheets, ...grnSheetEntries]);
+
+    const summary = [
+      `GRN ${grnId} posted`,
+      `${totalSheets} sheets — ${totalSqft.toFixed(1)} sqft`,
+      defectCount > 0 ? `${defectCount} defect(s) recorded` : '',
+      defectCount > 0 ? 'Vendor defect report draft created' : '',
+    ].filter(Boolean).join(' | ');
+
+    toast.success(summary, { duration: 6000 });
+    refreshData();
+    handleClose();
+  };
+
+  const handleClose = () => {
+    setVendorId(''); setPoId(''); setDcNo(''); setBiltyNo('');
+    setVendorSoNo(''); setVehicleNo(''); setDriverName(''); setDriverPhone('');
+    setGrnDate(new Date().toISOString().split('T')[0]);
+    setLines(Array.from({ length: 3 }, blankLine));
+    setFreightPKR(0); setOtherCharges(0); setOtherChargesDesc(''); setCashPaymentRef('');
+    setTagsGenerated(false);
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  // ── Render ────────────────────────────────────────────────────────────
+  return (
+    <div className="fixed inset-0 bg-slate-900/70 flex items-start justify-center z-[400] overflow-y-auto py-4 px-3">
+      <div className="bg-white rounded-2xl w-full max-w-6xl shadow-2xl flex flex-col">
+
+        {/* ── Modal Header ── */}
+        <div className="flex items-center justify-between px-7 py-4 bg-slate-900 text-white rounded-t-2xl shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-emerald-600 rounded-xl"><Package size={18}/></div>
+            <div>
+              <h2 className="text-base font-black uppercase tracking-tight">Goods Receipt — Glass</h2>
+              <p className="text-[10px] text-slate-400 font-bold font-mono mt-0.5">{grnId}</p>
             </div>
-        );
-    }
+          </div>
+          <button onClick={handleClose} className="w-9 h-9 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center">
+            <X size={18}/>
+          </button>
+        </div>
 
-    return (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 z-[400]">
-           <div className="bg-white rounded-[2.5rem] w-full max-w-5xl h-[94vh] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300">
-              <div className="px-10 py-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
-                 <div className="flex items-center space-x-6">
-                    <div className="p-4 bg-emerald-600 rounded-2xl shadow-lg"><Truck size={28}/></div>
-                    <div>
-                       <h3 className="text-2xl font-black uppercase tracking-tight leading-none">Goods Receipt Note (GRN)</h3>
-                       <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1.5 italic">Transaction: MIGO | Movement 101</p>
-                    </div>
-                 </div>
-                 <button onClick={onClose} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-full flex items-center justify-center transition-all"><X size={28}/></button>
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+
+          {/* ── Section 1: Header ── */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5">
+            <div className="flex items-center gap-2 pb-3 border-b mb-4">
+              <Building2 size={14} className="text-blue-600"/>
+              <span className="text-xs font-black uppercase tracking-widest text-slate-700">GRN Header</span>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Glass Vendor *</label>
+                <select className="sap-input w-full font-bold" value={vendorId} onChange={e => setVendorId(e.target.value)}>
+                  <option value="">— Select Vendor —</option>
+                  {glassVendors.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                </select>
               </div>
 
-              <div className="flex bg-slate-100 p-2 border-b">
-                  <button onClick={() => setEntryMode('Manual')} className={`flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${entryMode === 'Manual' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>Manual Entry</button>
-                  <button onClick={() => setEntryMode('VendorImport')} className={`flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${entryMode === 'VendorImport' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>Bulk Import (Excel)</button>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">PO Number (Optional)</label>
+                <select className="sap-input w-full font-bold" value={poId} onChange={e => setPoId(e.target.value)}>
+                  <option value="">— No PO / Select PO —</option>
+                  {glassPOs.filter(p => !vendorId || (p as any).vendorId === vendorId || p.toVendor === selectedVendor?.name).map(p => (
+                    <option key={p.id} value={p.id}>{p.id} — {p.toVendor}</option>
+                  ))}
+                </select>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-10 bg-slate-50 space-y-8">
-                 {entryMode === 'VendorImport' ? (
-                     <div className="space-y-6">
-                         <div className="bg-blue-600 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden">
-                             <div className="relative z-10"><h2 className="text-xl font-black uppercase">Bulk Stock Import</h2><p className="text-[10px] font-bold text-blue-200 uppercase mt-1">Nippon / Hardware Logistics</p></div>
-                             <div className="flex items-center space-x-3 relative z-10">
-                                 <button onClick={handleExcelExport} className="bg-white/10 text-white px-4 py-3 rounded-xl font-bold uppercase text-xs flex items-center space-x-2"><Download size={16}/> <span>Template</span></button>
-                                 <div className="relative"><input type="file" ref={fileInputRef} onChange={handleExcelImport} className="hidden" accept=".xlsx, .xls" /><button onClick={() => fileInputRef.current?.click()} className="bg-white text-blue-700 px-6 py-3 rounded-xl font-black uppercase text-xs shadow-lg flex items-center space-x-2">{isParsing ? <Loader2 className="animate-spin" size={16}/> : <FileUp size={16}/>} <span>{isParsing ? 'Reading...' : 'Upload Excel'}</span></button></div>
-                             </div>
-                             <FileSearch size={160} className="absolute -bottom-4 -right-4 text-blue-500 opacity-20"/>
-                         </div>
-                         {importedItems.length > 0 && (
-                             <div className="bg-white rounded-3xl border shadow-sm overflow-hidden animate-in fade-in">
-                                 <div className="p-4 bg-emerald-50 border-b border-emerald-100 flex items-center space-x-2"><CheckCircle2 size={16} className="text-emerald-600"/><span className="text-xs font-bold text-emerald-800 uppercase">Items Ready: {importedItems.length}</span></div>
-                                 <table className="w-full text-left sap-table">
-                                     <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400"><tr><th>Code</th><th>Description</th><th className="text-right">Qty</th><th className="text-right">Price</th><th className="text-right">Total</th></tr></thead>
-                                     <tbody className="divide-y">{importedItems.map((item, i) => (<tr key={i}><td className="px-4 py-3 font-black text-blue-600">{item.code}</td><td className="px-4 py-3 text-xs font-bold uppercase">{item.desc}</td><td className="px-4 py-3 text-right font-bold">{item.qty}</td><td className="px-4 py-3 text-right">{item.price}</td><td className="px-4 py-3 text-right font-black">{(item.qty * item.price).toLocaleString()}</td></tr>))}</tbody>
-                                 </table>
-                             </div>
-                         )}
-                     </div>
-                 ) : (
-                     <div className="grid grid-cols-12 gap-8">
-                        <div className="col-span-7 space-y-6">
-                            <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
-                            <div className="flex items-center justify-between border-b pb-4">
-                                <div className="flex items-center space-x-3"><Layers size={18} className="text-blue-600"/><h4 className="text-sm font-black uppercase tracking-widest">Item Selection</h4></div>
-                                {company !== 'Nippon' && (
-                                    <div className="flex bg-slate-100 p-1 rounded-lg">
-                                        <button onClick={() => setMigoMode('Glass')} className={`px-3 py-1 text-[10px] font-black uppercase rounded-md transition-all ${migoMode === 'Glass' ? 'bg-white shadow text-blue-600' : 'text-slate-400'}`}>Glass Sheet</button>
-                                        <button onClick={() => setMigoMode('General')} className={`px-3 py-1 text-[10px] font-black uppercase rounded-md transition-all ${migoMode === 'General' ? 'bg-white shadow text-orange-600' : 'text-slate-400'}`}>General Item</button>
-                                    </div>
-                                )}
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">GRN Date</label>
+                <input type="date" className="sap-input w-full" value={grnDate} onChange={e => setGrnDate(e.target.value)}/>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">DC Number *</label>
+                <input type="text" className="sap-input w-full font-bold uppercase" placeholder="DC-XXXX"
+                  value={dcNo} onChange={e => setDcNo(e.target.value)}/>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Bilty Number *</label>
+                <input type="text" className="sap-input w-full font-bold uppercase" placeholder="BLT-XXXX"
+                  value={biltyNo} onChange={e => setBiltyNo(e.target.value)}/>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Vendor SO Number</label>
+                <input type="text" className="sap-input w-full font-bold uppercase" placeholder="Vendor SO ref"
+                  value={vendorSoNo} onChange={e => setVendorSoNo(e.target.value)}/>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Vehicle Number</label>
+                <input type="text" className="sap-input w-full font-bold uppercase" placeholder="LEA-XXXX"
+                  value={vehicleNo} onChange={e => setVehicleNo(e.target.value)}/>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Driver Name</label>
+                <input type="text" className="sap-input w-full font-bold uppercase" placeholder="Driver name (for PV)"
+                  value={driverName} onChange={e => setDriverName(e.target.value)}/>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Driver Phone</label>
+                <input type="text" className="sap-input w-full font-bold" placeholder="03XX-XXXXXXX"
+                  value={driverPhone} onChange={e => setDriverPhone(e.target.value)}/>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Section 2: Line Items ── */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5">
+            <div className="flex items-center justify-between pb-3 border-b mb-3">
+              <div className="flex items-center gap-2">
+                <Package size={14} className="text-emerald-600"/>
+                <span className="text-xs font-black uppercase tracking-widest">Line Items</span>
+                <span className="text-[9px] text-slate-400 font-bold">Search: 5mm, plain 84, mirror — token match</span>
+              </div>
+              <button onClick={addLine}
+                className="flex items-center gap-1 bg-emerald-600 text-white px-3 py-1.5 rounded-xl text-xs font-black uppercase hover:bg-emerald-700">
+                <Plus size={12}/> Add Line
+              </button>
+            </div>
+
+            {/* Column labels */}
+            <div className="grid text-[9px] font-black uppercase text-slate-400 mb-1.5 px-1 gap-2"
+              style={{ gridTemplateColumns: '1fr 70px 68px 68px 70px 80px 80px 24px' }}>
+              <span>Glass Specification</span>
+              <span className="text-right">Sheets</span>
+              <span className="text-right">SqFt</span>
+              <span className="text-right">Sq Mtr</span>
+              <span className="text-right">Weight KG</span>
+              <span className="text-right">Rate/sqft</span>
+              <span className="text-right">Line Total</span>
+              <span></span>
+            </div>
+
+            <div className="space-y-1.5">
+              {lines.map((line, idx) => {
+                const suggs = getSuggestions(line.searchQuery);
+                const isFilled = line.sheetCount > 0;
+                const hasDefects = line.sheetInspections.some(s => s.status !== 'OK');
+                return (
+                  <div key={line.id} ref={el => { suggRefs.current[line.id] = el; }}>
+                    {/* Main row */}
+                    <div className={`rounded-xl border transition-colors ${isFilled ? hasDefects ? 'border-amber-200 bg-amber-50/20' : 'border-emerald-200 bg-emerald-50/20' : 'border-slate-100 bg-slate-50/40'}`}>
+                      <div className="p-2.5 grid gap-2 items-start"
+                        style={{ gridTemplateColumns: '1fr 70px 68px 68px 70px 80px 80px 24px' }}>
+
+                        {/* Search */}
+                        <div className="relative">
+                          <div className="flex items-center gap-1 mb-1 min-h-[16px]">
+                            <span className="text-[9px] font-black text-slate-400">#{idx+1}</span>
+                            {line.thickness && (
+                              <span className="text-[9px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+                                {line.category} {line.thickness} {line.sheetSize}"
+                              </span>
+                            )}
+                            {line.sheetInspections.length > 0 && (
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${hasDefects ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                {line.sheetInspections.filter(s => s.status === 'OK').length} OK
+                                {hasDefects ? ` · ${line.sheetInspections.filter(s => s.status !== 'OK').length} defect` : ''}
+                              </span>
+                            )}
+                          </div>
+                          <input type="text" className="sap-input w-full text-xs font-bold"
+                            placeholder="e.g. plain 5mm, mirror 84x144, 6mm…"
+                            value={line.searchQuery} autoComplete="off"
+                            onChange={e => updateLine(line.id, { searchQuery: e.target.value, showSuggestions: true })}
+                            onFocus={() => updateLine(line.id, { showSuggestions: true })}/>
+                          {line.showSuggestions && (
+                            <div className="absolute z-50 top-full left-0 right-0 mt-0.5 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden">
+                              {suggs.length === 0
+                                ? <div className="px-3 py-2 text-[10px] text-slate-400 italic">No matches</div>
+                                : suggs.map(s => (
+                                  <button key={s.label}
+                                    className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-slate-50 last:border-0 flex items-center justify-between"
+                                    onMouseDown={e => { e.preventDefault(); pickSuggestion(line.id, s); }}>
+                                    <span className="text-xs font-black text-slate-800 uppercase">{s.label}</span>
+                                    {s.lastMAP > 0 && (
+                                      <span className="text-[9px] font-bold text-emerald-600 ml-3">MAP {s.lastMAP.toFixed(0)}</span>
+                                    )}
+                                  </button>
+                                ))
+                              }
                             </div>
-                            
-                            {migoMode === 'Glass' ? (
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-400">Category</label><select className="sap-input w-full font-bold" value={grnSelection.category} onChange={(e) => setGrnSelection({...grnSelection, category: e.target.value, subCategory: (e.target.value === 'Mirror' ? 'Belgium' : 'Standard'), color: 'N/A', thickness: '5mm', sheetSize: ''})}>{uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-                                    <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-400">Sub-Category</label><select disabled={isPlain || isFluted} className="sap-input w-full font-bold" value={grnSelection.subCategory} onChange={(e) => setGrnSelection({...grnSelection, subCategory: e.target.value, color: 'N/A', sheetSize: ''})}>{availableSubCategories.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                                    <div className={`space-y-1.5 transition-opacity ${!isColor ? 'opacity-30' : ''}`}><label className="text-[10px] font-black uppercase text-slate-400">Glass Color</label><select disabled={!isColor} className="sap-input w-full font-bold" value={grnSelection.color} onChange={(e) => setGrnSelection({...grnSelection, color: e.target.value, sheetSize: ''})}>{availableColors.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-                                    <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-400">Thickness</label><select className="sap-input w-full font-bold" value={grnSelection.thickness} onChange={(e) => setGrnSelection({...grnSelection, thickness: e.target.value, sheetSize: ''})}>{uniqueThicknesses.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                                    
-                                    <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-400">Width (In)</label><select className="sap-input w-full font-bold" value={grnSelection.sheetSize.split('x')[0]} onChange={(e) => { const w = e.target.value; const h = grnSelection.sheetSize.split('x')[1] || '144'; setGrnSelection({...grnSelection, sheetSize: w ? `${w}x${h}` : ''}); }}><option value="">-</option><option value="84">84"</option><option value="96">96"</option></select></div>
-                                    <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-400">Height (In)</label><select className="sap-input w-full font-bold" value={grnSelection.sheetSize.split('x')[1]} onChange={(e) => { const h = e.target.value; const w = grnSelection.sheetSize.split('x')[0] || '84'; setGrnSelection({...grnSelection, sheetSize: h ? `${w}x${h}` : ''}); }}><option value="">-</option><option value="144">144"</option></select></div>
-                                </div>
-                            ) : (
-                                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-400">Select Item</label><select className="sap-input w-full font-bold" value={migoData.materialId} onChange={(e) => setMigoData({...migoData, materialId: e.target.value})}><option value="">-- Choose from Master Data --</option>{generalProducts.map(p => (<option key={p.id} value={p.id}>{p.description} ({p.unit})</option>))}</select></div>
-                            )}
-
-                            {migoData.materialId && (
-                                <div className={`p-4 border rounded-2xl flex items-center space-x-2 ${migoMode === 'Glass' ? 'bg-emerald-50 border-emerald-100' : 'bg-orange-50 border-orange-100'}`}>
-                                    <CheckCircle2 size={16} className={migoMode === 'Glass' ? 'text-emerald-600' : 'text-orange-600'}/><span className={`text-xs font-black uppercase ${migoMode === 'Glass' ? 'text-emerald-800' : 'text-orange-800'}`}>ID: {migoData.materialId} | Matched</span>
-                                </div>
-                            )}
-
-                            {/* Tag Preview Banner (Glass mode only) */}
-                            {migoMode === 'Glass' && migoData.qty > 0 && grnSelection.thickness && (
-                                <div className="flex items-center space-x-2 bg-blue-50 border border-blue-100 rounded-2xl p-3">
-                                    <Tag size={14} className="text-blue-600 shrink-0"/>
-                                    <div>
-                                        <p className="text-[10px] font-black text-blue-800 uppercase">Sheet Tags Preview</p>
-                                        <p className="text-[10px] text-blue-600 font-mono mt-0.5">
-                                            GLS-{grnSelection.thickness.replace(/\s/g,'').toUpperCase()}-{String(new Date().getMonth()+1).padStart(2,'0')}{String(new Date().getFullYear()).slice(-2)}-XXX-01 … -{String(migoData.qtyMode === 'Sheets' ? migoData.qty : '?').padStart(2,'0')}
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-                            </section>
-                            <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6"><div className="flex items-center space-x-3 pb-4 border-b"><ClipboardList size={18} className="text-indigo-600"/><h4 className="text-sm font-black uppercase tracking-widest">Document Header</h4></div><div className="grid grid-cols-2 gap-4"><div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-400">Reference</label><input type="text" placeholder="PO / Invoice Ref" value={migoData.referenceDoc} onChange={e => setMigoData({...migoData, referenceDoc: e.target.value})} className="sap-input w-full font-bold uppercase"/></div><div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-400">Remarks</label><input type="text" value={migoData.remarks} onChange={e => setMigoData({...migoData, remarks: e.target.value})} className="sap-input w-full font-bold uppercase"/></div></div></section>
+                          )}
                         </div>
 
-                        <div className="col-span-5 space-y-6">
-                        <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6 h-full flex flex-col justify-center">
-                            <div className="flex items-center justify-between pb-4 border-b"><div className="flex items-center space-x-3"><Scale size={18} className="text-amber-600"/><h4 className="text-sm font-black uppercase tracking-widest">Valuation</h4></div><button onClick={() => setIsImportMode(!isImportMode)} className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase border ${isImportMode ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-slate-400'}`}>{isImportMode ? 'Import Mode' : 'Local Purchase'}</button></div>
-                            <div className="space-y-4">
-                                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-400">Quantity ({migoData.qtyMode})</label><div className="relative"><input type="number" className="w-full p-4 bg-slate-50 border rounded-2xl font-black text-3xl text-center text-slate-800" value={migoData.qty || ''} onChange={e => setMigoData({...migoData, qty: Number(e.target.value)})} /><span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 uppercase">{migoData.qtyMode}</span></div></div>
-                                {migoMode === 'Glass' && (
-                                    <div className="flex bg-slate-100 p-1 rounded-lg"><button onClick={() => setMigoData({...migoData, qtyMode: 'Sheets'})} className={`flex-1 py-1 rounded text-[10px] font-black uppercase ${migoData.qtyMode === 'Sheets' ? 'bg-white text-blue-600 shadow' : 'text-slate-400'}`}>Sheets</button><button onClick={() => setMigoData({...migoData, qtyMode: 'SqFt'})} className={`flex-1 py-1 rounded text-[10px] font-black uppercase ${migoData.qtyMode === 'SqFt' ? 'bg-white text-blue-600 shadow' : 'text-slate-400'}`}>SqFt</button></div>
-                                )}
-                                {isImportMode ? (
-                                    <div className="space-y-3 bg-purple-50 p-4 rounded-2xl border border-purple-100">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-1"><label className="text-[10px] font-black uppercase text-purple-700">Currency</label><select className="w-full p-2 rounded-lg font-bold text-xs" value={migoData.currency} onChange={e => setMigoData({...migoData, currency: e.target.value})}><option>USD</option><option>RMB</option></select></div>
-                                            <div className="space-y-1"><label className="text-[10px] font-black uppercase text-purple-700">Rate</label><input type="number" className="w-full p-2 rounded-lg font-bold text-xs" value={migoData.exchangeRate} onChange={e => setMigoData({...migoData, exchangeRate: Number(e.target.value)})} /></div>
-                                        </div>
-                                        <div className="space-y-1"><label className="text-[10px] font-black uppercase text-purple-700">Foreign Unit Price</label><input type="number" className="w-full p-2 rounded-lg font-bold text-sm" value={migoData.foreignRate || ''} onChange={e => setMigoData({...migoData, foreignRate: Number(e.target.value)})} /></div>
-                                        <div className="space-y-1"><label className="text-[10px] font-black uppercase text-purple-700">Duty / Clearing</label><input type="number" className="w-full p-2 rounded-lg font-bold text-sm" value={migoData.totalDuty || ''} onChange={e => setMigoData({...migoData, totalDuty: Number(e.target.value)})} /></div>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-400">Unit Cost (PKR)</label><input type="number" className="w-full p-3 bg-white border-2 border-emerald-100 rounded-xl font-black text-xl text-center text-emerald-600" value={migoData.valuation || ''} onChange={e => setMigoData({...migoData, valuation: Number(e.target.value)})} /></div>
-                                )}
-                                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-400 flex items-center space-x-1"><Truck size={10}/> <span>Freight</span></label><input type="number" className="w-full p-3 bg-white border rounded-xl font-black text-xl text-center text-blue-600" value={migoData.transportCost || ''} onChange={e => setMigoData({...migoData, transportCost: Number(e.target.value)})} /></div>
-                                <div className="bg-slate-50 p-4 rounded-2xl space-y-2 border">
-                                    <div className="flex justify-between items-center"><span className="text-[10px] font-bold text-slate-500 uppercase">Landed Rate</span><span className="text-sm font-black text-slate-800">{currentLandedRate.toFixed(2)} / Unit</span></div>
-                                    <div className="flex justify-between items-center border-t pt-2"><span className="text-xs font-bold text-slate-500 uppercase">Total Value</span><span className="text-2xl font-black text-emerald-700">PKR {Math.round(currentTotalCost).toLocaleString()}</span></div>
+                        {/* Sheets */}
+                        <input type="number" min="0" className="sap-input text-xs font-black text-right mt-[16px]"
+                          placeholder="0" value={line.sheetCount || ''}
+                          onChange={e => {
+                            const cnt = Number(e.target.value);
+                            updateLine(line.id, { sheetCount: cnt });
+                          }}/>
+
+                        {/* Sqft */}
+                        <div className={`sap-input text-xs font-black text-right mt-[16px] cursor-not-allowed ${line.totalSqft > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-300'}`}>
+                          {line.totalSqft > 0 ? line.totalSqft.toFixed(1) : '—'}
+                        </div>
+
+                        {/* Sqmtr — editable */}
+                        <input type="number" min="0" step="0.001"
+                          className="sap-input text-xs font-bold text-right text-blue-700 mt-[16px]"
+                          placeholder="—" value={line.totalSqmtr || ''}
+                          onChange={e => updateLine(line.id, { totalSqmtr: Number(e.target.value) })}/>
+
+                        {/* Weight */}
+                        <input type="number" min="0"
+                          className="sap-input text-xs font-bold text-right mt-[16px]"
+                          placeholder="0 kg" value={line.weightKg || ''}
+                          onChange={e => updateLine(line.id, { weightKg: Number(e.target.value) })}/>
+
+                        {/* Rate */}
+                        <div className="mt-[16px]">
+                          <input type="number" min="0"
+                            className="sap-input text-xs font-black text-right w-full"
+                            placeholder="0.00" value={line.ratePKR || ''}
+                            onChange={e => updateLine(line.id, { ratePKR: Number(e.target.value) })}/>
+                        </div>
+
+                        {/* Total */}
+                        <div className={`text-xs font-black text-right pr-1 mt-[16px] ${line.lineValue > 0 ? 'text-emerald-700' : 'text-slate-200'}`}>
+                          {line.lineValue > 0 ? Math.round(line.lineValue).toLocaleString() : '—'}
+                        </div>
+
+                        {/* Remove */}
+                        <button onClick={() => removeLine(line.id)}
+                          className={`w-6 h-6 rounded flex items-center justify-center mt-[16px] ${lines.length > 1 ? 'text-red-300 hover:text-red-600' : 'text-slate-100 cursor-not-allowed'}`}>
+                          <Trash2 size={11}/>
+                        </button>
+                      </div>
+
+                      {/* Weight computed display */}
+                      {isFilled && line.weightKg > 0 && (
+                        <div className="px-3 pb-2 flex gap-4 text-[9px] font-bold text-slate-500">
+                          <span>Per sheet: <span className="text-slate-700">{line.perSheetWeightKg.toFixed(2)} kg</span></span>
+                          <span>Per sqft: <span className="text-slate-700">{line.perSqftWeightKg.toFixed(4)} kg</span></span>
+                        </div>
+                      )}
+
+                      {/* ── Sheet Inspections ── */}
+                      {line.sheetInspections.length > 0 && (
+                        <div className="border-t border-slate-100 mx-3 mb-2">
+                          <button
+                            className="flex items-center gap-1.5 text-[10px] font-black uppercase text-slate-500 hover:text-slate-800 py-2 w-full"
+                            onClick={() => updateLine(line.id, { expanded: !line.expanded })}>
+                            {line.expanded ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}
+                            Sheet Inspection ({line.sheetInspections.length} tags)
+                            {hasDefects && <span className="text-amber-600">— {line.sheetInspections.filter(s=>s.status!=='OK').length} defect(s)</span>}
+                          </button>
+
+                          {line.expanded && (
+                            <div className="space-y-1 pb-2 max-h-72 overflow-y-auto">
+                              {/* Inspection header */}
+                              <div className="grid text-[8px] font-black uppercase text-slate-400 px-1 gap-1"
+                                style={{ gridTemplateColumns: '120px 90px 80px 70px 1fr 60px' }}>
+                                <span>Tag ID</span>
+                                <span>Status</span>
+                                <span>Defect Code</span>
+                                <span>Usable sqft</span>
+                                <span>Cutter Note</span>
+                                <span>Photo</span>
+                              </div>
+                              {line.sheetInspections.map(insp => (
+                                <div key={insp.tagId}
+                                  className={`grid gap-1 px-1 py-1 rounded-lg items-center ${insp.status !== 'OK' ? 'bg-amber-50 border border-amber-100' : 'bg-slate-50'}`}
+                                  style={{ gridTemplateColumns: '120px 90px 80px 70px 1fr 60px' }}>
+
+                                  <span className="text-[9px] font-mono font-bold text-slate-600">{insp.tagId}</span>
+
+                                  {/* Status */}
+                                  <select
+                                    className={`text-[9px] font-black border rounded px-1 py-0.5 ${insp.status === 'OK' ? 'text-emerald-700 border-emerald-200' : insp.status === 'Defective' ? 'text-amber-700 border-amber-200' : 'text-red-700 border-red-200'}`}
+                                    value={insp.status}
+                                    onChange={e => updateInspection(line.id, insp.tagId, { status: e.target.value as any, usableSqft: e.target.value === 'OK' ? line.sqftPerSheet : insp.usableSqft })}>
+                                    <option value="OK">OK</option>
+                                    <option value="Defective">Defective</option>
+                                    <option value="Broken">Broken</option>
+                                  </select>
+
+                                  {/* Defect code */}
+                                  {insp.status !== 'OK'
+                                    ? <select className="text-[9px] border rounded px-1 py-0.5 border-amber-200"
+                                        value={insp.defectCode}
+                                        onChange={e => updateInspection(line.id, insp.tagId, { defectCode: e.target.value })}>
+                                        <option value="">— Code —</option>
+                                        {DEFECT_CODES.map(d => <option key={d.value} value={d.value}>{d.value}</option>)}
+                                      </select>
+                                    : <span className="text-[9px] text-slate-300">—</span>
+                                  }
+
+                                  {/* Usable sqft */}
+                                  {insp.status !== 'OK'
+                                    ? <input type="number" min="0" max={line.sqftPerSheet}
+                                        className="text-[9px] border border-amber-200 rounded px-1 py-0.5 w-full text-right font-bold"
+                                        value={insp.usableSqft || ''}
+                                        onChange={e => updateInspection(line.id, insp.tagId, { usableSqft: Number(e.target.value) })}/>
+                                    : <span className="text-[9px] text-slate-400 text-right">{line.sqftPerSheet.toFixed(1)}</span>
+                                  }
+
+                                  {/* Cutter note */}
+                                  <input type="text"
+                                    className="text-[9px] border border-slate-200 rounded px-1 py-0.5 w-full"
+                                    placeholder="Instruction for cutter…"
+                                    value={insp.cutterNote}
+                                    onChange={e => updateInspection(line.id, insp.tagId, { cutterNote: e.target.value })}/>
+
+                                  {/* Photo */}
+                                  <button onClick={() => handlePhoto(line.id, insp.tagId)}
+                                    className={`flex items-center gap-0.5 text-[9px] font-bold px-2 py-1 rounded ${insp.photos.length > 0 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500 hover:bg-blue-50'}`}>
+                                    <Camera size={10}/>
+                                    {insp.photos.length > 0 ? `${insp.photos.length}` : '+'}
+                                  </button>
                                 </div>
+                              ))}
                             </div>
-                        </section>
-                        </div>
-                     </div>
-                 )}
-              </div>
-
-              {/* ── Inward Inspection / Defect Section ────────────────── */}
-              {entryMode === 'Manual' && migoMode === 'Glass' && (
-                <div className="px-10 py-5 border-t border-slate-100 bg-amber-50/40">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle size={16} className="text-amber-600"/>
-                      <span className="text-xs font-black text-amber-700 uppercase">Inward Inspection</span>
-                    </div>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={inwardInspection.hasDefect}
-                        onChange={e => setInwardInspection(v => ({ ...v, hasDefect: e.target.checked }))}
-                        className="rounded"
-                      />
-                      <span className="text-xs font-bold text-amber-700">Defect / Breakage Found</span>
-                    </label>
-                  </div>
-
-                  {inwardInspection.hasDefect && (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-3 gap-3">
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-500 uppercase">Defect Sheets</label>
-                          <input
-                            type="number" min="0"
-                            className="sap-input w-full mt-1"
-                            placeholder="No. of sheets"
-                            value={inwardInspection.defectQty || ''}
-                            onChange={e => setInwardInspection(v => ({ ...v, defectQty: +e.target.value }))}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-500 uppercase">Defect Sq.Ft</label>
-                          <input
-                            type="number" min="0" step="0.01"
-                            className="sap-input w-full mt-1"
-                            placeholder="0.00"
-                            value={inwardInspection.defectSqft || ''}
-                            onChange={e => setInwardInspection(v => ({ ...v, defectSqft: +e.target.value }))}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-500 uppercase">Est. Claim Value (PKR)</label>
-                          <input
-                            type="number" min="0"
-                            className="sap-input w-full mt-1"
-                            placeholder="0"
-                            value={inwardInspection.estimatedValue || ''}
-                            onChange={e => setInwardInspection(v => ({ ...v, estimatedValue: +e.target.value }))}
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-500 uppercase">Defect Description *</label>
-                        <input
-                          className="sap-input w-full mt-1"
-                          placeholder="e.g. 3 sheets broken on arrival, edges chipped..."
-                          value={inwardInspection.defectDescription}
-                          onChange={e => setInwardInspection(v => ({ ...v, defectDescription: e.target.value }))}
-                        />
-                      </div>
-                      <label className="flex items-center gap-2 cursor-pointer bg-amber-100 rounded-xl p-3 border border-amber-200">
-                        <input
-                          type="checkbox"
-                          checked={inwardInspection.raiseNCR}
-                          onChange={e => setInwardInspection(v => ({ ...v, raiseNCR: e.target.checked }))}
-                          className="rounded"
-                        />
-                        <div>
-                          <span className="text-xs font-black text-amber-800">Raise NCR + Vendor Claim</span>
-                          <p className="text-[9px] text-amber-600 mt-0.5">Auto-creates NCR record and vendor claim draft linked to this GRN</p>
-                        </div>
-                      </label>
-                      {inwardInspection.raiseNCR && (
-                        <div className="bg-white rounded-xl border border-amber-200 p-3 text-[10px] font-bold text-amber-700">
-                          ✓ On posting: NCR-YYYYMMDD-XXXX will be created with action = Vendor Claim (Draft)
+                          )}
                         </div>
                       )}
                     </div>
-                  )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* ── Generate Tags Button ── */}
+            <div className="mt-4 flex items-center justify-between">
+              <div className="flex gap-4 text-xs">
+                <span className="font-bold text-slate-500">Lines: <span className="font-black text-slate-800">{filledLines.length}/{lines.length}</span></span>
+                <span className="font-bold text-slate-500">Sheets: <span className="font-black text-slate-800">{totalSheets}</span></span>
+                <span className="font-bold text-slate-500">SqFt: <span className="font-black text-slate-800">{totalSqft.toFixed(1)}</span></span>
+                <span className="font-bold text-slate-500">Sq Mtr: <span className="font-black text-slate-800">{totalSqmtr.toFixed(2)}</span></span>
+                <span className="font-bold text-slate-500">Weight: <span className="font-black text-slate-800">{totalWeight.toFixed(1)} kg</span></span>
+              </div>
+              <button onClick={handleGenerateTags}
+                className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-black uppercase ${tagsGenerated ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-slate-900 text-white hover:bg-blue-700'}`}>
+                <Tag size={13}/>
+                {tagsGenerated ? `Tags Generated (${lines.reduce((s,l)=>s+l.tagIds.length,0)}) ✓` : 'Generate Tags'}
+              </button>
+            </div>
+
+            {/* Defect summary */}
+            {defectCount > 0 && (
+              <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
+                <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5"/>
+                <div className="text-[10px] text-amber-800 font-bold">
+                  {defectCount} defective sheet(s) recorded —
+                  {brokenCount > 0 ? ` ${brokenCount} fully broken (NCR will auto-generate)` : ' vendor claim draft will be created on post'}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Section 3: Footer / Charges ── */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5">
+            <div className="flex items-center gap-2 pb-3 border-b mb-4">
+              <Truck size={14} className="text-slate-600"/>
+              <span className="text-xs font-black uppercase tracking-widest">Charges</span>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Freight PKR</label>
+                <input type="number" min="0" className="sap-input w-full font-bold"
+                  value={freightPKR || ''} onChange={e => setFreightPKR(Number(e.target.value))}/>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Freight Type</label>
+                <select className="sap-input w-full font-bold" value={freightType} onChange={e => setFreightType(e.target.value as any)}>
+                  <option value="Vendor Included">Vendor Included (Paid to transporter)</option>
+                  <option value="Own Expense">Own Expense</option>
+                </select>
+              </div>
+              {freightType === 'Vendor Included' && freightPKR > 0 && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-amber-600">Cash Payment Ref *</label>
+                  <input type="text" className="sap-input w-full font-bold border-amber-200" placeholder="Receipt / reference"
+                    value={cashPaymentRef} onChange={e => setCashPaymentRef(e.target.value)}/>
                 </div>
               )}
-
-              <div className="px-10 py-8 bg-white border-t flex justify-end space-x-4 shrink-0">
-                 <button onClick={onClose} className="px-8 py-3 text-slate-400 font-black uppercase text-xs tracking-widest">Discard</button>
-                 {entryMode === 'VendorImport' ? (
-                     <button onClick={handleBulkPost} disabled={importedItems.length === 0} className="bg-blue-600 text-white px-16 py-4 rounded-2xl font-black uppercase text-xs shadow-2xl flex items-center space-x-4"><ScanLine size={20}/> <span>Bulk Post</span></button>
-                 ) : (
-                     <button onClick={handleMigoPost} className="bg-slate-900 text-white px-16 py-4 rounded-2xl font-black uppercase text-xs shadow-2xl flex items-center space-x-4"><PackageCheck size={20}/> <span>Post GRN</span></button>
-                 )}
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Other Charges PKR</label>
+                <input type="number" min="0" className="sap-input w-full font-bold"
+                  value={otherCharges || ''} onChange={e => setOtherCharges(Number(e.target.value))}/>
               </div>
-           </div>
+              <div className="space-y-1 col-span-2">
+                <label className="text-[10px] font-black uppercase text-slate-400">
+                  Other Charges Description {otherCharges > 0 && <span className="text-red-500">*</span>}
+                </label>
+                <input type="text" className="sap-input w-full font-bold uppercase"
+                  placeholder="e.g. Loading charges, Labour"
+                  value={otherChargesDesc} onChange={e => setOtherChargesDesc(e.target.value)}/>
+              </div>
+            </div>
+
+            {/* Grand Total */}
+            <div className="mt-4 bg-slate-900 rounded-2xl p-4 flex justify-between items-center">
+              <div className="flex gap-6 text-xs text-slate-400">
+                <span>Material: <span className="font-black text-white">PKR {Math.round(totalMaterial).toLocaleString()}</span></span>
+                {freightPKR > 0 && <span>Freight: <span className="font-black text-blue-400">PKR {freightPKR.toLocaleString()}</span></span>}
+                {otherCharges > 0 && <span>Other: <span className="font-black text-slate-300">PKR {otherCharges.toLocaleString()}</span></span>}
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase font-bold mr-3">Grand Total</span>
+                <span className="text-xl font-black text-white">PKR {Math.round(grandTotal).toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+
         </div>
-    );
+
+        {/* ── Modal Footer ── */}
+        <div className="px-6 py-4 bg-slate-50 border-t rounded-b-2xl flex justify-between items-center shrink-0">
+          <div className="text-[10px] text-slate-500 font-bold space-x-3">
+            {!tagsGenerated && <span className="text-amber-600">⚠ Generate tags before posting</span>}
+            {tagsGenerated && <span className="text-emerald-600">✓ Tags ready</span>}
+            {defectCount > 0 && <span className="text-amber-600">· {defectCount} defect(s)</span>}
+          </div>
+          <div className="flex gap-3">
+            <button onClick={handleClose}
+              className="px-6 py-2.5 border border-slate-300 rounded-xl text-xs font-black uppercase text-slate-600 hover:bg-slate-100">
+              Cancel
+            </button>
+            <button onClick={handlePost}
+              className="bg-blue-700 text-white px-10 py-2.5 rounded-xl text-xs font-black uppercase shadow-lg flex items-center gap-2 hover:bg-blue-800">
+              <CheckCircle2 size={14}/> Post GRN
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
-export default React.memo(GoodsReceiptMIGO);
+export default GoodsReceiptMIGO;
