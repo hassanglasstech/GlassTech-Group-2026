@@ -13,7 +13,7 @@ import { SalesService } from '@/modules/sales/services/salesService';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { NCRService } from '@/modules/production/services/ncrService';
 import { GRNPrint } from '@/modules/glassco/core/prints/GRNPrint';
-// import { orchestrateGRNGL } from '@/modules/procurement/services/grnGLService'; // Phase 9 — add grnGLService.ts to deploy
+import { orchestrateGRNGL } from '@/modules/procurement/services/grnGLService';
 import {
   StoreItem, MaterialLedgerEntry, GRNSheetEntry, VendorDefectReport,
   PurchaseOrder
@@ -606,7 +606,7 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
       const defSheets = l.sheetInspections.filter(i => i.status !== 'OK');
       return s + defSheets.reduce((ss, i) => ss + (i.usableSqft || 0) * l.ratePKR, 0);
     }, 0);
-    // orchestrateGRNGL({ company, grnId, grnDate, vendorName: selectedVendor?.name || vendorId, totalOKValue, totalDefectiveValue: totalDefVal, freightType, freightAmount: freightPKR, cashPaymentRef, otherCharges, otherChargesDesc }); // Phase 9 — uncomment after adding grnGLService.ts
+    orchestrateGRNGL({ company, grnId, grnDate, vendorName: selectedVendor?.name || vendorId, totalOKValue, totalDefectiveValue: totalDefVal, freightType, freightAmount: freightPKR, cashPaymentRef, otherCharges, otherChargesDesc });
 
     const existingSheets = InventoryService.getGRNSheetEntries();
     InventoryService.saveGRNSheetEntries([...existingSheets, ...grnSheetEntries]);
