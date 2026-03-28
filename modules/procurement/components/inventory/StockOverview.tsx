@@ -4,6 +4,8 @@ import { useDebounce } from '@/modules/shared/hooks/useDebounce';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { StoreItem } from '@/modules/shared/types';
 import { SalesService } from '@/modules/sales/services/salesService';
+import { InventoryService } from '@/modules/procurement/services/inventoryService';
+import { AlertTriangle } from 'lucide-react';
 import { Search, Box, Image as ImageIcon, Filter } from 'lucide-react';
 import Pagination from '@/components/Pagination';
 
@@ -20,6 +22,13 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
     const itemsPerPage = 20;
     
     const allProducts = SalesService.getProducts();
+
+    // Phase 11 — Low stock alerts
+    const lowStockAlerts = useMemo(() =>
+      InventoryService.getLowStockItems(company),
+    [items, company]);
+    const lowStockMap: Record<string, 'red' | 'orange'> = {};
+    lowStockAlerts.forEach(a => { lowStockMap[a.item.id] = a.alertLevel; });
 
     // Reset pagination when filter changes
     React.useEffect(() => {
@@ -77,6 +86,24 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                 </div>
              </div>
              
+             {/* Low Stock Alert Banner */}
+             {lowStockAlerts.length > 0 && (
+               <div className="px-6 py-3 bg-red-50 border-b border-red-100 flex items-center gap-3">
+                 <AlertTriangle size={15} className="text-red-500 shrink-0"/>
+                 <div className="flex items-center gap-3 flex-wrap">
+                   <span className="text-xs font-black text-red-700 uppercase">
+                     {lowStockAlerts.filter(a => a.alertLevel === 'red').length} Critical · {lowStockAlerts.filter(a => a.alertLevel === 'orange').length} Low
+                   </span>
+                   {lowStockAlerts.slice(0,5).map(a => (
+                     <span key={a.item.id} className={`text-[9px] font-black px-2 py-0.5 rounded-full ${a.alertLevel === 'red' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                       {a.item.name.slice(0,20)} — {a.unrestrictedQty.toFixed(0)} {a.item.unit}
+                     </span>
+                   ))}
+                   {lowStockAlerts.length > 5 && <span className="text-[9px] text-red-400 font-bold">+{lowStockAlerts.length - 5} more</span>}
+                 </div>
+               </div>
+             )}
+
              <div className="flex-1 overflow-x-auto">
                  <table className="w-full text-left">
                     <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400">
@@ -122,7 +149,16 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                                     <span className="text-slate-300">-</span>
                                 )}
                             </td>
-                            <td className="px-6 py-4 text-right font-black text-slate-900 text-base">{(item.unrestrictedQty || 0).toLocaleString()} <span className="text-[10px] text-slate-400">{item.unit}</span></td>
+                            <td className="px-6 py-4 text-right font-black text-slate-900 text-base">
+                              <div className="flex items-center justify-end gap-2">
+                                {lowStockMap[item.id] && (
+                                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${lowStockMap[item.id] === 'red' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}>
+                                    {lowStockMap[item.id] === 'red' ? '⚠ Critical' : '⚡ Low'}
+                                  </span>
+                                )}
+                                {(item.unrestrictedQty || 0).toLocaleString()} <span className="text-[10px] text-slate-400">{item.unit}</span>
+                              </div>
+                            </td>
                             <td className="px-6 py-4 text-right">
                                <p className="text-xs font-black text-emerald-600">{currencySymbol} {(item.movingAveragePrice || 0).toLocaleString()}</p>
                             </td>
