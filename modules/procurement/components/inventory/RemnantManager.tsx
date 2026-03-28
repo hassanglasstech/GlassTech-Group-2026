@@ -222,17 +222,10 @@ const RemnantManager: React.FC = () => {
       InventoryService.saveStore(store);
     }
 
-    // Post scrap GL (nominal PKR 5/kg)
-    const nominalKg = r.estimatedWeightKg || r.sqft * 0.14;
-    const nominalValue = Number((nominalKg * 5).toFixed(2));
-    // postScrapDisposalGL({
-      company,
-      disposalId: `SCR-${r.id}`,
-      disposalDate: new Date().toISOString().split('T')[0],
-      actualAmountReceived: 0,   // actual deal entered separately in ScrapDisposals
-      nominalBookValue: nominalValue,
-      notes: scrapReason,
-    });
+    // Phase 9 GL — uncomment after adding grnGLService.ts to project
+    // const nominalKg = r.estimatedWeightKg || r.sqft * 0.14;
+    // const nominalValue = Number((nominalKg * 5).toFixed(2));
+    // postScrapDisposalGL({ company, disposalId: `SCR-${r.id}`, disposalDate: new Date().toISOString().split('T')[0], actualAmountReceived: 0, nominalBookValue: nominalValue, notes: scrapReason });
 
     toast.success(`${r.id} scrapped — GL entry parked`);
     setScrapModal(null);
