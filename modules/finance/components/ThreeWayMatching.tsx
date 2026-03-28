@@ -5,6 +5,7 @@ import { Company, PurchaseOrder, Requisition, LedgerTransaction, Account } from 
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { FinanceService } from '@/modules/finance/services/financeService';
+// import { postDefectAdjustmentGL } from '@/modules/procurement/services/grnGLService'; // Phase 9 — add grnGLService.ts to deploy
 import {
   CheckCircle2, AlertTriangle, Clock, X, Save, Search, Filter,
   FileText, Package, Receipt, CreditCard, Link2, ChevronRight,
@@ -207,6 +208,14 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
       setActiveStep('match');
     } else {
       toast.success(`✓ Invoice matched. GL posted: Dr GR/IR / Cr Payable. PO → Matched.`, { duration: 5000 });
+
+      // ── Auto-post defect adjustment if vendor defect report exists and confirmed ──
+      const vdrList = InventoryService.getVendorDefectReports()
+        .filter((r: any) => r.grnId === (selectedPO.grnRef || '') && r.status === 'Verbally Confirmed');
+      vdrList.forEach((vdr: any) => {
+        // postDefectAdjustmentGL({ company, grnId: vdr.grnId, adjustmentDate: new Date().toISOString().split('T')[0], adjustmentAmount: vdr.totalAdjustment, vendorName: vdr.vendorName, defectReportId: vdr.id }); // Phase 9 — uncomment after adding grnGLService.ts
+        InventoryService.upsertVendorDefectReport({ ...vdr, status: 'Settled', settlementRef: matchGL.id });
+      });
       setActiveStep('approval');
     }
   };
