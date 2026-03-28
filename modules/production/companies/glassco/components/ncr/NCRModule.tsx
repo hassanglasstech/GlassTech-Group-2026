@@ -2,11 +2,13 @@ import React, { useState, useMemo } from 'react';
 import { useProductionContext } from '@/modules/production/components/ProductionContext';
 import { NCRService } from '@/modules/production/services/ncrService';
 import { SalesService } from '@/modules/sales/services/salesService';
+import { InventoryService } from '@/modules/procurement/services/inventoryService';
+import NCRDefectPrint from '@/modules/glassco/core/prints/NCRDefectPrint';
 import { toast } from 'sonner';
 import {
   AlertTriangle, Plus, X, CheckCircle2, Clock, RefreshCw,
   FileText, TrendingDown, Package, ChevronRight, Banknote,
-  BarChart3, Eye, Send, ShieldCheck, Trash2
+  BarChart3, Eye, Send, ShieldCheck, Trash2, Printer
 } from 'lucide-react';
 import type { NCREvent, NCRStage, NCRCause, NCRAction, NCRReproduction, NCRVendorClaim } from '@/modules/production/types/ncr';
 import { NCR_CAUSE_LABELS, NCR_STAGE_LABELS } from '@/modules/production/types/ncr';
@@ -349,6 +351,15 @@ const NCRDetail: React.FC<{
 }> = ({ ncr, reproductions, claims, onClose, onRefresh, company }) => {
   const ncrReprs = reproductions.filter(r => r.ncrId === ncr.id);
   const ncrClaim = claims.find(c => c.ncrId === ncr.id);
+  const [showPrint, setShowPrint] = useState(false);
+
+  // Find matching VendorDefectReport for this NCR (via vendor claim)
+  const matchingVDR = useMemo(() => {
+    if (ncr.action !== 'Vendor-Claim' || !ncr.vendorName) return undefined;
+    const allReports = InventoryService.getVendorDefectReports();
+    // Match by company + vendor name + closest date
+    return allReports.find((r: any) => r.company === company && r.vendorName === ncr.vendorName);
+  }, [ncr, company]);
 
   const handleSubmitClaim = () => {
     if (!ncrClaim) return;
@@ -468,13 +479,52 @@ const NCRDetail: React.FC<{
           {/* Actions */}
           {ncr.status !== 'Closed' && (
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button onClick={() => setShowPrint(true)} className="flex items-center gap-1 bg-red-50 text-red-700 px-4 py-2 rounded-lg text-xs font-black hover:bg-red-100">
+                <Printer size={14}/> Print NCR
+              </button>
               <button onClick={handleClose} className="flex items-center gap-1 bg-slate-100 text-slate-700 px-4 py-2 rounded-lg text-xs font-black hover:bg-slate-200">
                 <CheckCircle2 size={14}/> Close NCR
               </button>
             </div>
           )}
+          {ncr.status === 'Closed' && (
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button onClick={() => setShowPrint(true)} className="flex items-center gap-1 bg-red-50 text-red-700 px-4 py-2 rounded-lg text-xs font-black hover:bg-red-100">
+                <Printer size={14}/> Print NCR
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* NCR Print Overlay */}
+      {showPrint && (
+        <div className="fixed inset-0 z-[600] bg-white overflow-y-auto">
+          <NCRDefectPrint
+            ncr={{
+              id: ncr.id,
+              company,
+              stage: NCR_STAGE_LABELS[ncr.stage] || ncr.stage,
+              cause: NCR_CAUSE_LABELS[ncr.cause] || ncr.cause,
+              description: ncr.description,
+              reportedBy: ncr.reportedBy,
+              reportedAt: ncr.reportedAt,
+              glassType: ncr.glassType,
+              thickness: ncr.thickness,
+              sqftLost: ncr.sqftLost,
+              estimatedValue: ncr.estimatedValue,
+              action: ncr.action,
+              vendorName: ncr.vendorName,
+              purchaseRef: ncr.purchaseRef,
+              notes: ncr.notes,
+              status: ncr.status,
+            }}
+            defectReport={matchingVDR}
+            mode={matchingVDR ? 'Both' : 'NCR'}
+            onClose={() => setShowPrint(false)}
+          />
+        </div>
+      )}
     </div>
   );
 };
