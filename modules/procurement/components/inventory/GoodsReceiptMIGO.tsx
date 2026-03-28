@@ -12,6 +12,7 @@ import { InventoryService } from '@/modules/procurement/services/inventoryServic
 import { SalesService } from '@/modules/sales/services/salesService';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { NCRService } from '@/modules/production/services/ncrService';
+// import { orchestrateGRNGL } from '@/modules/procurement/services/grnGLService'; // Phase 9 — add grnGLService.ts to deploy
 import {
   StoreItem, MaterialLedgerEntry, GRNSheetEntry, VendorDefectReport,
   PurchaseOrder
@@ -593,6 +594,17 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
     // ── Save ────────────────────────────────────────────────────────
     InventoryService.saveStore(allStore);
     InventoryService.saveStockLedger([...InventoryService.getStockLedger(), ...allLedger]);
+
+    // ── Phase 9: Post GL entries ───────────────────────────────────────
+    const totalOKValue  = filledLines.reduce((s, l) => {
+      const okSheets  = l.sheetInspections.filter(i => i.status === 'OK');
+      return s + okSheets.reduce((ss) => ss + l.sqftPerSheet * l.ratePKR, 0);
+    }, 0);
+    const totalDefVal = filledLines.reduce((s, l) => {
+      const defSheets = l.sheetInspections.filter(i => i.status !== 'OK');
+      return s + defSheets.reduce((ss, i) => ss + (i.usableSqft || 0) * l.ratePKR, 0);
+    }, 0);
+    // orchestrateGRNGL({ company, grnId, grnDate, vendorName: selectedVendor?.name || vendorId, totalOKValue, totalDefectiveValue: totalDefVal, freightType, freightAmount: freightPKR, cashPaymentRef, otherCharges, otherChargesDesc }); // Phase 9 — uncomment after adding grnGLService.ts
 
     const existingSheets = InventoryService.getGRNSheetEntries();
     InventoryService.saveGRNSheetEntries([...existingSheets, ...grnSheetEntries]);
