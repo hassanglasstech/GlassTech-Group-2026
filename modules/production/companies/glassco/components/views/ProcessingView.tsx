@@ -1,7 +1,10 @@
+import { toast } from 'sonner';
 import React, { useState } from 'react';
+import QCCheckPanel from '@/modules/glassco/core/QCCheckPanel';
 import { useProductionContext } from '@/modules/production/components/ProductionContext';
+import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import InwardAuditView from '@/modules/production/components/InwardAuditView';
-import { Flame, ArrowDownLeft, Hourglass, Layers, ChevronLeft, User, LayoutGrid, Clock, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { Flame, ArrowDownLeft, Hourglass, Layers, ChevronLeft, User, LayoutGrid, Clock, CheckCircle2, ArrowLeft, ShieldCheck } from 'lucide-react';
 import JobCard from '@/modules/production/components/sub/JobCard';
 import { isInternal, getGlassSize } from '@/modules/production/components/ProductionUtils';
 import { useNavigate } from 'react-router-dom';
@@ -11,7 +14,7 @@ import { SalesService } from '@/modules/sales/services/salesService';
 
 const ProcessingView: React.FC = () => {
   const { 
-    pieces, jobOrders, dispatches, clients, spots, company,
+    pieces, jobOrders, dispatches, clients, spots, company, handleUpdatePieceStatus,
     activeDispatchIdForLoading, setActiveDispatchIdForLoading,
     activeInwardDispatchId, setActiveInwardDispatchId,
     inwardAuditablePieces, selectedPiecesForDelivery,
@@ -19,7 +22,7 @@ const ProcessingView: React.FC = () => {
     selectedJobId, setSelectedJobId, getJobDetails, togglePieceToDispatch, loadAllPiecesToDispatch
   } = useProductionContext();
 
-  const [activeSubTab, setActiveSubTab] = useState<'tempering' | 'inward' | 'wip' | 'lamination' | 'double_glaze'>('tempering');
+  const [activeSubTab, setActiveSubTab] = useState<'qc' | 'tempering' | 'inward' | 'wip' | 'lamination' | 'double_glaze'>('qc');
   const [expandedLoadingJob, setExpandedLoadingJob] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -137,12 +140,23 @@ const ProcessingView: React.FC = () => {
     <div className="space-y-6">
         {/* Mobile-scrollable tabs */}
         <div className="flex space-x-1 bg-white p-1 rounded-2xl border shadow-sm overflow-x-auto scrollbar-none -mx-1 px-1">
+            <button onClick={() => setActiveSubTab('qc')} className={`px-3 sm:px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap flex items-center gap-1.5 min-h-[40px] ${activeSubTab === 'qc' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><ShieldCheck size={14}/><span>QC Check</span></button>
             <button onClick={() => setActiveSubTab('tempering')} className={`px-3 sm:px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap flex items-center gap-1.5 min-h-[40px] ${activeSubTab === 'tempering' ? 'bg-rose-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Flame size={14}/><span className="hidden sm:inline">Loading</span><span className="sm:hidden">Load</span></button>
             <button onClick={() => setActiveSubTab('inward')} className={`px-3 sm:px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap flex items-center gap-1.5 min-h-[40px] ${activeSubTab === 'inward' ? 'bg-blue-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><ArrowDownLeft size={14}/><span className="hidden sm:inline">Inward Audit</span><span className="sm:hidden">Inward</span></button>
             <button onClick={() => setActiveSubTab('wip')} className={`px-3 sm:px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap flex items-center gap-1.5 min-h-[40px] ${activeSubTab === 'wip' ? 'bg-amber-500 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Hourglass size={14}/>WIP</button>
             <button onClick={() => setActiveSubTab('lamination')} className={`px-3 sm:px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap flex items-center gap-1.5 min-h-[40px] ${activeSubTab === 'lamination' ? 'bg-orange-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Layers size={14}/><span className="hidden sm:inline">Lamination</span><span className="sm:hidden">Lam</span></button>
             <button onClick={() => setActiveSubTab('double_glaze')} className={`px-3 sm:px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap flex items-center gap-1.5 min-h-[40px] ${activeSubTab === 'double_glaze' ? 'bg-cyan-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Layers size={14}/>D/G</button>
         </div>
+
+        {activeSubTab === 'qc' && (
+            <div className="animate-in fade-in duration-300">
+              <QCCheckPanel
+                pieces={pieces}
+                jobOrders={jobOrders}
+                handleUpdatePieceStatus={handleUpdatePieceStatus}
+              />
+            </div>
+        )}
 
         {activeSubTab === 'tempering' && (
             <div className="space-y-4 animate-in fade-in duration-300">
@@ -158,6 +172,33 @@ const ProcessingView: React.FC = () => {
                       const selectedTrip = dispatches.find(d => d.id === activeDispatchIdForLoading);
                       return loaded > 0 ? (
                         <button onClick={() => {
+                          // ── Phase 8: Defective piece check ──────────────────
+                          const loadedPiecesList = pieces.filter(p => p.dispatchId === activeDispatchIdForLoading);
+                          const tripVendor = SalesService.getVendors().find((v: any) =>
+                            v.name?.toUpperCase() === selectedTrip?.plantName?.toUpperCase()
+                          );
+                          const vendorAcceptsDefective = (tripVendor as any)?.acceptsDefectivePieces !== false;
+
+                          if (!vendorAcceptsDefective) {
+                            // Check if any loaded piece is from a defective sheet
+                            const allSheetEntries = InventoryService.getGRNSheetEntries();
+                            const defectivePieceTags = loadedPiecesList.filter(p => {
+                              // Check if piece's tag is marked defective
+                              const tagId = (p as any).sheetTagId;
+                              if (!tagId) return false;
+                              const entry = allSheetEntries.find(e => e.tagId === tagId);
+                              return entry && entry.status !== 'OK';
+                            });
+
+                            if (defectivePieceTags.length > 0) {
+                              toast.error(
+                                `BLOCKED: ${selectedTrip?.plantName} does not accept defective pieces. ${defectivePieceTags.length} defective piece(s) in this trip. Remove them first.`,
+                                { duration: 8000 }
+                              );
+                              return; // BLOCK trip close
+                            }
+                          }
+
                           if (!confirm(`Finalize loading? ${loaded} pieces will be dispatched.`)) return;
                           const allDisp = ProductionService.getTemperingDispatches();
                           const allPcs = ProductionService.getProductionPieces();
@@ -180,6 +221,30 @@ const ProcessingView: React.FC = () => {
                             totalCost += sqFt * rate;
                           });
                           totalCost = Math.round(totalCost);
+
+                          // ── Phase 8: Fare distribution per piece (weight-based) ──
+                          const farePerKg = totalSqFt > 0
+                            ? totalCost / loadedPcs.reduce((s: number, p: any) => {
+                                const storeItem = InventoryService.getStore().find((si: any) =>
+                                  si.company === company && si.name?.includes(getGlassSize(p.specs || ''))
+                                );
+                                const sqFt = p.totalSqFt || 0;
+                                return s + sqFt * (storeItem?.perSqftWeightKg || 0.14);
+                              }, 0)
+                            : 0;
+                          // Store fare distribution on each piece for job costing
+                          loadedPcs.forEach((p: any) => {
+                            const storeItem = InventoryService.getStore().find((si: any) =>
+                              si.company === company && si.name?.includes(getGlassSize(p.specs || ''))
+                            );
+                            const pieceWeightKg = (p.totalSqFt || 0) * (storeItem?.perSqftWeightKg || 0.14);
+                            const allocatedFare = Number((pieceWeightKg * farePerKg).toFixed(2));
+                            // Save on piece for job cost reporting (stored in specs extension)
+                            const existingSpecs = (() => { try { return JSON.parse(p.specs || '{}'); } catch { return {}; } })();
+                            handleUpdatePieceStatus(p.id, p.status, {
+                              specs: JSON.stringify({ ...existingSpecs, allocatedFarePKR: allocatedFare }),
+                            });
+                          });
 
                           // ── Update dispatch with calculated totals ──
                           const updDisp = allDisp.map(d => d.id === activeDispatchIdForLoading
