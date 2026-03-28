@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { Remnant, RemnantDimensions, RemnantShape, RemnantHistoryEntry } from '@/modules/procurement/types/inventory';
 import { GlassCoRemnantTagPrint, RemnantTagData } from '@/modules/glassco/core/prints/GlassCoSheetTagPrint';
-// import { postScrapDisposalGL } from '@/modules/procurement/services/grnGLService'; // Phase 9 — add grnGLService.ts to deploy
+import { postScrapDisposalGL } from '@/modules/procurement/services/grnGLService';
 import {
   Plus, Trash2, Tag, MapPin, AlertTriangle, CheckCircle2,
   Clock, Search, ChevronDown, ChevronRight, Printer, Archive
@@ -222,12 +222,12 @@ const RemnantManager: React.FC = () => {
       InventoryService.saveStore(store);
     }
 
-    // Phase 9 GL — uncomment after adding grnGLService.ts to project
-    // const nominalKg = r.estimatedWeightKg || r.sqft * 0.14;
-    // const nominalValue = Number((nominalKg * 5).toFixed(2));
-    // postScrapDisposalGL({ company, disposalId: `SCR-${r.id}`, disposalDate: new Date().toISOString().split('T')[0], actualAmountReceived: 0, nominalBookValue: nominalValue, notes: scrapReason });
+    // Phase 9 GL — scrap disposal entry
+    const nominalKg = r.estimatedWeightKg || r.sqft * 0.14;
+    const nominalValue = Number((nominalKg * 5).toFixed(2));
+    postScrapDisposalGL({ company, disposalId: `SCR-${r.id}`, disposalDate: new Date().toISOString().split('T')[0], actualAmountReceived: 0, nominalBookValue: nominalValue, notes: scrapReason });
 
-    toast.success(`${r.id} scrapped — GL entry parked`);
+    toast.success(`${r.id} scrapped — GL entry posted`);
     setScrapModal(null);
     setScrapReason('');
   };
