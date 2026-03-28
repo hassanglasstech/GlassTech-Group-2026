@@ -12,6 +12,7 @@ import { InventoryService } from '@/modules/procurement/services/inventoryServic
 import { SalesService } from '@/modules/sales/services/salesService';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { NCRService } from '@/modules/production/services/ncrService';
+import { GRNPrint } from '@/modules/glassco/core/prints/GRNPrint';
 // import { orchestrateGRNGL } from '@/modules/procurement/services/grnGLService'; // Phase 9 — add grnGLService.ts to deploy
 import {
   StoreItem, MaterialLedgerEntry, GRNSheetEntry, VendorDefectReport,
@@ -162,6 +163,7 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
 
   // ── Tags generated flag ───────────────────────────────────────────────
   const [tagsGenerated, setTagsGenerated] = useState(false);
+  const [printData, setPrintData] = useState<any>(null);
   const [grnId] = useState(() => generateGRNId());
 
   // ── Suggestion refs ───────────────────────────────────────────────────
@@ -618,7 +620,21 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
 
     toast.success(summary, { duration: 6000 });
     refreshData();
-    handleClose();
+    // Prepare print data — modal stays open for print option
+    setPrintData({
+      grnId, grnDate, vendorName: selectedVendor?.name || vendorId,
+      dcNo, biltyNo, vendorSoNo, vehicleNo, driverName, poId,
+      freightType, freightPKR, otherCharges, otherChargesDesc,
+      lines: filledLines.map(l => ({
+        description: l.description, thickness: l.thickness, sheetSize: l.sheetSize,
+        sheetCount: l.sheetCount, sqftPerSheet: l.sqftPerSheet, totalSqft: l.totalSqft,
+        totalSqmtr: l.totalSqmtr, weightKg: l.weightKg, ratePKR: l.ratePKR,
+        lineValue: l.lineValue, tagIds: l.tagIds,
+      })),
+      sheetEntries: grnSheetEntries,
+      totalSheets, totalSqft, totalWeight,
+      grandTotal, postedBy: 'Store',
+    });
   };
 
   const handleClose = () => {
@@ -632,6 +648,11 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
   };
 
   if (!isOpen) return null;
+
+  // ── Print overlay ──
+  if (printData) {
+    return <GRNPrint data={printData} onClose={() => { setPrintData(null); handleClose(); }}/>;
+  }
 
   // ── Render ────────────────────────────────────────────────────────────
   return (
