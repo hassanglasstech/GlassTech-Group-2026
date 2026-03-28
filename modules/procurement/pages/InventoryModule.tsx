@@ -9,16 +9,16 @@ import ProductMaster from '@/modules/sales/pages/ProductMaster';
 import StockOverview from '@/modules/procurement/components/inventory/StockOverview';
 import GoodsIssue from '@/modules/procurement/components/inventory/GoodsIssue';
 import GoodsReceiptMIGO from '@/modules/procurement/components/inventory/GoodsReceiptMIGO';
+import RemnantManager from '@/modules/procurement/components/inventory/RemnantManager';
 
 import NipponGoodsReceipt from '@/modules/procurement/components/inventory/NipponGoodsReceipt';
 import { 
-  LayoutGrid, ArrowUpRight, ShieldCheck, Truck, Database, Loader2, FileText
+  LayoutGrid, ArrowUpRight, ShieldCheck, Truck, Database, Loader2, Layers
 } from 'lucide-react';
-import GlasscoPurchaseOrder from '@/modules/procurement/companies/glassco/GlasscoPurchaseOrder';
 
 const InventoryModule: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'overview' | 'po' | 'master' | 'issuance' | 'migo' | 'quality'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'master' | 'issuance' | 'migo' | 'quality' | 'remnants'>('overview');
   const [isLoading, setIsLoading] = useState(true);
   
   const [items, setItems] = useState<StoreItem[]>([]);
@@ -60,10 +60,10 @@ const InventoryModule: React.FC = () => {
 
   const tabs = [
     { id: 'overview', label: 'Stock Balances', icon: LayoutGrid },
-    { id: 'po',       label: 'Purchase Orders', icon: FileText },
-    { id: 'master',   label: 'Material Master', icon: Database },
+    { id: 'master', label: 'Material Master', icon: Database },
     { id: 'issuance', label: 'Goods Issue', icon: ArrowUpRight },
-    { id: 'quality',  label: 'Quality Hub', icon: ShieldCheck }
+    { id: 'quality', label: 'Quality Hub', icon: ShieldCheck },
+    { id: 'remnants', label: 'Remnants', icon: Layers }
   ];
 
   if (isLoading) return <div className="h-full flex items-center justify-center text-slate-400"><Loader2 className="animate-spin mr-2"/> Loading Inventory Data...</div>;
@@ -120,9 +120,9 @@ const InventoryModule: React.FC = () => {
               />
       )}
 
-      {activeTab === 'po' && company !== 'Nippon' && (
+      {activeTab === 'remnants' && (
         <div className="animate-in fade-in duration-300">
-          <GlasscoPurchaseOrder />
+          <RemnantManager />
         </div>
       )}
 
