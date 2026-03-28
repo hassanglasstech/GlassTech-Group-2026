@@ -198,6 +198,13 @@ const MDDashboard: React.FC = () => {
     return { totalRevenue, totalExpenses, netProfit:totalRevenue-totalExpenses, cashPosition:cashIn-cashOut, totalReceivables:totalRec, activeEmployees:activeEmps.length, loansOutstanding:activeLoans.reduce((s,l)=>s+(l.balance||l.amount||0),0), pendingReqs:pendingReqs.length, pendingReqValue:pendingReqs.reduce((s,r)=>s+(r.totalValue||r.estimatedAmount||0),0), monthlyChartData, companyRevenue, agingData, topExpenses, deptData, totalSalary, pipeline, factoryData };
   }, [filtered, visibleCompanies]);
 
+  // Phase 11 — Low stock
+  const lowStockItems = useMemo(() => {
+    try { return InventoryService.getLowStockItems(selectedCompany); } catch { return []; }
+  }, [selectedCompany]);
+  const criticalCount = lowStockItems.filter(a => a.alertLevel === 'red').length;
+  const lowCount = lowStockItems.filter(a => a.alertLevel === 'orange').length;
+
   if(isLoading) return <div className="space-y-6 animate-slide-up"><div className="skeleton skeleton-heading"/><div className="grid grid-cols-2 md:grid-cols-4 gap-4">{Array.from({length:8}).map((_,i)=><div key={i} className="skeleton skeleton-card"/>)}</div></div>;
 
   // ── DRILL DOWN ──────────────────────────────────────────────────────
@@ -251,6 +258,30 @@ const MDDashboard: React.FC = () => {
   // ── MAIN RENDER ─────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-slide-up">
+      {/* Phase 11 — Low Stock Alert */}
+      {lowStockItems.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
+          <AlertTriangle size={18} className="text-red-500 shrink-0 mt-0.5"/>
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-sm font-black uppercase text-red-700">Low Stock Alert</span>
+              {criticalCount > 0 && <span className="text-[10px] font-black bg-red-600 text-white px-2 py-0.5 rounded-full">{criticalCount} Critical</span>}
+              {lowCount > 0 && <span className="text-[10px] font-black bg-amber-500 text-white px-2 py-0.5 rounded-full">{lowCount} Low</span>}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {lowStockItems.slice(0, 8).map(a => (
+                <div key={a.item.id} className={`flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1.5 rounded-xl border ${a.alertLevel === 'red' ? 'bg-red-100 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+                  <span className="uppercase">{a.item.name.slice(0,18)}</span>
+                  <span className="font-black">{a.unrestrictedQty.toFixed(0)} {a.item.unit}</span>
+                  <span className="text-[9px] opacity-60">/ {a.reorderPoint} ROP</span>
+                </div>
+              ))}
+              {lowStockItems.length > 8 && <span className="text-[10px] text-red-400 font-bold self-center">+{lowStockItems.length - 8} more in Inventory</span>}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div><h1 className="text-2xl font-bold text-slate-900">MD Dashboard</h1><p className="text-sm text-slate-400 mt-1">{isFactory?'GlassTech Group \u2014 All Companies':`${selectedCompany} Unit`}</p></div>
         <div className="flex items-center gap-3 flex-wrap">
