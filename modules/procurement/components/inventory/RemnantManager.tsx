@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { Remnant, RemnantDimensions, RemnantShape, RemnantHistoryEntry } from '@/modules/procurement/types/inventory';
 import { GlassCoRemnantTagPrint, RemnantTagData } from '@/modules/glassco/core/prints/GlassCoSheetTagPrint';
-import { postScrapDisposalGL } from '@/modules/procurement/services/grnGLService';
+// import { postScrapDisposalGL } from '@/modules/procurement/services/grnGLService'; // Phase 9 — add grnGLService.ts to deploy
 import {
   Plus, Trash2, Tag, MapPin, AlertTriangle, CheckCircle2,
   Clock, Search, ChevronDown, ChevronRight, Printer, Archive
@@ -225,7 +225,7 @@ const RemnantManager: React.FC = () => {
     // Post scrap GL (nominal PKR 5/kg)
     const nominalKg = r.estimatedWeightKg || r.sqft * 0.14;
     const nominalValue = Number((nominalKg * 5).toFixed(2));
-    postScrapDisposalGL({
+    // postScrapDisposalGL({
       company,
       disposalId: `SCR-${r.id}`,
       disposalDate: new Date().toISOString().split('T')[0],
