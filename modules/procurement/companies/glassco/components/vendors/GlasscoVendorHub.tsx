@@ -3,8 +3,10 @@ import { Company, TemperingDispatch, ProductionPiece, PieceFault, Vendor, Quotat
 import { ProductionService } from '../../../../../production/services/productionService';
 import { SalesService } from '../../../../../sales/services/salesService';
 import { FinanceService } from '../../../../../finance/services/financeService';
+import { InventoryService } from '../../../../services/inventoryService';
+import NCRDefectPrint from '@/modules/glassco/core/prints/NCRDefectPrint';
 import { 
-  LayoutGrid, List, Plus, X, Save, Trash2, Edit, Truck, Layers, Flame, Calculator, CheckCircle2, Ban, Clock, Globe, Filter, Search, Phone, Receipt, Calendar, FileText
+  LayoutGrid, List, Plus, X, Save, Trash2, Edit, Truck, Layers, Flame, Calculator, CheckCircle2, Ban, Clock, Globe, Filter, Search, Phone, Receipt, Calendar, FileText, Printer
 } from 'lucide-react';
 import SupplyChainDashboard from '../../../../components/vendors/SupplyChainDashboard';
 
@@ -24,6 +26,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
   
   const [reconcileTripId, setReconcileTripId] = useState<string | null>(null);
   const [returnDates, setReturnDates] = useState<Record<string, string>>({});
+  const [printVDR, setPrintVDR] = useState<any | null>(null);
   
   const [isAddVendorOpen, setIsAddVendorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -616,6 +619,9 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
                                     : r.status === 'Verbally Confirmed' ? 'bg-amber-100 text-amber-700'
                                     : 'bg-slate-100 text-slate-500'
                                   }`}>{r.status}</span>
+                                  <button onClick={() => setPrintVDR(r)} className="p-1 hover:bg-red-50 rounded-lg" title="Print Defect Report">
+                                    <Printer size={13} className="text-red-600"/>
+                                  </button>
                                 </div>
                               </div>
                             ))}
@@ -630,5 +636,16 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
           </div>
         );
       })()}
+
+      {/* VDR Print Overlay */}
+      {printVDR && (
+        <div className="fixed inset-0 z-[600] bg-white overflow-y-auto">
+          <NCRDefectPrint
+            defectReport={printVDR}
+            mode="DefectReport"
+            onClose={() => setPrintVDR(null)}
+          />
+        </div>
+      )}
 
 export default GlasscoVendorHub;
