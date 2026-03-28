@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import CuttingDiagram, { buildPackingPiecesFromQuotation } from '@/modules/glassco/core/CuttingDiagram';
 import { useProductionContext } from '@/modules/production/components/ProductionContext';
 import JobRegistryView from '@/modules/production/components/JobRegistryView';
 import ServiceFloorView from '@/modules/production/components/ServiceFloorView';
@@ -17,6 +18,7 @@ const FabricationView: React.FC = () => {
 
   const [activeSubTab, setActiveSubTab] = useState<'jobs' | 'queue' | 'services'>('jobs');
   const [printingJob, setPrintingJob] = useState<Quotation | null>(null);
+  const [showCuttingDiagram, setShowCuttingDiagram] = useState(false);
 
   const handlePrintJobCard = (e: React.MouseEvent, jobId: string) => {
       e.stopPropagation();
@@ -48,12 +50,39 @@ const FabricationView: React.FC = () => {
                     <h3 className="text-xl font-black text-slate-800 uppercase">{jobData.projectName || 'Standard Order'}</h3>
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{jobData.clientName} | {selectedJobId}</p>
                  </div>
-                 <div className="ml-auto flex items-center space-x-6 text-right">
+                 <div className="ml-auto flex items-center space-x-4 text-right">
                     <div><p className="text-[10px] font-black text-slate-400 uppercase">Pending Qty</p><p className="text-lg font-black">{jobData.pendingQty} <span className="text-[10px] text-slate-400">Pcs</span></p></div>
                     <div><p className="text-[10px] font-black text-slate-400 uppercase">Volume</p><p className="text-lg font-black">{jobData.pendingSqFt} <span className="text-[10px] text-slate-400">Ft²</span></p></div>
+                    <button
+                      onClick={() => setShowCuttingDiagram(!showCuttingDiagram)}
+                      className={`flex items-center gap-2 text-xs font-black uppercase px-4 py-2 rounded-xl border transition-colors ${showCuttingDiagram ? 'bg-blue-700 text-white border-blue-700' : 'border-blue-200 text-blue-600 hover:bg-blue-50'}`}>
+                      ✂ {showCuttingDiagram ? 'Hide' : 'Cutting Plan'}
+                    </button>
                  </div>
               </div>
-              
+
+              {/* 2D Cutting Diagram */}
+              {showCuttingDiagram && (() => {
+                const job = jobOrders.find(j => j.orderNo === selectedJobId || j.id === selectedJobId);
+                const cuttingPieces = job ? buildPackingPiecesFromQuotation(job.items || []) : [];
+                return cuttingPieces.length > 0 ? (
+                  <div className="bg-white rounded-2xl border border-blue-200 shadow-sm p-5">
+                    <p className="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest">2D Cutting Plan</p>
+                    <CuttingDiagram
+                      pieces={cuttingPieces}
+                      sheetWidthInch={84}
+                      sheetHeightInch={144}
+                      glassType={cuttingPieces[0]?.glassType}
+                      jobOrderId={selectedJobId}
+                    />
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl p-6 text-center text-xs text-slate-400 font-bold">
+                    No piece dimensions found — add width/height to quotation items
+                  </div>
+                );
+              })()}
+
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                  {relevantPieces.map(p => (
                     <JobCard 
