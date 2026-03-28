@@ -13,7 +13,7 @@ interface GlasscoVendorHubProps {
 }
 
 const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
-  const [viewMode, setViewMode] = useState<'dashboard' | 'registry' | 'service_orders'>('dashboard');
+  const [viewMode, setViewMode] = useState<'dashboard' | 'registry' | 'service_orders' | 'performance'>('dashboard');
   const [activeTab, setActiveTab] = useState<'Tempering' | 'Glass' | 'Transport'>('Tempering');
   const [activeVendor, setActiveVendor] = useState<string | null>(null);
   
@@ -27,7 +27,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
   
   const [isAddVendorOpen, setIsAddVendorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [newVendorForm, setNewVendorForm] = useState<Partial<Vendor>>({ name: '', type: 'Tempering', contactPerson: '', phone: '', vehicles: [] });
+  const [newVendorForm, setNewVendorForm] = useState<any>({ name: '', type: 'Tempering', contactPerson: '', phone: '', vehicles: [], acceptsDefectivePieces: true });
   const [newVehicleInput, setNewVehicleInput] = useState('');
   
   // Rate Card State
@@ -213,6 +213,9 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
         <button onClick={() => { setViewMode('service_orders'); setActiveVendor(null); }} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all whitespace-nowrap ${viewMode === 'service_orders' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
             <FileText size={16} /><span>Service Orders</span>
         </button>
+        <button onClick={() => { setViewMode('performance'); setActiveVendor(null); }} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all whitespace-nowrap ${viewMode === 'performance' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+            <BarChart3 size={16} /><span>Performance</span>
+        </button>
       </div>
 
       {viewMode === 'dashboard' ? (
@@ -266,7 +269,10 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
                           {vendors.filter(v => (registryFilter === 'All' || v.type === registryFilter) && v.name.toLowerCase().includes(searchTerm.toLowerCase())).map(v => (
                               <tr key={v.id} className="group hover:bg-slate-50 transition-colors">
                                   <td className="px-4 py-3"><div className="flex items-center space-x-3"><div className={`w-8 h-8 rounded flex items-center justify-center font-bold border border-slate-200 bg-slate-100 text-slate-600`}>{v.type === 'Transport' ? <Truck size={16}/> : v.type === 'Glass' ? <Layers size={16}/> : <Flame size={16}/>}</div><div><p className="font-bold leading-tight uppercase text-xs text-slate-900">{v.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">{v.id}</p></div></div></td>
-                                  <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${v.type === 'Transport' ? 'bg-slate-900 text-white' : v.type === 'Glass' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>{v.type}</span></td>
+                                  <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${v.type === 'Transport' ? 'bg-slate-900 text-white' : v.type === 'Glass' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>{v.type}</span>
+                                    {v.type === 'Tempering' && (v as any).acceptsDefectivePieces === false && (
+                                      <span className="text-[9px] font-black text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">No Defective</span>
+                                    )}</td>
                                   <td className="px-4 py-3"><p className="text-xs font-bold text-slate-700 uppercase">{v.contactPerson || '-'}</p></td>
                                   <td className="px-4 py-3"><div className="flex items-center space-x-1 text-slate-500"><Phone size={12}/><span className="text-xs font-bold font-mono">{v.phone || '-'}</span></div></td>
                                   <td className="px-4 py-3">{v.type === 'Transport' ? <span className="text-[10px] font-bold text-blue-600 uppercase bg-blue-50 px-2 py-0.5 rounded">{v.vehicles?.length || 0} Vehicles</span> : <span className="text-[10px] text-slate-400 font-bold">N/A</span>}</td>
@@ -293,6 +299,19 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Type</label><select value={newVendorForm.type} onChange={e => setNewVendorForm({...newVendorForm, type: e.target.value as any})} className="sap-input w-full font-bold"><option value="Tempering">Tempering</option><option value="Glass">Glass</option><option value="Transport">Transport</option></select></div>
             <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Phone</label><input type="text" value={newVendorForm.phone} onChange={e => setNewVendorForm({...newVendorForm, phone: e.target.value})} className="sap-input w-full font-bold" /></div>
+          {newVendorForm.type === 'Tempering' && (
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border">
+              <div>
+                <div className="text-[10px] font-black uppercase text-slate-600">Accepts Defective Pieces</div>
+                <div className="text-[9px] text-slate-400 font-bold">Trip close will be blocked if NO and defective pieces are loaded</div>
+              </div>
+              <button
+                onClick={() => setNewVendorForm({...newVendorForm, acceptsDefectivePieces: !newVendorForm.acceptsDefectivePieces})}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${newVendorForm.acceptsDefectivePieces ? 'bg-emerald-500' : 'bg-red-400'}`}>
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${newVendorForm.acceptsDefectivePieces ? 'translate-x-6' : 'translate-x-1'}`}/>
+              </button>
+            </div>
+          )}
           </div>
           <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Contact Person</label><input type="text" value={newVendorForm.contactPerson} onChange={e => setNewVendorForm({...newVendorForm, contactPerson: e.target.value})} className="sap-input w-full font-bold uppercase" /></div>
           {newVendorForm.type === 'Transport' && (
@@ -480,5 +499,136 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
     </div>
   );
 };
+
+      {/* ═══ VENDOR PERFORMANCE VIEW ═══ */}
+      {viewMode === 'performance' && (() => {
+        const glassVendors = vendors.filter(v => v.type === 'Glass' || v.type === 'Tempering');
+        const allSheetEntries = InventoryService.getGRNSheetEntries().filter(e => e.company === company);
+        const allLedger = InventoryService.getStockLedger().filter(e => e.company === company && e.mvmntCode === '101');
+        const allReports = InventoryService.getVendorDefectReports().filter(r => r.company === company);
+        const allDispatches = dispatches;
+
+        return (
+          <div className="space-y-5 animate-in fade-in duration-300">
+            <div className="bg-purple-700 text-white p-6 rounded-[2rem] shadow-xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-8 opacity-10"><BarChart3 size={100}/></div>
+              <h2 className="text-xl font-black uppercase">Vendor Performance Dashboard</h2>
+              <p className="text-[10px] font-bold text-purple-200 uppercase tracking-widest mt-1">
+                Computed from GRN history, defect reports, and dispatch records
+              </p>
+            </div>
+
+            {glassVendors.length === 0 ? (
+              <div className="bg-white border border-dashed rounded-2xl p-12 text-center text-slate-400 font-bold text-sm">
+                No Glass or Tempering vendors found
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {glassVendors.map(v => {
+                  // GRN metrics
+                  const vendorLedger = allLedger.filter(e => e.vendorId === v.id || e.vendorName === v.name);
+                  const grnIds = new Set(vendorLedger.map(e => e.referenceDoc));
+                  const totalSqft = vendorLedger.reduce((s, e) => s + e.qty, 0);
+                  const vendorSheets = allSheetEntries.filter(e => grnIds.has(e.grnId));
+                  const defectSqft = vendorSheets.filter(e => e.status === 'Defective').reduce((s, e) => s + (e.usableSqft || 0), 0);
+                  const brokenSqft = vendorSheets.filter(e => e.status === 'Broken').reduce((s, e) => s + (e.sqftPerSheet || 0), 0);
+                  const defectRatePct = totalSqft > 0 ? Number(((defectSqft + brokenSqft) / totalSqft * 100).toFixed(1)) : 0;
+                  const totalClaims = allReports.filter(r => r.vendorId === v.id).reduce((s, r) => s + r.totalAdjustment, 0);
+
+                  // Tempering metrics
+                  const vendorDispatches = allDispatches.filter(d =>
+                    d.plantName?.toUpperCase() === v.name?.toUpperCase()
+                  );
+                  const totalDispatches = vendorDispatches.length;
+                  const avgTATDays = (() => {
+                    const withReturn = vendorDispatches.filter(d => d.expectedReturnDate && d.date);
+                    if (!withReturn.length) return null;
+                    const avg = withReturn.reduce((s, d) => {
+                      const days = Math.abs(new Date(d.expectedReturnDate!).getTime() - new Date(d.date).getTime()) / (1000 * 60 * 60 * 24);
+                      return s + days;
+                    }, 0) / withReturn.length;
+                    return Number(avg.toFixed(1));
+                  })();
+
+                  const isGlass = v.type === 'Glass';
+                  const headerColor = isGlass ? 'bg-blue-600' : 'bg-rose-600';
+
+                  return (
+                    <div key={v.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                      {/* Vendor header */}
+                      <div className={`${headerColor} text-white px-6 py-4 flex items-center justify-between`}>
+                        <div>
+                          <div className="font-black text-base uppercase">{v.name}</div>
+                          <div className="text-[10px] font-bold text-white/70 uppercase mt-0.5">{v.type} Vendor</div>
+                        </div>
+                        <div className="flex gap-4 text-right text-xs">
+                          {isGlass && <div><div className="text-white/60 font-bold uppercase text-[9px]">Total GRNs</div><div className="text-xl font-black">{grnIds.size}</div></div>}
+                          {!isGlass && <div><div className="text-white/60 font-bold uppercase text-[9px]">Dispatches</div><div className="text-xl font-black">{totalDispatches}</div></div>}
+                          <div>
+                            <div className="text-white/60 font-bold uppercase text-[9px]">
+                              {isGlass ? 'Defect Rate' : 'Avg TAT'}
+                            </div>
+                            <div className={`text-xl font-black ${isGlass && defectRatePct > 5 ? 'text-red-300' : ''}`}>
+                              {isGlass ? `${defectRatePct}%` : avgTATDays ? `${avgTATDays}d` : '—'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Metrics grid */}
+                      <div className={`grid gap-px bg-slate-100 ${isGlass ? 'grid-cols-5' : 'grid-cols-4'}`}>
+                        {isGlass ? [
+                          { label: 'Total Sqft Received', val: totalSqft.toFixed(0) },
+                          { label: 'Defective Sqft', val: defectSqft.toFixed(1), alert: defectSqft > 0 },
+                          { label: 'Broken Sqft', val: brokenSqft.toFixed(1), alert: brokenSqft > 0 },
+                          { label: 'Defect Rate', val: `${defectRatePct}%`, alert: defectRatePct > 5 },
+                          { label: 'Claims PKR', val: `PKR ${Math.round(totalClaims).toLocaleString()}`, alert: totalClaims > 0 },
+                        ] : [
+                          { label: 'Total Dispatches', val: totalDispatches },
+                          { label: 'Avg TAT (days)', val: avgTATDays ?? '—' },
+                          { label: 'Total Charges PKR', val: `PKR ${vendorDispatches.reduce((s,d)=>s+(d.totalCharges||0),0).toLocaleString()}` },
+                          { label: 'Accepts Defective', val: (v as any).acceptsDefectivePieces !== false ? 'YES' : 'NO', alert: (v as any).acceptsDefectivePieces === false },
+                        ].map((m: any) => (
+                          <div key={m.label} className="bg-white px-4 py-3">
+                            <div className="text-[9px] font-black uppercase text-slate-400">{m.label}</div>
+                            <div className={`text-sm font-black mt-0.5 ${m.alert ? 'text-red-600' : 'text-slate-800'}`}>{m.val}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Defect report list for glass vendors */}
+                      {isGlass && allReports.filter(r => r.vendorId === v.id).length > 0 && (
+                        <div className="px-6 py-4 border-t border-slate-100">
+                          <div className="text-[9px] font-black uppercase text-slate-400 mb-2 tracking-widest">Defect Reports</div>
+                          <div className="space-y-1.5">
+                            {allReports.filter(r => r.vendorId === v.id).map(r => (
+                              <div key={r.id} className="flex items-center justify-between text-xs bg-slate-50 rounded-xl px-3 py-2">
+                                <div className="flex items-center gap-3">
+                                  <span className="font-mono font-bold text-slate-600">{r.id}</span>
+                                  <span className="text-slate-500">{r.reportDate}</span>
+                                  <span className="text-[9px] font-black text-slate-500">{r.defectEntries.length} item(s)</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <span className="font-black text-red-600">PKR {Math.round(r.totalAdjustment).toLocaleString()}</span>
+                                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
+                                    r.status === 'Settled' ? 'bg-emerald-100 text-emerald-700'
+                                    : r.status === 'Sent' ? 'bg-blue-100 text-blue-700'
+                                    : r.status === 'Verbally Confirmed' ? 'bg-amber-100 text-amber-700'
+                                    : 'bg-slate-100 text-slate-500'
+                                  }`}>{r.status}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
 export default GlasscoVendorHub;
