@@ -6,7 +6,7 @@ import { FinanceService } from '../../../../../finance/services/financeService';
 import { InventoryService } from '../../../../services/inventoryService';
 import NCRDefectPrint from '@/modules/glassco/core/prints/NCRDefectPrint';
 import { 
-  LayoutGrid, List, Plus, X, Save, Trash2, Edit, Truck, Layers, Flame, Calculator, CheckCircle2, Ban, Clock, Globe, Filter, Search, Phone, Receipt, Calendar, FileText, Printer
+  LayoutGrid, List, Plus, X, Save, Trash2, Edit, Truck, Layers, Flame, Calculator, CheckCircle2, Ban, Clock, Globe, Filter, Search, Phone, Receipt, Calendar, FileText, Printer, AlertTriangle, BarChart3
 } from 'lucide-react';
 import SupplyChainDashboard from '../../../../components/vendors/SupplyChainDashboard';
 
@@ -511,6 +511,14 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
         const allReports = InventoryService.getVendorDefectReports().filter(r => r.company === company);
         const allDispatches = dispatches;
 
+        // Stage 3E: Single Vendor Risk Detection
+        const temperingVendors = vendors.filter(v => v.type === 'Tempering');
+        const laminationVendors = vendors.filter(v => v.type === 'Lamination');
+        const singleVendorRisks: { service: string; vendorName: string }[] = [];
+        if (temperingVendors.length === 1) singleVendorRisks.push({ service: 'Tempering', vendorName: temperingVendors[0].name });
+        if (temperingVendors.length === 0) singleVendorRisks.push({ service: 'Tempering', vendorName: 'NONE' });
+        if (laminationVendors.length === 1) singleVendorRisks.push({ service: 'Lamination', vendorName: laminationVendors[0].name });
+
         return (
           <div className="space-y-5 animate-in fade-in duration-300">
             <div className="bg-purple-700 text-white p-6 rounded-[2rem] shadow-xl relative overflow-hidden">
@@ -520,6 +528,24 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
                 Computed from GRN history, defect reports, and dispatch records
               </p>
             </div>
+
+            {/* Stage 3E: Single Vendor Risk Alert */}
+            {singleVendorRisks.length > 0 && (
+              <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-4 flex items-start gap-3">
+                <AlertTriangle size={20} className="text-red-600 shrink-0 mt-0.5"/>
+                <div>
+                  <p className="text-xs font-black text-red-700 uppercase">Single Vendor Risk — 18 Lac Cancellation Case</p>
+                  <div className="mt-1.5 space-y-1">
+                    {singleVendorRisks.map(r => (
+                      <p key={r.service} className="text-[10px] font-bold text-red-600">
+                        {r.service}: {r.vendorName === 'NONE' ? 'No vendor registered!' : `Only "${r.vendorName}" — vendor breakdown = order cancellation`}
+                        <span className="ml-2 text-[9px] font-black bg-red-200 text-red-800 px-1.5 py-0.5 rounded">NEEDS BACKUP VENDOR</span>
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {glassVendors.length === 0 ? (
               <div className="bg-white border border-dashed rounded-2xl p-12 text-center text-slate-400 font-bold text-sm">
