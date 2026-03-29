@@ -66,11 +66,11 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
 
     const serviceNicks = useMemo(() => {
         const dbNicks = products.filter(p => p.category === 'Service' && p.serviceNick).map(p => p.serviceNick!);
-        const standards = ['T/G', 'Notch', 'P/E', 'P/F', 'Double Glaze', 'R/D', 'Frosted', 'L/G'];
+        const standards = ['T/G', 'Notch', 'P/E', 'P/F', 'D/G', 'R/D', 'Frosted', 'L/G'];
         return Array.from(new Set([...standards, ...dbNicks]));
     }, [products]);
 
-    const stdInputClass = "sap-input w-full text-center h-9 font-bold text-xs p-0 focus:ring-2 focus:ring-blue-500 rounded border-slate-300 transition-colors";
+    const stdInputClass = "sap-input w-full text-center h-7 font-bold text-xs p-0 focus:ring-2 focus:ring-blue-500 rounded border-slate-300 transition-colors";
     
     const isBackdated = useMemo(() => {
         if (!formData.date) return false;
@@ -216,9 +216,9 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                         <table className="w-full text-left border-collapse">
                             <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
                                 <tr className="text-xs uppercase font-bold text-slate-400 tracking-widest">
-                                    <th className="w-10 text-center py-4 bg-slate-50">#</th>
-                                    <th className="w-[380px] py-4 bg-slate-50 pl-2">Glass Specification & Sheet Size</th>
-                                    <th className="w-[280px] py-4 bg-slate-50 pl-2">Services</th>
+                                    <th className="w-10 text-center py-2 bg-slate-50">#</th>
+                                    <th className="w-[380px] py-2 bg-slate-50 pl-2">Glass Specification & Sheet Size</th>
+                                    <th className="w-[110px] py-2 bg-slate-50 pl-2">Services</th>
                                     {isMM ? (
                                         <>
                                             <th className="w-24 text-center py-4 bg-slate-50">Width (mm)</th>
@@ -269,11 +269,11 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                                                 </td>
                                                 <td className="align-middle py-1 px-2">
                                                     {!item.isSection && (
-                                                        <div className="grid grid-cols-3 gap-1">
+                                                        <div className="grid grid-cols-3 gap-px" style={{width:'90px'}}>
                                                             {serviceNicks.map(nick => {
                                                                 const isTGDisabled = nick === 'T/G' && isNonTemperable;
                                                                 return (
-                                                                    <button key={nick} disabled={isTGDisabled} onClick={() => { const current = item.selectedServices || []; const next = current.includes(nick) ? current.filter(s => s !== nick) : [...current, nick]; handleUpdateItemWithLogic(idx, 'selectedServices', next); }} className={`px-1.5 h-6 rounded text-xs font-bold uppercase border transition-all ${isTGDisabled ? 'bg-slate-100 text-slate-300 border-slate-200 opacity-50' : item.selectedServices?.includes(nick) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-400 border-slate-200 hover:border-blue-400'}`}>{nick}</button>
+                                                                    <button key={nick} disabled={isTGDisabled} onClick={() => { const current = item.selectedServices || []; const next = current.includes(nick) ? current.filter(s => s !== nick) : [...current, nick]; handleUpdateItemWithLogic(idx, 'selectedServices', next); }} className={`h-5 rounded-sm text-[7px] font-black leading-none transition-all ${isTGDisabled ? 'bg-slate-100 text-slate-300 opacity-50' : item.selectedServices?.includes(nick) ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-400 hover:bg-blue-50'}`}>{nick}</button>
                                                                 );
                                                             })}
                                                         </div>
