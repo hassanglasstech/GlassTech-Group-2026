@@ -194,20 +194,19 @@ export const FinanceService = {
     FinanceService.saveLedger(all);
   },
 
+  // ── Store Purchase subcategories (cash advance flow) ──────────────
+  STORE_PURCHASE_SUBS: ['BOM Hardware', 'Aluminium Profiles', 'Consumables', 'Glass Purchase',
+    'Tool Purchase', 'Tool Replacement', 'Machine Parts', 'Material / Inventory'] as string[],
+
   // ── Create Parked Payment Voucher from Approved Requisition ─────────
+  //    Store Purchase → Dr Employee Advance / Cr Cash (advance given to purchaser)
+  //    Other → Dr Expense / Cr Cash (direct expense)
   createParkedPV: (req: any): LedgerTransaction => {
     const company = req.company as Company;
     const subCategory = req.subCategory || req.reqType || 'General Expense';
     const paymentMode = req.paymentMode || (req.requiresCashPayment ? 'Cash' : 'Cash');
     const amount = req.totalValue || req.loanAmount || req.amount || 0;
-
-    const gl = FinanceService.resolveSubcategoryGL(company, subCategory, paymentMode);
-
-    // Fallback GL if no mapping found
-    const debitCode  = gl?.debitCode  || '53817';
-    const debitName  = gl?.debitName  || 'Miscellaneous Expenses';
-    const creditCode = gl?.creditCode || '11112';
-    const creditName = gl?.creditName || 'Cash in Hand — Main';
+    const isStorePurchase = FinanceService.STORE_PURCHASE_SUBS.includes(subCategory);
 
     // Build description
     const itemDesc = req.items?.length
@@ -216,13 +215,37 @@ export const FinanceService = {
 
     const pvId = `PV-${company.slice(0,3).toUpperCase()}-${Date.now().toString().slice(-8)}`;
 
+    // Determine credit account from payment mode
+    const creditMap: Record<string, { code: string; name: string }> = {
+      'Cash':             { code: '11112', name: 'Cash in Hand — Main' },
+      'Petty Cash':       { code: '11111', name: 'Petty Cash' },
+      'Personal Account': { code: '21114', name: 'Payable — Other Vendors' },
+      'Bank Transfer':    { code: '11121', name: 'Bank — MCB Current' },
+    };
+    const creditAcc = creditMap[paymentMode] || creditMap['Cash'];
+
+    let debitCode: string, debitName: string, pvDesc: string;
+
+    if (isStorePurchase) {
+      // ── ADVANCE FLOW: paisa purchaser ko diya, maal abhi nahi aaya ──
+      debitCode = '11421';
+      debitName = 'Employee Advances';
+      pvDesc = `[PARKED] ADVANCE — ${subCategory.toUpperCase()}: ${itemDesc}`.toUpperCase();
+    } else {
+      // ── DIRECT EXPENSE: HR, Admin, R&M, etc ──
+      const gl = FinanceService.resolveSubcategoryGL(company, subCategory, paymentMode);
+      debitCode = gl?.debitCode || '53817';
+      debitName = gl?.debitName || 'Miscellaneous Expenses';
+      pvDesc = `[PARKED] ${subCategory.toUpperCase()}: ${itemDesc}`.toUpperCase();
+    }
+
     const pv: LedgerTransaction = {
       id: pvId,
       company,
       docType: 'PV' as LedgerDocType,
       docDate: req.date || new Date().toISOString().split('T')[0],
       date: req.date || new Date().toISOString().split('T')[0],
-      description: `[PARKED] ${subCategory.toUpperCase()}: ${itemDesc}`.toUpperCase(),
+      description: pvDesc,
       referenceId: req.id,
       status: 'Parked',
       reqId: req.id,
@@ -231,24 +254,190 @@ export const FinanceService = {
           accountId: `${company}-${debitCode}`,
           debit: amount,
           credit: 0,
-          text: `${debitCode} ${debitName}`,
+          text: `${debitCode} ${debitName}${isStorePurchase ? ' [ADVANCE]' : ''}`,
           costCenterId: req.items?.[0]?.costCenter || undefined,
         },
         {
-          accountId: `${company}-${creditCode}`,
+          accountId: `${company}-${creditAcc.code}`,
           debit: 0,
           credit: amount,
-          text: `${creditCode} ${creditName} | ${paymentMode || 'Cash'}`,
+          text: `${creditAcc.code} ${creditAcc.name} | ${paymentMode || 'Cash'}`,
         }
       ],
     };
 
-    // Save to ledger
     const all = FinanceService.getLedger();
     all.push(pv);
     FinanceService.saveLedger(all);
-
     return pv;
+  },
+
+  // ── Settle Advance on GRN ───────────────────────────────────────────
+  //    Called when GRN is posted with a linked Requisition
+  //    Compares: advance amount vs actual GRN amount
+  //    Posts: Dr Inventory accounts / Cr Employee Advance (settle)
+  //    If under-spend: Dr Cash / Cr Advance (refund)
+  //    If over-spend: Dr Advance / Cr Cash (extra payment)
+  settleAdvance: (params: {
+    company: Company;
+    reqId: string;
+    grnId: string;
+    actualAmount: number;
+    categoryTotals: Record<string, number>;  // { Hardware: 5000, Consumable: 2000 }
+    purchaserName?: string;
+  }): { settlementId: string; variance: number; status: 'Exact' | 'Under-spend' | 'Over-spend' } => {
+    const { company, reqId, grnId, actualAmount, categoryTotals, purchaserName } = params;
+    const today = new Date().toISOString().split('T')[0];
+
+    // Find the advance PV for this requisition
+    const allGL = FinanceService.getLedger();
+    const advancePV = allGL.find(t =>
+      t.reqId === reqId && t.status === 'Posted' &&
+      t.details?.some(d => d.text?.includes('[ADVANCE]'))
+    );
+
+    // If advance PV not found (maybe not posted yet, or direct expense), 
+    // fall back to checking Parked PVs too
+    const advanceEntry = advancePV || allGL.find(t =>
+      t.reqId === reqId && t.details?.some(d => d.text?.includes('[ADVANCE]'))
+    );
+
+    const advanceAmount = advanceEntry
+      ? advanceEntry.details.reduce((s, d) => s + (d.debit || 0), 0)
+      : 0;
+
+    const variance = actualAmount - advanceAmount;
+    const settlementId = `SETTLE-${grnId}`;
+
+    // ── Build settlement GL entries ───────────────────────────────────
+    const details: any[] = [];
+
+    // 1. Dr Inventory accounts (actual goods received)
+    for (const [cat, amt] of Object.entries(categoryTotals)) {
+      const glMap: Record<string, { code: string; name: string }> = {
+        'Hardware':   { code: '11513', name: 'Hardware & Accessories' },
+        'Profile':    { code: '11511', name: 'Aluminium Profiles — Stock' },
+        'Consumable': { code: '11531', name: 'Consumables — Fabrication' },
+        'Raw':        { code: '11513', name: 'Hardware & Accessories' },
+        'Service':    { code: '53817', name: 'Miscellaneous Expenses' },
+      };
+      const gl = glMap[cat] || glMap['Hardware'];
+      details.push({
+        accountId: `${company}-${gl.code}`,
+        debit: Math.round(amt),
+        credit: 0,
+        text: `${gl.code} ${gl.name} — GRN actual`,
+      });
+    }
+
+    // 2. Cr Employee Advance (clear the advance — use the LESSER of advance or actual)
+    const advanceClearAmount = Math.min(advanceAmount, actualAmount);
+    if (advanceClearAmount > 0) {
+      details.push({
+        accountId: `${company}-11421`,
+        debit: 0,
+        credit: Math.round(advanceClearAmount),
+        text: `11421 Employee Advances — Settled vs ${reqId}`,
+      });
+    }
+
+    // 3. Handle variance
+    if (variance < 0) {
+      // UNDER-SPEND: purchaser spent less, owes refund
+      // Dr Cash (refund received) / already Cr'd full advance above — adjust
+      // Actually: Cr Advance = actualAmount (less than advance), remaining advance needs Dr Cash / Cr Advance
+      const refund = Math.abs(variance);
+      details.push({
+        accountId: `${company}-11112`,
+        debit: Math.round(refund),
+        credit: 0,
+        text: `11112 Cash — Refund from ${purchaserName || 'purchaser'} (advance was ${advanceAmount}, actual ${actualAmount})`,
+      });
+      // Adjust: Cr the remaining advance
+      details[details.length - 2].credit = Math.round(advanceAmount); // full advance cleared
+    } else if (variance > 0) {
+      // OVER-SPEND: purchaser spent more, needs reimbursement
+      const extraPayment = variance;
+      details.push({
+        accountId: `${company}-11112`,
+        debit: 0,
+        credit: Math.round(extraPayment),
+        text: `11112 Cash — Extra payment to ${purchaserName || 'purchaser'} (advance was ${advanceAmount}, actual ${actualAmount})`,
+      });
+    }
+
+    // ── Save settlement GL entry ──────────────────────────────────────
+    const settleTx: LedgerTransaction = {
+      id: settlementId,
+      company,
+      docType: 'JV' as LedgerDocType,
+      docDate: today,
+      date: today,
+      description: `[PARKED] ADVANCE SETTLEMENT: ${reqId} → ${grnId} | Advance: ${advanceAmount} | Actual: ${actualAmount} | ${variance === 0 ? 'EXACT' : variance < 0 ? `REFUND ${Math.abs(variance)}` : `EXTRA ${variance}`}`.toUpperCase(),
+      referenceId: grnId,
+      reqId: reqId,
+      status: 'Parked',
+      details,
+    };
+
+    allGL.push(settleTx);
+    FinanceService.saveLedger(allGL);
+
+    return {
+      settlementId,
+      variance,
+      status: variance === 0 ? 'Exact' : variance < 0 ? 'Under-spend' : 'Over-spend',
+    };
+  },
+
+  // ── Get Outstanding Advances (unsettled) ────────────────────────────
+  getOutstandingAdvances: (company: Company): {
+    reqId: string; pvId: string; amount: number; date: string;
+    description: string; purchaser: string; settled: boolean; settledAmount: number;
+  }[] => {
+    const allGL = FinanceService.getLedger().filter(t => t.company === company);
+    const advances: any[] = [];
+
+    // Find all PVs that are advance entries
+    const advancePVs = allGL.filter(t =>
+      t.details?.some(d => d.text?.includes('[ADVANCE]'))
+    );
+
+    for (const pv of advancePVs) {
+      const advanceAmt = pv.details.reduce((s, d) => s + (d.debit || 0), 0);
+
+      // Check if settled
+      const settlement = allGL.find(t =>
+        t.id?.startsWith('SETTLE-') && t.reqId === pv.reqId
+      );
+
+      const settledAmt = settlement
+        ? settlement.details.filter(d => d.accountId?.includes('11421')).reduce((s, d) => s + (d.credit || 0), 0)
+        : 0;
+
+      // Extract purchaser from requisition
+      let purchaser = 'Unknown';
+      try {
+        const reqs = safeParse('requisitions') as any[];
+        const req = reqs.find(r => r.id === pv.reqId);
+        purchaser = req?.requisitioner || req?.employeeName || 'Unknown';
+      } catch {}
+
+      advances.push({
+        reqId: pv.reqId || pv.referenceId,
+        pvId: pv.id,
+        amount: advanceAmt,
+        date: pv.date,
+        description: pv.description?.replace('[PARKED] ', '').replace('ADVANCE — ', '') || '',
+        purchaser,
+        settled: !!settlement,
+        settledAmount: settledAmt,
+        status: pv.status,
+        variance: settlement ? (settledAmt - advanceAmt) : null,
+      });
+    }
+
+    return advances.sort((a, b) => b.date.localeCompare(a.date));
   },
 
   // ── Post Parked PV (Finance review → Post to GL) ────────────────────
