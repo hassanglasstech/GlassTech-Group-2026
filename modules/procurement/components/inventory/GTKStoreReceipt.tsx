@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { useAppStore } from '@/modules/shared/store/appStore';
+import { useAppStore } from '@/modules/shared/store/appStore'; 
 import { toast } from 'sonner';
 import { StoreItem, MaterialLedgerEntry } from '@/modules/shared/types';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
