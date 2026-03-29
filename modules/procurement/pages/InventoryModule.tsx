@@ -12,13 +12,15 @@ import GoodsReceiptMIGO from '@/modules/procurement/components/inventory/GoodsRe
 import RemnantManager from '@/modules/procurement/components/inventory/RemnantManager';
 
 import NipponGoodsReceipt from '@/modules/procurement/components/inventory/NipponGoodsReceipt';
+import GTKStoreReceipt from '@/modules/procurement/components/inventory/GTKStoreReceipt';
+import ProjectConsumption from '@/modules/procurement/components/inventory/ProjectConsumption';
 import { 
-  LayoutGrid, ArrowUpRight, ShieldCheck, Truck, Database, Loader2, Layers
+  LayoutGrid, ArrowUpRight, ShieldCheck, Truck, Database, Loader2, Layers, BarChart3
 } from 'lucide-react';
 
 const InventoryModule: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'overview' | 'master' | 'issuance' | 'migo' | 'quality' | 'remnants'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'master' | 'issuance' | 'migo' | 'quality' | 'remnants' | 'consumption'>('overview');
   const [isLoading, setIsLoading] = useState(true);
   
   const [items, setItems] = useState<StoreItem[]>([]);
@@ -58,12 +60,18 @@ const InventoryModule: React.FC = () => {
       }), 100);
   };
 
+  const isGlassCompany = company === 'Glassco';
+  const isNippon = company === 'Nippon';
+  const isAluminiumCompany = company === 'GTK' || company === 'GTI';
+
   const tabs = [
     { id: 'overview', label: 'Stock Balances', icon: LayoutGrid },
     { id: 'master', label: 'Material Master', icon: Database },
     { id: 'issuance', label: 'Goods Issue', icon: ArrowUpRight },
-    { id: 'quality', label: 'Quality Hub', icon: ShieldCheck },
-    { id: 'remnants', label: 'Remnants', icon: Layers }
+    { id: 'consumption', label: 'Project Consumption', icon: BarChart3 },
+    // Quality Hub & Remnants only for glass companies
+    ...(!isAluminiumCompany ? [{ id: 'quality', label: 'Quality Hub', icon: ShieldCheck }] : []),
+    ...(!isAluminiumCompany ? [{ id: 'remnants', label: 'Remnants', icon: Layers }] : []),
   ];
 
   if (isLoading) return <div className="h-full flex items-center justify-center text-slate-400"><Loader2 className="animate-spin mr-2"/> Loading Inventory Data...</div>;
@@ -126,7 +134,19 @@ const InventoryModule: React.FC = () => {
         </div>
       )}
 
-      {company === 'Nippon' ? (
+      {activeTab === 'consumption' && (
+        <div className="animate-in fade-in duration-300">
+          <ProjectConsumption />
+        </div>
+      )}
+
+      {isAluminiumCompany ? (
+          <GTKStoreReceipt
+            isOpen={isMigoOpen}
+            onClose={() => setIsMigoOpen(false)}
+            refreshData={refreshSync}
+          />
+      ) : company === 'Nippon' ? (
           <NipponGoodsReceipt
             isOpen={isMigoOpen}
             onClose={() => setIsMigoOpen(false)}
