@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { useAppStore } from '@/modules/shared/store/appStore'; 
+import { useAppStore } from '@/modules/shared/store/appStore';
 import { toast } from 'sonner';
 import { StoreItem, MaterialLedgerEntry } from '@/modules/shared/types';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
@@ -162,6 +162,7 @@ const GTKStoreReceipt: React.FC<GTKStoreReceiptProps> = ({ isOpen, onClose, refr
     if (validLines.length === 0) return toast.error('Add at least one item with description and quantity.');
     if (!header.receivedBy) return toast.error('Enter who received the goods.');
 
+    let settlementInfo: { settlementId: string; variance: number; status: string } | null = null;
     const allStore = InventoryService.getStore();
     const allLedger = InventoryService.getStockLedger();
     const receiptId = `GRN-${company.slice(0,3)}-${Date.now().toString().slice(-8)}`;
@@ -259,10 +260,10 @@ const GTKStoreReceipt: React.FC<GTKStoreReceiptProps> = ({ isOpen, onClose, refr
     SyncService.markDirty('store_items');
     SyncService.markDirty('stock_ledger');
 
-    // ── GL Entry: Dr Inventory / Cr Cash (Parked) ─────────────────────
+    // ── GL Entry ─────────────────────────────────────────────────────────
     if (totalAmount > 0) {
       try {
-        // Group by category for multi-line GL
+        // Group by category for GL
         const categoryTotals: Record<string, number> = {};
         for (const line of validLines) {
           if (line.condition === 'OK') {
@@ -271,48 +272,65 @@ const GTKStoreReceipt: React.FC<GTKStoreReceiptProps> = ({ isOpen, onClose, refr
           }
         }
 
-        const PAYMENT_CREDIT: Record<string, { code: string; name: string }> = {
-          'Cash':             { code: '11112', name: 'Cash in Hand — Main' },
-          'Petty Cash':       { code: '11111', name: 'Petty Cash' },
-          'Personal Account': { code: '21114', name: 'Payable — Other Vendors' },
-          'Bank Transfer':    { code: '11121', name: 'Bank — MCB Current' },
-        };
+        if (header.linkedReqId) {
+          // ── ADVANCE SETTLEMENT: Req linked → settle advance ──────────
+          const result = FinanceService.settleAdvance({
+            company: company as any,
+            reqId: header.linkedReqId,
+            grnId: receiptId,
+            actualAmount: totalAmount,
+            categoryTotals,
+            purchaserName: header.receivedBy,
+          });
 
-        const creditAcc = PAYMENT_CREDIT[header.paymentMode] || PAYMENT_CREDIT['Cash'];
-        const debitDetails = Object.entries(categoryTotals).map(([cat, amt]) => {
-          const gl = CATEGORY_GL[cat] || CATEGORY_GL['Hardware'];
-          return {
-            accountId: `${company}-${gl.debitCode}`,
-            debit: Math.round(amt),
-            credit: 0,
-            text: `${gl.debitCode} ${gl.debitName}`,
+          SyncService.markDirty('ledger');
+          settlementInfo = result; // used in toast below
+
+        } else {
+          // ── NO REQUISITION: Direct purchase, standard GL ─────────────
+          const PAYMENT_CREDIT: Record<string, { code: string; name: string }> = {
+            'Cash':             { code: '11112', name: 'Cash in Hand — Main' },
+            'Petty Cash':       { code: '11111', name: 'Petty Cash' },
+            'Personal Account': { code: '21114', name: 'Payable — Other Vendors' },
+            'Bank Transfer':    { code: '11121', name: 'Bank — MCB Current' },
           };
-        });
 
-        const glTx = {
-          id: `GL-${receiptId}`,
-          company,
-          docType: 'KR' as const,
-          docDate: header.receiptDate,
-          date: header.receiptDate,
-          description: `[PARKED] GRN: ${header.vendorName || 'Walk-in'} | DC:${header.challanNo || '—'} | ${validLines.length} items`.toUpperCase(),
-          referenceId: receiptId,
-          status: 'Parked' as const,
-          details: [
-            ...debitDetails,
-            {
-              accountId: `${company}-${creditAcc.code}`,
-              debit: 0,
-              credit: Math.round(totalAmount),
-              text: `${creditAcc.code} ${creditAcc.name} | ${header.paymentMode}`,
-            }
-          ],
-        };
+          const creditAcc = PAYMENT_CREDIT[header.paymentMode] || PAYMENT_CREDIT['Cash'];
+          const debitDetails = Object.entries(categoryTotals).map(([cat, amt]) => {
+            const gl = CATEGORY_GL[cat] || CATEGORY_GL['Hardware'];
+            return {
+              accountId: `${company}-${gl.debitCode}`,
+              debit: Math.round(amt),
+              credit: 0,
+              text: `${gl.debitCode} ${gl.debitName}`,
+            };
+          });
 
-        const allGL = FinanceService.getLedger();
-        allGL.push(glTx as any);
-        FinanceService.saveLedger(allGL);
-        SyncService.markDirty('ledger');
+          const glTx = {
+            id: `GL-${receiptId}`,
+            company,
+            docType: 'KR' as const,
+            docDate: header.receiptDate,
+            date: header.receiptDate,
+            description: `[PARKED] GRN: ${header.vendorName || 'Walk-in'} | DC:${header.challanNo || '—'} | ${validLines.length} items`.toUpperCase(),
+            referenceId: receiptId,
+            status: 'Parked' as const,
+            details: [
+              ...debitDetails,
+              {
+                accountId: `${company}-${creditAcc.code}`,
+                debit: 0,
+                credit: Math.round(totalAmount),
+                text: `${creditAcc.code} ${creditAcc.name} | ${header.paymentMode}`,
+              }
+            ],
+          };
+
+          const allGL = FinanceService.getLedger();
+          allGL.push(glTx as any);
+          FinanceService.saveLedger(allGL);
+          SyncService.markDirty('ledger');
+        }
       } catch (e) {
         console.error('GL posting failed:', e);
       }
@@ -333,8 +351,12 @@ const GTKStoreReceipt: React.FC<GTKStoreReceiptProps> = ({ isOpen, onClose, refr
     }
 
     // ── Done ──────────────────────────────────────────────────────────
+    const settlementMsg = settlementInfo
+      ? `\nAdvance Settlement: ${settlementInfo.status}${settlementInfo.variance !== 0 ? ` (PKR ${Math.abs(settlementInfo.variance).toLocaleString()} ${settlementInfo.variance < 0 ? 'refund due' : 'extra paid'})` : ''}`
+      : '\nParked GL entry created.';
+
     toast.success(
-      `GRN ${receiptId} posted!\n${validLines.length} items received, ${damagedLines.length} damaged/short.\nParked GL entry created.`,
+      `GRN ${receiptId} posted!\n${validLines.length} items received, ${damagedLines.length} damaged/short.${settlementMsg}`,
       { duration: 6000 }
     );
 
