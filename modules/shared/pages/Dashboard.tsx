@@ -1,11 +1,11 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { Company, ProductionPiece, StoreItem, LedgerTransaction } from '../types';
-import { HRService } from '../../hr/services/hrService';
-import { SalesService } from '../../sales/services/salesService';
-import { ProductionService } from '../../production/services/productionService';
-import { InventoryService } from '../../procurement/services/inventoryService';
-import { FinanceService } from '../../finance/services/financeService';
+import { HRService } from '@/modules/hr/services/hrService';
+import { SalesService } from '@/modules/sales/services/salesService';
+import { ProductionService } from '@/modules/production/services/productionService';
+import { InventoryService } from '@/modules/procurement/services/inventoryService';
+import { FinanceService } from '@/modules/finance/services/financeService';
 import { useNavigate } from 'react-router-dom';
 import { Users, Clock, Landmark, Factory, Briefcase, Warehouse, ShoppingBag, Globe, ShieldCheck, TrendingUp, AlertTriangle, Activity, Calendar, Truck, Loader2, DollarSign, FileCheck, Bell } from 'lucide-react';
 
