@@ -31,8 +31,8 @@ import { useAppStore } from '../../shared/store/appStore';
 import RequisitionPrint from '@/components/RequisitionPrint';
 
 // ─── GL Impact Preview Panel (merged from Glassco) ────────────────────────
-const GLPreviewPanel: React.FC<{ company: string; subCategory: string; amount: number }> = ({ company, subCategory, amount }) => {
-  const gl = FinanceService.resolveSubcategoryGL?.(company as any, subCategory);
+const GLPreviewPanel: React.FC<{ company: string; subCategory: string; amount: number; paymentMode?: string }> = ({ company, subCategory, amount, paymentMode }) => {
+  const gl = FinanceService.resolveSubcategoryGL?.(company as any, subCategory, paymentMode);
   if (!gl) return (
     <div className="flex flex-col items-center justify-center h-20 text-slate-300">
       <Zap size={20} className="mb-1" />
@@ -103,13 +103,15 @@ const InlineApprovalPanel: React.FC<{
             <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-2">Summary</p>
             <div className="flex justify-between text-xs"><span className="text-slate-500 font-bold">Category</span><span className="font-black">{r.category || '—'}</span></div>
             <div className="flex justify-between text-xs"><span className="text-slate-500 font-bold">Sub-Cat</span><span className="font-black">{r.subCategory || r.reqType || '—'}</span></div>
+            {(r as any).paymentMode && <div className="flex justify-between text-xs"><span className="text-slate-500 font-bold">Payment</span><span className="font-black text-emerald-600">{(r as any).paymentMode}</span></div>}
+            {(r as any).materialType && (r as any).materialType !== 'General' && <div className="flex justify-between text-xs"><span className="text-slate-500 font-bold">Material Type</span><span className="font-black text-orange-600">{(r as any).materialType}</span></div>}
             <div className="flex justify-between text-xs"><span className="text-slate-500 font-bold">By</span><span className="font-black">{r.requisitioner || 'HR'}</span></div>
             <div className="border-t pt-1 flex justify-between text-xs"><span className="text-slate-500 font-bold">Value</span><span className="font-black text-emerald-700">PKR {amount.toLocaleString()}</span></div>
             {r.requiresCashPayment && <p className="text-[9px] font-bold text-purple-600 flex items-center gap-1"><Banknote size={10}/>Parked PV auto-created</p>}
           </div>
           <div className="bg-white rounded-xl border p-4">
             <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-2 flex items-center gap-1"><BookOpen size={10}/> GL Impact</p>
-            <GLPreviewPanel company={r.company || company} subCategory={r.subCategory || r.reqType || ''} amount={amount} />
+            <GLPreviewPanel company={r.company || company} subCategory={r.subCategory || r.reqType || ''} amount={amount} paymentMode={(r as any).paymentMode} />
           </div>
           <div className="bg-white rounded-xl border p-4">
             <CostCenterSpendPanel company={r.company || company} costCenterId={primaryCC || ''} newAmount={amount} />
@@ -190,14 +192,29 @@ const Requisitions: React.FC = () => {
     return saved ? JSON.parse(saved) : {};
   });
 
-  const CATEGORIES = ['HR', 'Production', 'Admin', 'Repair & Maintenance', 'Factory'];
+  const CATEGORIES = ['HR', 'Production', 'Store Purchase', 'Admin', 'Repair & Maintenance', 'Factory'];
   const INITIAL_SUB_CATEGORIES: Record<string, string[]> = {
     'HR': ['Loan Request', 'Salary Advance', 'Skip Installment', 'Waive Absent', 'Overtime Approval'],
     'Production': ['Material / Inventory', 'Consumables'],
+    'Store Purchase': [
+      'BOM Hardware',           // wheels, hinges, handles, connectors, gaskets, EPDM, spiders, patch fittings
+      'Aluminium Profiles',     // D2, D3, D65, D32, system profiles
+      'Consumables',            // screws, drill bits, blades, sealant, rivets, masking tape
+      'Glass Purchase',         // glass for GTK projects
+      'Tool Purchase',          // new tools — pliers, screwdrivers, grinders, drills
+      'Tool Replacement',       // replacing damaged/lost tools
+      'Machine Parts',          // blade, motor, bearing for cutting machine, grinder
+    ],
     'Admin': ['General Expense', 'TA/DA', 'Fare Expense', 'Scrap'],
     'Repair & Maintenance': ['Maintenance / R&M', 'Vehicle Fuel', 'Vehicle Maintenance'],
     'Factory': ['Repair & Maintenance', 'Fuel Expense']
   };
+
+  // ── Material Type tag — for reporting which type of spend ──────────
+  const MATERIAL_TYPES = ['BOM Component', 'Consumable', 'Returnable Tool', 'Capital Asset', 'Profile', 'General'];
+
+  // ── Payment Modes — determines GL credit account ──────────────────
+  const PAYMENT_MODES = ['Cash', 'Petty Cash', 'Personal Account', 'Bank Transfer'];
 
   const getSubCategories = (cat: string) => {
     return [...(INITIAL_SUB_CATEGORIES[cat] || []), ...(customSubCategories[cat] || [])];
@@ -234,6 +251,9 @@ const Requisitions: React.FC = () => {
     headerText: '', requisitioner: '', priority: 'Normal' as any,
     category: 'Production',
     subCategory: 'Material / Inventory',
+    paymentMode: 'Cash' as string,
+    materialType: 'General' as string,
+    projectId: '' as string,
     date: new Date().toISOString().split('T')[0],
     employeeId: '', loanAmount: 0, loanPurpose: '', installments: 1,
     skipMonth: '', absentDate: '', absentReason: '',
@@ -314,7 +334,7 @@ const Requisitions: React.FC = () => {
         if (!formHeader.requisitioner || !formHeader.headerText) return toast.error("SAP Protocol: Requisitioner and Header Text are mandatory.", { duration: 4000 });
     }
     
-    const isMaterial = ['Material / Inventory', 'Maintenance / R&M', 'General Expense', 'Consumables'].includes(formHeader.subCategory);
+    const isMaterial = ['Material / Inventory', 'Maintenance / R&M', 'General Expense', 'Consumables', 'BOM Hardware', 'Aluminium Profiles', 'Glass Purchase', 'Tool Purchase', 'Tool Replacement', 'Machine Parts'].includes(formHeader.subCategory);
     
     if (isMaterial) {
         if (formItems.some(i => !i.materialDesc || !i.costCenter)) return toast.error("Validation Error: Item Description and Cost Center are required for all line items.", { duration: 4000 });
@@ -353,6 +373,9 @@ const Requisitions: React.FC = () => {
       items: isMaterial ? formItems : [], 
       totalValue, 
       status: 'Pending',
+      paymentMode: formHeader.paymentMode,
+      materialType: formHeader.materialType,
+      projectOrSiteName: formHeader.projectOrSiteName || (formHeader.projectId ? projects.find(p => p.id === formHeader.projectId)?.title : ''),
       employeeId: formHeader.employeeId,
       loanAmount: formHeader.loanAmount,
       loanPurpose: formHeader.loanPurpose,
@@ -372,7 +395,7 @@ const Requisitions: React.FC = () => {
       vehicleNo: formHeader.vehicleNo,
       driver: formHeader.driver,
       purpose: formHeader.purpose,
-      projectOrSiteName: formHeader.projectOrSiteName,
+      projectId: formHeader.projectId || undefined,
       qty: formHeader.qty,
       description: formHeader.description,
       type: formHeader.type,
@@ -407,6 +430,7 @@ const Requisitions: React.FC = () => {
     setFormHeader({ 
         headerText: '', requisitioner: '', priority: 'Normal', 
         category: 'Production', subCategory: 'Material / Inventory',
+        paymentMode: 'Cash', materialType: 'General', projectId: '',
         date: new Date().toISOString().split('T')[0],
         employeeId: '', loanAmount: 0, loanPurpose: '', installments: 1,
         skipMonth: '', absentDate: '', absentReason: '',
@@ -956,6 +980,31 @@ const Requisitions: React.FC = () => {
                     <div className="col-span-1 space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Req. Date</label><input type="date" className="sap-input w-full font-bold" value={formHeader.date} onChange={e => setFormHeader({...formHeader, date: e.target.value})} /></div>
                  </div>
 
+                 {/* ── Store Purchase: Payment Mode + Material Type + Project ──────── */}
+                 {formHeader.category !== 'HR' && (
+                 <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Payment Mode</label>
+                      <select className="sap-input w-full font-bold uppercase text-emerald-600" value={formHeader.paymentMode} onChange={e => setFormHeader({...formHeader, paymentMode: e.target.value})}>
+                        {PAYMENT_MODES.map(pm => <option key={pm} value={pm}>{pm}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Material Type</label>
+                      <select className="sap-input w-full font-bold uppercase text-orange-600" value={formHeader.materialType} onChange={e => setFormHeader({...formHeader, materialType: e.target.value})}>
+                        {MATERIAL_TYPES.map(mt => <option key={mt} value={mt}>{mt}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Project / Job Link</label>
+                      <select className="sap-input w-full font-bold uppercase text-blue-600" value={formHeader.projectId} onChange={e => setFormHeader({...formHeader, projectId: e.target.value})}>
+                        <option value="">— General Stock —</option>
+                        {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                      </select>
+                    </div>
+                 </div>
+                 )}
+
                  {/* ── GL Preview + Cash Payment + Cost Center (merged from Glassco) ── */}
                  <div className="grid grid-cols-3 gap-6">
                     <div className="bg-white p-5 rounded-3xl border shadow-sm">
@@ -963,8 +1012,8 @@ const Requisitions: React.FC = () => {
                         <BookOpen size={14} className="text-purple-500" />
                         <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">GL Account Preview</span>
                       </div>
-                      <GLPreviewPanel company={company} subCategory={formHeader.subCategory} amount={(() => {
-                        const isMat = ['Material / Inventory', 'Maintenance / R&M', 'General Expense', 'Consumables'].includes(formHeader.subCategory);
+                      <GLPreviewPanel company={company} subCategory={formHeader.subCategory} paymentMode={formHeader.paymentMode} amount={(() => {
+                        const isMat = ['Material / Inventory', 'Maintenance / R&M', 'General Expense', 'Consumables', 'BOM Hardware', 'Aluminium Profiles', 'Glass Purchase', 'Tool Purchase', 'Tool Replacement', 'Machine Parts'].includes(formHeader.subCategory);
                         if (isMat) return formItems.reduce((s, i) => s + (i.qty * i.estimatedRate), 0);
                         if (['Loan Request', 'Salary Advance'].includes(formHeader.subCategory)) return formHeader.loanAmount;
                         return formHeader.amount;
@@ -978,7 +1027,7 @@ const Requisitions: React.FC = () => {
                       <div>
                         <p className="text-[10px] font-black uppercase text-slate-400">Estimated Total</p>
                         <h3 className="text-2xl font-black text-slate-800">PKR {(() => {
-                          const isMat = ['Material / Inventory', 'Maintenance / R&M', 'General Expense', 'Consumables'].includes(formHeader.subCategory);
+                          const isMat = ['Material / Inventory', 'Maintenance / R&M', 'General Expense', 'Consumables', 'BOM Hardware', 'Aluminium Profiles', 'Glass Purchase', 'Tool Purchase', 'Tool Replacement', 'Machine Parts'].includes(formHeader.subCategory);
                           if (isMat) return formItems.reduce((s, i) => s + (i.qty * i.estimatedRate), 0);
                           if (['Loan Request', 'Salary Advance'].includes(formHeader.subCategory)) return formHeader.loanAmount;
                           return formHeader.amount;
@@ -986,12 +1035,13 @@ const Requisitions: React.FC = () => {
                       </div>
                       <div className="flex items-center justify-between pt-2 border-t border-slate-100">
                         <div>
-                          <p className="text-[10px] font-black uppercase text-slate-500">Cash Payment?</p>
-                          <p className="text-[9px] text-slate-400">Auto-creates Parked PV</p>
+                          <p className="text-[10px] font-black uppercase text-slate-500">Payment: {formHeader.paymentMode}</p>
+                          <p className="text-[9px] text-slate-400">Auto-creates Parked PV on approval</p>
                         </div>
                         <button onClick={() => setFormHeader({...formHeader, requiresCashPayment: !formHeader.requiresCashPayment})}
                           className={`w-12 h-6 rounded-full transition-colors relative ${formHeader.requiresCashPayment ? 'bg-emerald-500' : 'bg-slate-200'}`}>
                           <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${formHeader.requiresCashPayment ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                        </button>
                         </button>
                       </div>
                     </div>
@@ -1001,7 +1051,7 @@ const Requisitions: React.FC = () => {
                         <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Budget Check</span>
                       </div>
                       <CostCenterSpendPanel company={company} costCenterId={formItems[0]?.costCenter || ''} newAmount={(() => {
-                        const isMat = ['Material / Inventory', 'Maintenance / R&M', 'General Expense', 'Consumables'].includes(formHeader.subCategory);
+                        const isMat = ['Material / Inventory', 'Maintenance / R&M', 'General Expense', 'Consumables', 'BOM Hardware', 'Aluminium Profiles', 'Glass Purchase', 'Tool Purchase', 'Tool Replacement', 'Machine Parts'].includes(formHeader.subCategory);
                         if (isMat) return formItems.reduce((s, i) => s + (i.qty * i.estimatedRate), 0);
                         if (['Loan Request', 'Salary Advance'].includes(formHeader.subCategory)) return formHeader.loanAmount;
                         return formHeader.amount;
@@ -1009,7 +1059,7 @@ const Requisitions: React.FC = () => {
                     </div>
                  </div>
 
-                 {['Material / Inventory', 'Maintenance / R&M', 'General Expense'].includes(formHeader.subCategory) ? (
+                 {['Material / Inventory', 'Maintenance / R&M', 'General Expense', 'BOM Hardware', 'Aluminium Profiles', 'Consumables', 'Glass Purchase', 'Tool Purchase', 'Tool Replacement', 'Machine Parts'].includes(formHeader.subCategory) ? (
                      <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
                         <div className="p-4 bg-slate-50 border-b flex justify-between items-center"><h4 className="font-black text-slate-700 uppercase text-xs">Item Overview</h4><button onClick={addItemRow} className="text-blue-600 font-bold text-xs hover:underline">+ Add Item</button></div>
                         <table className="w-full text-left sap-table">
@@ -1287,7 +1337,7 @@ const Requisitions: React.FC = () => {
                     </div>
                     <div className="bg-white p-4 rounded-2xl border shadow-sm">
                         <p className="text-[10px] font-black uppercase text-slate-400 mb-2 flex items-center gap-1"><BookOpen size={10} /> GL Impact</p>
-                        <GLPreviewPanel company={viewingRequisition.company || company} subCategory={viewingRequisition.subCategory || ''} amount={viewingRequisition.totalValue} />
+                        <GLPreviewPanel company={viewingRequisition.company || company} subCategory={viewingRequisition.subCategory || ''} amount={viewingRequisition.totalValue} paymentMode={(viewingRequisition as any).paymentMode} />
                     </div>
                  </div>
 
