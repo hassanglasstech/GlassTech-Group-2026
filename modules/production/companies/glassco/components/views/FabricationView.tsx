@@ -3,7 +3,8 @@ import CuttingDiagram, { buildPackingPiecesFromQuotation } from '@/modules/glass
 import { useProductionContext } from '@/modules/production/components/ProductionContext';
 import JobRegistryView from '@/modules/production/components/JobRegistryView';
 import ServiceFloorView from '@/modules/production/components/ServiceFloorView';
-import { ClipboardCheck, Scissors, Sparkles, Check, ChevronLeft, User, LayoutGrid, Printer } from 'lucide-react';
+import SheetSelector from '@/modules/glassco/core/SheetSelector';
+import { ClipboardCheck, Scissors, Sparkles, Check, ChevronLeft, User, LayoutGrid, Printer, Sun, Moon, AlertTriangle, Layers } from 'lucide-react';
 import JobCard from '@/modules/production/components/sub/JobCard';
 import { GlasscoPrintTemplate } from '@/modules/glassco/core/GlasscoPrintTemplate';
 import { Quotation } from '@/modules/shared/types';
@@ -19,6 +20,41 @@ const FabricationView: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'jobs' | 'queue' | 'services'>('jobs');
   const [printingJob, setPrintingJob] = useState<Quotation | null>(null);
   const [showCuttingDiagram, setShowCuttingDiagram] = useState(false);
+  const [selectedSheetSize, setSelectedSheetSize] = useState<{ width: number; height: number }>({ width: 84, height: 144 });
+
+  // Stage 2C: Shift planning suggestion
+  const shiftSuggestion = useMemo(() => {
+    const cutJobs = pieces.filter(p => p.status === 'Cut');
+    const jobThicknesses: { jobId: string; thickness: string; mm: number }[] = [];
+    cutJobs.forEach(p => {
+      const job = jobOrders.find(j => j.orderNo === p.orderId || j.id === p.orderId);
+      if (!job) return;
+      const items = job.items || [];
+      items.forEach((item: any) => {
+        const thk = item.glassThickness || item.thickness || '';
+        const mm = parseInt(thk) || 0;
+        if (mm > 0) jobThicknesses.push({ jobId: p.orderId, thickness: thk, mm });
+      });
+    });
+    const thick = jobThicknesses.filter(t => t.mm >= 8);
+    const thin = jobThicknesses.filter(t => t.mm < 8);
+    if (thick.length === 0 && thin.length === 0) return null;
+    return { thickCount: thick.length, thinCount: thin.length };
+  }, [pieces, jobOrders]);
+
+  // Stage 2B: Jobs sorted by due date for batch cutting
+  const dueDateSortedJobs = useMemo(() => {
+    const cutJobIds = Array.from(new Set(pieces.filter(p => p.status === 'Cut').map(p => p.orderId)));
+    return cutJobIds.map(id => {
+      const job = jobOrders.find(j => j.orderNo === id || j.id === id);
+      return { id, job, dueDate: job?.dueDate || '', projectName: job?.projectName || id };
+    }).sort((a, b) => {
+      if (!a.dueDate && !b.dueDate) return 0;
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    });
+  }, [pieces, jobOrders]);
 
   const handlePrintJobCard = (e: React.MouseEvent, jobId: string) => {
       e.stopPropagation();
@@ -61,17 +97,34 @@ const FabricationView: React.FC = () => {
                  </div>
               </div>
 
-              {/* 2D Cutting Diagram */}
+              {/* 2D Cutting Diagram with Sheet Selector */}
               {showCuttingDiagram && (() => {
                 const job = jobOrders.find(j => j.orderNo === selectedJobId || j.id === selectedJobId);
                 const cuttingPieces = job ? buildPackingPiecesFromQuotation(job.items || []) : [];
+                const totalRequiredSqft = cuttingPieces.reduce((s, p) => s + (p.widthInch * p.heightInch * p.qty) / 144, 0);
+                const thicknessFromJob = job?.items?.[0]?.glassThickness || job?.items?.[0]?.thickness || '';
                 return cuttingPieces.length > 0 ? (
-                  <div className="bg-white rounded-2xl border border-blue-200 shadow-sm p-5">
-                    <p className="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest">2D Cutting Plan</p>
+                  <div className="bg-white rounded-2xl border border-blue-200 shadow-sm p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">2D Cutting Plan</p>
+                      {job?.dueDate && (
+                        <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${new Date(job.dueDate) < new Date() ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                          Due: {new Date(job.dueDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short' })}
+                        </span>
+                      )}
+                    </div>
+                    {/* Sheet Size Selector */}
+                    <SheetSelector
+                      company={job?.company || 'Glassco'}
+                      selectedSheet={selectedSheetSize}
+                      onSelect={(w, h) => setSelectedSheetSize({ width: w, height: h })}
+                      requiredSqft={totalRequiredSqft}
+                      filterThickness={thicknessFromJob}
+                    />
                     <CuttingDiagram
                       pieces={cuttingPieces}
-                      sheetWidthInch={84}
-                      sheetHeightInch={144}
+                      sheetWidthInch={selectedSheetSize.width}
+                      sheetHeightInch={selectedSheetSize.height}
                       glassType={cuttingPieces[0]?.glassType}
                       jobOrderId={selectedJobId}
                     />
@@ -107,14 +160,8 @@ const FabricationView: React.FC = () => {
      const uniqueIds = Array.from(new Set<string>(pieces.filter(p => p.status === 'Cut').map(p => p.orderId)));
      if (uniqueIds.length === 0) return <div className="py-20 text-center text-slate-300 font-black uppercase text-xs italic">No jobs pending in cutting.</div>;
 
-     // Sort latest first — safe null check
-     const sortedIds = [...uniqueIds].sort((a, b) => {
-        const jobA = jobOrders.find(j => j?.orderNo === a);
-        const jobB = jobOrders.find(j => j?.orderNo === b);
-        const dateA = jobA?.date ? new Date(jobA.date).getTime() : 0;
-        const dateB = jobB?.date ? new Date(jobB.date).getTime() : 0;
-        return dateB - dateA;
-     });
+     // Sort by due date (dueDateSortedJobs already sorted)
+     const sortedIds = dueDateSortedJobs.map(j => j.id);
 
      return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in zoom-in duration-300">
@@ -147,6 +194,16 @@ const FabricationView: React.FC = () => {
                        <h4 className="text-lg font-black text-slate-900 uppercase leading-tight mb-1 truncate relative z-10">{data.projectName || 'Standard Order'}</h4>
                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate relative z-10">{data.clientName}</p>
                        <p className="text-[9px] font-bold text-blue-300 uppercase tracking-widest mt-1 relative z-10">{numericIdDisplay}</p>
+                       {(() => {
+                         const job = jobOrders.find(j => j?.orderNo === id || j?.id === id);
+                         if (!job?.dueDate) return null;
+                         const isOverdue = new Date(job.dueDate) < new Date();
+                         return (
+                           <span className={`mt-1.5 inline-block text-[9px] font-black px-2 py-0.5 rounded-full relative z-10 ${isOverdue ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                             {isOverdue ? '⚠ OVERDUE' : 'Due'}: {new Date(job.dueDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short' })}
+                           </span>
+                         );
+                       })()}
                     </div>
                     <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 gap-4 relative z-10">
                        <div><p className="text-[9px] font-black text-slate-400 uppercase">Pending Total</p><p className="text-xl font-black text-slate-800">{data.pendingQty} <span className="text-[9px] text-slate-400">Pcs</span></p></div>
@@ -186,13 +243,48 @@ const FabricationView: React.FC = () => {
         {activeSubTab === 'queue' && (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
                 {!selectedJobId && (
+                    <>
                     <div className="bg-blue-600 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-8 opacity-10"><Scissors size={120} /></div>
                         <div>
                             <h2 className="text-2xl font-black uppercase">Cutting Floor</h2>
-                            <p className="text-[10px] font-bold text-blue-100 uppercase tracking-widest mt-1">Select Job to Process</p>
+                            <p className="text-[10px] font-bold text-blue-100 uppercase tracking-widest mt-1">
+                              {dueDateSortedJobs.length} jobs — sorted by due date
+                            </p>
                         </div>
+                        {dueDateSortedJobs.length > 0 && dueDateSortedJobs[0].dueDate && (
+                          <div className="text-right z-10">
+                            <p className="text-[9px] font-bold text-blue-200 uppercase">Most Urgent</p>
+                            <p className="text-sm font-black">{dueDateSortedJobs[0].projectName}</p>
+                            <p className="text-[10px] font-bold text-yellow-300">
+                              Due: {new Date(dueDateSortedJobs[0].dueDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short' })}
+                            </p>
+                          </div>
+                        )}
                     </div>
+                    {/* Stage 2C: Shift Planning Suggestion */}
+                    {shiftSuggestion && (
+                      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center gap-4">
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className="p-2 bg-amber-100 rounded-xl"><Sun size={16} className="text-amber-600"/></div>
+                          <div>
+                            <p className="text-[9px] font-black text-slate-400 uppercase">Morning Shift</p>
+                            <p className="text-xs font-bold text-slate-700">Thick glass (8mm+): {shiftSuggestion.thickCount} items</p>
+                            <p className="text-[9px] text-slate-400">Heavy glass first — cutter fresh, fewer breakage</p>
+                          </div>
+                        </div>
+                        <div className="w-px h-10 bg-slate-200"/>
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className="p-2 bg-indigo-100 rounded-xl"><Moon size={16} className="text-indigo-600"/></div>
+                          <div>
+                            <p className="text-[9px] font-black text-slate-400 uppercase">Afternoon Shift</p>
+                            <p className="text-xs font-bold text-slate-700">Thin glass ({'<'}8mm): {shiftSuggestion.thinCount} items</p>
+                            <p className="text-[9px] text-slate-400">Lighter glass — less fatigue risk</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    </>
                 )}
                 {renderJobGrid()}
             </div>
