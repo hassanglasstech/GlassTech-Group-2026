@@ -14,13 +14,14 @@ import RemnantManager from '@/modules/procurement/components/inventory/RemnantMa
 import NipponGoodsReceipt from '@/modules/procurement/components/inventory/NipponGoodsReceipt';
 import GTKStoreReceipt from '@/modules/procurement/components/inventory/GTKStoreReceipt';
 import ProjectConsumption from '@/modules/procurement/components/inventory/ProjectConsumption';
+import ToolRegister from '@/modules/procurement/components/inventory/ToolRegister';
 import { 
-  LayoutGrid, ArrowUpRight, ShieldCheck, Truck, Database, Loader2, Layers, BarChart3
+  LayoutGrid, ArrowUpRight, ShieldCheck, Truck, Database, Loader2, Layers, BarChart3, Wrench
 } from 'lucide-react';
 
 const InventoryModule: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'overview' | 'master' | 'issuance' | 'migo' | 'quality' | 'remnants' | 'consumption'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'master' | 'issuance' | 'migo' | 'quality' | 'remnants' | 'consumption' | 'tools'>('overview');
   const [isLoading, setIsLoading] = useState(true);
   
   const [items, setItems] = useState<StoreItem[]>([]);
@@ -69,6 +70,8 @@ const InventoryModule: React.FC = () => {
     { id: 'master', label: 'Material Master', icon: Database },
     { id: 'issuance', label: 'Goods Issue', icon: ArrowUpRight },
     { id: 'consumption', label: 'Project Consumption', icon: BarChart3 },
+    // Tools tab only for aluminium companies
+    ...(isAluminiumCompany ? [{ id: 'tools', label: 'Tool Register', icon: Wrench }] : []),
     // Quality Hub & Remnants only for glass companies
     ...(!isAluminiumCompany ? [{ id: 'quality', label: 'Quality Hub', icon: ShieldCheck }] : []),
     ...(!isAluminiumCompany ? [{ id: 'remnants', label: 'Remnants', icon: Layers }] : []),
@@ -137,6 +140,12 @@ const InventoryModule: React.FC = () => {
       {activeTab === 'consumption' && (
         <div className="animate-in fade-in duration-300">
           <ProjectConsumption />
+        </div>
+      )}
+
+      {activeTab === 'tools' && (
+        <div className="animate-in fade-in duration-300">
+          <ToolRegister />
         </div>
       )}
 
