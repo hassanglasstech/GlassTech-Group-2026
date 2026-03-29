@@ -1,13 +1,15 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   Printer, X, Plus, Trash2, FileSignature, 
   Search, Info, Calculator, Ruler, Layers, Box, Calendar,
   Edit2, FileCheck, Eye, Component, Anchor, PaintBucket,
   Hammer, Grid, CheckCircle2, Image as ImageIcon, MousePointer2,
-  PenTool, UploadCloud, FileImage, Square, Circle, Save
+  PenTool, UploadCloud, FileImage, Square, Circle, Save, Scissors
 } from 'lucide-react';
 import { useQuotations } from './useQuotations';
 import DeliveryPromise from '@/modules/sales/components/DeliveryPromise';
+import CuttingDiagram, { buildPackingPiecesFromQuotation } from '@/modules/glassco/core/CuttingDiagram';
+import SheetSelector from '@/modules/glassco/core/SheetSelector';
 
 const QuotationManager: React.FC = () => {
   const {
@@ -41,6 +43,8 @@ const QuotationManager: React.FC = () => {
 
   const isLocked = formData.status === 'Approved';
   const subTotal = formData.items?.reduce((s, i) => s + i.amount, 0) || 0;
+  const [show2DPreview, setShow2DPreview] = useState(false);
+  const [previewSheetSize, setPreviewSheetSize] = useState<{ width: number; height: number }>({ width: 84, height: 144 });
 
   const filteredQuotations = useMemo(() => {
     let result = [...quotations];
@@ -452,6 +456,44 @@ const QuotationManager: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* ── 2D Wastage Preview ── */}
+            {formData.items && formData.items.length > 0 && (
+              <div className="px-6 py-3 border-t border-slate-200 bg-blue-50/30">
+                <button
+                  onClick={() => setShow2DPreview(!show2DPreview)}
+                  className={`flex items-center gap-2 text-xs font-black uppercase px-4 py-2 rounded-xl border transition-colors ${show2DPreview ? 'bg-blue-700 text-white border-blue-700' : 'border-blue-200 text-blue-600 hover:bg-blue-50 bg-white'}`}
+                >
+                  <Scissors size={14}/> {show2DPreview ? 'Hide' : 'Show'} 2D Wastage Preview
+                </button>
+                {show2DPreview && (() => {
+                  const cuttingPieces = buildPackingPiecesFromQuotation(formData.items || []);
+                  if (cuttingPieces.length === 0) return (
+                    <div className="mt-3 bg-white border border-dashed border-slate-200 rounded-xl p-4 text-center text-xs text-slate-400 font-bold">
+                      Add piece dimensions (width × height) to items first
+                    </div>
+                  );
+                  const totalRequiredSqft = cuttingPieces.reduce((s, p) => s + (p.widthInch * p.heightInch * p.qty) / 144, 0);
+                  return (
+                    <div className="mt-3 bg-white rounded-xl border border-blue-200 p-4 space-y-3">
+                      <SheetSelector
+                        company={company}
+                        selectedSheet={previewSheetSize}
+                        onSelect={(w, h) => setPreviewSheetSize({ width: w, height: h })}
+                        requiredSqft={totalRequiredSqft}
+                      />
+                      <CuttingDiagram
+                        pieces={cuttingPieces}
+                        sheetWidthInch={previewSheetSize.width}
+                        sheetHeightInch={previewSheetSize.height}
+                        glassType={cuttingPieces[0]?.glassType}
+                        quotationMode={true}
+                      />
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
 
             <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center">
               <div className="text-2xl font-black text-slate-800 tracking-tight">
