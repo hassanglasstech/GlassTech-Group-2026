@@ -204,9 +204,9 @@ const QuotationManager: React.FC = () => {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden border border-slate-200">
-            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+        <div className="fixed inset-0 bg-white z-50 flex flex-col">
+          {/* Fixed Header */}
+          <div className="px-6 py-3 border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
                   <FileSignature size={20} />
@@ -228,8 +228,9 @@ const QuotationManager: React.FC = () => {
                   <X size={20} />
                 </button>
               </div>
-            </div>
+          </div>
 
+          {/* Scrollable Content */}
             <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6 grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-2">
@@ -455,47 +456,48 @@ const QuotationManager: React.FC = () => {
                   </table>
                 </div>
               </div>
+
+              {/* ── 2D Wastage Preview (inside scroll area) ── */}
+              {formData.items && formData.items.length > 0 && (
+                <div className="mt-4 bg-blue-50/50 border border-blue-200 rounded-2xl p-4">
+                  <button
+                    onClick={() => setShow2DPreview(!show2DPreview)}
+                    className={`flex items-center gap-2 text-xs font-black uppercase px-4 py-2 rounded-xl border transition-colors ${show2DPreview ? 'bg-blue-700 text-white border-blue-700' : 'border-blue-200 text-blue-600 hover:bg-blue-50 bg-white'}`}
+                  >
+                    <Scissors size={14}/> {show2DPreview ? 'Hide' : 'Show'} 2D Wastage Preview
+                  </button>
+                  {show2DPreview && (() => {
+                    const cuttingPieces = buildPackingPiecesFromQuotation(formData.items || []);
+                    if (cuttingPieces.length === 0) return (
+                      <div className="mt-3 bg-white border border-dashed border-slate-200 rounded-xl p-4 text-center text-xs text-slate-400 font-bold">
+                        Add piece dimensions (width x height) to items first
+                      </div>
+                    );
+                    const totalRequiredSqft = cuttingPieces.reduce((s, p) => s + (p.widthInch * p.heightInch * p.qty) / 144, 0);
+                    return (
+                      <div className="mt-3 bg-white rounded-xl border border-blue-200 p-4 space-y-3">
+                        <SheetSelector
+                          company={company}
+                          selectedSheet={previewSheetSize}
+                          onSelect={(w, h) => setPreviewSheetSize({ width: w, height: h })}
+                          requiredSqft={totalRequiredSqft}
+                        />
+                        <CuttingDiagram
+                          pieces={cuttingPieces}
+                          sheetWidthInch={previewSheetSize.width}
+                          sheetHeightInch={previewSheetSize.height}
+                          glassType={cuttingPieces[0]?.glassType}
+                          quotationMode={true}
+                        />
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
 
-            {/* ── 2D Wastage Preview ── */}
-            {formData.items && formData.items.length > 0 && (
-              <div className="px-6 py-3 border-t border-slate-200 bg-blue-50/30">
-                <button
-                  onClick={() => setShow2DPreview(!show2DPreview)}
-                  className={`flex items-center gap-2 text-xs font-black uppercase px-4 py-2 rounded-xl border transition-colors ${show2DPreview ? 'bg-blue-700 text-white border-blue-700' : 'border-blue-200 text-blue-600 hover:bg-blue-50 bg-white'}`}
-                >
-                  <Scissors size={14}/> {show2DPreview ? 'Hide' : 'Show'} 2D Wastage Preview
-                </button>
-                {show2DPreview && (() => {
-                  const cuttingPieces = buildPackingPiecesFromQuotation(formData.items || []);
-                  if (cuttingPieces.length === 0) return (
-                    <div className="mt-3 bg-white border border-dashed border-slate-200 rounded-xl p-4 text-center text-xs text-slate-400 font-bold">
-                      Add piece dimensions (width × height) to items first
-                    </div>
-                  );
-                  const totalRequiredSqft = cuttingPieces.reduce((s, p) => s + (p.widthInch * p.heightInch * p.qty) / 144, 0);
-                  return (
-                    <div className="mt-3 bg-white rounded-xl border border-blue-200 p-4 space-y-3">
-                      <SheetSelector
-                        company={company}
-                        selectedSheet={previewSheetSize}
-                        onSelect={(w, h) => setPreviewSheetSize({ width: w, height: h })}
-                        requiredSqft={totalRequiredSqft}
-                      />
-                      <CuttingDiagram
-                        pieces={cuttingPieces}
-                        sheetWidthInch={previewSheetSize.width}
-                        sheetHeightInch={previewSheetSize.height}
-                        glassType={cuttingPieces[0]?.glassType}
-                        quotationMode={true}
-                      />
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-
-            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center">
+            {/* Fixed Footer */}
+            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center shrink-0">
               <div className="text-2xl font-black text-slate-800 tracking-tight">
                 <span className="text-sm text-slate-500 font-bold uppercase mr-2">Total</span>
                 Rs {(Number(subTotal) || 0).toLocaleString()}
@@ -505,7 +507,6 @@ const QuotationManager: React.FC = () => {
                 {!isLocked && <button onClick={() => handleSave(true)} className="sap-btn-primary bg-emerald-600 hover:bg-emerald-700"><FileCheck size={16} className="mr-2"/> Approve Quotation</button>}
               </div>
             </div>
-          </div>
         </div>
       )}
     </div>
