@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Company, TemperingDispatch, ProductionPiece, PieceFault, Vendor, Quotation, VendorRate } from '../../../../../shared/types';
-import { ProductionService } from '../../../../../production/services/productionService';
-import { SalesService } from '../../../../../sales/services/salesService';
-import { FinanceService } from '../../../../../finance/services/financeService';
-import { InventoryService } from '../../../../services/inventoryService';
+import { ProductionService } from '@/modules/production/services/productionService';
+import { SalesService } from '@/modules/sales/services/salesService';
+import { FinanceService } from '@/modules/finance/services/financeService';
+import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import NCRDefectPrint from '@/modules/glassco/core/prints/NCRDefectPrint';
 import { 
   LayoutGrid, List, Plus, X, Save, Trash2, Edit, Truck, Layers, Flame, Calculator, CheckCircle2, Ban, Clock, Globe, Filter, Search, Phone, Receipt, Calendar, FileText, Printer, AlertTriangle, BarChart3
