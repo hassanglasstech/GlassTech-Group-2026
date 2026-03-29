@@ -76,7 +76,7 @@ export const GlasscoEditorMM: React.FC<Props> = ({
         return w >= 55 || h >= 115;
     };
 
-    const stdInput = "sap-input w-full text-center h-9 font-bold text-xs p-0 border-slate-300";
+    const stdInput = "sap-input w-full text-center h-7 font-bold text-xs p-0 border-slate-300";
 
     return (
         <div className="bg-white rounded-3xl w-full h-[95vh] shadow-2xl flex flex-col overflow-hidden border border-slate-300 no-print">
@@ -170,9 +170,9 @@ export const GlasscoEditorMM: React.FC<Props> = ({
                                             </td>
                                             <td className="py-1 px-2">
                                                 {!item.isSection && (
-                                                    <div className="flex flex-wrap gap-1">
+                                                    <div className="grid grid-cols-3 gap-px" style={{width:'90px'}}>
                                                         {serviceNicks.map(nick => (
-                                                            <button key={nick} onClick={() => { const cur = item.selectedServices || []; onUpdateItem(idx, 'selectedServices', cur.includes(nick) ? cur.filter(s => s !== nick) : [...cur, nick]); }} className={`px-1.5 h-6 rounded text-[9px] font-black border transition-all ${item.selectedServices?.includes(nick) ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-400 border-slate-200 hover:border-blue-400'}`}>{nick}</button>
+                                                            <button key={nick} onClick={() => { const cur = item.selectedServices || []; onUpdateItem(idx, 'selectedServices', cur.includes(nick) ? cur.filter(s => s !== nick) : [...cur, nick]); }} className={`h-5 rounded-sm text-[7px] font-black leading-none transition-all ${item.selectedServices?.includes(nick) ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-400 hover:bg-blue-50'}`}>{nick}</button>
                                                         ))}
                                                     </div>
                                                 )}
