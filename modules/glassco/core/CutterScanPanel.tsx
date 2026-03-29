@@ -94,6 +94,7 @@ const CutterScanPanel: React.FC = () => {
     assessments: { pieceNo: number; hasDefect: boolean | null }[];
   } | null>(null);
   const [scrapInput, setScrapInput]               = useState(0);
+  const [scrapWeightInput, setScrapWeightInput]   = useState(0);
   const [showCloseConfirm, setShowCloseConfirm]   = useState(false);
 
   const scanRef = useRef<HTMLInputElement>(null);
@@ -278,6 +279,12 @@ const CutterScanPanel: React.FC = () => {
     if (!activeSession) return;
 
     const endTime = new Date().toISOString();
+    // Calculate wastage % = scrapSqft / (totalUsedSqft + scrapSqft) * 100
+    // totalUsedSqft approximated from sheets scanned x avg sqft per sheet
+    const totalInputSqft = scrapInput + (activeSession.piecesLogged > 0 ? scrapInput / (scrapInput > 0 ? 1 : 1) : 0);
+    // Simple: wastage = scrap / (scrap + produced pieces area). We'll use scrapInput as is.
+    const estimatedWastage = totalInputSqft > 0 ? (scrapInput / totalInputSqft) * 100 : 0;
+
     const csRecord: CuttingSession = {
       id: activeSession.sessionId,
       company,
@@ -293,15 +300,16 @@ const CutterScanPanel: React.FC = () => {
       })),
       piecesProduced: activeSession.piecesLogged,
       remnantsCreated: activeSession.remnantsCreated,
-      scrapSqft,
-      scrapWeightKg: 0,
-      estimatedWastagePct: 0,
+      scrapSqft: scrapInput,
+      scrapWeightKg: scrapWeightInput,
+      estimatedWastagePct: Number(estimatedWastage.toFixed(1)),
     };
     InventoryService.upsertCuttingSession(csRecord);
 
-    toast.success(`Session closed — ${activeSession.scans.length} sheets, ${scrapInput.toFixed(1)} sqft scrap recorded`);
+    toast.success(`Session closed — ${activeSession.scans.length} sheets, ${scrapInput.toFixed(1)} sqft / ${scrapWeightInput.toFixed(1)} kg scrap`);
     setActiveSession(null);
     setScrapInput(0);
+    setScrapWeightInput(0);
     setShowCloseConfirm(false);
     setShowDiagram(false);
     setSelectedJobId('');
@@ -399,6 +407,19 @@ const CutterScanPanel: React.FC = () => {
                   onChange={e => setScrapInput(Number(e.target.value))}/>
                 <p className="text-[9px] text-slate-400">Include all offcuts below remnant threshold</p>
               </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Scrap Weight (KG)</label>
+                <input type="number" min="0" step="0.1"
+                  className="sap-input w-full font-bold"
+                  placeholder="Weigh scrap pieces"
+                  value={scrapWeightInput || ''}
+                  onChange={e => setScrapWeightInput(Number(e.target.value))}/>
+              </div>
+              {scrapInput > 0 && (
+                <div className="bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 text-xs font-bold text-amber-700">
+                  Scrap: {scrapInput.toFixed(1)} sqft / {scrapWeightInput.toFixed(1)} kg
+                </div>
+              )}
             </div>
             <div className="flex gap-3 justify-end">
               <button onClick={() => setShowCloseConfirm(false)}
