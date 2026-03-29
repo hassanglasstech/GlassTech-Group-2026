@@ -7,6 +7,7 @@ import {
   PenTool, UploadCloud, FileImage, Square, Circle, Save
 } from 'lucide-react';
 import { useQuotations } from './useQuotations';
+import DeliveryPromise from '@/modules/sales/components/DeliveryPromise';
 
 const QuotationManager: React.FC = () => {
   const {
@@ -246,6 +247,16 @@ const QuotationManager: React.FC = () => {
                   <label className="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center"><Layers size={14} className="mr-1"/> Project / Store Name</label>
                   <input disabled={isLocked} type="text" className="sap-input w-full" placeholder="e.g. Emporium Mall Outlet" value={formData.projectName} onChange={e => setFormData({...formData, projectName: e.target.value})} />
                 </div>
+                {/* Stage 3C — Delivery Promise Calculator */}
+                {formData.items && formData.items.length > 0 && (
+                  <div className="md:col-span-3">
+                    <DeliveryPromise
+                      company={company}
+                      items={formData.items}
+                      orderValuePKR={subTotal}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
