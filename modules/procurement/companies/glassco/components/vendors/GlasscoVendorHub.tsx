@@ -156,7 +156,6 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
       setIsAddVendorOpen(true);
   };
 
-  // --- RATE CARD LOGIC ---
   const openRateModal = (vendor: Vendor) => {
       setSelectedVendorForRates(vendor);
       setNewRateForm({ 
@@ -172,8 +171,6 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
       if (!selectedVendorForRates || !newRateForm.rate) return;
       const updatedRates = [...(selectedVendorForRates.rates || [])];
       
-      // We do NOT overwrite anymore, we append new historical record.
-      // Filter logic in SalesOrder will pick the latest date.
       updatedRates.push({
           id: `RATE-${Date.now()}`,
           thickness: newRateForm.thickness || '12mm',
@@ -189,7 +186,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
       SalesService.saveVendors(nextVendors);
       setVendors(nextVendors);
       setSelectedVendorForRates(updatedVendor);
-      setNewRateForm({ ...newRateForm, rate: 0 }); // Reset rate but keep thickness
+      setNewRateForm({ ...newRateForm, rate: 0 }); 
   };
 
   const handleDeleteRate = (rateId: string) => {
@@ -235,7 +232,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
               onUpdateReturnDate={handleUpdateReturnDate}
               returnDates={returnDates}
           />
-      ) : (
+      ) : viewMode === 'registry' ? (
           <div className="space-y-4 animate-in fade-in duration-300">
               <div className="bg-white border border-slate-200 p-4 shadow-sm flex justify-between items-center rounded-xl">
                 <div className="flex items-center space-x-4">
@@ -285,7 +282,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
                                               <button onClick={() => openRateModal(v)} className="p-1.5 text-orange-600 bg-orange-50 hover:bg-orange-100 rounded transition-colors" title="Manage Rates"><Receipt size={16}/></button>
                                           )}
                                           <button onClick={() => openAddModal(v)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit size={16} /></button>
-                                          <button onClick={() => { if(confirm("Delete?")) { const u = vendors.filter(x => x.id !== v.id); SalesService.saveVendors(u); setVendors(u); }}} className="p-1.5 rounded transition-colors text-slate-400 hover:text-red-600 hover:bg-red-50"><Trash2 size={16} /></button>
+                                          <button onClick={() => { if(window.confirm("Delete?")) { const u = vendors.filter(x => x.id !== v.id); SalesService.saveVendors(u); setVendors(u); }}} className="p-1.5 rounded transition-colors text-slate-400 hover:text-red-600 hover:bg-red-50"><Trash2 size={16} /></button>
                                       </div>
                                   </td>
                               </tr>
@@ -294,7 +291,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
                   </table>
               </div>
           </div>
-      )}
+      ) : null}
 
       {isAddVendorOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">
         <div className="p-8 space-y-6 bg-slate-50">
@@ -321,7 +318,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
             <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
               <label className="text-[10px] font-black uppercase text-blue-700 ml-1 mb-2 block">Register Vehicles</label>
               <div className="flex space-x-2 mb-2"><input type="text" placeholder="e.g. LEA-9988" value={newVehicleInput} onChange={e => setNewVehicleInput(e.target.value)} className="flex-1 p-2 border rounded-lg text-sm font-bold uppercase" /><button onClick={() => { if(newVehicleInput) { setNewVendorForm({...newVendorForm, vehicles: [...(newVendorForm.vehicles || []), newVehicleInput]}); setNewVehicleInput(''); } }} className="bg-blue-600 text-white px-4 rounded-lg font-bold text-xs">Add</button></div>
-              <div className="flex flex-wrap gap-2">{newVendorForm.vehicles?.map((v, i) => (<span key={i} className="bg-white border border-blue-200 text-blue-800 px-2 py-1 rounded text-[10px] font-bold uppercase flex items-center space-x-1"><span>{v}</span><button onClick={() => { const next = [...(newVendorForm.vehicles || [])]; next.splice(i, 1); setNewVendorForm({...newVendorForm, vehicles: next}); }}><X size={10}/></button></span>))}</div>
+              <div className="flex flex-wrap gap-2">{newVendorForm.vehicles?.map((v: any, i: number) => (<span key={i} className="bg-white border border-blue-200 text-blue-800 px-2 py-1 rounded text-[10px] font-bold uppercase flex items-center space-x-1"><span>{v}</span><button onClick={() => { const next = [...(newVendorForm.vehicles || [])]; next.splice(i, 1); setNewVendorForm({...newVendorForm, vehicles: next}); }}><X size={10}/></button></span>))}</div>
             </div>
           )}
         </div>
@@ -499,9 +496,6 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
           </div>
         );
       })()}
-    </div>
-  );
-};
 
       {/* ═══ VENDOR PERFORMANCE VIEW ═══ */}
       {viewMode === 'performance' && (() => {
@@ -665,7 +659,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
 
       {/* VDR Print Overlay */}
       {printVDR && (
-        <div className="fixed inset-0 z-[600] bg-white overflow-y-auto">
+        <div className="fixed inset-0 z-[600] bg-white flex items-center justify-center p-4">
           <NCRDefectPrint
             defectReport={printVDR}
             mode="DefectReport"
@@ -673,5 +667,9 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
           />
         </div>
       )}
+
+    </div>
+  );
+};
 
 export default GlasscoVendorHub;
