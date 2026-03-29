@@ -79,7 +79,9 @@ export interface Quotation {
   manualSerial?: string; 
   isAlreadyDispatched?: boolean; 
   receivedAmount?: number; 
-  actualDeliveryDate?: string; 
+  actualDeliveryDate?: string;
+  delayReason?: string;
+  delayCategory?: 'Internal' | 'Outsourcing' | 'Client' | '';
 }
 
 export type JobOrder = Quotation;
