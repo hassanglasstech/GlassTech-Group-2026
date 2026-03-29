@@ -60,7 +60,9 @@ const SalesOrders: React.FC = () => {
     // Detail Form State
     const [detailForm, setDetailForm] = useState({
         receivedAmount: 0,
-        deliveryDate: ''
+        deliveryDate: '',
+        delayReason: '',
+        delayCategory: '' as 'Internal' | 'Outsourcing' | 'Client' | ''
     });
 
     const [nipponPrintType, setNipponPrintType] = useState<'KinLong' | 'Glasstech' | 'General'>('Glasstech');
@@ -212,7 +214,9 @@ const SalesOrders: React.FC = () => {
         setSelectedOrder(order);
         setDetailForm({
             receivedAmount: order.receivedAmount || 0,
-            deliveryDate: order.actualDeliveryDate || order.dueDate || ''
+            deliveryDate: order.actualDeliveryDate || order.dueDate || '',
+            delayReason: order.delayReason || '',
+            delayCategory: order.delayCategory || ''
         });
     };
 
@@ -222,7 +226,9 @@ const SalesOrders: React.FC = () => {
         const updatedOrder = {
             ...selectedOrder,
             receivedAmount: Number(detailForm.receivedAmount),
-            actualDeliveryDate: detailForm.deliveryDate
+            actualDeliveryDate: detailForm.deliveryDate,
+            delayReason: detailForm.delayReason,
+            delayCategory: detailForm.delayCategory
         };
         const next = all.map(q => q.id === selectedOrder.id ? updatedOrder : q);
         SalesService.saveQuotations(next);
@@ -701,6 +707,32 @@ const SalesOrders: React.FC = () => {
                                             onChange={e => setDetailForm({...detailForm, deliveryDate: e.target.value})}
                                         />
                                     </div>
+                                    {/* Stage 1C — Delay Tracking */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Delay Category (if late)</label>
+                                        <select
+                                            className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm text-slate-800 outline-none focus:border-indigo-500"
+                                            value={detailForm.delayCategory}
+                                            onChange={e => setDetailForm({...detailForm, delayCategory: e.target.value as any})}
+                                        >
+                                            <option value="">— No Delay —</option>
+                                            <option value="Internal">Internal (Cutting backlog / capacity)</option>
+                                            <option value="Outsourcing">Outsourcing (Tempering / Lamination vendor)</option>
+                                            <option value="Client">Client (Design change / payment hold)</option>
+                                        </select>
+                                    </div>
+                                    {detailForm.delayCategory && (
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Delay Reason</label>
+                                            <input
+                                                type="text"
+                                                placeholder="e.g. Tempering vendor delayed 3 days"
+                                                className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm text-slate-800 outline-none focus:border-indigo-500 placeholder:text-[10px] placeholder:font-normal"
+                                                value={detailForm.delayReason}
+                                                onChange={e => setDetailForm({...detailForm, delayReason: e.target.value})}
+                                            />
+                                        </div>
+                                    )}
                                 </div>
 
                                 <button 
