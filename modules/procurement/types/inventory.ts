@@ -464,6 +464,9 @@ export interface Requisition {
   description?: string;
   type?: string;
   requiresCashPayment?: boolean;
+  paymentMode?: string;           // Cash | Petty Cash | Personal Account | Bank Transfer
+  materialType?: string;          // BOM Component | Consumable | Returnable Tool | Capital Asset | Profile | General
+  projectId?: string;             // linked project ID for project-wise cost tracking
   estimatedAmount?: number;
   paymentStatus?: 'Pending' | 'Paid' | 'Partial' | 'Not Required';
   paidAmount?: number;
