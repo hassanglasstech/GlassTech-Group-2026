@@ -59,6 +59,179 @@ const QuotationManager: React.FC = () => {
     return result;
   }, [quotations, searchTerm, clients]);
 
+  // ═══════════════════════════════════════════════════════════════════
+  // FORM VIEW — renders as native page (not popup)
+  // ═══════════════════════════════════════════════════════════════════
+  if (isModalOpen) {
+    return (
+      <div className="space-y-6">
+        {/* Header Bar */}
+        <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex items-center space-x-3">
+            <button onClick={() => { setIsModalOpen(false); setShow2DPreview(false); }} className="p-2 hover:bg-slate-100 rounded-full"><X size={20} className="text-slate-500"/></button>
+            <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center"><FileSignature size={20} /></div>
+            <div>
+              <h2 className="text-lg font-black text-slate-800 tracking-tight">{formData.id ? `Edit ${formData.id}` : 'New Quotation'}</h2>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{company}</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${formData.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{formData.status || 'Draft'}</span>
+            <div className="text-xl font-black text-slate-800">Rs {(Number(subTotal) || 0).toLocaleString()}</div>
+          </div>
+        </div>
+
+        {/* Form Fields */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="space-y-2">
+            <label className="text-xs font-black text-slate-400 uppercase flex items-center"><Calendar size={14} className="mr-1"/> Date</label>
+            <input disabled={isLocked} type="date" className="sap-input w-full" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-black text-slate-400 uppercase flex items-center"><Calendar size={14} className="mr-1"/> Valid Till</label>
+            <input disabled={isLocked} type="date" className="sap-input w-full" value={formData.dueDate} onChange={e => setFormData({...formData, dueDate: e.target.value})} />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-black text-slate-400 uppercase flex items-center"><Info size={14} className="mr-1"/> Client</label>
+            <select disabled={isLocked} className="sap-input w-full" value={formData.clientId} onChange={e => setFormData({...formData, clientId: e.target.value})}>
+              <option value="">Select Client...</option>
+              {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div className="space-y-2 md:col-span-3">
+            <label className="text-xs font-black text-slate-400 uppercase flex items-center"><Layers size={14} className="mr-1"/> Project / Store Name</label>
+            <input disabled={isLocked} type="text" className="sap-input w-full" placeholder="e.g. Emporium Mall Outlet" value={formData.projectName} onChange={e => setFormData({...formData, projectName: e.target.value})} />
+          </div>
+          {formData.items && formData.items.length > 0 && (
+            <div className="md:col-span-3"><DeliveryPromise company={company} items={formData.items} orderValuePKR={subTotal} /></div>
+          )}
+        </div>
+
+        {/* Items Table */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+            <h3 className="text-sm font-black text-slate-800 uppercase flex items-center"><Box size={16} className="mr-2 text-blue-600"/> Glass Items</h3>
+            {!isLocked && <button onClick={addGlassItem} className="sap-btn-light text-xs py-1.5"><Plus size={14} className="mr-1"/> Add Item</button>}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left sap-table">
+              <thead><tr>
+                <th className="px-4 py-3 text-[10px] w-8">#</th><th className="px-4 py-3 text-[10px]">Glass</th>
+                <th className="px-4 py-3 text-[10px]">Size</th><th className="px-4 py-3 text-[10px]">Qty</th>
+                <th className="px-4 py-3 text-[10px]">SqFt</th><th className="px-4 py-3 text-[10px]">Rate</th>
+                <th className="px-4 py-3 text-[10px]">Amount</th><th className="px-4 py-3 text-[10px] w-20">Services</th>
+                <th className="px-4 py-3 text-[10px] w-12"></th>
+              </tr></thead>
+              <tbody>
+                {(formData.items || []).map((item, idx) => (
+                  <React.Fragment key={idx}>
+                    <tr className={`border-t cursor-pointer hover:bg-blue-50/30 ${selectedItemIndex === idx ? 'bg-blue-50' : ''}`} onClick={() => setSelectedItemIndex(selectedItemIndex === idx ? null : idx)}>
+                      <td className="px-4 py-3 font-bold text-slate-400">{idx + 1}</td>
+                      <td className="px-4 py-3"><div className="font-black text-slate-800 text-xs">{item.glassType || '—'} {item.glassThickness || ''}</div><div className="text-[10px] text-slate-500 mt-0.5">{(item.selectedServices || []).join(', ')}</div></td>
+                      <td className="px-4 py-3 text-xs font-bold text-slate-600">{item.width || 0}&#34; x {item.height || 0}&#34;</td>
+                      <td className="px-4 py-3 text-xs font-black">{item.qty || 0}</td>
+                      <td className="px-4 py-3 text-xs font-bold text-blue-600">{(item.totalSqFt || item.sqft || 0).toFixed(1)}</td>
+                      <td className="px-4 py-3 text-xs font-bold">Rs {(item.rate || 0).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-xs font-black text-emerald-700">Rs {(item.amount || 0).toLocaleString()}</td>
+                      <td className="px-4 py-3">{(item.selectedServices || []).map(s => <span key={s} className="inline-block px-1.5 py-0.5 bg-slate-100 text-slate-600 text-[8px] font-black uppercase rounded mr-0.5 mb-0.5">{s}</span>)}</td>
+                      <td className="px-4 py-3">{!isLocked && <button onClick={e => { e.stopPropagation(); removeGlassItem(idx); }} className="text-rose-400 hover:text-rose-600"><Trash2 size={14}/></button>}</td>
+                    </tr>
+                    {selectedItemIndex === idx && (
+                      <tr><td colSpan={9} className="p-0 border-t bg-slate-50">
+                        <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Glass Type</label><select disabled={isLocked} className="sap-input w-full text-sm" value={item.glassType} onChange={e => updateGlassItem(idx, 'glassType', e.target.value)}><option value="">Select...</option>{getAvailableTypes().map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                              <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Thickness</label><select disabled={isLocked} className="sap-input w-full text-sm" value={item.glassThickness || ''} onChange={e => updateGlassItem(idx, 'glassThickness', e.target.value)}><option value="">Select...</option>{getAvailableThicknesses().map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Shape</label><select disabled={isLocked} className="sap-input w-full text-sm" value={item.shape || 'Rectangle'} onChange={e => updateGlassItem(idx, 'shape', e.target.value)}><option value="Rectangle">Rectangle</option><option value="Circle">Circle</option></select></div>
+                              <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Qty</label><input disabled={isLocked} type="number" min="1" className="sap-input w-full text-sm" value={item.qty || ''} onChange={e => updateGlassItem(idx, 'qty', Number(e.target.value))} /></div>
+                            </div>
+                            <div className="grid grid-cols-4 gap-2">
+                              <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">W (inch)</label><input disabled={isLocked} type="number" min="0" className="sap-input w-full text-sm" value={item.inchW || ''} onChange={e => updateGlassItem(idx, 'inchW', Number(e.target.value))} /></div>
+                              <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">W (soot)</label><input disabled={isLocked} type="number" min="0" max="9" className="sap-input w-full text-sm" value={item.sootW || ''} onChange={e => updateGlassItem(idx, 'sootW', Number(e.target.value))} /></div>
+                              <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">H (inch)</label><input disabled={isLocked} type="number" min="0" className="sap-input w-full text-sm" value={item.inchH || ''} onChange={e => updateGlassItem(idx, 'inchH', Number(e.target.value))} /></div>
+                              <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">H (soot)</label><input disabled={isLocked} type="number" min="0" max="9" className="sap-input w-full text-sm" value={item.sootH || ''} onChange={e => updateGlassItem(idx, 'sootH', Number(e.target.value))} /></div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Width (mm)</label><input disabled={isLocked} type="number" min="0" className="sap-input w-full text-sm" value={item.mmW || ''} onChange={e => updateGlassItem(idx, 'mmW', Number(e.target.value))} /></div>
+                              <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Height (mm)</label><input disabled={isLocked} type="number" min="0" className="sap-input w-full text-sm" value={item.mmH || ''} onChange={e => updateGlassItem(idx, 'mmH', Number(e.target.value))} /></div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Rate (per sqft)</label><input disabled={isLocked} type="number" min="0" className="sap-input w-full text-sm" value={item.rate || ''} onChange={e => updateGlassItem(idx, 'rate', Number(e.target.value))} /></div>
+                              <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Amount</label><div className="sap-input w-full text-sm font-black text-emerald-700 bg-emerald-50 flex items-center">Rs {(item.amount || 0).toLocaleString()}</div></div>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[9px] font-black text-slate-400 uppercase">Services</label>
+                              <div className="flex flex-wrap gap-1.5">{serviceNicks.map(srv => {
+                                const isSel = (item.selectedServices || []).includes(srv);
+                                return <button key={srv} disabled={isLocked} onClick={() => { const cur = item.selectedServices || []; updateGlassItem(idx, 'selectedServices', isSel ? cur.filter(s => s !== srv) : [...cur, srv]); }} className={`px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase border ${isSel ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300'}`}>{srv}</button>;
+                              })}</div>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[9px] font-black text-slate-400 uppercase">Design Image</label>
+                              {!isLocked && <button onClick={() => { setSelectedItemIndex(idx); fileInputRef.current?.click(); }} className="flex items-center gap-1 text-[9px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200"><UploadCloud size={12}/> Upload</button>}
+                              {item.designFile && <div className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded-xl border mt-1"><div className="flex items-center space-x-2 text-sm font-medium text-slate-700"><FileImage size={16} className="text-blue-500" /><span className="truncate w-32">Attached</span></div>{!isLocked && <button onClick={() => updateGlassItem(idx, 'designFile', undefined)} className="text-rose-500 p-1 rounded"><X size={14}/></button>}</div>}
+                            </div>
+                          </div>
+                          <div className="flex-1 bg-white border border-slate-200 rounded-xl p-6 flex items-center justify-center relative overflow-hidden">
+                            <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+                            {item.designFile ? <img src={item.designFile} alt="Design" className="max-w-full max-h-64 object-contain relative z-10 rounded shadow-sm" /> : (
+                              <div className="relative z-10 flex flex-col items-center">
+                                <div className="border-4 border-blue-500/30 bg-blue-50/50 flex items-center justify-center relative" style={{ width: item.shape === 'Circle' ? '160px' : '200px', height: item.shape === 'Circle' ? '160px' : '120px', borderRadius: item.shape === 'Circle' ? '50%' : '8px' }}>
+                                  <span className="text-blue-400/50 font-black text-2xl uppercase">{item.glassType}</span>
+                                  {item.shape !== 'Circle' && <><div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-black text-slate-500 bg-white px-2 rounded-full shadow-sm border">{item.width}&#34;</div><div className="absolute -left-8 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-500 bg-white px-2 rounded-full shadow-sm border -rotate-90">{item.height}&#34;</div></>}
+                                  {item.shape === 'Circle' && <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] font-black text-slate-500 bg-white px-2 py-1 rounded-full shadow-sm border flex items-center gap-1"><Circle size={10}/> D {item.width}&#34;</div>}
+                                </div>
+                                <div className="mt-6 flex gap-2">{(item.selectedServices || []).map(s => <span key={s} className="px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-black uppercase rounded-md border">{s}</span>)}</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td></tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* 2D Wastage Preview — ALWAYS visible section */}
+        <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-5">
+          <button onClick={() => setShow2DPreview(!show2DPreview)} className={`flex items-center gap-2 text-sm font-black uppercase px-5 py-3 rounded-xl border-2 transition-colors ${show2DPreview ? 'bg-blue-700 text-white border-blue-700' : 'border-blue-300 text-blue-700 hover:bg-blue-100 bg-white shadow-sm'}`}>
+            <Scissors size={16}/> {show2DPreview ? 'Hide' : 'Show'} 2D Wastage Preview
+          </button>
+          {show2DPreview && (() => {
+            const cuttingPieces = buildPackingPiecesFromQuotation(formData.items || []);
+            if (cuttingPieces.length === 0) return <div className="mt-3 bg-white border-2 border-dashed border-slate-200 rounded-xl p-6 text-center text-sm text-slate-400 font-bold">Add piece dimensions (width x height) to items first</div>;
+            const totalRequiredSqft = cuttingPieces.reduce((s, p) => s + (p.widthInch * p.heightInch * p.qty) / 144, 0);
+            return (
+              <div className="mt-3 bg-white rounded-xl border border-blue-200 p-4 space-y-3">
+                <SheetSelector company={company} selectedSheet={previewSheetSize} onSelect={(w, h) => setPreviewSheetSize({ width: w, height: h })} requiredSqft={totalRequiredSqft} />
+                <CuttingDiagram pieces={cuttingPieces} sheetWidthInch={previewSheetSize.width} sheetHeightInch={previewSheetSize.height} glassType={cuttingPieces[0]?.glassType} quotationMode={true} />
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Sticky Action Bar */}
+        <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm sticky bottom-0 z-10">
+          <div className="text-2xl font-black text-slate-800"><span className="text-sm text-slate-500 font-bold uppercase mr-2">Total</span>Rs {(Number(subTotal) || 0).toLocaleString()}</div>
+          <div className="flex space-x-3">
+            <button onClick={() => { setIsModalOpen(false); setShow2DPreview(false); }} className="sap-btn-light">Close</button>
+            {!isLocked && <button onClick={() => handleSave(false)} className="sap-btn-light"><Save size={16} className="mr-2"/> Save Draft</button>}
+            {!isLocked && <button onClick={() => handleSave(true)} className="sap-btn-primary bg-emerald-600 hover:bg-emerald-700"><FileCheck size={16} className="mr-2"/> Approve</button>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // LIST VIEW
+  // ═══════════════════════════════════════════════════════════════════
   return (
     <div className="space-y-6">
       {printingQuote && (
@@ -203,312 +376,6 @@ const QuotationManager: React.FC = () => {
         </table>
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-white z-50 flex flex-col">
-          {/* Fixed Header */}
-          <div className="px-6 py-3 border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
-                  <FileSignature size={20} />
-                </div>
-                <div>
-                  <h2 className="text-lg font-black text-slate-800 tracking-tight">
-                    {formData.id ? `Edit ${formData.id}` : 'New Quotation'}
-                  </h2>
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{company}</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-4">
-                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                  formData.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-                }`}>
-                  {formData.status || 'Draft'}
-                </span>
-                <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full transition-colors">
-                  <X size={20} />
-                </button>
-              </div>
-          </div>
-
-          {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center"><Calendar size={14} className="mr-1"/> Date</label>
-                  <input disabled={isLocked} type="date" className="sap-input w-full" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center"><Calendar size={14} className="mr-1"/> Valid Till</label>
-                  <input disabled={isLocked} type="date" className="sap-input w-full" value={formData.dueDate} onChange={e => setFormData({...formData, dueDate: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center"><Info size={14} className="mr-1"/> Client</label>
-                  <select disabled={isLocked} className="sap-input w-full" value={formData.clientId} onChange={e => setFormData({...formData, clientId: e.target.value})}>
-                    <option value="">Select Client...</option>
-                    {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-2 md:col-span-3">
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center"><Layers size={14} className="mr-1"/> Project / Store Name</label>
-                  <input disabled={isLocked} type="text" className="sap-input w-full" placeholder="e.g. Emporium Mall Outlet" value={formData.projectName} onChange={e => setFormData({...formData, projectName: e.target.value})} />
-                </div>
-                {/* Stage 3C — Delivery Promise Calculator */}
-                {formData.items && formData.items.length > 0 && (
-                  <div className="md:col-span-3">
-                    <DeliveryPromise
-                      company={company}
-                      items={formData.items}
-                      orderValuePKR={subTotal}
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center"><Box size={16} className="mr-2 text-blue-600"/> Glass Items</h3>
-                  {!isLocked && <button onClick={addGlassItem} className="sap-btn-light text-xs py-1.5"><Plus size={14} className="mr-1"/> Add Item</button>}
-                </div>
-                
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left sap-table">
-                    <thead>
-                      <tr>
-                        <th className="w-12 text-center">#</th>
-                        <th className="w-48">Description</th>
-                        <th className="w-32">Type</th>
-                        <th className="w-24">Thick</th>
-                        <th className="w-48">Services</th>
-                        <th className="w-20 text-center">W (in)</th>
-                        <th className="w-20 text-center">H (in)</th>
-                        <th className="w-20 text-center">Qty</th>
-                        <th className="w-24 text-right">SqFt</th>
-                        <th className="w-24 text-right">Rate</th>
-                        <th className="w-28 text-right">Amount</th>
-                        <th className="w-16 text-center">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {formData.items?.map((item, idx) => (
-                        <React.Fragment key={idx}>
-                          <tr className={`hover:bg-slate-50 transition-colors ${selectedItemIndex === idx ? 'bg-blue-50/50' : ''}`} onClick={() => setSelectedItemIndex(idx)}>
-                            <td className="text-center font-bold text-slate-400">{idx + 1}</td>
-                            <td><input disabled={isLocked} type="text" className="sap-input w-full py-1 text-sm font-bold" value={item.description} onChange={e => updateGlassItem(idx, 'description', e.target.value)} placeholder="Location/Desc" /></td>
-                            <td>
-                              <select disabled={isLocked} className="sap-input w-full py-1 text-sm font-bold text-blue-600" value={item.glassType} onChange={e => updateGlassItem(idx, 'glassType', e.target.value)}>
-                                {getAvailableTypes().map(t => <option key={t} value={t}>{t}</option>)}
-                              </select>
-                            </td>
-                            <td>
-                              <select disabled={isLocked} className="sap-input w-full py-1 text-sm font-bold text-indigo-600" value={item.glassSize} onChange={e => updateGlassItem(idx, 'glassSize', e.target.value)}>
-                                {getAvailableThicknesses().map(t => <option key={t} value={t}>{t}</option>)}
-                              </select>
-                            </td>
-                            <td>
-                              <div className="flex flex-wrap gap-1">
-                                {serviceNicks.map(srv => {
-                                  if (item.glassType === 'Mirror' && srv === 'T/G') return null;
-                                  const isSelected = (item.selectedServices || []).includes(srv);
-                                  return (
-                                    <button
-                                      key={srv}
-                                      disabled={isLocked}
-                                      onClick={() => {
-                                        const current = item.selectedServices || [];
-                                        updateGlassItem(idx, 'selectedServices', isSelected ? current.filter(s => s !== srv) : [...current, srv]);
-                                      }}
-                                      className={`px-2 py-0.5 text-[10px] font-black uppercase rounded-full transition-colors ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-                                    >
-                                      {srv}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </td>
-                            <td>
-                              <div className="flex items-center space-x-1">
-                                <input disabled={isLocked} type="number" className="sap-input w-12 py-1 text-center font-bold" value={item.inchW || ''} onChange={e => updateGlassItem(idx, 'inchW', Number(e.target.value))} placeholder="in" />
-                                <input disabled={isLocked} type="number" className="sap-input w-10 py-1 text-center text-xs text-slate-500" value={item.sootW || ''} onChange={e => updateGlassItem(idx, 'sootW', Number(e.target.value))} placeholder="st" />
-                              </div>
-                            </td>
-                            <td>
-                              <div className="flex items-center space-x-1">
-                                <input disabled={isLocked} type="number" className="sap-input w-12 py-1 text-center font-bold" value={item.inchH || ''} onChange={e => updateGlassItem(idx, 'inchH', Number(e.target.value))} placeholder="in" />
-                                <input disabled={isLocked} type="number" className="sap-input w-10 py-1 text-center text-xs text-slate-500" value={item.sootH || ''} onChange={e => updateGlassItem(idx, 'sootH', Number(e.target.value))} placeholder="st" />
-                              </div>
-                            </td>
-                            <td><input disabled={isLocked} type="number" className="sap-input w-full py-1 text-center font-bold" value={item.qty || ''} onChange={e => updateGlassItem(idx, 'qty', Number(e.target.value))} /></td>
-                            <td className="text-right font-bold text-slate-600 bg-slate-50">{item.totalSqFt?.toFixed(2)}</td>
-                            <td><input disabled={isLocked} type="number" className="sap-input w-full py-1 text-right font-bold text-emerald-600" value={item.pricePerUnit || ''} onChange={e => updateGlassItem(idx, 'pricePerUnit', Number(e.target.value))} /></td>
-                            <td className="text-right font-black text-slate-800 bg-slate-50">{(item.amount || 0).toLocaleString()}</td>
-                            <td className="text-center">
-                              {!isLocked && <button onClick={() => removeGlassItem(idx)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"><Trash2 size={14} /></button>}
-                            </td>
-                          </tr>
-                          
-                          {/* Expanded Details for Selected Item */}
-                          {selectedItemIndex === idx && (
-                            <tr className="bg-blue-50/30 border-b-2 border-blue-100">
-                              <td colSpan={12} className="p-4">
-                                <div className="flex space-x-6">
-                                  <div className="w-64 shrink-0">
-                                    <div className="flex space-x-2 mb-4">
-                                      <button onClick={() => setModalTab('items')} className={`flex-1 py-1.5 text-xs font-bold uppercase rounded-lg transition-colors ${modalTab === 'items' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 border border-slate-200'}`}>Details</button>
-                                      <button onClick={() => setModalTab('design')} className={`flex-1 py-1.5 text-xs font-bold uppercase rounded-lg transition-colors ${modalTab === 'design' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 border border-slate-200'}`}>Design</button>
-                                      <button onClick={() => setModalTab('upload')} className={`flex-1 py-1.5 text-xs font-bold uppercase rounded-lg transition-colors ${modalTab === 'upload' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 border border-slate-200'}`}>File</button>
-                                    </div>
-                                    
-                                    {modalTab === 'items' && (
-                                      <div className="space-y-3">
-                                        <div>
-                                          <label className="text-[10px] font-black text-slate-400 uppercase">Location Code</label>
-                                          <input disabled={isLocked} type="text" className="sap-input w-full py-1 text-sm font-mono" value={item.locationCode || ''} onChange={e => updateGlassItem(idx, 'locationCode', e.target.value)} placeholder="e.g. W1, D2" />
-                                        </div>
-                                        <div>
-                                          <label className="text-[10px] font-black text-slate-400 uppercase">Glazing Specs</label>
-                                          <textarea disabled={isLocked} className="sap-input w-full py-1 text-sm h-20 resize-none" value={item.glazingSpecs || ''} onChange={e => updateGlassItem(idx, 'glazingSpecs', e.target.value)} placeholder="Additional notes..." />
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {modalTab === 'design' && (
-                                      <div className="space-y-3">
-                                        <div className="grid grid-cols-2 gap-2">
-                                          <button disabled={isLocked} onClick={() => updateGlassItem(idx, 'shape', 'Rectangle')} className={`py-2 flex flex-col items-center justify-center rounded-lg border ${item.shape === 'Rectangle' || !item.shape ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-slate-200 bg-white text-slate-400'}`}><Square size={24} className="mb-1"/><span className="text-[10px] font-bold uppercase">Rect</span></button>
-                                          <button disabled={isLocked} onClick={() => updateGlassItem(idx, 'shape', 'Circle')} className={`py-2 flex flex-col items-center justify-center rounded-lg border ${item.shape === 'Circle' ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-slate-200 bg-white text-slate-400'}`}><Circle size={24} className="mb-1"/><span className="text-[10px] font-bold uppercase">Circle</span></button>
-                                        </div>
-                                        <div>
-                                          <label className="text-[10px] font-black text-slate-400 uppercase">Cutouts</label>
-                                          <input disabled={isLocked} type="number" className="sap-input w-full py-1 text-sm" value={item.cutouts || ''} onChange={e => updateGlassItem(idx, 'cutouts', Number(e.target.value))} placeholder="0" />
-                                        </div>
-                                        <div>
-                                          <label className="text-[10px] font-black text-slate-400 uppercase">Holes</label>
-                                          <input disabled={isLocked} type="number" className="sap-input w-full py-1 text-sm" value={item.holes || ''} onChange={e => updateGlassItem(idx, 'holes', Number(e.target.value))} placeholder="0" />
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {modalTab === 'upload' && (
-                                      <div className="space-y-4">
-                                        <input type="file" ref={fileInputRef} className="hidden" accept="image/*,.pdf" onChange={handleFileUpload} disabled={isLocked} />
-                                        <button disabled={isLocked} onClick={() => fileInputRef.current?.click()} className="w-full py-8 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-all">
-                                          <UploadCloud size={32} className="mb-2" />
-                                          <span className="text-xs font-bold uppercase">Upload Drawing</span>
-                                        </button>
-                                        {item.designFile && (
-                                          <div className="flex items-center justify-between p-2 bg-white border border-slate-200 rounded-lg">
-                                            <div className="flex items-center space-x-2 text-sm font-medium text-slate-700">
-                                              <FileImage size={16} className="text-blue-500" />
-                                              <span className="truncate w-32">Attached File</span>
-                                            </div>
-                                            {!isLocked && <button onClick={() => updateGlassItem(idx, 'designFile', undefined)} className="text-rose-500 hover:bg-rose-50 p-1 rounded"><X size={14}/></button>}
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  <div className="flex-1 bg-white border border-slate-200 rounded-xl p-6 flex items-center justify-center relative overflow-hidden">
-                                    <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
-                                    
-                                    {item.designFile ? (
-                                      <img src={item.designFile} alt="Design" className="max-w-full max-h-64 object-contain relative z-10 rounded shadow-sm" />
-                                    ) : (
-                                      <div className="relative z-10 flex flex-col items-center">
-                                        <div 
-                                          className={`border-4 border-blue-500/30 bg-blue-50/50 flex items-center justify-center relative transition-all duration-500`}
-                                          style={{
-                                            width: item.shape === 'Circle' ? '160px' : '200px',
-                                            height: item.shape === 'Circle' ? '160px' : '120px',
-                                            borderRadius: item.shape === 'Circle' ? '50%' : '8px'
-                                          }}
-                                        >
-                                          <span className="text-blue-400/50 font-black text-2xl uppercase tracking-widest">{item.glassType}</span>
-                                          
-                                          {/* Dimension Labels */}
-                                          {item.shape !== 'Circle' && (
-                                            <>
-                                              <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-black text-slate-500 bg-white px-2 rounded-full shadow-sm border border-slate-100">{item.width}″</div>
-                                              <div className="absolute -left-8 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-500 bg-white px-2 rounded-full shadow-sm border border-slate-100 -rotate-90">{item.height}″</div>
-                                            </>
-                                          )}
-                                          {item.shape === 'Circle' && (
-                                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] font-black text-slate-500 bg-white px-2 py-1 rounded-full shadow-sm border border-slate-100 flex items-center gap-1">
-                                              <Circle size={10}/> ⌀ {item.width}″
-                                            </div>
-                                          )}
-                                        </div>
-                                        <div className="mt-6 flex gap-2">
-                                          {(item.selectedServices || []).map(s => (
-                                            <span key={s} className="px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-black uppercase rounded-md border border-slate-200">{s}</span>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* ── 2D Wastage Preview (inside scroll area) ── */}
-              {formData.items && formData.items.length > 0 && (
-                <div className="mt-4 bg-blue-50/50 border border-blue-200 rounded-2xl p-4">
-                  <button
-                    onClick={() => setShow2DPreview(!show2DPreview)}
-                    className={`flex items-center gap-2 text-xs font-black uppercase px-4 py-2 rounded-xl border transition-colors ${show2DPreview ? 'bg-blue-700 text-white border-blue-700' : 'border-blue-200 text-blue-600 hover:bg-blue-50 bg-white'}`}
-                  >
-                    <Scissors size={14}/> {show2DPreview ? 'Hide' : 'Show'} 2D Wastage Preview
-                  </button>
-                  {show2DPreview && (() => {
-                    const cuttingPieces = buildPackingPiecesFromQuotation(formData.items || []);
-                    if (cuttingPieces.length === 0) return (
-                      <div className="mt-3 bg-white border border-dashed border-slate-200 rounded-xl p-4 text-center text-xs text-slate-400 font-bold">
-                        Add piece dimensions (width x height) to items first
-                      </div>
-                    );
-                    const totalRequiredSqft = cuttingPieces.reduce((s, p) => s + (p.widthInch * p.heightInch * p.qty) / 144, 0);
-                    return (
-                      <div className="mt-3 bg-white rounded-xl border border-blue-200 p-4 space-y-3">
-                        <SheetSelector
-                          company={company}
-                          selectedSheet={previewSheetSize}
-                          onSelect={(w, h) => setPreviewSheetSize({ width: w, height: h })}
-                          requiredSqft={totalRequiredSqft}
-                        />
-                        <CuttingDiagram
-                          pieces={cuttingPieces}
-                          sheetWidthInch={previewSheetSize.width}
-                          sheetHeightInch={previewSheetSize.height}
-                          glassType={cuttingPieces[0]?.glassType}
-                          quotationMode={true}
-                        />
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-            </div>
-
-            {/* Fixed Footer */}
-            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center shrink-0">
-              <div className="text-2xl font-black text-slate-800 tracking-tight">
-                <span className="text-sm text-slate-500 font-bold uppercase mr-2">Total</span>
-                Rs {(Number(subTotal) || 0).toLocaleString()}
-              </div>
-              <div className="flex space-x-3">
-                {!isLocked && <button onClick={() => handleSave(false)} className="sap-btn-light"><Save size={16} className="mr-2"/> Save Draft</button>}
-                {!isLocked && <button onClick={() => handleSave(true)} className="sap-btn-primary bg-emerald-600 hover:bg-emerald-700"><FileCheck size={16} className="mr-2"/> Approve Quotation</button>}
-              </div>
-            </div>
-        </div>
-      )}
     </div>
   );
 };
