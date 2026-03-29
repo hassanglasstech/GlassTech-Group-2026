@@ -97,6 +97,39 @@ const FabricationView: React.FC = () => {
                  </div>
               </div>
 
+              {/* Stage 3D: Buffer Cutting Alert */}
+              {(() => {
+                const job = jobOrders.find(j => j.orderNo === selectedJobId || j.id === selectedJobId);
+                if (!job) return null;
+                const allServices = new Set<string>();
+                (job.items || []).forEach((item: any) => (item.selectedServices || []).forEach((s: string) => allServices.add(s)));
+                const needsOutsourcing = allServices.has('Tempering') || allServices.has('Toughening') || allServices.has('Lamination') || allServices.has('Double Glazing') || allServices.has('DG');
+                const totalAmount = (job.items || []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
+                const isHighValue = totalAmount > 300000;
+                if (!needsOutsourcing) return null;
+                return (
+                  <div className={`rounded-2xl p-4 flex items-center gap-3 ${isHighValue ? 'bg-amber-50 border-2 border-amber-300' : 'bg-blue-50 border border-blue-200'}`}>
+                    <AlertTriangle size={20} className={isHighValue ? 'text-amber-600' : 'text-blue-500'}/>
+                    <div>
+                      <p className={`text-xs font-black uppercase ${isHighValue ? 'text-amber-700' : 'text-blue-700'}`}>
+                        {isHighValue ? '⚠ BUFFER CUTTING REQUIRED' : 'Outsourcing Risk — Consider Buffer'}
+                      </p>
+                      <p className="text-[10px] font-bold text-slate-600 mt-0.5">
+                        {isHighValue
+                          ? `Order >${(totalAmount/100000).toFixed(0)} lac with ${Array.from(allServices).join(', ')}. Cut 10-15% extra pieces to cover vendor breakage (industry avg 1-3%).`
+                          : `This order includes ${Array.from(allServices).join(', ')}. Buffer pieces recommended for orders >3 lac.`
+                        }
+                      </p>
+                    </div>
+                    {isHighValue && (
+                      <div className="ml-auto bg-amber-600 text-white px-3 py-1.5 rounded-xl text-[10px] font-black whitespace-nowrap">
+                        +10% BUFFER
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* 2D Cutting Diagram with Sheet Selector */}
               {showCuttingDiagram && (() => {
                 const job = jobOrders.find(j => j.orderNo === selectedJobId || j.id === selectedJobId);
