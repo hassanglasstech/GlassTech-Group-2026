@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { ProductionProvider } from '@/modules/production/components/ProductionContext';
-import { Scissors, Truck, ShieldCheck, Flame, BarChart3, AlertTriangle, Zap, Users, Upload } from 'lucide-react';
+import { Scissors, Truck, ShieldCheck, Flame, BarChart3, AlertTriangle, Zap, Users, Upload, Award } from 'lucide-react';
 import NCRModule from './components/ncr/NCRModule';
 import GeneratorLogModule from '@/modules/production/components/GeneratorLog';
 import LabourLogModule from '@/modules/production/components/LabourLog';
 import DataImportTool from '@/modules/production/components/DataImportTool';
+import CutterDashboard from '@/modules/production/components/CutterDashboard';
 
 // Split Views
 import FabricationView from './components/views/FabricationView'; 
@@ -13,7 +14,7 @@ import DispatchView from './components/views/DispatchView';
 import DashboardView from './components/views/DashboardView';
 
 const GlasscoProductionContent: React.FC = () => {
-  const [activeView, setActiveView] = useState<'dashboard' | 'fabrication' | 'processing' | 'dispatch' | 'ncr' | 'energy' | 'labour' | 'import'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'fabrication' | 'processing' | 'dispatch' | 'ncr' | 'energy' | 'labour' | 'import' | 'performance'>('dashboard');
 
   const tabClass = (id: string, activeColor: string, bgColor: string) => 
     `flex items-center space-x-2 px-5 py-3 rounded-lg text-xs font-black uppercase tracking-widest transition-all border-b-4 whitespace-nowrap ${activeView === id ? `${activeColor} ${bgColor}` : 'border-transparent text-slate-500 hover:bg-slate-50'}`;
@@ -46,6 +47,9 @@ const GlasscoProductionContent: React.FC = () => {
         <button onClick={() => setActiveView('import')} className={tabClass('import', 'border-indigo-600 text-indigo-700', 'bg-indigo-50')}>
           <Upload size={16}/> <span>Import</span>
         </button>
+        <button onClick={() => setActiveView('performance')} className={tabClass('performance', 'border-purple-600 text-purple-700', 'bg-purple-50')}>
+          <Award size={16}/> <span>Cutters</span>
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 bg-[#f8fafc]">
@@ -58,6 +62,7 @@ const GlasscoProductionContent: React.FC = () => {
           {activeView === 'energy' && <GeneratorLogModule />}
           {activeView === 'labour' && <LabourLogModule />}
           {activeView === 'import' && <DataImportTool />}
+          {activeView === 'performance' && <CutterDashboard />}
         </div>
       </div>
     </div>
