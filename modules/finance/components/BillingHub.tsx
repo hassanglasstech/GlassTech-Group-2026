@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useDebounce } from '@/modules/shared/hooks/useDebounce';
-import { Company, Quotation, ProductionPiece, LedgerTransaction } from '../../shared/types';
+import { Company, Quotation, ProductionPiece, LedgerTransaction, Invoice, PaymentReceipt } from '../../shared/types';
 import { FinanceService } from '../services/financeService';
 import { SalesService } from '../../sales/services/salesService';
 import { ProductionService } from '../../production/services/productionService';
@@ -10,33 +10,6 @@ import {
   Receipt, XCircle, X, Save, Banknote, AlertCircle, Clock, Eye, CreditCard
 } from 'lucide-react';
 import { toast } from 'sonner';
-
-interface Invoice {
-  id: string;
-  company: Company;
-  orderId: string;
-  orderNo: string;
-  clientId: string;
-  clientName: string;
-  date: string;
-  dueDate: string;
-  totalAmount: number;
-  receivedAmount: number;
-  balance: number;
-  status: 'Outstanding' | 'Partial' | 'Paid' | 'Overdue';
-  glTxId: string;
-  payments: PaymentReceipt[];
-}
-
-interface PaymentReceipt {
-  id: string;
-  invoiceId: string;
-  date: string;
-  amount: number;
-  method: 'Cash' | 'Bank Transfer' | 'Cheque' | 'Online';
-  reference: string;
-  glTxId: string;
-}
 
 const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
   const [activeView, setActiveView] = useState<'billing' | 'receivables' | 'receipts'>('billing');
