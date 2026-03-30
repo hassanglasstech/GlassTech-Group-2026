@@ -1,17 +1,28 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useDebounce } from '@/modules/shared/hooks/useDebounce';
-import { Employee, Account, Company, TagMaster, Department } from '@/modules/shared/types';
+import { Employee, Account, Company, TagMaster, Department, EmployeeStatus } from '@/modules/shared/types';
 import { HRService } from '@/modules/hr/services/hrService';
 import { TagService } from '@/modules/hr/services/tagService';
 import { EmployeeDocService } from '@/modules/hr/services/employeeDocService';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { EmployeeTagPills, TagSelector } from '@/modules/hr/components/TagPills';
 import DocumentFolder from '@/modules/hr/components/DocumentFolder';
-import { UserPlus, Search, Edit2, Trash2, X, Briefcase, Wallet, UserCircle, FileUp, Download, Building2, Tags, FolderOpen } from 'lucide-react';
+import EmployeeProfileCard from '@/modules/hr/components/EmployeeProfileCard';
+import { UserPlus, Search, Edit2, Trash2, X, Briefcase, Wallet, UserCircle, FileUp, Download, Building2, Tags, FolderOpen, Eye, EyeOff } from 'lucide-react';
 import Pagination from '@/components/Pagination';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+
+// ── Status config ───────────────────────────────────────────────────
+const STATUS_OPTIONS: { value: EmployeeStatus; label: string; color: string }[] = [
+  { value: 'probation',  label: 'Probation',  color: 'bg-amber-100 text-amber-700 border-amber-200' },
+  { value: 'confirmed',  label: 'Confirmed',  color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  { value: 'resigned',   label: 'Resigned',   color: 'bg-red-100 text-red-700 border-red-200' },
+  { value: 'terminated', label: 'Terminated',  color: 'bg-red-100 text-red-700 border-red-200' },
+  { value: 'suspended',  label: 'Suspended',  color: 'bg-orange-100 text-orange-700 border-orange-200' },
+];
+const INACTIVE_STATUSES: EmployeeStatus[] = ['resigned', 'terminated'];
 
 type ModalTab = 'personal' | 'employment' | 'salary' | 'documents';
 
@@ -25,6 +36,8 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showInactive, setShowInactive] = useState(false);
+  const [viewingEmployee, setViewingEmployee] = useState<Employee | null>(null);
 
   // ── Tag & Department State ──────────────────────────────────────────
   const [companyTags, setCompanyTags] = useState<TagMaster[]>([]);
@@ -179,10 +192,14 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
     setModalTab('personal');
   };
 
-  const filteredEmployees = employees.filter(e => 
-    e.personal.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) || 
-    e.work.employeeCode.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
-  );
+  const filteredEmployees = employees.filter(e => {
+    // Hide resigned/terminated unless toggle is on
+    if (!showInactive && INACTIVE_STATUSES.includes(e.work.status as EmployeeStatus)) return false;
+    // Search filter
+    return e.personal.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) || 
+      e.work.employeeCode.toLowerCase().includes(debouncedSearchTerm.toLowerCase());
+  });
+  const inactiveCount = employees.filter(e => INACTIVE_STATUSES.includes(e.work.status as EmployeeStatus)).length;
   const paginatedEmployees = filteredEmployees.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   // Build current employee object for DocumentFolder (when editing)
@@ -197,6 +214,15 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
           <input type="text" placeholder="Search by name or code..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
         </div>
         <div className="flex space-x-3 w-full md:w-auto overflow-x-auto no-scrollbar">
+          {inactiveCount > 0 && (
+            <button onClick={() => setShowInactive(!showInactive)}
+              className={`px-4 py-2 rounded-lg flex items-center space-x-2 transition-all font-bold text-sm border whitespace-nowrap ${
+                showInactive ? 'bg-red-50 text-red-700 border-red-200' : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+              }`}>
+              {showInactive ? <EyeOff size={16} /> : <Eye size={16} />}
+              <span>{showInactive ? 'Hide' : 'Show'} Inactive ({inactiveCount})</span>
+            </button>
+          )}
           <input type="file" ref={fileInputRef} onChange={handleImportExcel} className="hidden" accept=".xlsx, .xls" />
           <button onClick={() => fileInputRef.current?.click()} className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-slate-200 transition-all font-bold text-sm border border-slate-200 whitespace-nowrap"><FileUp size={18} /><span>Import</span></button>
           <button onClick={handleExportExcel} className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-slate-200 transition-all font-bold text-sm border border-slate-200 whitespace-nowrap"><Download size={18} /><span>Export</span></button>
@@ -224,18 +250,29 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
                 const photoUrl = EmployeeDocService.getPhotoUrl(emp.id);
                 const docCompleteness = EmployeeDocService.getCompleteness(emp.id);
                 return (
-                  <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors group">
+                  <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors group cursor-pointer" onClick={() => setViewingEmployee(emp)}>
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-3">
                         {photoUrl ? (
                           <img src={photoUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-slate-200" />
                         ) : (
-                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm border border-blue-200">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm border ${
+                            INACTIVE_STATUSES.includes(emp.work.status as EmployeeStatus)
+                              ? 'bg-red-50 text-red-400 border-red-200 opacity-60'
+                              : 'bg-blue-100 text-blue-600 border-blue-200'
+                          }`}>
                             {emp.personal.name.charAt(0)}
                           </div>
                         )}
                         <div>
-                          <p className="font-bold text-slate-900 leading-tight">{emp.personal.name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className={`font-bold leading-tight ${INACTIVE_STATUSES.includes(emp.work.status as EmployeeStatus) ? 'text-slate-400 line-through' : 'text-slate-900'}`}>{emp.personal.name}</p>
+                            {emp.work.status && emp.work.status !== 'confirmed' && (
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${STATUS_OPTIONS.find(s => s.value === emp.work.status)?.color || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                {STATUS_OPTIONS.find(s => s.value === emp.work.status)?.label || emp.work.status}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[11px] text-slate-400 font-semibold">{emp.work.employeeCode}</p>
                         </div>
                       </div>
@@ -268,8 +305,8 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => handleEdit(emp)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit2 size={16} /></button>
-                        <button onClick={() => handleDelete(emp.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleEdit(emp); }} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit2 size={16} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDelete(emp.id); }} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
                       </div>
                     </td>
                   </tr>
@@ -352,6 +389,20 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
                           </select>
                         </div>
                         <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Joining date</label><input type="date" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold" value={formData.work?.joinDate} onChange={e => setFormData({...formData, work: {...formData.work!, joinDate: e.target.value}})} /></div>
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Status</label>
+                          <select
+                            className={`w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold appearance-none ${
+                              INACTIVE_STATUSES.includes(formData.work?.status as EmployeeStatus)
+                                ? 'bg-red-50 border-red-200 text-red-700'
+                                : 'bg-slate-50 border-slate-200'
+                            }`}
+                            value={formData.work?.status || 'confirmed'}
+                            onChange={e => setFormData({...formData, work: {...formData.work!, status: e.target.value as EmployeeStatus}})}
+                          >
+                            {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                          </select>
+                        </div>
                       </div>
                     </section>
 
@@ -419,6 +470,14 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
             )}
           </div>
         </div>
+      )}
+
+      {/* ── Employee Profile Card (Full Page) ──────────────────────── */}
+      {viewingEmployee && (
+        <EmployeeProfileCard
+          employee={viewingEmployee}
+          onClose={() => setViewingEmployee(null)}
+        />
       )}
     </div>
   );
