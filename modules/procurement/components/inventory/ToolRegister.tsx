@@ -13,54 +13,20 @@ import { SyncService } from '@/src/services/SyncService';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { HRService } from '@/modules/hr/services/hrService';
 import {
+  Tool, ToolCategory, ToolStatus, ToolCondition, ToolHistoryEntry,
+  ToolService
+} from '@/modules/procurement/services/toolService';
+import {
   Plus, Search, Wrench, UserCircle, ArrowLeftRight, AlertTriangle,
   Trash2, X, CheckCircle2, Package, Shield, Filter,
   ChevronDown, ChevronUp, Edit2, RotateCcw, XCircle
 } from 'lucide-react';
 
-// ═══════════════════════════════════════════════════════════════════════
-//  TYPES
-// ═══════════════════════════════════════════════════════════════════════
+// ── Using shared types from toolService.ts ───────────────────────────
 
-type ToolCategory = 'Hand Tool' | 'Power Tool' | 'Measuring' | 'Cutting' | 'Safety' | 'Installer Kit';
-type ToolStatus = 'Available' | 'Assigned' | 'Maintenance' | 'Lost' | 'Damaged' | 'Written Off';
-type ToolCondition = 'New' | 'Good' | 'Fair' | 'Poor' | 'Broken';
-
-interface Tool {
-  id: string;             // TOOL-GTK-001
-  company: string;
-  name: string;
-  category: ToolCategory;
-  brand?: string;
-  model?: string;
-  purchaseDate: string;
-  purchaseCost: number;
-  currentCondition: ToolCondition;
-  status: ToolStatus;
-  storageBin: string;     // where it's stored when available
-  // Assignment
-  assignedTo?: string;    // employee name
-  assignedDate?: string;
-  assignedProject?: string;
-  // History
-  history: ToolHistoryEntry[];
-  // Write-off
-  writeOffDate?: string;
-  writeOffReason?: string;
-  writeOffGlId?: string;
-}
-
-interface ToolHistoryEntry {
-  date: string;
-  action: 'Registered' | 'Assigned' | 'Returned' | 'Maintenance' | 'Condition Update' | 'Written Off';
-  details: string;
-  by: string;
-}
-
-// ── Storage Key ──────────────────────────────────────────────────────
-const TOOLS_KEY = 'gtk_erp_tools';
-const getTools = (): Tool[] => safeParse(TOOLS_KEY);
-const saveTools = (data: Tool[]) => safeSave(TOOLS_KEY, data);
+// ── Storage via ToolService ──────────────────────────────────────────
+const getTools = ToolService.getTools;
+const saveTools = ToolService.saveTools;
 
 // ── Constants ────────────────────────────────────────────────────────
 const CATEGORIES: ToolCategory[] = ['Hand Tool', 'Power Tool', 'Measuring', 'Cutting', 'Safety', 'Installer Kit'];
