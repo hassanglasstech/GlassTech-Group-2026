@@ -59,10 +59,10 @@ const clearPending = (table: string) => {
 
 // ── Table → localStorage key mapping ─────────────────────────────────
 const TABLE_MAP: Record<string, string> = {
-  employees:          'employees',
-  attendance:         'attendance',
-  loans:              'loans',
-  payroll:            'payroll',
+  employees:          'gtk_erp_employees',
+  attendance:         'gtk_erp_attendance',
+  loans:              'gtk_erp_loans',
+  payroll:            'gtk_erp_payroll',
   accounts:           'accounts',
   cost_centers:       'cost_centers',
   ledger:             'ledger',
@@ -134,7 +134,7 @@ const LOCAL_ONLY_TABLES = new Set(['activity_logs']);
 const TABLE_COLUMNS: Record<string, string[]> = {
   ledger:    ['id', 'company', 'doc_type', 'doc_date', 'date', 'description', 'reference_id', 'status', 'details', 'updated_at'],
   petty_cash: ['id', 'company', 'date', 'type', 'amount', 'description', 'reference_doc', 'created_at'],
-  employees: ['id', 'company', 'name', 'personal', 'work', 'salary', 'basic', 'house_rent', 'conveyance', 'special_allowance', 'department', 'designation', 'grade', 'join_date', 'employee_code', 'address', 'phone', 'cnic', 'updated_at'],
+  employees: ['id', 'company', 'name', 'personal', 'work', 'salary', 'basic', 'house_rent', 'conveyance', 'special_allowance', 'department', 'department_id', 'designation', 'grade', 'join_date', 'employee_code', 'status', 'address', 'phone', 'cnic', 'updated_at'],
   assets:    ['id', 'company', 'name', 'category', 'serial_no', 'purchase_date', 'purchase_cost', 'useful_life', 'status', 'location', 'assigned_to', 'depreciation_method', 'maintenance_logs', 'notes', 'updated_at'],
 };
 
@@ -376,6 +376,70 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     assigned_by: er.assignedBy||er.assigned_by||'admin',
     updated_at: er._updatedAt||new Date().toISOString(),
   }),
+  // ── HR Push Mappers ──
+  employees: (e: any) => ({
+    id: e.id, 
+    company: e.company||'',
+    name: e.personal?.name||e.name||'',
+    cnic: e.personal?.cnic||e.cnic||'',
+    phone: e.personal?.phone||e.phone||'',
+    address: e.personal?.address||e.address||'',
+    designation: e.work?.designation||e.designation||'',
+    department: e.work?.department||e.department||'',
+    department_id: e.work?.departmentId||e.departmentId||'',
+    grade: e.work?.grade||e.grade||'',
+    join_date: e.work?.joinDate||e.joinDate||e.join_date||'',
+    employee_code: e.work?.employeeCode||e.employeeCode||e.employee_code||'',
+    status: e.work?.status||e.status||'confirmed',
+    basic: e.salary?.basic||e.basic||0,
+    house_rent: e.salary?.houseRent||e.houseRent||e.house_rent||0,
+    conveyance: e.salary?.conveyance||e.conveyance||0,
+    special_allowance: e.salary?.specialAllowance||e.specialAllowance||e.special_allowance||0,
+    personal: e.personal||null,
+    work: e.work||null,
+    salary: e.salary||null,
+    updated_at: e._updatedAt||new Date().toISOString(),
+  }),
+  attendance: (a: any) => ({
+    id: a.id, employee_id: a.employeeId||a.employee_id||'',
+    date: a.date||'', status: a.status||'Present',
+    late_minutes: a.lateMinutes||a.late_minutes||0,
+    early_minutes: a.earlyMinutes||a.early_minutes||0,
+    overtime_hours: a.overtimeHours||a.overtime_hours||0,
+    company: a.company||'',
+  }),
+  loans: (l: any) => ({
+    id: l.id, employee_id: l.employeeId||l.employee_id||'',
+    date: l.date||'', amount: l.amount||0,
+    type: l.type||'Loan',
+    repayment_amount: l.repaymentAmount||l.repayment_amount||0,
+    status: l.status||'Active',
+    requisition_id: l.requisitionId||l.requisition_id||null,
+    skip_month: l.skipMonth||l.skip_month||null,
+    company: l.company||'',
+  }),
+  payroll: (p: any) => ({
+    id: p.id, employee_id: p.employeeId||p.employee_id||'',
+    month: p.month||'',
+    basic_pay: p.basicPay||p.basic_pay||0,
+    allowances: p.allowances||0,
+    overtime_pay: p.overtimePay||p.overtime_pay||0,
+    overtime_hours: p.overtimeHours||p.overtime_hours||0,
+    early_deduction_hours: p.earlyDeductionHours||p.early_deduction_hours||0,
+    late_deduction: p.lateDeduction||p.late_deduction||0,
+    absent_deduction: p.absentDeduction||p.absent_deduction||0,
+    loan_deduction: p.loanDeduction||p.loan_deduction||0,
+    advance_deduction: p.advanceDeduction||p.advance_deduction||0,
+    net_salary: p.netSalary||p.net_salary||0,
+    absent_dates: p.absentDates||p.absent_dates||[],
+    late_dates: p.lateDates||p.late_dates||[],
+    loan_repayments: p.loanRepayments||p.loan_repayments||[],
+    is_salary_paid: p.isSalaryPaid||p.is_salary_paid||false,
+    is_overtime_paid: p.isOvertimePaid||p.is_overtime_paid||false,
+    allowed_absent_count: p.allowedAbsentCount||p.allowed_absent_count||0,
+    loan_waived: p.loanWaived||p.loan_waived||false,
+    company: p.company||'',
+  }),
 };
 
 // ── Pull mappers: Supabase row → app object ───────────────────────────
@@ -519,6 +583,41 @@ const TABLE_PULL: Record<string, (row: any) => any> = {
     assignedAt: r.assigned_at,
     assignedBy: r.assigned_by,
   }),
+  // ── HR Pull Mappers ──
+  attendance: (r: any) => ({
+    ...r,
+    employeeId: r.employee_id,
+    lateMinutes: r.late_minutes,
+    earlyMinutes: r.early_minutes,
+    overtimeHours: r.overtime_hours,
+  }),
+  loans: (r: any) => ({
+    ...r,
+    employeeId: r.employee_id,
+    repaymentAmount: r.repayment_amount,
+    requisitionId: r.requisition_id,
+    skipMonth: r.skip_month,
+  }),
+  payroll: (r: any) => ({
+    ...r,
+    employeeId: r.employee_id,
+    basicPay: r.basic_pay,
+    overtimePay: r.overtime_pay,
+    overtimeHours: r.overtime_hours,
+    earlyDeductionHours: r.early_deduction_hours,
+    lateDeduction: r.late_deduction,
+    absentDeduction: r.absent_deduction,
+    loanDeduction: r.loan_deduction,
+    advanceDeduction: r.advance_deduction,
+    netSalary: r.net_salary,
+    absentDates: r.absent_dates||[],
+    lateDates: r.late_dates||[],
+    loanRepayments: r.loan_repayments||[],
+    isSalaryPaid: r.is_salary_paid,
+    isOvertimePaid: r.is_overtime_paid,
+    allowedAbsentCount: r.allowed_absent_count,
+    loanWaived: r.loan_waived,
+  }),
 };
 
 const pushTable = async (table: string, localKey: string): Promise<boolean> => {
@@ -531,7 +630,7 @@ const pushTable = async (table: string, localKey: string): Promise<boolean> => {
   const pusher = TABLE_PUSH[table];
   if (pusher) {
     data = rawData.map(pusher).filter((r: any) => r.id);
-  } else if (['employees','assets','ledger','petty_cash'].includes(table)) {
+  } else if (['assets','ledger','petty_cash'].includes(table)) {
     const mapped = rawData.map(mapToSupabase);
     data = filterColumns(table, mapped);
   } else {
