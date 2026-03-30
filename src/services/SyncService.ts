@@ -59,45 +59,55 @@ const clearPending = (table: string) => {
 
 // ── Table → localStorage key mapping ─────────────────────────────────
 const TABLE_MAP: Record<string, string> = {
+  // ── HR ──
   employees:          'gtk_erp_employees',
   attendance:         'gtk_erp_attendance',
   loans:              'gtk_erp_loans',
   payroll:            'gtk_erp_payroll',
-  accounts:           'accounts',
-  cost_centers:       'cost_centers',
-  ledger:             'ledger',
-  petty_cash:         'petty_cash',
-  recurring_expenses: 'recurring_expenses',
-  financial_events:   'financial_events',
-  mapping_rules:      'mapping_rules',
-  gl_config:          'gl_config',
-  clients:            'clients',
-  quotations:         'quotations',
-  projects:           'projects',
-  products:           'products',
-  vendors:            'vendors',
-  store_items:        'store',
-  assets:             'assets',
-  stock_ledger:       'stock_ledger',
-  inspection_lots:    'inspection_lots',
-  remnants:           'remnants',
-  handling_units:     'handling_units',
-  requisitions:       'requisitions',
-  purchase_orders:    'purchase_orders',
-  production_pieces:  'production_pieces',
-  job_orders:         'job_orders',
+  tag_master:         'gtk_erp_tag_master',
+  employee_tags:      'gtk_erp_employee_tags',
+  departments:        'gtk_erp_departments',
+  employee_docs:      'gtk_erp_employee_docs',
+  // ── Finance ──
+  accounts:           'gtk_erp_accounts',
+  cost_centers:       'gtk_erp_cost_centers',
+  ledger:             'gtk_erp_ledger',
+  petty_cash:         'gtk_erp_petty_cash',
+  recurring_expenses: 'gtk_erp_recurring_expenses',
+  financial_events:   'gtk_erp_financial_events',
+  mapping_rules:      'gtk_erp_mapping_rules',
+  gl_config:          'gtk_erp_gl_config',
+  // ── Sales ──
+  clients:            'gtk_erp_clients',
+  quotations:         'gtk_erp_quotations',
+  projects:           'gtk_erp_projects',
+  invoices:           'gtk_erp_invoices',
+  payment_receipts:   'gtk_erp_payment_receipts',
+  // ── Inventory / Procurement ──
+  products:           'gtk_erp_products',
+  vendors:            'gtk_erp_vendors',
+  store_items:        'gtk_erp_store',
+  assets:             'gtk_erp_assets',
+  stock_ledger:       'gtk_erp_stock_ledger',
+  inspection_lots:    'gtk_erp_inspection_lots',
+  remnants:           'gtk_erp_remnants',
+  handling_units:     'gtk_erp_handling_units',
+  requisitions:       'gtk_erp_requisitions',
+  purchase_orders:    'gtk_erp_purchase_orders',
+  // ── Production ──
+  production_pieces:  'gtk_erp_production_pieces',
+  job_orders:         'gtk_erp_job_orders',
+  // ── Logistics ──
   gate_passes:        'gtk_erp_gate_pass',
   warehouse_spots:    'gtk_erp_warehouse_spots',
-  // NCR — add after running ncr_tables.sql in Supabase
-  // NCR tables
+  // ── NCR ──
   ncr_events:         'gtk_erp_ncr_events',
   ncr_reproductions:  'gtk_erp_ncr_reproductions',
   ncr_claims:         'gtk_erp_ncr_claims',
   ncr_remnants:       'gtk_erp_ncr_remnants',
+  // ── System ──
   activity_logs:      'gtk_erp_activity_logs',
-  invoices:           'gtk_erp_invoices',
-  payment_receipts:   'gtk_erp_payment_receipts',
-  // RBAC tables (Phase 3)
+  // ── RBAC ──
   roles:              'gtk_erp_roles',
   permissions:        'gtk_erp_permissions',
   role_permissions:   'gtk_erp_role_permissions',
@@ -440,6 +450,24 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     loan_waived: p.loanWaived||p.loan_waived||false,
     company: p.company||'',
   }),
+  // ── Tags Push Mappers ──
+  tag_master: (t: any) => ({
+    id: t.id, company: t.company||'', category: t.category||'job_title',
+    label: t.label||'', color: t.color||'', text_color: t.textColor||t.text_color||'',
+    is_active: t.isActive!==false,
+    updated_at: t._updatedAt||new Date().toISOString(),
+  }),
+  employee_tags: (et: any) => ({
+    id: et.id, employee_id: et.employeeId||et.employee_id||'',
+    tag_id: et.tagId||et.tag_id||'', is_primary: et.isPrimary||et.is_primary||false,
+    updated_at: et._updatedAt||new Date().toISOString(),
+  }),
+  departments: (d: any) => ({
+    id: d.id, company: d.company||'', name: d.name||'',
+    parent_dept: d.parentDept||d.parent_dept||null,
+    is_active: d.isActive!==false,
+    updated_at: d._updatedAt||new Date().toISOString(),
+  }),
 };
 
 // ── Pull mappers: Supabase row → app object ───────────────────────────
@@ -617,6 +645,23 @@ const TABLE_PULL: Record<string, (row: any) => any> = {
     isOvertimePaid: r.is_overtime_paid,
     allowedAbsentCount: r.allowed_absent_count,
     loanWaived: r.loan_waived,
+  }),
+  // ── Tags Pull Mappers ──
+  tag_master: (r: any) => ({
+    ...r,
+    textColor: r.text_color,
+    isActive: r.is_active,
+  }),
+  employee_tags: (r: any) => ({
+    ...r,
+    employeeId: r.employee_id,
+    tagId: r.tag_id,
+    isPrimary: r.is_primary,
+  }),
+  departments: (r: any) => ({
+    ...r,
+    parentDept: r.parent_dept,
+    isActive: r.is_active,
   }),
 };
 
