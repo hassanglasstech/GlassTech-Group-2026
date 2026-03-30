@@ -17,6 +17,8 @@ export interface UserProfile {
   allowedCompanies: string[];
   allowedModules: string[];
   timeRestricted: boolean;
+  employeeId?: string;     // NEW: linked employee record (Phase 4)
+  employeeCode?: string;   // NEW: e.g. "GTK-007" for display
 }
 
 export const ROLE_DEFAULT_COMPANY: Record<UserRole, string> = {
@@ -51,6 +53,7 @@ export type AuthStep =
   | 'device_choice'  // ask: biometric or remember device?
   | 'device_setup'   // registering WebAuthn
   | 'biometric'      // authenticate with device
+  | 'pin'            // PIN fallback login (Phase 4)
   | 'done';          // fully authenticated
 
 interface AuthState {
