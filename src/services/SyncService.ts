@@ -786,6 +786,13 @@ export const SyncService = {
     if (ok) clearPending(table);
   },
 
+  // Pull a single table from Supabase → localStorage
+  pullTable: async (table: string): Promise<void> => {
+    const localKey = TABLE_MAP[table];
+    if (!localKey) return;
+    await pullTable(table, localKey);
+  },
+
   // Push all pending changes (called on reconnect / manual sync)
   pushPending: async (): Promise<{ pushed: number; failed: number }> => {
     if (syncInProgress) return { pushed: 0, failed: 0 };
