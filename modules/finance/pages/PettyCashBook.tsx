@@ -6,6 +6,7 @@ import { InventoryService } from '@/modules/procurement/services/inventoryServic
 import { Plus, Search, ArrowUpRight, ArrowDownLeft, X, Save, Wallet, Check, AlertTriangle, Fingerprint, Printer } from 'lucide-react';
 import Pagination from '@/components/Pagination';
 import { UnifiedPaymentPrint } from '@/modules/finance/components/prints/UnifiedPaymentPrint';
+import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 
 const BUSINESS_TRANSACTIONS = [
     // RECEIPTS
@@ -47,6 +48,9 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
   });
 
   const [linkedReqId, setLinkedReqId] = useState('');
+
+
+  const { refreshKey } = useRealtimeRefresh(['petty_cash', 'accounts']);
 
   useEffect(() => { refreshData(); }, [company]);
 

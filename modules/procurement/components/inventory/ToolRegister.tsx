@@ -12,6 +12,7 @@ import { safeParse, safeSave } from '@/modules/shared/services/utils';
 import { SyncService } from '@/src/services/SyncService';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { HRService } from '@/modules/hr/services/hrService';
+import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 import {
   Tool, ToolCategory, ToolStatus, ToolCondition, ToolHistoryEntry,
   ToolService
@@ -62,12 +63,15 @@ const ToolRegister: React.FC = () => {
   // Employees for assignment
   const [employees, setEmployees] = useState<any[]>([]);
 
+
+  const { refreshKey } = useRealtimeRefresh(['store_items', 'requisitions']);
+
   useEffect(() => {
     setTools(getTools().filter(t => t.company === company));
     try {
       setEmployees(HRService.getEmployees().filter(e => e.company === company && e.status !== 'Inactive'));
     } catch { setEmployees([]); }
-  }, [company]);
+  }, [company, refreshKey]);
 
   const refresh = () => setTools(getTools().filter(t => t.company === company));
 

@@ -15,6 +15,7 @@ import { InventoryService } from '@/modules/procurement/services/inventoryServic
 import { ProductionService } from '@/modules/production/services/productionService';
 import { AppService } from '@/modules/shared/services/appService';
 import { SyncService } from '@/src/services/SyncService';
+import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 import {
   Plus, Search, X, Save, Trash2, Edit2, CheckCircle2,
   Building2, Phone, Tag, FileText, ShoppingCart, Filter,
@@ -75,9 +76,12 @@ const GTKVendorHub: React.FC<{ company: string }> = ({ company }) => {
   const [showCreatePO, setShowCreatePO] = useState<Vendor | null>(null);
 
   // ── Load ────────────────────────────────────────────────────────────
+
+  const { refreshKey } = useRealtimeRefresh(['vendors', 'purchase_orders']);
+
   useEffect(() => {
     setVendors(SalesService.getVendors().filter(v => !v.company || v.company === company));
-  }, [company]);
+  }, [company, refreshKey]);
 
   const refresh = () => {
     setVendors(SalesService.getVendors().filter(v => !v.company || v.company === company));

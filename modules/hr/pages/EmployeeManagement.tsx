@@ -13,6 +13,7 @@ import { UserPlus, Search, Edit2, Trash2, X, Briefcase, Wallet, UserCircle, File
 import Pagination from '@/components/Pagination';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 
 // ── Status config ───────────────────────────────────────────────────
 const STATUS_OPTIONS: { value: EmployeeStatus; label: string; color: string }[] = [
@@ -53,13 +54,16 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
 
   const [formData, setFormData] = useState<Partial<Employee>>(initialFormState);
 
+
+  const { refreshKey } = useRealtimeRefresh(['employees', 'departments', 'tag_master', 'employee_tags']);
+
   useEffect(() => {
     TagService.initSeedData();
     const currentEmployees = HRService.getEmployees().filter(e => e.company === company);
     setEmployees(currentEmployees);
     setCompanyTags(TagService.getTags(company));
     setCompanyDepts(TagService.getDepartments(company));
-  }, [company]);
+  }, [company, refreshKey]);
 
   useEffect(() => {
     if (isModalOpen && !editingId) {

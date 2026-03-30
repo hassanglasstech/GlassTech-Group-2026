@@ -6,6 +6,7 @@ import { FinanceService } from '@/modules/finance/services/financeService';
 import { CreditCard, Printer, Eye, X, Calculator, Calendar, FileUp, Download, ArrowLeft, CheckCircle2, ShieldCheck, BarChart3, FileText, Info, Check, AlertCircle, Building2, User, Ban, ShieldCheck as Shield, Send, Landmark } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 
 const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -16,11 +17,14 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [showAllSlipsPrint, setShowAllSlipsPrint] = useState(false);
   const [viewTab, setViewTab] = useState<'cumulative' | 'salary' | 'overtime'>('cumulative');
 
+
+  const { refreshKey } = useRealtimeRefresh(['payroll', 'employees', 'attendance', 'loans']);
+
   useEffect(() => {
     const emps = HRService.getEmployees().filter(e => e.company === company);
     setEmployees(emps);
     generatePayrolls(emps);
-  }, [company, selectedMonth]);
+  }, [company, selectedMonth, refreshKey]);
 
   const generatePayrolls = (emps: Employee[]) => {
     const attendance = HRService.getAttendance();

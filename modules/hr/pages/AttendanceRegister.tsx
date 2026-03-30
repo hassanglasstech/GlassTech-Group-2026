@@ -8,6 +8,7 @@ import * as XLSX from 'xlsx';
 
 import { useAppStore } from '../../shared/store/appStore';
 import { toast } from 'sonner';
+import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 
 const AttendanceRegister: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
@@ -54,9 +55,12 @@ const AttendanceRegister: React.FC = () => {
 
   const isSelectedDateSunday = new Date(selectedDate).getDay() === 0;
 
+
+  const { refreshKey } = useRealtimeRefresh(['attendance', 'employees']);
+
   useEffect(() => {
     refreshAllData();
-  }, [company, selectedDate, viewType]);
+  }, [company, selectedDate, viewType, refreshKey]);
 
   const refreshAllData = () => {
     const emps = HRService.getEmployees().filter(e => e.company === company);

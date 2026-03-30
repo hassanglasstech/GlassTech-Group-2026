@@ -5,6 +5,7 @@ import { useAppStore } from '@/modules/shared/store/appStore';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { SyncService } from '@/src/services/SyncService';
+import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 
 // ── Types ─────────────────────────────────────────────────────────────
 type AssetCategory = 'Machinery' | 'Vehicle' | 'Tool' | 'Furniture' | 'IT Equipment' | 'Other';
@@ -86,10 +87,13 @@ const AssetManagement: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
   const [assets, setAssets] = useState<Asset[]>([]);
 
+
+  const { refreshKey } = useRealtimeRefresh(['assets']);
+
   useEffect(() => {
     const all = safeParse(ASSET_KEY).filter((a: Asset) => a.company === company);
     setAssets(all);
-  }, [company]);
+  }, [company, refreshKey]);
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [filterCategory, setFilterCategory] = useState<string>('All');

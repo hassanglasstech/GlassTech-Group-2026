@@ -6,6 +6,7 @@ import { Role, Permission, RBACModule, RBACAction, RBACScope, Employee } from '@
 import { Company } from '@/modules/shared/types/core';
 import { Shield, Plus, Edit2, Trash2, X, Users, Check, ChevronDown, ChevronRight, Search, Info } from 'lucide-react';
 import { toast } from 'sonner';
+import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 
 // ── Scope Labels ────────────────────────────────────────────────────
 const SCOPE_LABELS: Record<RBACScope, string> = {
@@ -29,10 +30,13 @@ const RoleManager: React.FC = () => {
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
 
   // ── Load data ──────────────────────────────────────────────────────
+
+  const { refreshKey } = useRealtimeRefresh(['roles', 'permissions', 'role_permissions', 'employee_roles']);
+
   useEffect(() => {
     RBACService.initSeedData();
     setRoles(RBACService.getRoles(company));
-  }, [company]);
+  }, [company, refreshKey]);
 
   const selectedRole = useMemo(() => roles.find(r => r.id === selectedRoleId), [roles, selectedRoleId]);
 
@@ -45,7 +49,7 @@ const RoleManager: React.FC = () => {
   // ── Employees for assignment ───────────────────────────────────────
   const employees = useMemo(() => {
     return HRService.getEmployees().filter(e => e.company === company);
-  }, [company]);
+  }, [company, refreshKey]);
 
   const assignedEmployeeIds = useMemo(() => {
     if (!selectedRoleId) return new Set<string>();

@@ -10,6 +10,7 @@ import {
   CheckCircle2, Target, Filter, ArrowRight, FileClock, PenTool, BookOpen, Loader2, Building, Zap
 } from 'lucide-react';
 import Pagination from '../../../components/Pagination';
+import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 
 const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
   const [activeTab, setActiveTab] = useState<'Posted' | 'Parked' | 'System'>('Posted');
@@ -62,7 +63,10 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
 
   const [formData, setFormData] = useState(initialFormState);
 
-  useEffect(() => { refreshData(); }, [company]);
+
+  const { refreshKey } = useRealtimeRefresh(['ledger', 'accounts', 'cost_centers']);
+
+  useEffect(() => { refreshData(); }, [company, refreshKey]);
 
   // Effect to load specific company data when target company changes in Modal
   useEffect(() => {

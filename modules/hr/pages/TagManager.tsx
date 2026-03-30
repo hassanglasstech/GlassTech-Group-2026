@@ -5,6 +5,7 @@ import { TagMaster, Department, TagCategory } from '../types/hr';
 import { TagPill } from '../components/TagPills';
 import { Plus, Edit2, Trash2, X, Tags, Building2, Palette, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 
 // ── Tag Manager Page ────────────────────────────────────────────────
 const TagManager: React.FC = () => {
@@ -32,10 +33,13 @@ const TagManager: React.FC = () => {
     isActive: true,
   });
 
+
+  const { refreshKey } = useRealtimeRefresh(['tag_master', 'employee_tags', 'departments']);
+
   useEffect(() => {
     TagService.initSeedData();
     refreshData();
-  }, [company]);
+  }, [company, refreshKey]);
 
   const refreshData = () => {
     setTags(TagService.getTags(company));

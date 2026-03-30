@@ -11,6 +11,7 @@ import { Company } from '@/modules/shared/constants';
 import { AppService } from '@/modules/shared/services/appService';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { SyncService } from '@/src/services/SyncService';
+import { RealtimeService } from '@/src/services/RealtimeService';
 import { getNetworkStatus, OfflineQueue } from '@/modules/shared/services/networkService';
 import { DataIntegrity } from '@/modules/shared/services/dataIntegrity';
 import { checkSchemaVersion } from '@/modules/shared/services/utils';
@@ -267,7 +268,10 @@ const App: React.FC = () => {
 
   // Run sync ONLY after user is authenticated
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      RealtimeService.stop();
+      return;
+    }
     const init = async () => {
       // Schema version check + data integrity repair on startup
       checkSchemaVersion();
@@ -275,8 +279,11 @@ const App: React.FC = () => {
       await SyncService.fetchFromCloud();
       await AppService.seedInitialData();
       AppService.checkAndTriggerAutoBackup();
+      // Start Realtime AFTER initial fetch — live cross-device sync
+      RealtimeService.start();
     };
     init();
+    return () => { RealtimeService.stop(); };
   }, [user?.id]); // only when user changes
 
   useEffect(() => {

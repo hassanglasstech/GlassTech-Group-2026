@@ -6,6 +6,7 @@ import { InventoryService } from '@/modules/procurement/services/inventoryServic
 import { Plus, Search, CheckCircle, Clock, Banknote, HandCoins, X, AlertCircle, FileUp, Download, Calendar, Edit2, Trash2, Fingerprint } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 
 const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -27,11 +28,14 @@ const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
     requisitionId: ''
   });
 
+
+  const { refreshKey } = useRealtimeRefresh(['loans', 'employees']);
+
   useEffect(() => {
     const emps = HRService.getEmployees().filter(e => e.company === company);
     setEmployees(emps);
     refreshData(emps);
-  }, [company, selectedMonth]);
+  }, [company, selectedMonth, refreshKey]);
 
   const refreshData = (emps: Employee[]) => {
     const allLoans = HRService.getLoans();

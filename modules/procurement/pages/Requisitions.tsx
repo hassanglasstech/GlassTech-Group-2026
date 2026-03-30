@@ -29,6 +29,7 @@ import { SyncService } from '@/src/services/SyncService';
 import { useAppStore } from '../../shared/store/appStore';
 
 import RequisitionPrint from '@/components/RequisitionPrint';
+import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 
 // ─── GL Impact Preview Panel (merged from Glassco) ────────────────────────
 const GLPreviewPanel: React.FC<{ company: string; subCategory: string; amount: number; paymentMode?: string }> = ({ company, subCategory, amount, paymentMode }) => {
@@ -268,9 +269,12 @@ const Requisitions: React.FC = () => {
     { id: '1', itemCategory: 'Standard', materialDesc: '', qty: 1, unit: 'Unit', estimatedRate: 0, deliveryDate: '', costCenter: '' }
   ]);
 
+
+  const { refreshKey } = useRealtimeRefresh(['requisitions', 'store_items', 'purchase_orders', 'employees']);
+
   useEffect(() => {
     refreshData();
-  }, [company]);
+  }, [company, refreshKey]);
 
   useEffect(() => {
     const reqId = searchParams.get('id');

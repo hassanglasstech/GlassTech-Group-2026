@@ -18,6 +18,7 @@ import { useLocation } from 'react-router-dom';
 import { useAppStore } from '../../shared/store/appStore';
 import { useAuthStore } from '../../auth/authStore';
 import { toast } from 'sonner';
+import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 
 const SalesOrders: React.FC = () => {
     const company = useAppStore(state => state.selectedCompany);
@@ -67,9 +68,12 @@ const SalesOrders: React.FC = () => {
 
     const [nipponPrintType, setNipponPrintType] = useState<'KinLong' | 'Glasstech' | 'General'>('Glasstech');
 
-    useEffect(() => {
+  
+  const { refreshKey } = useRealtimeRefresh(['quotations', 'clients', 'production_pieces', 'purchase_orders']);
+
+  useEffect(() => {
         refreshData();
-    }, [company]);
+    }, [company, refreshKey]);
 
     // Handle Incoming Queue from Router (Logistics Module)
     useEffect(() => {

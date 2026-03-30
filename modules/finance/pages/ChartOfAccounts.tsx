@@ -8,6 +8,7 @@ import {
   TrendingUp, TrendingDown, Trash2, Save, Info, ShieldAlert, Calculator, Edit2, FileUp, FileDown, RotateCcw
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 
 const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -38,7 +39,10 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
   // Opening Balance State
   const [obEntries, setObEntries] = useState<Record<string, { debit: number, credit: number }>>({});
 
-  useEffect(() => { refreshData(); }, [company]);
+
+  const { refreshKey } = useRealtimeRefresh(['accounts', 'ledger']);
+
+  useEffect(() => { refreshData(); }, [company, refreshKey]);
 
   const refreshData = () => {
     const data = FinanceService.getAccounts().filter(a => a.company === company);

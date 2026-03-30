@@ -6,6 +6,7 @@ import { UserPlus, Search, Edit2, Trash2, X, Building, Phone, Save, Briefcase } 
 
 import { useAppStore } from '../../shared/store/appStore';
 import { toast } from 'sonner';
+import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 
 const ClientMaster: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
@@ -26,9 +27,12 @@ const ClientMaster: React.FC = () => {
 
   const [formData, setFormData] = useState<Partial<Client>>(initialForm);
 
+
+  const { refreshKey } = useRealtimeRefresh(['clients']);
+
   useEffect(() => {
     refreshData();
-  }, [company]);
+  }, [company, refreshKey]);
 
   const refreshData = () => {
     const all = SalesService.getClients().filter(c => c.company === company);
