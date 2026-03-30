@@ -126,6 +126,7 @@ export const VendorType = {
   GLASS: 'Glass',
   TRANSPORT: 'Transport',
   HARDWARE: 'Hardware',
+  PROFILE: 'Profile',
   GENERAL: 'General'
 } as const;
 export type VendorType = typeof VendorType[keyof typeof VendorType];
