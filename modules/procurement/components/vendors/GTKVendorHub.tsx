@@ -83,7 +83,12 @@ const GTKVendorHub: React.FC<{ company: string }> = ({ company }) => {
     setVendors(SalesService.getVendors().filter(v => !v.company || v.company === company));
   };
 
-  // ── Filter ──────────────────────────────────────────────────────────
+  // ── Dynamic vendor types (from existing vendors + defaults) ──────────
+  const DEFAULT_TYPES = ['Hardware', 'Profile', 'General', 'Glass', 'Transport'];
+  const vendorTypes = useMemo(() => {
+    const fromVendors = vendors.map(v => v.type).filter(Boolean);
+    return Array.from(new Set([...DEFAULT_TYPES, ...fromVendors])).sort();
+  }, [vendors]);
   const filtered = useMemo(() => {
     return vendors.filter(v => {
       if (filterType !== 'All' && v.type !== filterType) return false;
@@ -107,7 +112,7 @@ const GTKVendorHub: React.FC<{ company: string }> = ({ company }) => {
   // ── Stats ───────────────────────────────────────────────────────────
   const stats = useMemo(() => ({
     total: vendors.length,
-    profile: vendors.filter(v => v.type === 'General' || v.type === 'Hardware').length,
+    profile: vendors.filter(v => v.type !== 'Glass' && v.type !== 'Transport' && v.type !== 'Tempering').length,
     withRates: vendors.filter(v => getVendorRates(v.id).length > 0).length,
     pos: InventoryService.getPurchaseOrders().filter(p => p.fromCompany === company).length,
   }), [vendors, company]);
@@ -295,7 +300,7 @@ const GTKVendorHub: React.FC<{ company: string }> = ({ company }) => {
         <select className="px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold"
           value={filterType} onChange={e => setFilterType(e.target.value)}>
           <option value="All">All Types</option>
-          <option>Hardware</option><option>General</option><option>Glass</option><option>Transport</option>
+          {vendorTypes.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
         <button onClick={() => setShowAddVendor(true)}
           className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-600 transition-all flex items-center space-x-2">
@@ -365,8 +370,18 @@ const GTKVendorHub: React.FC<{ company: string }> = ({ company }) => {
                 <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase text-slate-400">Type</label>
                   <select className="sap-input w-full font-bold" value={vendorForm.type}
-                    onChange={e => setVendorForm({...vendorForm, type: e.target.value})}>
-                    <option>Hardware</option><option>General</option><option>Glass</option><option>Transport</option>
+                    onChange={e => {
+                      if (e.target.value === '__ADD_NEW__') {
+                        const newType = window.prompt('Enter new vendor type:');
+                        if (newType && newType.trim()) {
+                          setVendorForm({...vendorForm, type: newType.trim()});
+                        }
+                      } else {
+                        setVendorForm({...vendorForm, type: e.target.value});
+                      }
+                    }}>
+                    {vendorTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                    <option value="__ADD_NEW__" style={{color:'#2563eb',fontWeight:700}}>+ Add new type</option>
                   </select>
                 </div>
                 <div className="space-y-1">
