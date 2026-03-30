@@ -3,6 +3,51 @@ import { AttendanceStatus, LoanStatus } from '../../shared/constants';
 
 export type { AttendanceStatus, LoanStatus };
 
+// ── Tag System ──────────────────────────────────────────────────────
+export type TagCategory = 'job_title' | 'designation';
+
+export interface TagMaster {
+  id: string;
+  company: Company;
+  category: TagCategory;
+  label: string;
+  color: string;        // hex for pill bg, e.g. "#E6F1FB"
+  textColor: string;    // hex for pill text, e.g. "#0C447C"
+  isActive: boolean;
+}
+
+export interface EmployeeTag {
+  id: string;
+  employeeId: string;
+  tagId: string;
+  isPrimary: boolean;
+}
+
+// ── Department ──────────────────────────────────────────────────────
+export interface Department {
+  id: string;
+  company: Company;
+  name: string;
+  parentDept: string | null;
+  isActive: boolean;
+}
+
+// ── Employee Document ───────────────────────────────────────────────
+export type DocType = 'photo' | 'cnic_front' | 'cnic_back' | 'police_verification' | 'job_letter' | 'contract' | 'other';
+export type DocStatus = 'valid' | 'expired' | 'missing';
+
+export interface EmployeeDoc {
+  id: string;
+  employeeId: string;
+  docType: DocType;
+  fileName: string;
+  fileUrl: string;       // Supabase Storage path or localStorage base64
+  expiryDate: string | null;
+  uploadedAt: string;
+  status: DocStatus;
+}
+
+// ── Employee (Enhanced) ─────────────────────────────────────────────
 export interface Employee {
   id: string;
   company: Company;
@@ -11,13 +56,16 @@ export interface Employee {
     cnic: string;
     phone: string;
     address: string;
+    photoUrl?: string;   // NEW: quick-access photo path
   };
   work: {
-    designation: string;
-    department: string;
+    designation: string;     // LEGACY: kept for backward compat, display-only
+    department: string;      // LEGACY: free text, kept for backward compat
+    departmentId: string;    // NEW: FK to Department table
     grade: string;
     joinDate: string;
     employeeCode: string;
+    status?: EmployeeStatus; // NEW: probation/confirmed/etc
   };
   salary: {
     basic: number;
@@ -27,6 +75,9 @@ export interface Employee {
   };
 }
 
+export type EmployeeStatus = 'probation' | 'confirmed' | 'resigned' | 'terminated' | 'suspended';
+
+// ── Attendance ──────────────────────────────────────────────────────
 export interface AttendanceRecord {
   id: string;
   employeeId: string;
@@ -37,6 +88,7 @@ export interface AttendanceRecord {
   overtimeHours: number;
 }
 
+// ── Loan / Advance ──────────────────────────────────────────────────
 export interface LoanAdvance {
   id: string;
   employeeId: string;
@@ -49,6 +101,7 @@ export interface LoanAdvance {
   skipMonth?: string;
 }
 
+// ── Payroll ─────────────────────────────────────────────────────────
 export interface Payroll {
   id: string;
   employeeId: string;
@@ -68,6 +121,6 @@ export interface Payroll {
   loanRepayments: { date: string; amount: number; type: 'Loan' | 'Advance' }[];
   isSalaryPaid?: boolean;
   isOvertimePaid?: boolean;
-  allowedAbsentCount?: number; 
+  allowedAbsentCount?: number;
   loanWaived?: boolean;
 }
