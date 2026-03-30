@@ -94,6 +94,8 @@ const TABLE_MAP: Record<string, string> = {
   // ncr_claims:         'gtk_erp_ncr_claims',
   // ncr_remnants:       'gtk_erp_ncr_remnants',
   activity_logs:      'gtk_erp_activity_logs',
+  invoices:           'gtk_erp_invoices',
+  payment_receipts:   'gtk_erp_payment_receipts',
 };
 
 // ── Supabase column mapper (snake_case from DB) ───────────────────────
@@ -251,6 +253,31 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     total_amount: p.totalAmount||0,
     category: p.category||'', items: p.items||[],
   }),
+  invoices: (i: any) => ({
+    id: i.id, company: i.company||'',
+    order_id: i.orderId||i.order_id||'',
+    order_no: i.orderNo||i.order_no||'',
+    client_id: i.clientId||i.client_id||'',
+    client_name: i.clientName||i.client_name||'',
+    date: i.date||'', due_date: i.dueDate||i.due_date||'',
+    total_amount: i.totalAmount||i.total_amount||0,
+    received_amount: i.receivedAmount||i.received_amount||0,
+    balance: i.balance||0,
+    status: i.status||'Outstanding',
+    gl_tx_id: i.glTxId||i.gl_tx_id||'',
+    payments: i.payments||[],
+    updated_at: i._updatedAt||i.updatedAt||new Date().toISOString(),
+  }),
+  payment_receipts: (r: any) => ({
+    id: r.id,
+    invoice_id: r.invoiceId||r.invoice_id||'',
+    date: r.date||'',
+    amount: r.amount||0,
+    method: r.method||'Bank Transfer',
+    reference: r.reference||'',
+    gl_tx_id: r.glTxId||r.gl_tx_id||'',
+    updated_at: r._updatedAt||r.updatedAt||new Date().toISOString(),
+  }),
 };
 
 // ── Pull mappers: Supabase row → app object ───────────────────────────
@@ -325,6 +352,18 @@ const TABLE_PULL: Record<string, (row: any) => any> = {
     ...r,
     fromCompany: r.from_company, toVendor: r.to_vendor,
     totalAmount: r.total_amount,
+  }),
+  invoices: (r: any) => ({
+    ...r,
+    orderId: r.order_id, orderNo: r.order_no,
+    clientId: r.client_id, clientName: r.client_name,
+    dueDate: r.due_date, totalAmount: r.total_amount,
+    receivedAmount: r.received_amount,
+    glTxId: r.gl_tx_id, payments: r.payments||[],
+  }),
+  payment_receipts: (r: any) => ({
+    ...r,
+    invoiceId: r.invoice_id, glTxId: r.gl_tx_id,
   }),
 };
 
