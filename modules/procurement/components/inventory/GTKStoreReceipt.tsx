@@ -16,6 +16,7 @@ import {
   X, Plus, Trash2, Package, CheckCircle2,
   Search, ShoppingBag, Wrench, AlertTriangle
 } from 'lucide-react';
+import { ToolService } from '@/modules/procurement/services/toolService';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 interface ReceiptLine {
@@ -336,6 +337,37 @@ const GTKStoreReceipt: React.FC<GTKStoreReceiptProps> = ({ isOpen, onClose, refr
       }
     }
 
+    // ── Auto-register tools in Tool Register ────────────────────────────
+    let toolRegResult: { registered: number; toolIds: string[] } | null = null;
+    const toolLines = validLines.filter(l =>
+      l.condition === 'OK' && (
+        l.materialType === 'Returnable Tool' ||
+        l.materialType === 'Capital Asset' ||
+        l.description.toUpperCase().match(/GRINDER|DRILL|SAW|PLIER|SCREWDRIVER|HAMMER|WRENCH|CUTTER|LEVEL|TAPE MEASURE|RIVET GUN|SILICONE GUN|TOOLBOX|KIT|CLAMP/)
+      )
+    );
+
+    if (toolLines.length > 0) {
+      try {
+        toolRegResult = ToolService.autoRegisterFromGRN({
+          company: company as string,
+          lines: toolLines.map(l => ({
+            description: l.description,
+            qty: l.qty,
+            rate: l.rate,
+            category: l.category,
+            materialType: l.materialType,
+          })),
+          grnId: receiptId,
+          reqId: header.linkedReqId || undefined,
+          receivedBy: header.receivedBy,
+          purchaseDate: header.receiptDate,
+        });
+      } catch (e) {
+        console.error('Tool auto-register failed:', e);
+      }
+    }
+
     // ── Update linked requisition status ───────────────────────────────
     if (header.linkedReqId) {
       try {
@@ -355,8 +387,12 @@ const GTKStoreReceipt: React.FC<GTKStoreReceiptProps> = ({ isOpen, onClose, refr
       ? `\nAdvance Settlement: ${settlementInfo.status}${settlementInfo.variance !== 0 ? ` (PKR ${Math.abs(settlementInfo.variance).toLocaleString()} ${settlementInfo.variance < 0 ? 'refund due' : 'extra paid'})` : ''}`
       : '\nParked GL entry created.';
 
+    const toolMsg = toolRegResult && toolRegResult.registered > 0
+      ? `\n${toolRegResult.registered} tool(s) auto-registered: ${toolRegResult.toolIds.join(', ')}`
+      : '';
+
     toast.success(
-      `GRN ${receiptId} posted!\n${validLines.length} items received, ${damagedLines.length} damaged/short.${settlementMsg}`,
+      `GRN ${receiptId} posted!\n${validLines.length} items received, ${damagedLines.length} damaged/short.${settlementMsg}${toolMsg}`,
       { duration: 6000 }
     );
 
@@ -484,6 +520,7 @@ const GTKStoreReceipt: React.FC<GTKStoreReceiptProps> = ({ isOpen, onClose, refr
                     <th className="px-3 py-3 text-left w-8">#</th>
                     <th className="px-3 py-3 text-left min-w-[200px]">Description</th>
                     <th className="px-3 py-3 text-left w-28">Category</th>
+                    <th className="px-3 py-3 text-left w-28">Type</th>
                     <th className="px-3 py-3 text-center w-20">Qty</th>
                     <th className="px-3 py-3 text-left w-24">Unit</th>
                     <th className="px-3 py-3 text-right w-24">Rate</th>
@@ -528,6 +565,14 @@ const GTKStoreReceipt: React.FC<GTKStoreReceiptProps> = ({ isOpen, onClose, refr
                         <select className="w-full p-2 bg-slate-50 border rounded-lg font-bold text-[11px]"
                           value={line.category} onChange={e => updateLine(line.id, { category: e.target.value })}>
                           {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-3 py-2">
+                        <select className={`w-full p-2 border rounded-lg font-bold text-[11px] ${
+                          line.materialType === 'Returnable Tool' || line.materialType === 'Capital Asset' ? 'bg-purple-50 text-purple-700' : 'bg-slate-50'
+                        }`}
+                          value={line.materialType} onChange={e => updateLine(line.id, { materialType: e.target.value })}>
+                          {MATERIAL_TYPES.map(mt => <option key={mt} value={mt}>{mt}</option>)}
                         </select>
                       </td>
                       <td className="px-3 py-2">
