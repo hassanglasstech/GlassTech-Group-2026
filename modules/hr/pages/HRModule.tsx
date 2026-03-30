@@ -5,17 +5,19 @@ import EmployeeManagement from './EmployeeManagement';
 import AttendanceRegister from './AttendanceRegister';
 import LoanManagement from './LoanManagement';
 import PayrollManagement from './PayrollManagement';
-import { Users, ClipboardCheck, Landmark, CreditCard, History } from 'lucide-react';
+import TagManager from './TagManager';
+import { Users, ClipboardCheck, Landmark, CreditCard, History, Tags } from 'lucide-react';
 
 const HRModule: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'registry' | 'attendance' | 'loans' | 'payroll' | 'history'>('registry');
+  const [activeTab, setActiveTab] = useState<'registry' | 'attendance' | 'loans' | 'payroll' | 'tags' | 'history'>('registry');
 
   const tabs = [
     { id: 'registry', label: 'Registry', icon: Users },
     { id: 'attendance', label: 'Attendance', icon: ClipboardCheck },
     { id: 'loans', label: 'Loans', icon: Landmark },
     { id: 'payroll', label: 'Payroll', icon: CreditCard },
+    { id: 'tags', label: 'Tags & Depts', icon: Tags },
     { id: 'history', label: 'Old Records', icon: History },
   ];
 
@@ -39,6 +41,7 @@ const HRModule: React.FC = () => {
       {activeTab === 'attendance' && <AttendanceRegister company={company} />}
       {activeTab === 'loans' && <LoanManagement company={company} />}
       {activeTab === 'payroll' && <PayrollManagement company={company} />}
+      {activeTab === 'tags' && <TagManager />}
       {activeTab === 'history' && <OldDisbursements />}
     </div>
   );
