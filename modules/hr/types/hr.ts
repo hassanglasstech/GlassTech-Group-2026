@@ -47,6 +47,41 @@ export interface EmployeeDoc {
   status: DocStatus;
 }
 
+// ── RBAC — Role-Based Access Control ────────────────────────────────
+export type RBACModule = 'hr' | 'attendance' | 'payroll' | 'production' | 'finance' | 'store' | 'procurement' | 'sales' | 'projects' | 'logistics' | 'vendors' | 'hub' | 'md-dashboard' | 'admin';
+export type RBACAction = 'create' | 'read' | 'update' | 'delete';
+export type RBACScope  = 'own' | 'department' | 'company' | 'all';
+
+export interface Role {
+  id: string;
+  name: string;
+  company: Company;
+  description: string;
+  isSystem: boolean;     // true = default role, cannot be deleted
+  isActive: boolean;
+}
+
+export interface Permission {
+  id: string;
+  module: RBACModule;
+  action: RBACAction;
+  scope: RBACScope;
+}
+
+export interface RolePermission {
+  id: string;
+  roleId: string;
+  permissionId: string;
+}
+
+export interface EmployeeRole {
+  id: string;
+  employeeId: string;
+  roleId: string;
+  assignedAt: string;
+  assignedBy: string;
+}
+
 // ── Employee (Enhanced) ─────────────────────────────────────────────
 export interface Employee {
   id: string;

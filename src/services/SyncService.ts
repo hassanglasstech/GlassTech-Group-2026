@@ -97,6 +97,11 @@ const TABLE_MAP: Record<string, string> = {
   activity_logs:      'gtk_erp_activity_logs',
   invoices:           'gtk_erp_invoices',
   payment_receipts:   'gtk_erp_payment_receipts',
+  // RBAC tables (Phase 3)
+  roles:              'gtk_erp_roles',
+  permissions:        'gtk_erp_permissions',
+  role_permissions:   'gtk_erp_role_permissions',
+  employee_roles:     'gtk_erp_employee_roles',
 };
 
 // ── Supabase column mapper (snake_case from DB) ───────────────────────
@@ -345,6 +350,32 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     date: r.date||'', notes: r.notes||'',
     updated_at: r._updatedAt||new Date().toISOString(),
   }),
+  // ── RBAC Push Mappers (Phase 3) ──
+  roles: (r: any) => ({
+    id: r.id, name: r.name||'', company: r.company||'',
+    description: r.description||'',
+    is_system: r.isSystem||false, is_active: r.isActive!==false,
+    updated_at: r._updatedAt||new Date().toISOString(),
+  }),
+  permissions: (p: any) => ({
+    id: p.id, module: p.module||'', action: p.action||'',
+    scope: p.scope||'company',
+    updated_at: p._updatedAt||new Date().toISOString(),
+  }),
+  role_permissions: (rp: any) => ({
+    id: rp.id,
+    role_id: rp.roleId||rp.role_id||'',
+    permission_id: rp.permissionId||rp.permission_id||'',
+    updated_at: rp._updatedAt||new Date().toISOString(),
+  }),
+  employee_roles: (er: any) => ({
+    id: er.id,
+    employee_id: er.employeeId||er.employee_id||'',
+    role_id: er.roleId||er.role_id||'',
+    assigned_at: er.assignedAt||er.assigned_at||new Date().toISOString(),
+    assigned_by: er.assignedBy||er.assigned_by||'admin',
+    updated_at: er._updatedAt||new Date().toISOString(),
+  }),
 };
 
 // ── Pull mappers: Supabase row → app object ───────────────────────────
@@ -468,6 +499,25 @@ const TABLE_PULL: Record<string, (row: any) => any> = {
     estimatedKg: r.estimated_kg,
     disposalMethod: r.disposal_method,
     scrapValue: r.scrap_value,
+  }),
+  // ── RBAC Pull Mappers (Phase 3) ──
+  roles: (r: any) => ({
+    ...r,
+    isSystem: r.is_system,
+    isActive: r.is_active,
+  }),
+  permissions: (r: any) => ({ ...r }),
+  role_permissions: (r: any) => ({
+    ...r,
+    roleId: r.role_id,
+    permissionId: r.permission_id,
+  }),
+  employee_roles: (r: any) => ({
+    ...r,
+    employeeId: r.employee_id,
+    roleId: r.role_id,
+    assignedAt: r.assigned_at,
+    assignedBy: r.assigned_by,
   }),
 };
 
