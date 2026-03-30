@@ -31,7 +31,7 @@ export const NCRService = {
   getNCREvents: (): NCREvent[] => safeParse(KEYS.NCR_EVENTS),
   saveNCREvents: (data: NCREvent[]) => {
     safeSave(KEYS.NCR_EVENTS, data);
-    SyncService.markDirty('production_pieces'); // reuse table slot
+    SyncService.markDirty('ncr_events');
   },
 
   getNCRByCompany: (company: string): NCREvent[] =>
@@ -125,7 +125,10 @@ export const NCRService = {
 
   // ── Reproductions ────────────────────────────────────────────────────
   getReproductions: (): NCRReproduction[] => safeParse(KEYS.REPRODUCTIONS),
-  saveReproductions: (data: NCRReproduction[]) => safeSave(KEYS.REPRODUCTIONS, data),
+  saveReproductions: (data: NCRReproduction[]) => {
+    safeSave(KEYS.REPRODUCTIONS, data);
+    SyncService.markDirty('ncr_reproductions');
+  },
 
   getReproductionsByCompany: (company: string): NCRReproduction[] =>
     NCRService.getReproductions().filter(r => r.company === company),
@@ -164,7 +167,10 @@ export const NCRService = {
 
   // ── Vendor Claims ────────────────────────────────────────────────────
   getVendorClaims: (): NCRVendorClaim[] => safeParse(KEYS.VENDOR_CLAIMS),
-  saveVendorClaims: (data: NCRVendorClaim[]) => safeSave(KEYS.VENDOR_CLAIMS, data),
+  saveVendorClaims: (data: NCRVendorClaim[]) => {
+    safeSave(KEYS.VENDOR_CLAIMS, data);
+    SyncService.markDirty('ncr_claims');
+  },
 
   getVendorClaimsByCompany: (company: string): NCRVendorClaim[] =>
     NCRService.getVendorClaims().filter(c => c.company === company),
@@ -230,7 +236,10 @@ export const NCRService = {
 
   // ── Remnants ─────────────────────────────────────────────────────────
   getRemnants: (): BreakageRemnant[] => safeParse(KEYS.REMNANTS),
-  saveRemnants: (data: BreakageRemnant[]) => safeSave(KEYS.REMNANTS, data),
+  saveRemnants: (data: BreakageRemnant[]) => {
+    safeSave(KEYS.REMNANTS, data);
+    SyncService.markDirty('ncr_remnants');
+  },
 
   addRemnant: (data: Omit<BreakageRemnant, 'id'>): BreakageRemnant => {
     const remnant: BreakageRemnant = { ...data, id: genRemnantId() };
