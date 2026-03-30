@@ -226,7 +226,7 @@ export const EmployeeDocService = {
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
+      // Get public URL (bucket is public)
       const { data: urlData } = supabase.storage
         .from(STORAGE_BUCKET)
         .getPublicUrl(storagePath);
@@ -349,11 +349,52 @@ export const EmployeeDocService = {
   },
 
   // ── Get photo URL (quick access for avatars) ──────────────────────
-  // This uses local cache for speed — no await needed in lists
   getPhotoUrl: (employeeId: string): string | null => {
     const cached: EmployeeDoc[] = safeParse(LOCAL_CACHE_KEY);
     const photo = cached.find(d => d.employeeId === employeeId && d.docType === 'photo');
-    return photo?.fileUrl || null;
+    if (!photo?.fileUrl) return null;
+    if (photo.fileUrl.startsWith('http')) return photo.fileUrl;
+    // Build public URL from storage path
+    const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(photo.fileUrl);
+    return data.publicUrl;
+  },
+
+  // ── Get photo URL async (fetches from Supabase if not in cache) ───
+  getPhotoUrlAsync: async (employeeId: string): Promise<string | null> => {
+    // Try cache first
+    const cached: EmployeeDoc[] = safeParse(LOCAL_CACHE_KEY);
+    let photo = cached.find(d => d.employeeId === employeeId && d.docType === 'photo');
+
+    // If not in cache, fetch from Supabase
+    if (!photo) {
+      try {
+        const { data, error } = await supabase
+          .from(SUPABASE_TABLE)
+          .select('*')
+          .eq('employee_id', employeeId)
+          .eq('doc_type', 'photo')
+          .maybeSingle();
+        if (!error && data) {
+          photo = rowToDoc(data);
+          // Update cache
+          const allCache: EmployeeDoc[] = safeParse(LOCAL_CACHE_KEY);
+          updateLocalCache([...allCache.filter(d => d.id !== photo!.id), photo]);
+        }
+      } catch { /* silent */ }
+    }
+
+    if (!photo?.fileUrl) return null;
+    if (photo.fileUrl.startsWith('http')) return photo.fileUrl;
+    const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(photo.fileUrl);
+    return data.publicUrl;
+  },
+
+  // ── Get viewable URL for any document ─────────────────────────────
+  getDocUrl: async (doc: EmployeeDoc): Promise<string | null> => {
+    if (!doc.fileUrl) return null;
+    if (doc.fileUrl.startsWith('http')) return doc.fileUrl;
+    const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(doc.fileUrl);
+    return data.publicUrl;
   },
 
   // ── Document completeness score (sync version for lists) ──────────
