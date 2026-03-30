@@ -113,3 +113,31 @@ export interface FinanceMetric {
   netProfit: number;
   topExpenses: { category: string; amount: number }[];
 }
+
+// ── Invoice & Payment Receipt ─────────────────────────────────────────
+export interface Invoice {
+  id: string;
+  company: Company;
+  orderId: string;
+  orderNo: string;
+  clientId: string;
+  clientName: string;
+  date: string;
+  dueDate: string;
+  totalAmount: number;
+  receivedAmount: number;
+  balance: number;
+  status: 'Outstanding' | 'Partial' | 'Paid' | 'Overdue';
+  glTxId: string;
+  payments: PaymentReceipt[];
+}
+
+export interface PaymentReceipt {
+  id: string;
+  invoiceId: string;
+  date: string;
+  amount: number;
+  method: 'Cash' | 'Bank Transfer' | 'Cheque' | 'Online';
+  reference: string;
+  glTxId: string;
+}
