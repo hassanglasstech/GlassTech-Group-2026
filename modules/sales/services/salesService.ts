@@ -14,6 +14,16 @@ const KEYS = {
 import { safeParse, safeSave } from '../../shared/services/utils';
 import { toast } from 'sonner';
 
+// ── Lazy import SyncService to trigger cloud push after invoice/payment saves ──
+const triggerSync = async (table: string) => {
+  try {
+    const { SyncService } = await import('@/src/services/SyncService');
+    SyncService.markDirty(table);
+  } catch {
+    // Sync not available (offline or import error) — localStorage save is sufficient
+  }
+};
+
 export const SalesService = {
   getClients: (): Client[] => safeParse(KEYS.CLIENTS),
   saveClients: (data: Client[]) => safeSave(KEYS.CLIENTS, data),
@@ -26,11 +36,19 @@ export const SalesService = {
   getVendors: (): Vendor[] => safeParse(KEYS.VENDORS),
   saveVendors: (data: Vendor[]) => safeSave(KEYS.VENDORS, data),
 
-  // ── Invoices ──
+  // ── Invoices (now with Supabase sync) ──
   getInvoices: (): any[] => safeParse(KEYS.INVOICES),
-  saveInvoices: (data: any[]) => safeSave(KEYS.INVOICES, data),
+  saveInvoices: (data: any[]) => {
+    const result = safeSave(KEYS.INVOICES, data);
+    if (result) triggerSync('invoices');
+    return result;
+  },
 
-  // ── Payment Receipts (AR Collections) ──
+  // ── Payment Receipts (now with Supabase sync) ──
   getPaymentReceipts: (): any[] => safeParse(KEYS.PAYMENT_RECEIPTS),
-  savePaymentReceipts: (data: any[]) => safeSave(KEYS.PAYMENT_RECEIPTS, data),
+  savePaymentReceipts: (data: any[]) => {
+    const result = safeSave(KEYS.PAYMENT_RECEIPTS, data);
+    if (result) triggerSync('payment_receipts');
+    return result;
+  },
 };
