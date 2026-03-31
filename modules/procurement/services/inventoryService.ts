@@ -2,7 +2,7 @@ import {
   StoreItem, MaterialLedgerEntry, InspectionLot, Remnant, RemnantHistoryEntry,
   HandlingUnit, Requisition, PurchaseOrder, Vehicle, VehicleTrip, VehicleExpense,
   GRNSheetEntry, VendorDefectReport, CuttingSession, ManualCountSheet,
-  ScrapDisposal, VendorReview,
+  ScrapDisposal, VendorReview, PalletRateEntry,
 } from '@/modules/procurement/types/inventory';
 import { initDB } from '@/modules/shared/services/db';
 import { bgSaveToIDB, safeParse, safeSave } from '@/modules/shared/services/utils';
@@ -26,6 +26,7 @@ const KEYS = {
   MANUAL_COUNT_SHEETS:     'gtk_erp_manual_count_sheets',
   SCRAP_DISPOSALS:         'gtk_erp_scrap_disposals',
   VENDOR_REVIEWS:          'gtk_erp_vendor_reviews',
+  PALLET_RATES:            'gtk_erp_pallet_rates',
 };
 
 export const InventoryService = {
@@ -287,5 +288,21 @@ export const InventoryService = {
       avgDeliveryDays: 0,    // calculated when PO dates linked — Phase 2
       outstandingGRIR: 0,    // from GL — Phase 9
     };
+  },
+
+  // ── Pallet Rate History ───────────────────────────────────────────
+  getPalletRates: (): PalletRateEntry[] => safeParse(KEYS.PALLET_RATES),
+  getPalletRatesByCompany: (company: string): PalletRateEntry[] =>
+    safeParse(KEYS.PALLET_RATES).filter((r: PalletRateEntry) => r.company === company),
+  getRecentPalletRates: (company: string, limit = 5): PalletRateEntry[] =>
+    safeParse(KEYS.PALLET_RATES)
+      .filter((r: PalletRateEntry) => r.company === company)
+      .sort((a: PalletRateEntry, b: PalletRateEntry) => b.date.localeCompare(a.date))
+      .slice(0, limit),
+  savePalletRates: (data: PalletRateEntry[]) => safeSave(KEYS.PALLET_RATES, data),
+  addPalletRate: (entry: PalletRateEntry) => {
+    const all: PalletRateEntry[] = safeParse(KEYS.PALLET_RATES);
+    all.push(entry);
+    safeSave(KEYS.PALLET_RATES, all);
   },
 };
