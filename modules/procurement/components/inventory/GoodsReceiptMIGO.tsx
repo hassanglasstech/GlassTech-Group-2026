@@ -14,18 +14,16 @@ import { ProductionService } from '@/modules/production/services/productionServi
 import { NCRService } from '@/modules/production/services/ncrService';
 import { GRNPrint } from '@/modules/glassco/core/prints/GRNPrint';
 import { orchestrateGRNGL } from '@/modules/procurement/services/grnGLService';
-import { FinanceService } from '@/modules/finance/services/financeService';
 import {
   StoreItem, MaterialLedgerEntry, GRNSheetEntry, VendorDefectReport,
-  PurchaseOrder, PalletRateEntry
+  PurchaseOrder
 } from '@/modules/procurement/types/inventory';
 import {
   X, Plus, Trash2, ChevronDown, ChevronRight, Camera, AlertTriangle,
   Package, Truck, FileText, CheckCircle2, Search, Printer, Building2,
-  Tag, Scale, Info, History, Users, CreditCard
+  Tag, Scale, Info
 } from 'lucide-react';
 import { Product } from '@/modules/shared/types';
-import { Vendor } from '@/modules/sales/types/crm';
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const DEFECT_CODES = [
@@ -163,27 +161,16 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
   // ── Lines ─────────────────────────────────────────────────────────────
   const [lines, setLines] = useState<GRNLine[]>(() => Array.from({ length: 3 }, blankLine));
 
-  // ── Footer — Charges ────────────────────────────────────────────────
+  // ── Footer ────────────────────────────────────────────────────────────
   const [freightPKR, setFreightPKR]     = useState(0);
   const [freightType, setFreightType]   = useState<'Vendor Included' | 'Own Expense'>('Vendor Included');
   const [otherCharges, setOtherCharges] = useState(0);
   const [otherChargesDesc, setOtherChargesDesc] = useState('');
   const [cashPaymentRef, setCashPaymentRef] = useState('');
-
-  // ── Crane ──────────────────────────────────────────────────────────
-  const [craneVendorId, setCraneVendorId] = useState('');
-  const [craneAmount, setCraneAmount]     = useState(0);
-
-  // ── Labour + Packing ──────────────────────────────────────────────
-  const [labourVendorId, setLabourVendorId]   = useState('');
-  const [labourCharges, setLabourCharges]     = useState(0);
-  const [palletCount, setPalletCount]         = useState(0);
-  const [palletRate, setPalletRate]           = useState(0);
-  const [showPalletHistory, setShowPalletHistory] = useState(false);
-
-  // ── Bilty Weight ──────────────────────────────────────────────────
-  const [biltyWeight, setBiltyWeight] = useState(0);
-
+  // ── Weight & Unloading ──────────────────────────────────────────────
+  const [biltyWeightKg, setBiltyWeightKg] = useState(0);
+  const [cranePKR, setCranePKR]           = useState(0);
+  const [packingSalePKR, setPackingSalePKR] = useState(0);
   // ── Tags generated flag ───────────────────────────────────────────────
   const [tagsGenerated, setTagsGenerated] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
@@ -210,22 +197,6 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
 
   const selectedPO = useMemo(() =>
     glassPOs.find(p => p.id === poId), [poId, glassPOs]);
-
-  // ── Crane & Labour vendor lists ────────────────────────────────────
-  const allVendors: Vendor[] = useMemo(() =>
-    SalesService.getVendors().filter((v: any) => !v.company || v.company === company), [company]);
-  const craneVendors = useMemo(() => allVendors.filter(v => v.type === 'Crane/Unloading'), [allVendors]);
-  const labourVendors = useMemo(() => allVendors.filter(v => v.type === 'Labour'), [allVendors]);
-  const selectedCraneVendor = useMemo(() => craneVendors.find(v => v.id === craneVendorId), [craneVendorId, craneVendors]);
-  const selectedLabourVendor = useMemo(() => labourVendors.find(v => v.id === labourVendorId), [labourVendorId, labourVendors]);
-
-  // ── Pallet rate history (last 5) ──────────────────────────────────
-  const palletRateHistory = useMemo(() =>
-    InventoryService.getRecentPalletRates(company as string, 5), [company]);
-
-  // ── Packing computed ──────────────────────────────────────────────
-  const packingBuyback = palletCount * palletRate;
-  const labourNetPayable = labourCharges - packingBuyback;
 
   // Build suggestion catalogue from product master + GRN history
   const catalogue: SuggestionItem[] = useMemo(() => {
@@ -421,7 +392,14 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
   const totalSqmtr   = filledLines.reduce((s, l) => s + l.totalSqmtr, 0);
   const totalWeight  = filledLines.reduce((s, l) => s + l.weightKg, 0);
   const totalMaterial = filledLines.reduce((s, l) => s + l.lineValue, 0);
-  const grandTotal   = totalMaterial + freightPKR + craneAmount + labourCharges + otherCharges - packingBuyback;
+
+  // ── Weight & Packing ───────────────────────────────────────────────
+  // Glass weight from Weight Master: per-line weight (entered in line) 
+  const glassWeightFromLines = totalWeight; // sum of per-line weightKg
+  const packingWeightKg = biltyWeightKg > 0 && glassWeightFromLines > 0
+    ? Number((biltyWeightKg - glassWeightFromLines).toFixed(1)) : 0;
+
+  const grandTotal = totalMaterial + freightPKR + otherCharges + cranePKR - packingSalePKR;
 
   // Defect summary
   const allInspections = lines.flatMap(l => l.sheetInspections);
@@ -636,85 +614,29 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
       );
     }
 
-    // ── Save (atomic with rollback) ────────────────────────────────
-    // Snapshot current state for rollback on failure
-    const snapshotStore = JSON.parse(JSON.stringify(InventoryService.getStore()));
-    const snapshotLedger = JSON.parse(JSON.stringify(InventoryService.getStockLedger()));
-    const snapshotSheets = JSON.parse(JSON.stringify(InventoryService.getGRNSheetEntries()));
-    const snapshotGL = JSON.parse(JSON.stringify(FinanceService.getLedger()));
-    const snapshotReports = JSON.parse(JSON.stringify(InventoryService.getVendorDefectReports()));
+    // ── Save ────────────────────────────────────────────────────────
+    InventoryService.saveStore(allStore);
+    InventoryService.saveStockLedger([...InventoryService.getStockLedger(), ...allLedger]);
 
-    try {
-      // Step 1: Stock
-      InventoryService.saveStore(allStore);
-      // Step 2: Ledger
-      InventoryService.saveStockLedger([...InventoryService.getStockLedger(), ...allLedger]);
+    // ── Phase 9: Post GL entries ───────────────────────────────────────
+    const totalOKValue  = filledLines.reduce((s, l) => {
+      const okSheets  = l.sheetInspections.filter(i => i.status === 'OK');
+      return s + okSheets.reduce((ss) => ss + l.sqftPerSheet * l.ratePKR, 0);
+    }, 0);
+    const totalDefVal = filledLines.reduce((s, l) => {
+      const defSheets = l.sheetInspections.filter(i => i.status !== 'OK');
+      return s + defSheets.reduce((ss, i) => ss + (i.usableSqft || 0) * l.ratePKR, 0);
+    }, 0);
+    orchestrateGRNGL({ company, grnId, grnDate, vendorName: selectedVendor?.name || vendorId, totalOKValue, totalDefectiveValue: totalDefVal, freightType, freightAmount: freightPKR, cashPaymentRef, otherCharges, otherChargesDesc });
 
-      // Step 3: GL entries
-      const totalOKValue  = filledLines.reduce((s, l) => {
-        const okSheets  = l.sheetInspections.filter(i => i.status === 'OK');
-        return s + okSheets.reduce((ss) => ss + l.sqftPerSheet * l.ratePKR, 0);
-      }, 0);
-      const totalDefVal = filledLines.reduce((s, l) => {
-        const defSheets = l.sheetInspections.filter(i => i.status !== 'OK');
-        return s + defSheets.reduce((ss, i) => ss + (i.usableSqft || 0) * l.ratePKR, 0);
-      }, 0);
-      orchestrateGRNGL({
-        company, grnId, grnDate,
-        vendorName: selectedVendor?.name || vendorId,
-        totalOKValue, totalDefectiveValue: totalDefVal,
-        freightType, freightAmount: freightPKR, cashPaymentRef,
-        otherCharges, otherChargesDesc,
-        craneVendorName: selectedCraneVendor?.name || '',
-        craneAmount,
-        labourVendorName: selectedLabourVendor?.name || '',
-        labourGross: labourCharges,
-        packingBuyback,
-        labourNetPayable,
-      });
-
-      // Step 4: Pallet Rate History
-      if (palletCount > 0 && palletRate > 0) {
-        InventoryService.addPalletRate({
-          id: `PLT-${grnId}`,
-          company: company as any,
-          grnId,
-          date: grnDate,
-          vendorId: labourVendorId,
-          vendorName: selectedLabourVendor?.name || '',
-          ratePerPallet: palletRate,
-          palletCount,
-          totalPacking: packingBuyback,
-        });
-      }
-
-      // Step 5: Sheet entries
-      const existingSheets = InventoryService.getGRNSheetEntries();
-      InventoryService.saveGRNSheetEntries([...existingSheets, ...grnSheetEntries]);
-
-    } catch (err) {
-      // ── ROLLBACK on any failure ──
-      console.error('[GRN POST] FAILED — rolling back:', err);
-      InventoryService.saveStore(snapshotStore);
-      InventoryService.saveStockLedger(snapshotLedger);
-      InventoryService.saveGRNSheetEntries(snapshotSheets);
-      FinanceService.saveLedger(snapshotGL);
-      InventoryService.saveVendorDefectReports(snapshotReports);
-      toast.error(`GRN ${grnId} post FAILED — all changes rolled back. Error: ${(err as Error).message}`, { duration: 10000 });
-      return;
-    }
-
-    // ── Post Summary ─────────────────────────────────────────────────
-    const pvParts: string[] = [];
-    if (craneAmount > 0) pvParts.push(`Crane: PKR ${craneAmount.toLocaleString()}`);
-    if (labourCharges > 0) pvParts.push(`Labour Net: PKR ${labourNetPayable.toLocaleString()}`);
+    const existingSheets = InventoryService.getGRNSheetEntries();
+    InventoryService.saveGRNSheetEntries([...existingSheets, ...grnSheetEntries]);
 
     const summary = [
       `GRN ${grnId} posted`,
       `${totalSheets} sheets — ${totalSqft.toFixed(1)} sqft`,
       defectCount > 0 ? `${defectCount} defect(s) recorded` : '',
       defectCount > 0 ? 'Vendor defect report draft created' : '',
-      pvParts.length > 0 ? `${pvParts.length} PV(s) generated (${pvParts.join(', ')})` : '',
     ].filter(Boolean).join(' | ');
 
     toast.success(summary, { duration: 6000 });
@@ -724,10 +646,6 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
       grnId, grnDate, vendorName: selectedVendor?.name || vendorId,
       dcNo, biltyNo, vendorSoNo, vehicleNo, driverName, poId,
       freightType, freightPKR, otherCharges, otherChargesDesc,
-      craneAmount, craneVendorName: selectedCraneVendor?.name || '',
-      labourCharges, labourVendorName: selectedLabourVendor?.name || '',
-      palletCount, palletRate, packingBuyback, labourNetPayable,
-      biltyWeight,
       lines: filledLines.map(l => ({
         description: l.description, thickness: l.thickness, sheetSize: l.sheetSize,
         sheetCount: l.sheetCount, sqftPerSheet: l.sqftPerSheet, totalSqft: l.totalSqft,
@@ -746,9 +664,7 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
     setGrnDate(new Date().toISOString().split('T')[0]);
     setLines(Array.from({ length: 3 }, blankLine));
     setFreightPKR(0); setOtherCharges(0); setOtherChargesDesc(''); setCashPaymentRef('');
-    setCraneVendorId(''); setCraneAmount(0);
-    setLabourVendorId(''); setLabourCharges(0); setPalletCount(0); setPalletRate(0);
-    setBiltyWeight(0); setShowPalletHistory(false);
+    setBiltyWeightKg(0); setCranePKR(0); setPackingSalePKR(0);
     setTagsGenerated(false);
     onClose();
   };
@@ -1185,234 +1101,102 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
           <div className="bg-white border border-slate-200 rounded-2xl p-5">
             <div className="flex items-center gap-2 pb-3 border-b mb-4">
               <Truck size={14} className="text-slate-600"/>
-              <span className="text-xs font-black uppercase tracking-widest">Charges & Unloading</span>
+              <span className="text-xs font-black uppercase tracking-widest">Charges & Weight</span>
             </div>
 
-            {/* ── ROW A: Freight (existing — keep as is) ── */}
-            <div className="mb-4">
-              <div className="text-[9px] font-black uppercase text-slate-400 mb-2 tracking-widest flex items-center gap-1.5">
-                <Truck size={10}/> Freight
+            {/* Row 1: Freight */}
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Freight PKR</label>
+                <input type="number" min="0" className="sap-input w-full font-bold"
+                  value={freightPKR || ''} onChange={e => setFreightPKR(Number(e.target.value))}/>
               </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Freight PKR</label>
-                  <input type="number" min="0" className="sap-input w-full font-bold"
-                    value={freightPKR || ''} onChange={e => setFreightPKR(Number(e.target.value))}/>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Freight Type</label>
-                  <select className="sap-input w-full font-bold" value={freightType} onChange={e => setFreightType(e.target.value as any)}>
-                    <option value="Vendor Included">Vendor Included (Paid to transporter)</option>
-                    <option value="Own Expense">Own Expense</option>
-                  </select>
-                </div>
-                {freightType === 'Vendor Included' && freightPKR > 0 && (
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase text-amber-600">Cash Payment Ref *</label>
-                    <input type="text" className="sap-input w-full font-bold border-amber-200" placeholder="Receipt / reference"
-                      value={cashPaymentRef} onChange={e => setCashPaymentRef(e.target.value)}/>
-                  </div>
-                )}
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Freight Type</label>
+                <select className="sap-input w-full font-bold" value={freightType} onChange={e => setFreightType(e.target.value as any)}>
+                  <option value="Vendor Included">Vendor Included (Paid to transporter)</option>
+                  <option value="Own Expense">Own Expense</option>
+                </select>
               </div>
-            </div>
-
-            {/* ── ROW B: Crane (new) ── */}
-            <div className="mb-4 border-t border-slate-100 pt-4">
-              <div className="text-[9px] font-black uppercase text-slate-400 mb-2 tracking-widest flex items-center gap-1.5">
-                <Package size={10}/> Crane / Unloading
-                <span className="text-[8px] font-bold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded ml-1">Auto PV</span>
-              </div>
-              <div className="grid grid-cols-3 gap-4">
+              {freightType === 'Vendor Included' && freightPKR > 0 && (
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Crane Vendor</label>
-                  <select className="sap-input w-full font-bold" value={craneVendorId} onChange={e => setCraneVendorId(e.target.value)}>
-                    <option value="">— Select Crane Vendor —</option>
-                    {craneVendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                  </select>
-                  {craneVendors.length === 0 && (
-                    <p className="text-[8px] text-amber-600 font-bold">No Crane vendors registered — add in Vendor Hub</p>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Crane Amount PKR</label>
-                  <input type="number" min="0" className="sap-input w-full font-bold"
-                    value={craneAmount || ''} onChange={e => setCraneAmount(Number(e.target.value))}/>
-                </div>
-                {craneAmount > 0 && (
-                  <div className="flex items-end pb-1">
-                    <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                      PV: Dr Unloading Expense 51215 / Cr Cash 11112 = PKR {craneAmount.toLocaleString()}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* ── ROW C: Labour + Packing (new — IFRS gross) ── */}
-            <div className="mb-4 border-t border-slate-100 pt-4">
-              <div className="text-[9px] font-black uppercase text-slate-400 mb-2 tracking-widest flex items-center gap-1.5">
-                <Users size={10}/> Labour & Packing Buyback
-                <span className="text-[8px] font-bold text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded ml-1">IFRS Gross</span>
-                <span className="text-[8px] font-bold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">Auto PV</span>
-              </div>
-              <div className="grid grid-cols-4 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Labour Vendor</label>
-                  <select className="sap-input w-full font-bold" value={labourVendorId} onChange={e => setLabourVendorId(e.target.value)}>
-                    <option value="">— Select Labour —</option>
-                    {labourVendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                  </select>
-                  {labourVendors.length === 0 && (
-                    <p className="text-[8px] text-amber-600 font-bold">No Labour vendors — add in Vendor Hub</p>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Labour Charges PKR (Gross)</label>
-                  <input type="number" min="0" className="sap-input w-full font-bold"
-                    value={labourCharges || ''} onChange={e => setLabourCharges(Number(e.target.value))}/>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">No. of Pallets</label>
-                  <input type="number" min="0" className="sap-input w-full font-bold"
-                    value={palletCount || ''} onChange={e => setPalletCount(Number(e.target.value))}/>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1">
-                    Rate/Pallet PKR
-                    <button onClick={() => setShowPalletHistory(!showPalletHistory)} className="text-blue-500 hover:text-blue-700" title="View rate history">
-                      <History size={10}/>
-                    </button>
-                  </label>
-                  <input type="number" min="0" className="sap-input w-full font-bold"
-                    value={palletRate || ''} onChange={e => setPalletRate(Number(e.target.value))}/>
-                </div>
-              </div>
-
-              {/* Pallet Rate History */}
-              {showPalletHistory && palletRateHistory.length > 0 && (
-                <div className="mt-2 bg-blue-50 border border-blue-100 rounded-xl p-3">
-                  <div className="text-[8px] font-black uppercase text-blue-500 mb-1.5 tracking-widest">Last 5 Pallet Rates</div>
-                  <div className="space-y-1">
-                    {palletRateHistory.map(r => (
-                      <div key={r.id} className="flex items-center justify-between text-[9px] font-bold text-slate-600 bg-white px-2 py-1 rounded">
-                        <span className="font-mono">{r.date}</span>
-                        <span>{r.vendorName}</span>
-                        <span>{r.palletCount} pallets × PKR {r.ratePerPallet}</span>
-                        <span className="font-black text-blue-700">= PKR {r.totalPacking.toLocaleString()}</span>
-                        <span className="text-[8px] text-slate-400">{r.grnId}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {showPalletHistory && palletRateHistory.length === 0 && (
-                <div className="mt-2 text-[9px] text-slate-400 font-bold italic">No pallet rate history yet</div>
-              )}
-
-              {/* Computed summary */}
-              {labourCharges > 0 && (
-                <div className="mt-3 grid grid-cols-3 gap-3">
-                  <div className="bg-slate-50 rounded-xl px-3 py-2 text-center">
-                    <div className="text-[8px] font-black uppercase text-slate-400">Packing Buyback</div>
-                    <div className="text-sm font-black text-emerald-600">PKR {Math.round(packingBuyback).toLocaleString()}</div>
-                    <div className="text-[8px] text-slate-400">{palletCount} × {palletRate}</div>
-                  </div>
-                  <div className="bg-slate-50 rounded-xl px-3 py-2 text-center">
-                    <div className="text-[8px] font-black uppercase text-slate-400">Net Payable</div>
-                    <div className={`text-sm font-black ${labourNetPayable >= 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                      PKR {Math.round(labourNetPayable).toLocaleString()}
-                    </div>
-                    <div className="text-[8px] text-slate-400">{labourCharges} − {Math.round(packingBuyback)}</div>
-                  </div>
-                  <div className="bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
-                    <div className="text-[8px] font-black uppercase text-blue-500">PV Entry (3 lines)</div>
-                    <div className="space-y-0.5 mt-1">
-                      <div className="text-[8px] font-bold text-slate-600">Dr 51216 Unloading Labour = {labourCharges.toLocaleString()}</div>
-                      <div className="text-[8px] font-bold text-emerald-600">Cr 44112 Packing Income = {Math.round(packingBuyback).toLocaleString()}</div>
-                      <div className="text-[8px] font-bold text-red-600">Cr 11112 Cash = {Math.round(labourNetPayable).toLocaleString()}</div>
-                    </div>
-                  </div>
+                  <label className="text-[10px] font-black uppercase text-amber-600">Cash Payment Ref *</label>
+                  <input type="text" className="sap-input w-full font-bold border-amber-200" placeholder="Receipt / reference"
+                    value={cashPaymentRef} onChange={e => setCashPaymentRef(e.target.value)}/>
                 </div>
               )}
             </div>
 
-            {/* ── ROW D: Bilty Weight ── */}
-            <div className="mb-4 border-t border-slate-100 pt-4">
-              <div className="text-[9px] font-black uppercase text-slate-400 mb-2 tracking-widest flex items-center gap-1.5">
-                <Scale size={10}/> Weight Reconciliation
+            {/* Row 2: Weight — Bilty vs Glass vs Packing */}
+            <div className="grid grid-cols-4 gap-4 mb-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Bilty Weight (KG)</label>
+                <input type="number" min="0" step="0.1" className="sap-input w-full font-bold"
+                  placeholder="From transporter bilty"
+                  value={biltyWeightKg || ''} onChange={e => setBiltyWeightKg(Number(e.target.value))}/>
               </div>
-              <div className="grid grid-cols-4 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Bilty Weight (KG)</label>
-                  <input type="number" min="0" className="sap-input w-full font-bold"
-                    value={biltyWeight || ''} onChange={e => setBiltyWeight(Number(e.target.value))}/>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Glass Weight (KG)</label>
+                <div className="sap-input w-full font-black bg-blue-50 text-blue-700">
+                  {glassWeightFromLines > 0 ? glassWeightFromLines.toFixed(1) : '—'}
+                  <span className="text-[8px] text-blue-400 ml-1">(from lines)</span>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Glass Weight (KG)</label>
-                  <div className="sap-input w-full font-bold bg-slate-50 text-slate-700 cursor-not-allowed">
-                    {totalWeight.toFixed(1)}
-                  </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Packing Weight (KG)</label>
+                <div className={`sap-input w-full font-black ${packingWeightKg > 0 ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-slate-300'}`}>
+                  {packingWeightKg > 0 ? packingWeightKg.toFixed(1) : '—'}
+                  <span className="text-[8px] text-slate-400 ml-1">(pallet/plastic/paper)</span>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Packing Weight (KG)</label>
-                  <div className={`sap-input w-full font-black ${biltyWeight > 0 && biltyWeight > totalWeight ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-50 text-slate-400'}`}>
-                    {biltyWeight > 0 ? (biltyWeight - totalWeight).toFixed(1) : '—'}
-                  </div>
-                </div>
-                {biltyWeight > 0 && biltyWeight < totalWeight && (
-                  <div className="flex items-end pb-1">
-                    <span className="text-[9px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded flex items-center gap-1">
-                      <AlertTriangle size={10}/> Glass weight exceeds bilty weight!
-                    </span>
-                  </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-emerald-600">Packing Sale PKR</label>
+                <input type="number" min="0" className="sap-input w-full font-bold border-emerald-200"
+                  placeholder="Lump sum sale"
+                  value={packingSalePKR || ''} onChange={e => setPackingSalePKR(Number(e.target.value))}/>
+                {packingSalePKR > 0 && packingWeightKg > 0 && (
+                  <span className="text-[8px] font-bold text-emerald-600">
+                    PKR {(packingSalePKR / packingWeightKg).toFixed(1)}/kg
+                  </span>
                 )}
               </div>
             </div>
 
-            {/* ── ROW E: Other Charges (existing — keep) ── */}
-            <div className="border-t border-slate-100 pt-4">
-              <div className="text-[9px] font-black uppercase text-slate-400 mb-2 tracking-widest flex items-center gap-1.5">
-                <CreditCard size={10}/> Other Charges
+            {/* Row 3: Crane + Other Charges */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Crane / Unloading PKR</label>
+                <input type="number" min="0" className="sap-input w-full font-bold"
+                  placeholder="Unloading expense"
+                  value={cranePKR || ''} onChange={e => setCranePKR(Number(e.target.value))}/>
               </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Other Charges PKR</label>
-                  <input type="number" min="0" className="sap-input w-full font-bold"
-                    value={otherCharges || ''} onChange={e => setOtherCharges(Number(e.target.value))}/>
-                </div>
-                <div className="space-y-1 col-span-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400">
-                    Other Charges Description {otherCharges > 0 && <span className="text-red-500">*</span>}
-                  </label>
-                  <input type="text" className="sap-input w-full font-bold uppercase"
-                    placeholder="e.g. Loading charges, miscellaneous"
-                    value={otherChargesDesc} onChange={e => setOtherChargesDesc(e.target.value)}/>
-                </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Other Charges PKR</label>
+                <input type="number" min="0" className="sap-input w-full font-bold"
+                  value={otherCharges || ''} onChange={e => setOtherCharges(Number(e.target.value))}/>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">
+                  Other Charges Description {otherCharges > 0 && <span className="text-red-500">*</span>}
+                </label>
+                <input type="text" className="sap-input w-full font-bold uppercase"
+                  placeholder="e.g. Loading charges, Labour"
+                  value={otherChargesDesc} onChange={e => setOtherChargesDesc(e.target.value)}/>
               </div>
             </div>
 
-            {/* ── Grand Total Bar ── */}
-            <div className="mt-5 bg-slate-900 rounded-2xl p-4">
-              <div className="flex flex-wrap gap-4 text-xs text-slate-400 mb-2">
+            {/* Grand Total */}
+            <div className="mt-4 bg-slate-900 rounded-2xl p-4 flex justify-between items-center">
+              <div className="flex gap-4 text-xs text-slate-400 flex-wrap">
                 <span>Material: <span className="font-black text-white">PKR {Math.round(totalMaterial).toLocaleString()}</span></span>
                 {freightPKR > 0 && <span>Freight: <span className="font-black text-blue-400">PKR {freightPKR.toLocaleString()}</span></span>}
-                {craneAmount > 0 && <span>Crane: <span className="font-black text-cyan-400">PKR {craneAmount.toLocaleString()}</span></span>}
-                {labourCharges > 0 && <span>Labour: <span className="font-black text-orange-400">PKR {labourCharges.toLocaleString()}</span></span>}
-                {packingBuyback > 0 && <span>Packing: <span className="font-black text-emerald-400">−PKR {Math.round(packingBuyback).toLocaleString()}</span></span>}
+                {cranePKR > 0 && <span>Crane: <span className="font-black text-orange-400">PKR {cranePKR.toLocaleString()}</span></span>}
                 {otherCharges > 0 && <span>Other: <span className="font-black text-slate-300">PKR {otherCharges.toLocaleString()}</span></span>}
+                {packingSalePKR > 0 && <span>Packing Sale: <span className="font-black text-emerald-400">- PKR {packingSalePKR.toLocaleString()}</span></span>}
               </div>
-              <div className="flex justify-between items-center">
-                <div className="flex gap-3">
-                  {(craneAmount > 0 || labourCharges > 0) && (
-                    <span className="text-[9px] font-bold text-blue-400 bg-blue-900/30 px-2 py-1 rounded">
-                      {(craneAmount > 0 ? 1 : 0) + (labourCharges > 0 ? 1 : 0)} PV(s) will be generated (Parked)
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 uppercase font-bold mr-3">Grand Total</span>
-                  <span className="text-xl font-black text-white">PKR {Math.round(grandTotal).toLocaleString()}</span>
-                </div>
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase font-bold mr-3">Grand Total</span>
+                <span className="text-xl font-black text-white">PKR {Math.round(grandTotal).toLocaleString()}</span>
               </div>
             </div>
           </div>
