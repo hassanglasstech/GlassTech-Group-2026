@@ -271,14 +271,29 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold uppercase text-slate-400">Thickness</label>
-                                    <select value={glassForm.thickness} onChange={e => setGlassForm({...glassForm, thickness: e.target.value})} className="w-full p-3 rounded-xl border font-bold">
-                                        <option>5mm</option>
-                                        <option>6mm</option>
-                                        <option>8mm</option>
-                                        <option>10mm</option>
-                                        <option>12mm</option>
-                                        <option>19mm</option>
-                                    </select>
+                                    <div className="flex gap-1.5">
+                                        <select value={['5mm','6mm','8mm','10mm','12mm','19mm'].includes(glassForm.thickness) ? glassForm.thickness : 'custom'} 
+                                            onChange={e => {
+                                                if (e.target.value === 'custom') return;
+                                                setGlassForm({...glassForm, thickness: e.target.value});
+                                            }} 
+                                            className="flex-1 p-3 rounded-xl border font-bold">
+                                            <option>5mm</option>
+                                            <option>6mm</option>
+                                            <option>8mm</option>
+                                            <option>10mm</option>
+                                            <option>12mm</option>
+                                            <option>19mm</option>
+                                            <option value="custom">Custom...</option>
+                                        </select>
+                                        <input 
+                                            type="text" placeholder="e.g. 4mm"
+                                            value={!['5mm','6mm','8mm','10mm','12mm','19mm'].includes(glassForm.thickness) && glassForm.thickness !== '5mm' ? glassForm.thickness : ''}
+                                            onChange={e => setGlassForm({...glassForm, thickness: e.target.value || '5mm'})}
+                                            className={`w-20 p-3 rounded-xl border font-black text-center text-amber-700 bg-amber-50 ${!['5mm','6mm','8mm','10mm','12mm','19mm'].includes(glassForm.thickness) ? 'ring-2 ring-amber-300' : ''}`}
+                                            title="Custom thickness"
+                                        />
+                                    </div>
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold uppercase text-slate-400">Category (Glass Type)</label>
@@ -342,29 +357,83 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold uppercase text-slate-400">Width (Inch)</label>
-                                    <select 
-                                        value={glassForm.width} 
-                                        onChange={e => setGlassForm({...glassForm, width: Number(e.target.value)})} 
-                                        className="w-full p-3 rounded-xl border font-black"
-                                    >
-                                        <option value={0}>-</option>
-                                        <option value={78}>78"</option>
-                                        <option value={84}>84"</option>
-                                        <option value={96}>96"</option>
-                                    </select>
+                                    <div className="flex gap-1.5">
+                                        <select 
+                                            value={[78, 84, 96].includes(glassForm.width) ? glassForm.width : 'custom'} 
+                                            onChange={e => {
+                                                if (e.target.value === 'custom') return;
+                                                setGlassForm({...glassForm, width: Number(e.target.value)});
+                                            }} 
+                                            className="flex-1 p-3 rounded-xl border font-black"
+                                        >
+                                            <option value={0}>-</option>
+                                            <option value={78}>78"</option>
+                                            <option value={84}>84"</option>
+                                            <option value={96}>96"</option>
+                                            <option value="custom">Custom...</option>
+                                        </select>
+                                        {(glassForm.width > 0 && ![78, 84, 96].includes(glassForm.width)) || glassForm.width === 0 ? null : null}
+                                        <input 
+                                            type="text" inputMode="decimal"
+                                            placeholder="W"
+                                            value={![0, 78, 84, 96].includes(glassForm.width) ? glassForm.width : ''}
+                                            onChange={e => {
+                                                const val = e.target.value.replace(/[^0-9.]/g, '');
+                                                setGlassForm({...glassForm, width: parseFloat(val) || 0});
+                                            }}
+                                            className={`w-16 p-3 rounded-xl border font-black text-center text-amber-700 bg-amber-50 ${![0, 78, 84, 96].includes(glassForm.width) ? 'ring-2 ring-amber-300' : ''}`}
+                                            title="Custom width"
+                                        />
+                                    </div>
+                                    {glassForm.width > 0 && ![78, 84, 96].includes(glassForm.width) && (
+                                        <span className="text-[8px] font-black text-amber-600 uppercase">Custom: {glassForm.width}"</span>
+                                    )}
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold uppercase text-slate-400">Height (Inch)</label>
-                                    <select 
-                                        value={glassForm.height} 
-                                        onChange={e => setGlassForm({...glassForm, height: Number(e.target.value)})} 
-                                        className="w-full p-3 rounded-xl border font-black"
-                                    >
-                                        <option value={0}>-</option>
-                                        <option value={144}>144"</option>
-                                    </select>
+                                    <div className="flex gap-1.5">
+                                        <select 
+                                            value={[144].includes(glassForm.height) ? glassForm.height : 'custom'} 
+                                            onChange={e => {
+                                                if (e.target.value === 'custom') return;
+                                                setGlassForm({...glassForm, height: Number(e.target.value)});
+                                            }} 
+                                            className="flex-1 p-3 rounded-xl border font-black"
+                                        >
+                                            <option value={0}>-</option>
+                                            <option value={144}>144"</option>
+                                            <option value="custom">Custom...</option>
+                                        </select>
+                                        <input 
+                                            type="text" inputMode="decimal"
+                                            placeholder="H"
+                                            value={![0, 144].includes(glassForm.height) ? glassForm.height : ''}
+                                            onChange={e => {
+                                                const val = e.target.value.replace(/[^0-9.]/g, '');
+                                                setGlassForm({...glassForm, height: parseFloat(val) || 0});
+                                            }}
+                                            className={`w-16 p-3 rounded-xl border font-black text-center text-amber-700 bg-amber-50 ${![0, 144].includes(glassForm.height) ? 'ring-2 ring-amber-300' : ''}`}
+                                            title="Custom height"
+                                        />
+                                    </div>
+                                    {glassForm.height > 0 && ![144].includes(glassForm.height) && (
+                                        <span className="text-[8px] font-black text-amber-600 uppercase">Custom: {glassForm.height}"</span>
+                                    )}
                                 </div>
                             </div>
+                            {/* Custom size sqft preview */}
+                            {glassForm.width > 0 && glassForm.height > 0 && (
+                                <div className="flex items-center gap-2 px-1">
+                                    <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                                        {glassForm.width}" × {glassForm.height}" = {((glassForm.width * glassForm.height) / 144).toFixed(2)} sqft/sheet
+                                    </span>
+                                    {(![78, 84, 96].includes(glassForm.width) || ![144].includes(glassForm.height)) && (
+                                        <span className="text-[8px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                            NON-STANDARD SIZE
+                                        </span>
+                                    )}
+                                </div>
+                            )}
 
                         </>
                     ) : (
