@@ -112,6 +112,7 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                           <th className="px-6 py-4">Item & Code</th>
                           <th className="px-6 py-4">Description</th>
                           <th className="px-6 py-4">Specs (Color/Dir/Tng)</th>
+                          <th className="px-6 py-4 text-right">Sheets</th>
                           <th className="px-6 py-4 text-right">Balance Qty</th>
                           <th className="px-6 py-4 text-right">Unit Price</th>
                           <th className="px-6 py-4 text-right">Amount</th>
@@ -122,6 +123,12 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                          const product = allProducts.find(p => p.id === item.id);
                          const hasImportSpecs = product && (product.finishColor || product.direction || product.tongueLength);
                          const currencySymbol = company === 'Nippon' ? '¥' : 'PKR';
+                         // Sheet count: compute from sqft balance / sqftPerSheet (from product sheetSize)
+                         const sqftPerSheet = product?.sheetSize ? (() => {
+                           const [w, h] = (product.sheetSize || '').split('x').map(Number);
+                           return w && h ? Number(((w * h) / 144).toFixed(3)) : 0;
+                         })() : 0;
+                         const sheetCount = sqftPerSheet > 0 ? Math.round((item.unrestrictedQty || 0) / sqftPerSheet) : null;
                          
                          return (
                          <tr key={item.id} className="hover:bg-slate-50 group">
@@ -149,6 +156,13 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                                     <span className="text-slate-300">-</span>
                                 )}
                             </td>
+                            <td className="px-6 py-4 text-right">
+                              {sheetCount !== null ? (
+                                <span className="font-black text-slate-700 text-sm">{sheetCount}</span>
+                              ) : (
+                                <span className="text-[9px] text-slate-300">—</span>
+                              )}
+                            </td>
                             <td className="px-6 py-4 text-right font-black text-slate-900 text-base">
                               <div className="flex items-center justify-end gap-2">
                                 {lowStockMap[item.id] && (
@@ -168,7 +182,7 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                          </tr>
                        )})}
                        {paginatedItems.length === 0 && (
-                           <tr><td colSpan={7} className="text-center py-20 text-slate-300 font-bold uppercase italic">No items found matching your filters.</td></tr>
+                           <tr><td colSpan={8} className="text-center py-20 text-slate-300 font-bold uppercase italic">No items found matching your filters.</td></tr>
                        )}
                     </tbody>
                  </table>
