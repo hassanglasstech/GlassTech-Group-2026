@@ -179,3 +179,76 @@ export interface DailyTarget {
   remainingDays: number;
   pendingSqFt: number;
 }
+
+// ── Floor Staff — production team member overlay on Employee ────────────
+export type FloorRole = 'Cutter' | 'Helper' | 'Polish Operator' | 'Machine Operator' | 'Supervisor';
+export type SkillGrade = 'A+' | 'A' | 'B' | 'C';
+
+export interface FloorStaff {
+  id: string;
+  company: Company;
+  employeeId: string;
+  name: string;
+  photoUrl?: string;
+  role: FloorRole;
+  skillGrade: SkillGrade;
+  avgSqftPerHour: number;         // auto-calculated from actuals
+  manualSqftPerHour: number;      // initial manual entry
+  isActive: boolean;
+}
+
+// ── Cutting Table — physical work station ───────────────────────────────
+export interface CuttingTable {
+  id: string;
+  company: Company;
+  label: string;                   // "Table 1", "Table 2", "Table 3"
+  status: 'Active' | 'Maintenance';
+}
+
+// ── Daily Floor Plan — team assignment + order queue per table ───────────
+export interface DailyFloorPlan {
+  id: string;
+  company: Company;
+  date: string;
+  tables: {
+    tableId: string;
+    teamStaffIds: string[];
+    queue: {
+      orderId: string;
+      orderRef: string;
+      clientName: string;
+      sqft: number;
+      pieceCount: number;
+      priority: 'Normal' | 'Urgent' | 'Emergency';
+      estimatedMinutes: number;
+      actualMinutes?: number;
+      status: 'Pending' | 'Cutting' | 'Done';
+      startedAt?: string;
+      completedAt?: string;
+    }[];
+  }[];
+  status: 'Draft' | 'Active' | 'Completed';
+  createdBy: string;
+  approvedBy?: string;
+}
+
+// ── Simulation Result — what-if analysis before execution ───────────────
+export interface SimulationResult {
+  id: string;
+  planId: string;
+  timestamp: string;
+  tables: {
+    tableId: string;
+    tableLabel: string;
+    estimatedFinishTime: string;
+    totalSqft: number;
+    totalMinutes: number;
+    utilizationPct: number;
+  }[];
+  alerts: string[];
+  impactIfUrgentInserted?: {
+    urgentOrderId: string;
+    targetTableId: string;
+    delayedOrders: { orderId: string; orderRef: string; delayMinutes: number }[];
+  };
+}
