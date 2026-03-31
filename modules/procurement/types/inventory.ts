@@ -167,7 +167,7 @@ export interface GRNSheetEntry {
 
   // ── Inspection Result ─────────────────────────────────────────────
   status: 'OK' | 'Defective' | 'Broken';
-  defectCode?: 'BR-01' | 'BR-02' | 'BR-03' | 'BR-04' | 'BR-05';
+  defectCode?: 'BR-01' | 'BR-02' | 'BR-03' | 'BR-04' | 'BR-05' | 'BR-06';
   defectDescription?: string;
   usableSqft?: number;            // for Defective/Broken — usable area
   cutterNote?: string;            // instruction for cutter
