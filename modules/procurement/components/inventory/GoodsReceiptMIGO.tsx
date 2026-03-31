@@ -204,17 +204,18 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
     SalesService.getProducts()
       .filter((p: any) =>
         (p.company === company || !p.company) &&
-        (p.category === 'Glass' || p.glassType) &&
-        p.thickness && p.sheetSize
+        (p.category === 'Glass' || p.category === 'Raw' || p.glassType)
       )
       .forEach((p: any) => {
-        const key = `${p.glassType || p.category}-${p.thickness}-${p.sheetSize}`;
+        const th = p.thickness || '';
+        const sz = p.sheetSize || '';
+        const key = `${p.glassType || p.category}-${th}-${sz}-${p.id}`;
         if (seen.has(key)) return; seen.add(key);
         const store = storeItems.find((s: StoreItem) => s.id === p.id);
         items.push({
-          label: [p.glassType || p.category, p.subCategory || '', p.thickness, `${p.sheetSize}"`].filter(Boolean).join(' ').trim(),
+          label: [p.glassType || p.category, p.subCategory || '', th, sz ? `${sz}"` : ''].filter(Boolean).join(' ').trim() || p.description,
           productId: p.id, category: p.glassType || p.category || 'Plain',
-          thickness: p.thickness, sheetSize: p.sheetSize,
+          thickness: th, sheetSize: sz,
           lastMAP: store?.movingAveragePrice || p.costPrice || 0,
           stockOnHand: store?.unrestrictedQty || 0,
         });
