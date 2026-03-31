@@ -16,13 +16,14 @@ import GTKStoreReceipt from '@/modules/procurement/components/inventory/GTKStore
 import ProjectConsumption from '@/modules/procurement/components/inventory/ProjectConsumption';
 import ToolRegister from '@/modules/procurement/components/inventory/ToolRegister';
 import AdvanceTracker from '@/modules/procurement/components/inventory/AdvanceTracker';
+import OpeningBalance from '@/modules/procurement/components/inventory/OpeningBalance';
 import { 
-  LayoutGrid, ArrowUpRight, ShieldCheck, Truck, Database, Loader2, Layers, BarChart3, Wrench, Banknote
+  LayoutGrid, ArrowUpRight, ShieldCheck, Truck, Database, Loader2, Layers, BarChart3, Wrench, Banknote, PackageOpen
 } from 'lucide-react';
 
 const InventoryModule: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'overview' | 'master' | 'issuance' | 'migo' | 'quality' | 'remnants' | 'consumption' | 'tools' | 'advances'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'master' | 'issuance' | 'migo' | 'quality' | 'remnants' | 'consumption' | 'tools' | 'advances' | 'opening'>('overview');
   const [isLoading, setIsLoading] = useState(true);
   
   const [items, setItems] = useState<StoreItem[]>([]);
@@ -69,6 +70,7 @@ const InventoryModule: React.FC = () => {
   const tabs = [
     { id: 'overview', label: 'Stock Balances', icon: LayoutGrid },
     { id: 'master', label: 'Material Master', icon: Database },
+    { id: 'opening', label: 'Opening Balance', icon: PackageOpen },
     { id: 'issuance', label: 'Goods Issue', icon: ArrowUpRight },
     { id: 'consumption', label: 'Project Consumption', icon: BarChart3 },
     // Tools tab only for aluminium companies
@@ -131,6 +133,12 @@ const InventoryModule: React.FC = () => {
                 ledger={ledger}
                 refreshData={refreshSync}
               />
+      )}
+
+      {activeTab === 'opening' && (
+        <div className="animate-in fade-in duration-300">
+          <OpeningBalance refreshData={refreshSync} />
+        </div>
       )}
 
       {activeTab === 'remnants' && (
