@@ -244,6 +244,8 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
                             <option value="Tempering">Tempering Partners</option>
                             <option value="Glass">Glass Suppliers</option>
                             <option value="Transport">Logistics & Transport</option>
+                            <option value="Crane/Unloading">Crane / Unloading</option>
+                            <option value="Labour">Labour</option>
                         </select>
                     </div>
                     <div className="relative w-64">
@@ -297,7 +299,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
         <div className="p-8 space-y-6 bg-slate-50">
           <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Vendor Name</label><input type="text" value={newVendorForm.name} onChange={e => setNewVendorForm({...newVendorForm, name: e.target.value})} className="sap-input w-full font-black uppercase" /></div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Type</label><select value={newVendorForm.type} onChange={e => setNewVendorForm({...newVendorForm, type: e.target.value as any})} className="sap-input w-full font-bold"><option value="Tempering">Tempering</option><option value="Glass">Glass</option><option value="Transport">Transport</option></select></div>
+            <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Type</label><select value={newVendorForm.type} onChange={e => setNewVendorForm({...newVendorForm, type: e.target.value as any})} className="sap-input w-full font-bold"><option value="Tempering">Tempering</option><option value="Glass">Glass</option><option value="Transport">Transport</option><option value="Crane/Unloading">Crane / Unloading</option><option value="Labour">Labour</option></select></div>
             <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Phone</label><input type="text" value={newVendorForm.phone} onChange={e => setNewVendorForm({...newVendorForm, phone: e.target.value})} className="sap-input w-full font-bold" /></div>
           {newVendorForm.type === 'Tempering' && (
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border">
