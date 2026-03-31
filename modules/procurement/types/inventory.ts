@@ -38,6 +38,22 @@ export interface Product {
   isSet?: boolean;
   setComponents?: ProductComponent[];
   hsCode?: string;
+  // ── Price History (version tracking) ────────────────────────────
+  priceHistory?: PriceHistoryEntry[];
+}
+
+// ── Price History Entry — tracks rate changes over time ───────────────
+export interface PriceHistoryEntry {
+  id: string;
+  date: string;                    // when the change was made
+  changedBy: string;               // who changed it
+  oldBasePrice: number;
+  newBasePrice: number;
+  oldCostPrice: number;
+  newCostPrice: number;
+  oldTemperingPrice?: number;
+  newTemperingPrice?: number;
+  reason?: string;                 // optional: why rate changed
 }
 
 export interface ProductComponent {
