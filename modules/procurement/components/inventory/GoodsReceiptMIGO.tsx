@@ -178,8 +178,7 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
   // ── Data ─────────────────────────────────────────────────────────────
   const glassVendors = useMemo(() =>
     SalesService.getVendors().filter((v: any) =>
-      (!v.company || v.company === company) &&
-      (v.type === 'Glass' || v.type === 'Supplier')
+      (!v.company || v.company === company)
     ), [company]);
 
   const glassPOs: PurchaseOrder[] = useMemo(() =>
