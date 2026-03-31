@@ -43,13 +43,19 @@ interface OBLine {
   description: string;
   category: string;
   unit: string;
-  qty: number;
-  rate: number;
-  totalValue: number;
+  // ── Sheet → SqFt → Value calculation ───────────────────────────
+  sheetCount: number;           // number of sheets
+  sqftPerSheet: number;         // auto from sheetSize (WxH / 144)
+  totalSqft: number;            // sheetCount × sqftPerSheet
+  rate: number;                 // rate per sqft
+  totalValue: number;           // totalSqft × rate
   storageBin: string;
+  // ── Weight ─────────────────────────────────────────────────────
+  weightKg: number;             // our own measured weight
+  biltyWeightKg: number;        // bilty/transporter weight (includes packaging)
   // For glass items
   thickness?: string;
-  sheetSize?: string;
+  sheetSize?: string;           // "84x144"
   // Search
   searchQuery: string;
   showSuggestions: boolean;
@@ -66,9 +72,17 @@ interface HealthIssue {
 const emptyLine = (): OBLine => ({
   id: `OB-L-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
   productId: '', description: '', category: '', unit: 'SqFt',
-  qty: 0, rate: 0, totalValue: 0, storageBin: 'MAIN',
+  sheetCount: 0, sqftPerSheet: 0, totalSqft: 0,
+  rate: 0, totalValue: 0, storageBin: 'MAIN',
+  weightKg: 0, biltyWeightKg: 0,
   searchQuery: '', showSuggestions: false,
 });
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function sqftOf(size: string): number {
+  const [w, h] = (size || '').split('x').map(Number);
+  return w && h ? Number(((w * h) / 144).toFixed(3)) : 0;
+}
 
 // ══════════════════════════════════════════════════════════════════════════
 // COMPONENT
@@ -110,14 +124,21 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
     setLines(prev => prev.map((l, i) => {
       if (i !== idx) return l;
       const updated = { ...l, ...patch };
-      if ('qty' in patch || 'rate' in patch) {
-        updated.totalValue = Number(((updated.qty || 0) * (updated.rate || 0)).toFixed(2));
+      // Recalc sqft from sheetSize if changed
+      if ('sheetSize' in patch && patch.sheetSize) {
+        updated.sqftPerSheet = sqftOf(patch.sheetSize);
+      }
+      // Recalc totalSqft and totalValue on any quantity/rate change
+      if ('sheetCount' in patch || 'sqftPerSheet' in patch || 'rate' in patch || 'sheetSize' in patch) {
+        updated.totalSqft = Number(((updated.sheetCount || 0) * (updated.sqftPerSheet || 0)).toFixed(2));
+        updated.totalValue = Number(((updated.totalSqft || 0) * (updated.rate || 0)).toFixed(2));
       }
       return updated;
     }));
   };
 
   const selectProduct = (idx: number, product: Product) => {
+    const spf = sqftOf(product.sheetSize || '');
     updateLine(idx, {
       productId: product.id,
       description: product.description,
@@ -125,6 +146,7 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
       unit: product.unit || 'SqFt',
       thickness: product.thickness,
       sheetSize: product.sheetSize,
+      sqftPerSheet: spf,
       searchQuery: product.description,
       showSuggestions: false,
     });
@@ -154,7 +176,7 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
     const errors: string[] = [];
     linesToPost.forEach((l, i) => {
       if (!l.description) errors.push(`Line ${i + 1}: Material description is required`);
-      if (l.qty <= 0) errors.push(`Line ${i + 1}: Quantity must be > 0`);
+      if (l.sheetCount <= 0 && l.totalSqft <= 0) errors.push(`Line ${i + 1}: Sheet count or total sqft must be > 0`);
       if (l.rate <= 0) errors.push(`Line ${i + 1}: Rate must be > 0`);
     });
     if (errors.length > 0) {
@@ -195,13 +217,19 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
         }
 
         // ── Update Stock Quantities ──────────────────────────────────
-        item.quantity = (item.quantity || 0) + line.qty;
-        item.unrestrictedQty = (item.unrestrictedQty || 0) + line.qty;
+        const stockQty = line.totalSqft > 0 ? line.totalSqft : line.sheetCount;
+        item.quantity = (item.quantity || 0) + stockQty;
+        item.unrestrictedQty = (item.unrestrictedQty || 0) + stockQty;
         item.totalValue = (item.totalValue || 0) + line.totalValue;
         item.movingAveragePrice = item.quantity > 0
           ? Number((item.totalValue / item.quantity).toFixed(2))
           : line.rate;
         item.lastMovementDate = obDate;
+        // Weight data
+        if (line.weightKg > 0) {
+          item.perSheetWeightKg = line.sheetCount > 0 ? Number((line.weightKg / line.sheetCount).toFixed(3)) : 0;
+          item.perSqftWeightKg = stockQty > 0 ? Number((line.weightKg / stockQty).toFixed(4)) : 0;
+        }
 
         if (itemIdx !== -1) store[itemIdx] = item; else store.push(item);
 
@@ -212,13 +240,15 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
           materialId,
           timestamp: new Date(obDate).toISOString(),
           mvmntCode: '561',
-          qty: line.qty,
-          uom: line.unit || 'SqFt',
+          qty: line.totalSqft > 0 ? line.totalSqft : line.sheetCount,
+          uom: line.totalSqft > 0 ? 'SqFt' : (line.unit || 'SqFt'),
           valuation: line.rate,
           balanceAfter: item.quantity,
           referenceDoc: obId,
           user: 'Opening Balance',
-          remarks: `Opening Balance — ${line.description}${remarks ? ' | ' + remarks : ''}`,
+          remarks: `Opening Balance — ${line.description} (${line.sheetCount} sheets${line.sheetSize ? ', ' + line.sheetSize + '"' : ''}${line.weightKg > 0 ? ', Own Wt: ' + line.weightKg + 'kg' : ''}${line.biltyWeightKg > 0 ? ', Bilty Wt: ' + line.biltyWeightKg + 'kg' : ''})${remarks ? ' | ' + remarks : ''}`,
+          sheetCount: line.sheetCount || undefined,
+          lineWeightKg: line.weightKg || undefined,
         };
         ledger.push(ledgerEntry);
         glTotal += line.totalValue;
@@ -308,22 +338,24 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
     const rows: OBLine[] = [];
     const rawLines = csvText.trim().split('\n');
 
-    // Expected format: Description, Category, Unit, Qty, Rate, StorageBin
+    // Expected format: Description, Category, Sheets, SheetSize, Rate, WeightKg, BiltyKg, StorageBin
     // Skip header if present
     const startIdx = rawLines[0]?.toLowerCase().includes('description') ? 1 : 0;
 
     rawLines.slice(startIdx).forEach((raw, i) => {
       const cols = raw.split(',').map(c => c.trim());
       if (cols.length < 5) {
-        errors.push(`Row ${i + 1}: Need at least 5 columns (Description, Category, Unit, Qty, Rate)`);
+        errors.push(`Row ${i + 1}: Need at least 5 columns (Description, Category, Sheets, SheetSize, Rate)`);
         return;
       }
-      const [desc, cat, unit, qtyStr, rateStr, bin] = cols;
-      const qty = parseFloat(qtyStr);
+      const [desc, cat, sheetsStr, sizeStr, rateStr, wtStr, biltyStr, bin] = cols;
+      const sheets = parseFloat(sheetsStr);
       const rate = parseFloat(rateStr);
+      const wt = parseFloat(wtStr) || 0;
+      const biltyWt = parseFloat(biltyStr) || 0;
 
       if (!desc) { errors.push(`Row ${i + 1}: Description empty`); return; }
-      if (isNaN(qty) || qty <= 0) { errors.push(`Row ${i + 1}: Invalid qty "${qtyStr}"`); return; }
+      if (isNaN(sheets) || sheets <= 0) { errors.push(`Row ${i + 1}: Invalid sheets "${sheetsStr}"`); return; }
       if (isNaN(rate) || rate <= 0) { errors.push(`Row ${i + 1}: Invalid rate "${rateStr}"`); return; }
 
       // Try to match with existing product
@@ -331,17 +363,25 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
         p.description.toLowerCase() === desc.toLowerCase()
       );
 
+      const spf = sqftOf(sizeStr || matchedProduct?.sheetSize || '');
+      const totalSqft = Number((sheets * spf).toFixed(2));
+
       rows.push({
         id: `OB-CSV-${i}`,
         productId: matchedProduct?.id || '',
         description: desc,
         category: cat || 'Raw',
-        unit: unit || 'SqFt',
-        qty, rate,
-        totalValue: Number((qty * rate).toFixed(2)),
+        unit: 'SqFt',
+        sheetCount: sheets,
+        sqftPerSheet: spf,
+        totalSqft,
+        rate,
+        totalValue: Number((totalSqft * rate).toFixed(2)),
         storageBin: bin || 'MAIN',
+        weightKg: wt,
+        biltyWeightKg: biltyWt,
         thickness: matchedProduct?.thickness,
-        sheetSize: matchedProduct?.sheetSize,
+        sheetSize: sizeStr || matchedProduct?.sheetSize,
         searchQuery: desc,
         showSuggestions: false,
       });
@@ -604,24 +644,36 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                   </div>
                 </div>
 
-                {/* Second Row: Qty, Rate, Value, Bin */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {/* Second Row: Sheets, SqFt/Sheet, Total SqFt, Rate, Value */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                   <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Quantity *</label>
+                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Sheets *</label>
                     <input
                       type="text"
                       inputMode="decimal"
                       placeholder="0"
-                      value={line.qty > 0 ? line.qty : ''}
+                      value={line.sheetCount > 0 ? line.sheetCount : ''}
                       onChange={e => {
                         const val = e.target.value.replace(/[^0-9.]/g, '');
-                        updateLine(idx, { qty: parseFloat(val) || 0 });
+                        updateLine(idx, { sheetCount: parseFloat(val) || 0 });
                       }}
                       className="w-full px-3 py-2 border rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Rate (PKR) *</label>
+                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">SqFt/Sheet</label>
+                    <div className={`px-3 py-2 border rounded-lg text-xs font-black ${line.sqftPerSheet > 0 ? 'bg-blue-50 text-blue-700' : 'bg-slate-50 text-slate-300'}`}>
+                      {line.sqftPerSheet > 0 ? line.sqftPerSheet.toFixed(2) : line.sheetSize ? sqftOf(line.sheetSize).toFixed(2) : '—'}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Total SqFt</label>
+                    <div className={`px-3 py-2 border rounded-lg text-xs font-black ${line.totalSqft > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-300'}`}>
+                      {line.totalSqft > 0 ? line.totalSqft.toLocaleString() : '—'}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Rate/SqFt (PKR) *</label>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -640,6 +692,47 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                       PKR {line.totalValue.toLocaleString()}
                     </div>
                   </div>
+                </div>
+
+                {/* Third Row: Weight, Bilty Weight, Storage Bin */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Our Weight (KG)</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="Manual weight"
+                      value={line.weightKg > 0 ? line.weightKg : ''}
+                      onChange={e => {
+                        const val = e.target.value.replace(/[^0-9.]/g, '');
+                        updateLine(idx, { weightKg: parseFloat(val) || 0 });
+                      }}
+                      className="w-full px-3 py-2 border rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Bilty Weight (KG)</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="Transporter wt"
+                      value={line.biltyWeightKg > 0 ? line.biltyWeightKg : ''}
+                      onChange={e => {
+                        const val = e.target.value.replace(/[^0-9.]/g, '');
+                        updateLine(idx, { biltyWeightKg: parseFloat(val) || 0 });
+                      }}
+                      className="w-full px-3 py-2 border rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  {line.biltyWeightKg > 0 && line.weightKg > 0 && (
+                    <div>
+                      <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Packaging Diff</label>
+                      <div className={`px-3 py-2 border rounded-lg text-xs font-black ${(line.biltyWeightKg - line.weightKg) > 0 ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-slate-400'}`}>
+                        {(line.biltyWeightKg - line.weightKg).toFixed(1)} KG
+                        <span className="text-[8px] ml-1 text-slate-400">(pallet/plastic/paper)</span>
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Storage Bin</label>
                     <input
@@ -677,13 +770,15 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
           <div className="p-6 border-t bg-slate-50/50 flex items-center justify-between">
             <div className="flex items-center gap-6 text-xs">
               <span className="font-bold text-slate-500">{lines.filter(l => l.description).length} item(s)</span>
+              <span className="font-bold text-slate-500">Sheets: <span className="font-black text-slate-800">{lines.reduce((s, l) => s + l.sheetCount, 0)}</span></span>
+              <span className="font-bold text-slate-500">SqFt: <span className="font-black text-slate-800">{lines.reduce((s, l) => s + l.totalSqft, 0).toFixed(1)}</span></span>
               <span className="font-black text-blue-700 text-sm">
                 Total: PKR {lines.reduce((s, l) => s + l.totalValue, 0).toLocaleString()}
               </span>
             </div>
             <button
               onClick={() => postOpeningBalances(lines)}
-              disabled={isPosting || lines.every(l => !l.description)}
+              disabled={isPosting || lines.every(l => !l.description || (l.sheetCount <= 0 && l.totalSqft <= 0))}
               className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-wider hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center gap-2"
             >
               {isPosting ? (
@@ -704,7 +799,7 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
           <div className="p-6 border-b bg-slate-50/50">
             <h2 className="text-sm font-black uppercase text-slate-800">Bulk Opening Balance — CSV Upload</h2>
             <p className="text-[10px] text-slate-400 mt-1">
-              Format: <span className="font-mono bg-slate-100 px-1 rounded">Description, Category, Unit, Qty, Rate, StorageBin</span>
+              Format: <span className="font-mono bg-slate-100 px-1 rounded">Description, Category, Sheets, SheetSize, Rate, WeightKg, BiltyKg, StorageBin</span>
             </p>
           </div>
 
@@ -725,7 +820,7 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
               value={csvText}
               onChange={e => setCsvText(e.target.value)}
               rows={10}
-              placeholder={`Description, Category, Unit, Qty, Rate, StorageBin\nClear Glass 5mm 84x144, Raw, SqFt, 500, 45, MAIN\nAluminium Handle Chrome, Hardware, PCS, 200, 350, RACK-A\nSilicone Tube, Consumable, Tube, 50, 120, SHELF-3`}
+              placeholder={`Description, Category, Sheets, SheetSize, Rate, WeightKg, BiltyKg, StorageBin\nClear Glass 5mm, Raw, 20, 84x144, 45, 1200, 1350, MAIN\nMirror 6mm Belgium, Raw, 10, 84x144, 120, 800, 920, RACK-A\nColor Glass 5mm Grey, Raw, 15, 78x144, 55, 900, 1050, MAIN`}
               className="w-full px-4 py-3 border rounded-xl text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
             />
 
@@ -777,10 +872,12 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                       <th className="px-4 py-2">#</th>
                       <th className="px-4 py-2">Description</th>
                       <th className="px-4 py-2">Category</th>
-                      <th className="px-4 py-2">Unit</th>
-                      <th className="px-4 py-2 text-right">Qty</th>
+                      <th className="px-4 py-2 text-right">Sheets</th>
+                      <th className="px-4 py-2">Size</th>
+                      <th className="px-4 py-2 text-right">SqFt</th>
                       <th className="px-4 py-2 text-right">Rate</th>
                       <th className="px-4 py-2 text-right">Value</th>
+                      <th className="px-4 py-2 text-right">Wt KG</th>
                       <th className="px-4 py-2">Match</th>
                     </tr>
                   </thead>
@@ -790,10 +887,12 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                         <td className="px-4 py-2 text-slate-400">{i + 1}</td>
                         <td className="px-4 py-2 font-bold">{r.description}</td>
                         <td className="px-4 py-2">{r.category}</td>
-                        <td className="px-4 py-2">{r.unit}</td>
-                        <td className="px-4 py-2 text-right font-bold">{r.qty.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-right font-bold">{r.sheetCount}</td>
+                        <td className="px-4 py-2 text-[10px]">{r.sheetSize || '—'}</td>
+                        <td className="px-4 py-2 text-right font-bold">{r.totalSqft.toLocaleString()}</td>
                         <td className="px-4 py-2 text-right">{r.rate.toLocaleString()}</td>
                         <td className="px-4 py-2 text-right font-black text-blue-600">{r.totalValue.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-right text-slate-500">{r.weightKg > 0 ? r.weightKg : '—'}</td>
                         <td className="px-4 py-2">
                           {r.productId ? (
                             <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Matched</span>
