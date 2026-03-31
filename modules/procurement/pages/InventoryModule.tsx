@@ -17,13 +17,14 @@ import ProjectConsumption from '@/modules/procurement/components/inventory/Proje
 import ToolRegister from '@/modules/procurement/components/inventory/ToolRegister';
 import AdvanceTracker from '@/modules/procurement/components/inventory/AdvanceTracker';
 import OpeningBalance from '@/modules/procurement/components/inventory/OpeningBalance';
+import GRNRegister from '@/modules/procurement/components/inventory/GRNRegister';
 import { 
-  LayoutGrid, ArrowUpRight, ShieldCheck, Truck, Database, Loader2, Layers, BarChart3, Wrench, Banknote, PackageOpen
+  LayoutGrid, ArrowUpRight, ShieldCheck, Truck, Database, Loader2, Layers, BarChart3, Wrench, Banknote, PackageOpen, ClipboardList
 } from 'lucide-react';
 
 const InventoryModule: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'overview' | 'master' | 'issuance' | 'migo' | 'quality' | 'remnants' | 'consumption' | 'tools' | 'advances' | 'opening'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'master' | 'issuance' | 'migo' | 'quality' | 'remnants' | 'consumption' | 'tools' | 'advances' | 'opening' | 'grnRegister'>('overview');
   const [isLoading, setIsLoading] = useState(true);
   
   const [items, setItems] = useState<StoreItem[]>([]);
@@ -79,6 +80,7 @@ const InventoryModule: React.FC = () => {
     // Quality Hub & Remnants only for glass companies
     ...(!isAluminiumCompany ? [{ id: 'quality', label: 'Quality Hub', icon: ShieldCheck }] : []),
     ...(!isAluminiumCompany ? [{ id: 'remnants', label: 'Remnants', icon: Layers }] : []),
+    ...(!isAluminiumCompany ? [{ id: 'grnRegister', label: 'GRN Register', icon: ClipboardList }] : []),
   ];
 
   if (isLoading) return <div className="h-full flex items-center justify-center text-slate-400"><Loader2 className="animate-spin mr-2"/> Loading Inventory Data...</div>;
@@ -162,6 +164,12 @@ const InventoryModule: React.FC = () => {
       {activeTab === 'advances' && (
         <div className="animate-in fade-in duration-300">
           <AdvanceTracker />
+        </div>
+      )}
+
+      {activeTab === 'grnRegister' && (
+        <div className="animate-in fade-in duration-300">
+          <GRNRegister />
         </div>
       )}
 
