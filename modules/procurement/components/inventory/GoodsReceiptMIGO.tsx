@@ -32,6 +32,7 @@ const DEFECT_CODES = [
   { value: 'BR-03', label: 'BR-03 — Surface Scratch' },
   { value: 'BR-04', label: 'BR-04 — Manufacturing Defect' },
   { value: 'BR-05', label: 'BR-05 — Complete Break' },
+  { value: 'BR-06', label: 'BR-06 — Bubbles' },
 ];
 
 const SQFT_TO_SQM = 0.092903;
@@ -1039,11 +1040,38 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
                 <span className="font-bold text-slate-500">Sq Mtr: <span className="font-black text-slate-800">{totalSqmtr.toFixed(2)}</span></span>
                 <span className="font-bold text-slate-500">Weight: <span className="font-black text-slate-800">{totalWeight.toFixed(1)} kg</span></span>
               </div>
-              <button onClick={handleGenerateTags}
-                className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-black uppercase ${tagsGenerated ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-slate-900 text-white hover:bg-blue-700'}`}>
-                <Tag size={13}/>
-                {tagsGenerated ? `Tags Generated (${lines.reduce((s,l)=>s+l.tagIds.length,0)}) ✓` : 'Generate Tags'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={handleGenerateTags}
+                  className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-black uppercase ${tagsGenerated ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-slate-900 text-white hover:bg-blue-700'}`}>
+                  <Tag size={13}/>
+                  {tagsGenerated ? `Tags Generated (${lines.reduce((s,l)=>s+l.tagIds.length,0)}) ✓` : 'Generate Tags'}
+                </button>
+                {tagsGenerated && (
+                  <button onClick={() => {
+                    const tagLines = lines.filter(l => l.tagIds.length > 0);
+                    const printContent = tagLines.map(l =>
+                      l.tagIds.map(t => `<div style="border:1px dashed #999;padding:8px;margin:4px;display:inline-block;font-family:monospace;font-size:11px;min-width:220px;">
+                        <div style="font-weight:900;font-size:13px;">${t}</div>
+                        <div>${l.category} ${l.thickness} ${l.sheetSize}"</div>
+                        <div style="color:#666;">${selectedVendor?.name || ''} | ${grnId}</div>
+                        <div style="color:#666;">${grnDate}</div>
+                      </div>`).join('')
+                    ).join('');
+                    const w = window.open('', '_blank', 'width=800,height=600');
+                    if (w) {
+                      w.document.write(`<html><head><title>Sheet Tags — ${grnId}</title></head><body style="padding:16px;">
+                        <h3 style="font-family:sans-serif;margin-bottom:12px;">Sheet Tags — ${grnId} (${lines.reduce((s,l)=>s+l.tagIds.length,0)} tags)</h3>
+                        <div style="display:flex;flex-wrap:wrap;gap:4px;">${printContent}</div>
+                        <script>setTimeout(()=>window.print(),500)<\/script>
+                      </body></html>`);
+                      w.document.close();
+                    }
+                  }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase bg-blue-600 text-white hover:bg-blue-700">
+                    <Printer size={13}/> Print Tags
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Defect summary */}
