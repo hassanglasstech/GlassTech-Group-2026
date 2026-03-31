@@ -7,13 +7,17 @@
 import React, { useState, useMemo } from 'react';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
-import { MaterialLedgerEntry } from '@/modules/procurement/types/inventory';
-import { Search, Truck, Trash2, ChevronDown, ChevronRight, Package } from 'lucide-react';
+import { SalesService } from '@/modules/sales/services/salesService';
+import { FinanceService } from '@/modules/finance/services/financeService';
+import { MaterialLedgerEntry, StoreItem } from '@/modules/procurement/types/inventory';
+import { Search, Truck, Trash2, ChevronDown, ChevronRight, Package, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 
 const GRNRegister: React.FC = () => {
   const company = useAppStore(s => s.selectedCompany);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedGrn, setExpandedGrn] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Build GRN list from ledger entries with mvmntCode 101
   const grnList = useMemo(() => {
@@ -66,7 +70,7 @@ const GRNRegister: React.FC = () => {
 
     return Object.values(grnMap)
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [company]);
+  }, [company, refreshKey]);
 
   const filtered = useMemo(() => {
     if (!searchTerm.trim()) return grnList;
@@ -82,6 +86,56 @@ const GRNRegister: React.FC = () => {
   // Sheet entries for expanded GRN
   const getSheetEntries = (grnId: string) =>
     InventoryService.getGRNSheetEntriesByGRN(grnId);
+
+  // ── DELETE GRN — full reversal ──────────────────────────────────────
+  const handleDeleteGRN = (grnId: string) => {
+    if (!window.confirm(`Delete GRN ${grnId}?\n\nThis will:\n• Reverse stock quantities\n• Remove sheet entries\n• Delete linked GL entries\n• Remove vendor defect reports\n\nThis cannot be undone.`)) return;
+
+    const grn = grnList.find(g => g.grnId === grnId);
+    if (!grn) return;
+
+    // 1. Reverse stock — reduce qty from store items
+    const allStore = InventoryService.getStore();
+    grn.lines.forEach(line => {
+      const storeIdx = allStore.findIndex(s => s.id === line.materialId && s.company === company);
+      if (storeIdx !== -1) {
+        const item = { ...allStore[storeIdx] };
+        item.quantity = Math.max(0, (item.quantity || 0) - (line.qty || 0));
+        item.unrestrictedQty = Math.max(0, (item.unrestrictedQty || 0) - (line.qty || 0));
+        item.totalValue = Math.max(0, (item.totalValue || 0) - ((line.qty || 0) * (line.valuation || 0)));
+        allStore[storeIdx] = item;
+      }
+    });
+    InventoryService.saveStore(allStore);
+
+    // 2. Remove ledger entries for this GRN
+    const allLedger = InventoryService.getStockLedger().filter(
+      (e: MaterialLedgerEntry) => e.referenceDoc !== grnId
+    );
+    InventoryService.saveStockLedger(allLedger);
+
+    // 3. Remove sheet entries
+    const allSheets = InventoryService.getGRNSheetEntries().filter(
+      s => s.grnId !== grnId
+    );
+    InventoryService.saveGRNSheetEntries(allSheets);
+
+    // 4. Remove vendor defect reports linked to this GRN
+    const allReports = InventoryService.getVendorDefectReports().filter(
+      r => r.grnId !== grnId
+    );
+    InventoryService.saveVendorDefectReports(allReports);
+
+    // 5. Remove GL entries linked to this GRN (referenceId === grnId)
+    const allGL = FinanceService.getLedger().filter(
+      (tx: any) => tx.referenceId !== grnId
+    );
+    FinanceService.saveLedger(allGL);
+
+    setExpandedGrn(null);
+    setRefreshKey(k => k + 1);
+    toast.success(`GRN ${grnId} deleted — stock reversed, ${grn.lines.length} line(s), GL entries removed`);
+  };
 
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
@@ -157,9 +211,15 @@ const GRNRegister: React.FC = () => {
                   {isExpanded && (
                     <div className="bg-slate-50 border-t border-slate-100 px-10 py-4">
                       {/* Line items */}
-                      <div className="text-[9px] font-black uppercase text-slate-400 mb-2 tracking-widest">
-                        {grn.lines.length} Line Item(s)
-                        {grn.poId && <span className="ml-3 text-blue-500">PO: {grn.poId}</span>}
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                          {grn.lines.length} Line Item(s)
+                          {grn.poId && <span className="ml-3 text-blue-500">PO: {grn.poId}</span>}
+                        </div>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteGRN(grn.grnId); }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-[10px] font-black uppercase hover:bg-red-600 hover:text-white transition-all">
+                          <Trash2 size={11}/> Delete GRN
+                        </button>
                       </div>
                       <div className="space-y-1 mb-4">
                         {grn.lines.map((line, i) => (
