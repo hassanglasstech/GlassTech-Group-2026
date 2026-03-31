@@ -466,17 +466,32 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
       const defUsableSqft = defSheets.reduce((s, i) => s + (i.usableSqft || 0), 0);
       const lineTotalSqft = okSqft + defUsableSqft;
 
-      // ── Landed cost allocation (IAS 2) ───────────────────────────
-      // Allocate freight + crane + labour(net) proportionally by sqft
-      const totalGRNSqft = filledLines.reduce((s, l) => {
-        const ok = l.sheetInspections.filter(i => i.status === 'OK').reduce((ss, _i) => ss + l.sqftPerSheet, 0);
-        const def = l.sheetInspections.filter(i => i.status !== 'OK').reduce((ss, i) => ss + (i.usableSqft || 0), 0);
-        return s + ok + def;
-      }, 0);
+      // ── Landed cost allocation (IAS 2 — weight basis) ────────────
+      // Primary: line weight / total GRN weight
+      // Fallback: if any line has zero weight, use bilty weight distributed by sqft
+      const totalGRNWeight = filledLines.reduce((s, l) => s + (l.weightKg || 0), 0);
+      const allLinesHaveWeight = filledLines.every(l => (l.weightKg || 0) > 0);
       const totalLandedCharges = freightPKR + craneAmount + Math.max(0, labourNetPayable) + otherCharges;
-      const lineShareOfCharges = totalGRNSqft > 0 && lineTotalSqft > 0
-        ? Number(((lineTotalSqft / totalGRNSqft) * totalLandedCharges).toFixed(2))
-        : 0;
+
+      let lineShareOfCharges = 0;
+      if (totalLandedCharges > 0) {
+        if (allLinesHaveWeight && totalGRNWeight > 0) {
+          // Weight basis — all lines have weight entered
+          lineShareOfCharges = Number(((line.weightKg / totalGRNWeight) * totalLandedCharges).toFixed(2));
+        } else if (biltyWeight > 0) {
+          // Fallback: bilty weight distributed by sqft ratio
+          const totalGRNSqft = filledLines.reduce((s, l) => {
+            const ok = l.sheetInspections.filter(i => i.status === 'OK').reduce((ss, _i) => ss + l.sqftPerSheet, 0);
+            const def = l.sheetInspections.filter(i => i.status !== 'OK').reduce((ss, i) => ss + (i.usableSqft || 0), 0);
+            return s + ok + def;
+          }, 0);
+          const lineTotalSqftForAlloc = okSqft + defUsableSqft;
+          lineShareOfCharges = totalGRNSqft > 0
+            ? Number(((lineTotalSqftForAlloc / totalGRNSqft) * totalLandedCharges).toFixed(2))
+            : 0;
+        }
+        // If neither weight nor bilty weight available — charges not allocated (stay as period expense)
+      }
 
       const okValue  = Number((okSqft * line.ratePKR).toFixed(2));
       const defValue = Number((defUsableSqft * line.ratePKR).toFixed(2));
