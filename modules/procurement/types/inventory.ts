@@ -627,6 +627,10 @@ export interface VehicleTrip {
   status: 'Scheduled' | 'Completed' | 'Cancelled';
   paidStatus: 'Unpaid' | 'Paid';
   glTxId?: string;
+  // ── Load direction + rate (Phase 1) ────────────────────────────
+  loadDirection?: 'Both' | 'OneWayLoaded' | 'OneWayEmpty';
+  fullRate?: number;               // full round-trip rate
+  reducedRate?: number;            // one-way empty rate (typically 50%)
 }
 
 export interface VehicleExpense {
