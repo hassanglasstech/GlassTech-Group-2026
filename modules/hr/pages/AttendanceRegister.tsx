@@ -9,6 +9,7 @@ import * as XLSX from 'xlsx';
 import { useAppStore } from '../../shared/store/appStore';
 import { toast } from 'sonner';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
+import IndividualAttendanceModal from '@/modules/hr/components/IndividualAttendanceModal';
 
 const AttendanceRegister: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
@@ -18,6 +19,7 @@ const AttendanceRegister: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [viewType, setViewType] = useState<'daily' | 'monthly' | 'summary'>('daily');
   const [isBulkEditing, setIsBulkEditing] = useState(false);
+  const [individualEditEmp, setIndividualEditEmp] = useState<Employee | null>(null);
   const [bulkData, setBulkData] = useState<Record<string, Record<string, { status: AttendanceStatus, ot: number, early: number, late: number }>>>({});
   
   // Phase 3 State
@@ -474,11 +476,7 @@ const AttendanceRegister: React.FC = () => {
           {viewType === 'daily' ? (
             !isSelectedDateSunday && <button onClick={handleSaveAll} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-blue-700 transition-all whitespace-nowrap">Save Register</button>
           ) : viewType === 'monthly' ? (
-            !isBulkEditing ? (
-              <button onClick={startBulkEdit} className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-indigo-700 transition-all whitespace-nowrap">Edit Monthly Data</button>
-            ) : (
-              <button onClick={saveBulkMonthly} className="bg-emerald-600 text-white px-6 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-emerald-700 transition-all whitespace-nowrap">Save All Monthly</button>
-            )
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Click employee row to edit</span>
           ) : null}
         </div>
       </div>
@@ -538,8 +536,17 @@ const AttendanceRegister: React.FC = () => {
                   return (
                     <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-4 py-3 sticky left-0 bg-white z-20 border-r shadow-lg">
-                        <p className="font-bold text-xs text-slate-800 leading-none">{emp?.personal?.name ?? "—"}</p>
-                        <p className="text-[8px] text-slate-400 font-black uppercase mt-1 tracking-tighter">{emp?.work?.employeeCode ?? "—"}</p>
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <p className="font-bold text-xs text-slate-800 leading-none">{emp?.personal?.name ?? "—"}</p>
+                            <p className="text-[8px] text-slate-400 font-black uppercase mt-1 tracking-tighter">{emp?.work?.employeeCode ?? "—"}</p>
+                          </div>
+                          <button
+                            onClick={() => setIndividualEditEmp(emp)}
+                            className="shrink-0 px-2 py-1 text-[8px] font-black uppercase bg-blue-50 border border-blue-100 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all tracking-widest"
+                            title="Edit this employee's monthly attendance"
+                          >Edit</button>
+                        </div>
                       </td>
                       {daysArray.map(day => {
                         const dateStr = `${selectedMonth}-${String(day).padStart(2, '0')}`;
@@ -650,6 +657,15 @@ const AttendanceRegister: React.FC = () => {
                   </tbody>
               </table>
           </div>
+      )}
+
+      {individualEditEmp && (
+        <IndividualAttendanceModal
+          employee={individualEditEmp}
+          month={selectedMonth}
+          onClose={() => setIndividualEditEmp(null)}
+          onSaved={() => { refreshAllData(); }}
+        />
       )}
 
       {isEditSummaryModalOpen && editingSummary && (
