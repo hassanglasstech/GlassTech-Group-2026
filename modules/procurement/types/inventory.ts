@@ -445,6 +445,26 @@ export interface PalletRateEntry {
   totalPacking: number;            // palletCount × ratePerPallet
 }
 
+// ── Weight Master Entry — per-KG weight record with history ──────────────
+export interface WeightMasterEntry {
+  id: string;
+  company: Company;
+  productId: string;
+  productName: string;
+  thickness: string;
+  sheetSize: string;
+  date: string;
+  recordedBy: string;
+  totalWeightKg: number;
+  sheetCount: number;
+  perSheetKg: number;
+  sqftPerSheet: number;
+  perSqftKg: number;
+  source: 'GRN' | 'Manual';
+  grnId?: string;
+  notes?: string;
+}
+
 export interface RequisitionItem { 
   id: string; 
   itemCategory: string; 
