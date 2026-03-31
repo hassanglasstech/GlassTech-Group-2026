@@ -31,6 +31,8 @@ const ACC = {
   FREIGHT_EXPENSE:   '51214',   // Inward Freight Expense (fallback: 51213)
   SCRAP_INVENTORY:   '11519',   // Scrap Inventory (nominal) — may not exist, fallback to 11511
   OTHER_INCOME:      '44112',   // Other Income / Miscellaneous
+  UNLOADING_CRANE:   '51215',   // Unloading Expense — Crane
+  UNLOADING_LABOUR:  '51216',   // Unloading Expense — Labour
 };
 
 // ── Helper: find account by code ──────────────────────────────────────────
@@ -377,6 +379,114 @@ export function postOtherChargesGL(params: {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// 5b. CRANE PV — Dr Unloading Expense (Crane) / Cr Cash
+// ══════════════════════════════════════════════════════════════════════════
+export function postCranePV(params: {
+  company: string;
+  grnId: string;
+  grnDate: string;
+  craneVendorName: string;
+  craneAmount: number;
+}): boolean {
+  const { company, grnId, grnDate, craneAmount, craneVendorName } = params;
+  if (craneAmount <= 0) return true;
+
+  const accounts = FinanceService.getAccounts().filter(a => a.company === company);
+  const craneAcc = findAcc(accounts, ACC.UNLOADING_CRANE)
+    || accounts.find(a => a.name?.toLowerCase().includes('unloading') && a.type === 'Expense')
+    || findAcc(accounts, ACC.FREIGHT_EXPENSE); // fallback
+  const cashAcc = findAcc(accounts, ACC.CASH_IN_HAND);
+
+  if (!craneAcc || !cashAcc) {
+    console.warn('[Crane PV] Unloading Expense or Cash account not found');
+    return false;
+  }
+
+  const tx: LedgerTransaction = {
+    id: genTxId('PV'),
+    company: company as any,
+    docType: 'PV' as LedgerDocType,
+    docDate: grnDate,
+    date: grnDate,
+    description: `GRN ${grnId} — Crane/Unloading (${craneVendorName})`,
+    referenceId: grnId,
+    status: 'Parked',
+    details: [
+      { accountId: craneAcc.id, debit: craneAmount, credit: 0, text: `Unloading Expense — Crane (${craneVendorName})` },
+      { accountId: cashAcc.id, debit: 0, credit: craneAmount, text: `Cash paid — Crane ${craneVendorName} — GRN ${grnId}` },
+    ],
+  };
+
+  FinanceService.recordTransaction(tx);
+  return true;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 5c. LABOUR + PACKING PV — IFRS Gross Accounting
+//     Dr Unloading Expense (Labour) = gross labour
+//     Cr Other Income (Packing Sale) = packing buyback
+//     Cr Cash = net payable (labour - packing)
+// ══════════════════════════════════════════════════════════════════════════
+export function postLabourPackingPV(params: {
+  company: string;
+  grnId: string;
+  grnDate: string;
+  labourVendorName: string;
+  labourGross: number;
+  packingBuyback: number;
+  netPayable: number;
+}): boolean {
+  const { company, grnId, grnDate, labourVendorName, labourGross, packingBuyback, netPayable } = params;
+  if (labourGross <= 0) return true;
+
+  const accounts = FinanceService.getAccounts().filter(a => a.company === company);
+  const labourAcc = findAcc(accounts, ACC.UNLOADING_LABOUR)
+    || findAcc(accounts, ACC.UNLOADING_CRANE)
+    || accounts.find(a => a.name?.toLowerCase().includes('unloading') && a.type === 'Expense');
+  const incomeAcc = findAcc(accounts, ACC.OTHER_INCOME)
+    || accounts.find(a => a.name?.toLowerCase().includes('other income') && a.type === 'Revenue');
+  const cashAcc = findAcc(accounts, ACC.CASH_IN_HAND);
+
+  if (!labourAcc || !cashAcc) {
+    console.warn('[Labour PV] Unloading Expense or Cash account not found');
+    return false;
+  }
+
+  const details: LedgerTransaction['details'] = [
+    { accountId: labourAcc.id, debit: labourGross, credit: 0, text: `Unloading Expense — Labour (${labourVendorName}) — GRN ${grnId}` },
+  ];
+
+  // Packing buyback as Other Income
+  if (packingBuyback > 0 && incomeAcc) {
+    details.push({
+      accountId: incomeAcc.id, debit: 0, credit: packingBuyback,
+      text: `Other Income — Packing Material Sale (${labourVendorName}) — GRN ${grnId}`,
+    });
+  }
+
+  // Net cash paid
+  details.push({
+    accountId: cashAcc.id, debit: 0, credit: netPayable > 0 ? netPayable : labourGross,
+    text: `Cash paid — Labour net (${labourVendorName}) — GRN ${grnId}`,
+  });
+
+  const tx: LedgerTransaction = {
+    id: genTxId('PV'),
+    company: company as any,
+    docType: 'PV' as LedgerDocType,
+    docDate: grnDate,
+    date: grnDate,
+    description: `GRN ${grnId} — Labour & Packing (${labourVendorName}): Gross ${labourGross}, Packing -${packingBuyback}, Net ${netPayable}`,
+    referenceId: grnId,
+    status: 'Parked',
+    details,
+  };
+
+  FinanceService.recordTransaction(tx);
+  return true;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // 6. FULL GRN GL ORCHESTRATOR
 // Call this from GoodsReceiptMIGO after posting stock
 // ══════════════════════════════════════════════════════════════════════════
@@ -392,9 +502,17 @@ export function orchestrateGRNGL(params: {
   cashPaymentRef?: string;
   otherCharges: number;
   otherChargesDesc: string;
+  // ── Crane & Labour (new) ────────────────────────────────────────
+  craneVendorName?: string;
+  craneAmount?: number;
+  labourVendorName?: string;
+  labourGross?: number;
+  packingBuyback?: number;
+  labourNetPayable?: number;
 }) {
   const { freightType, freightAmount, otherCharges } = params;
   let glCount = 0;
+  const pvSummary: string[] = [];
 
   // 1. Material receipt
   const ok1 = postGRNMaterialGL({
@@ -430,8 +548,29 @@ export function orchestrateGRNGL(params: {
     if (ok3) glCount++;
   }
 
+  // 4. Crane PV
+  if ((params.craneAmount || 0) > 0 && params.craneVendorName) {
+    const ok4 = postCranePV({
+      company: params.company, grnId: params.grnId, grnDate: params.grnDate,
+      craneVendorName: params.craneVendorName, craneAmount: params.craneAmount!,
+    });
+    if (ok4) { glCount++; pvSummary.push(`Crane: PKR ${params.craneAmount!.toLocaleString()}`); }
+  }
+
+  // 5. Labour + Packing PV
+  if ((params.labourGross || 0) > 0 && params.labourVendorName) {
+    const netPay = params.labourNetPayable ?? (params.labourGross! - (params.packingBuyback || 0));
+    const ok5 = postLabourPackingPV({
+      company: params.company, grnId: params.grnId, grnDate: params.grnDate,
+      labourVendorName: params.labourVendorName, labourGross: params.labourGross!,
+      packingBuyback: params.packingBuyback || 0, netPayable: netPay,
+    });
+    if (ok5) { glCount++; pvSummary.push(`Labour Net: PKR ${netPay.toLocaleString()}`); }
+  }
+
   if (glCount > 0) {
-    toast.success(`${glCount} GL entr${glCount > 1 ? 'ies' : 'y'} posted for GRN ${params.grnId}`, { duration: 4000 });
+    const pvNote = pvSummary.length > 0 ? ` | PVs: ${pvSummary.join(', ')}` : '';
+    toast.success(`${glCount} GL entr${glCount > 1 ? 'ies' : 'y'} posted for GRN ${params.grnId}${pvNote}`, { duration: 5000 });
   }
 
   return glCount;
