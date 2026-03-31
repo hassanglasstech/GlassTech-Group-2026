@@ -127,6 +127,8 @@ export const VendorType = {
   TRANSPORT: 'Transport',
   HARDWARE: 'Hardware',
   PROFILE: 'Profile',
-  GENERAL: 'General'
+  GENERAL: 'General',
+  CRANE: 'Crane/Unloading',
+  LABOUR: 'Labour',
 } as const;
 export type VendorType = typeof VendorType[keyof typeof VendorType];
