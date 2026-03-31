@@ -208,8 +208,9 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     type: v.type||'Supplier', address: v.address||'',
     contact_person: v.contactPerson||v.contact_person||'',
     phone: v.phone||'',
-    registration_date: v.registrationDate||v.registration_date||'',
+    registration_date: v.registrationDate||v.registration_date||null,
     rates: v.rates||[],
+    rate_list_versions: v.rateListVersions||v.rate_list_versions||null,
   }),
   products: (p: any) => ({
     id: p.id, company: p.company||'', category: p.category||'',
@@ -223,6 +224,7 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     model_no: p.modelNo||'', brand: p.brand||'',
     direction: p.direction||'', tongue_length: p.tongueLength||'',
     image_url: p.imageUrl||'',
+    price_history: p.priceHistory||p.price_history||null,
   }),
   requisitions: (r: any) => ({
     id: r.id, company: r.company||'', date: r.date||'',
@@ -501,6 +503,7 @@ const TABLE_PULL: Record<string, (row: any) => any> = {
     nickName: r.nick_name,
     contactPerson: r.contact_person,
     registrationDate: r.registration_date,
+    rateListVersions: r.rate_list_versions,
   }),
   products: (r: any) => ({
     ...r,
@@ -511,6 +514,7 @@ const TABLE_PULL: Record<string, (row: any) => any> = {
     mainCategory: r.main_category, finishColor: r.finish_color,
     modelNo: r.model_no, tongueLength: r.tongue_length,
     imageUrl: r.image_url, variants: r.variants||[],
+    priceHistory: r.price_history,
   }),
   requisitions: (r: any) => ({
     ...r,
