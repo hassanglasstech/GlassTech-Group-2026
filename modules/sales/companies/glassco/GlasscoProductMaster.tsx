@@ -9,10 +9,11 @@ import {
   Plus, Search, Edit2, Trash2, Package, Layers, Wrench, 
   FileSpreadsheet, FileUp, Image as ImageIcon, Loader2, 
   Factory, ChevronRight, ChevronDown, Filter, Download, FileJson, 
-  UploadCloud, Settings2, Flame
+  UploadCloud, Settings2, Flame, History
 } from 'lucide-react';
 import ProductFormModal from '@/components/product/ProductFormModal';
 import * as XLSX from 'xlsx';
+import { PriceHistoryEntry } from '@/modules/procurement/types/inventory';
 
 const GlasscoProductMaster: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
@@ -24,6 +25,7 @@ const GlasscoProductMaster: React.FC = () => {
   const [catFilter, setCatFilter] = useState('All');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [groupByCategory, setGroupByCategory] = useState(true);
+  const [priceHistoryProduct, setPriceHistoryProduct] = useState<Product | null>(null);
   
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const excelInputRef = useRef<HTMLInputElement>(null);
@@ -239,9 +241,34 @@ const GlasscoProductMaster: React.FC = () => {
   };
 
   const updatePrice = (id: string, field: 'costPrice' | 'basePrice' | 'temperingPrice', value: number) => {
-    const updated = products.map(p => p.id === id ? { ...p, [field]: value } : p);
-    setProducts(updated);
-    SalesService.saveProducts(SalesService.getProducts().map(p => p.id === id ? { ...p, [field]: value } : p));
+    const allProds = SalesService.getProducts();
+    const existing = allProds.find(p => p.id === id);
+    if (!existing) return;
+
+    // Track history entry when any price field changes
+    const oldVal = existing[field] || 0;
+    if (oldVal !== value && oldVal > 0) {
+      const histEntry: PriceHistoryEntry = {
+        id: `PH-${Date.now()}`,
+        date: new Date().toISOString().split('T')[0],
+        changedBy: 'Admin',
+        oldBasePrice: field === 'basePrice' ? oldVal : (existing.basePrice || 0),
+        newBasePrice: field === 'basePrice' ? value : (existing.basePrice || 0),
+        oldCostPrice: field === 'costPrice' ? oldVal : (existing.costPrice || 0),
+        newCostPrice: field === 'costPrice' ? value : (existing.costPrice || 0),
+        oldTemperingPrice: field === 'temperingPrice' ? oldVal : (existing.temperingPrice || 0),
+        newTemperingPrice: field === 'temperingPrice' ? value : (existing.temperingPrice || 0),
+      };
+      const history = [...(existing.priceHistory || []), histEntry];
+      const updated = allProds.map(p => p.id === id ? { ...p, [field]: value, priceHistory: history } : p);
+      SalesService.saveProducts(updated);
+      setProducts(updated.filter(p => p.company === company));
+      return;
+    }
+
+    const updated = allProds.map(p => p.id === id ? { ...p, [field]: value } : p);
+    SalesService.saveProducts(updated);
+    setProducts(updated.filter(p => p.company === company));
   };
 
   const handleDelete = (id: string) => {
@@ -342,7 +369,12 @@ const GlasscoProductMaster: React.FC = () => {
 
   const renderRateRow = (p: Product) => (
       <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-          <td className="font-bold text-[11px] uppercase text-slate-700 pl-8 py-2">{p.description}</td>
+          <td className="font-bold text-[11px] uppercase text-slate-700 pl-8 py-2">
+            {p.description}
+            {(p.priceHistory?.length || 0) > 0 && (
+              <span className="ml-1.5 text-[8px] font-black text-blue-500 bg-blue-50 px-1 py-0.5 rounded">{p.priceHistory!.length} rev</span>
+            )}
+          </td>
           <td className="p-1 text-center">
               <input type="number" className="w-20 text-center bg-slate-50 border rounded py-0.5 font-black text-[10px] outline-none focus:ring-2 focus:ring-emerald-500" value={p.costPrice || 0} onChange={e => updatePrice(p.id, 'costPrice', Number(e.target.value))} />
           </td>
@@ -357,9 +389,14 @@ const GlasscoProductMaster: React.FC = () => {
               )}
           </td>
           <td className="text-center">
-              {p.basePrice > 0 && <span className={`text-[10px] font-black ${p.basePrice > (p.costPrice || 0) ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  {((p.basePrice - (p.costPrice || 0)) / p.basePrice * 100).toFixed(1)}%
-              </span>}
+              <div className="flex items-center justify-center gap-2">
+                {p.basePrice > 0 && <span className={`text-[10px] font-black ${p.basePrice > (p.costPrice || 0) ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {((p.basePrice - (p.costPrice || 0)) / p.basePrice * 100).toFixed(1)}%
+                </span>}
+                <button onClick={() => setPriceHistoryProduct(p)} className="p-1 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded transition-all" title="Price History">
+                  <History size={12}/>
+                </button>
+              </div>
           </td>
       </tr>
   );
@@ -516,6 +553,48 @@ const GlasscoProductMaster: React.FC = () => {
                  </tbody>
               </table>
            </div>
+        </div>
+      )}
+
+      {/* Price History Modal */}
+      {priceHistoryProduct && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[500] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden">
+            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="font-black uppercase text-sm">Price History</h3>
+                <p className="text-[10px] text-slate-400 font-bold mt-0.5">{priceHistoryProduct.description}</p>
+              </div>
+              <button onClick={() => setPriceHistoryProduct(null)} className="w-8 h-8 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center">
+                <Trash2 size={14}/>
+              </button>
+            </div>
+            <div className="p-6 max-h-[60vh] overflow-y-auto">
+              {(priceHistoryProduct.priceHistory?.length || 0) === 0 ? (
+                <div className="text-center py-12 text-slate-300 font-bold italic text-sm">No price changes recorded yet</div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-6 text-[9px] font-black uppercase text-slate-400 px-3 gap-2">
+                    <span>Date</span><span>Changed By</span><span className="text-right">Old Cost</span><span className="text-right">New Cost</span><span className="text-right">Old Base</span><span className="text-right">New Base</span>
+                  </div>
+                  {[...(priceHistoryProduct.priceHistory || [])].reverse().map(h => (
+                    <div key={h.id} className="grid grid-cols-6 text-[10px] font-bold bg-slate-50 rounded-xl px-3 py-2.5 gap-2 items-center">
+                      <span className="font-mono text-slate-600">{h.date}</span>
+                      <span className="text-slate-500">{h.changedBy}</span>
+                      <span className="text-right text-slate-400">{h.oldCostPrice.toLocaleString()}</span>
+                      <span className={`text-right font-black ${h.newCostPrice > h.oldCostPrice ? 'text-red-600' : h.newCostPrice < h.oldCostPrice ? 'text-emerald-600' : 'text-slate-500'}`}>{h.newCostPrice.toLocaleString()}</span>
+                      <span className="text-right text-slate-400">{h.oldBasePrice.toLocaleString()}</span>
+                      <span className={`text-right font-black ${h.newBasePrice > h.oldBasePrice ? 'text-red-600' : h.newBasePrice < h.oldBasePrice ? 'text-emerald-600' : 'text-slate-500'}`}>{h.newBasePrice.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="mt-4 bg-blue-50 border border-blue-100 rounded-xl p-3 text-[10px] font-bold text-blue-600">
+                Current: Cost PKR {(priceHistoryProduct.costPrice || 0).toLocaleString()} · Base PKR {(priceHistoryProduct.basePrice || 0).toLocaleString()}
+                {priceHistoryProduct.temperingPrice ? ` · Tempered PKR ${priceHistoryProduct.temperingPrice.toLocaleString()}` : ''}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
