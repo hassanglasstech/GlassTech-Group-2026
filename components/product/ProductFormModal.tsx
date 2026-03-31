@@ -36,6 +36,10 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
     temperingPrice: '' as string | number
   });
 
+  // String states for custom decimal inputs (prevents dot-eating on parseFloat)
+  const [customW, setCustomW] = useState('');
+  const [customH, setCustomH] = useState('');
+
   // General Item Form
   const [generalForm, setGeneralForm] = useState({
       name: '',
@@ -114,6 +118,7 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
             // Default to General for Nippon
             setItemMode(company === 'Nippon' ? 'General' : 'Glass');
             setGlassForm({ type: 'Plain', subType: 'Standard', thickness: '5mm', color: 'Clear', width: 0, height: 0, costPrice: '', salesPrice: '', temperingPrice: '' });
+            setCustomW(''); setCustomH('');
             setGeneralForm({ name: '', category: 'Hardware', subCategory: '', unit: 'Pcs', minLevel: 50, costPrice: '', salesPrice: '', brand: '', modelNo: '', finishColor: '', material: '', imageUrl: '' });
             setServiceForm({ description: '', nick: '', thickness: '5mm', unit: 'SqFt', costPrice: 0, salesPrice: 0, vendor: '' });
             setIsCustomNick(false);
@@ -362,6 +367,7 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                                             value={[78, 84, 96].includes(glassForm.width) ? glassForm.width : 'custom'} 
                                             onChange={e => {
                                                 if (e.target.value === 'custom') return;
+                                                setCustomW('');
                                                 setGlassForm({...glassForm, width: Number(e.target.value)});
                                             }} 
                                             className="flex-1 p-3 rounded-xl border font-black"
@@ -372,14 +378,21 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                                             <option value={96}>96"</option>
                                             <option value="custom">Custom...</option>
                                         </select>
-                                        {(glassForm.width > 0 && ![78, 84, 96].includes(glassForm.width)) || glassForm.width === 0 ? null : null}
                                         <input 
                                             type="text" inputMode="decimal"
                                             placeholder="W"
-                                            value={![0, 78, 84, 96].includes(glassForm.width) ? glassForm.width : ''}
+                                            value={customW || (![0, 78, 84, 96].includes(glassForm.width) ? String(glassForm.width) : '')}
                                             onChange={e => {
                                                 const val = e.target.value.replace(/[^0-9.]/g, '');
-                                                setGlassForm({...glassForm, width: parseFloat(val) || 0});
+                                                setCustomW(val);
+                                                const num = parseFloat(val);
+                                                if (!isNaN(num)) setGlassForm(f => ({...f, width: num}));
+                                                else if (val === '') setGlassForm(f => ({...f, width: 0}));
+                                            }}
+                                            onBlur={() => {
+                                                const num = parseFloat(customW);
+                                                if (!isNaN(num)) { setGlassForm(f => ({...f, width: num})); setCustomW(''); }
+                                                else { setCustomW(''); }
                                             }}
                                             className={`w-16 p-3 rounded-xl border font-black text-center text-amber-700 bg-amber-50 ${![0, 78, 84, 96].includes(glassForm.width) ? 'ring-2 ring-amber-300' : ''}`}
                                             title="Custom width"
@@ -396,6 +409,7 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                                             value={[144].includes(glassForm.height) ? glassForm.height : 'custom'} 
                                             onChange={e => {
                                                 if (e.target.value === 'custom') return;
+                                                setCustomH('');
                                                 setGlassForm({...glassForm, height: Number(e.target.value)});
                                             }} 
                                             className="flex-1 p-3 rounded-xl border font-black"
@@ -407,10 +421,18 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                                         <input 
                                             type="text" inputMode="decimal"
                                             placeholder="H"
-                                            value={![0, 144].includes(glassForm.height) ? glassForm.height : ''}
+                                            value={customH || (![0, 144].includes(glassForm.height) ? String(glassForm.height) : '')}
                                             onChange={e => {
                                                 const val = e.target.value.replace(/[^0-9.]/g, '');
-                                                setGlassForm({...glassForm, height: parseFloat(val) || 0});
+                                                setCustomH(val);
+                                                const num = parseFloat(val);
+                                                if (!isNaN(num)) setGlassForm(f => ({...f, height: num}));
+                                                else if (val === '') setGlassForm(f => ({...f, height: 0}));
+                                            }}
+                                            onBlur={() => {
+                                                const num = parseFloat(customH);
+                                                if (!isNaN(num)) { setGlassForm(f => ({...f, height: num})); setCustomH(''); }
+                                                else { setCustomH(''); }
                                             }}
                                             className={`w-16 p-3 rounded-xl border font-black text-center text-amber-700 bg-amber-50 ${![0, 144].includes(glassForm.height) ? 'ring-2 ring-amber-300' : ''}`}
                                             title="Custom height"
