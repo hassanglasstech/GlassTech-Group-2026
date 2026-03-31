@@ -14,6 +14,7 @@ import { ProductionService } from '@/modules/production/services/productionServi
 import { NCRService } from '@/modules/production/services/ncrService';
 import { GRNPrint } from '@/modules/glassco/core/prints/GRNPrint';
 import { orchestrateGRNGL } from '@/modules/procurement/services/grnGLService';
+import { FinanceService } from '@/modules/finance/services/financeService';
 import {
   StoreItem, MaterialLedgerEntry, GRNSheetEntry, VendorDefectReport,
   PurchaseOrder, PalletRateEntry
@@ -635,51 +636,73 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
       );
     }
 
-    // ── Save ────────────────────────────────────────────────────────
-    InventoryService.saveStore(allStore);
-    InventoryService.saveStockLedger([...InventoryService.getStockLedger(), ...allLedger]);
+    // ── Save (atomic with rollback) ────────────────────────────────
+    // Snapshot current state for rollback on failure
+    const snapshotStore = JSON.parse(JSON.stringify(InventoryService.getStore()));
+    const snapshotLedger = JSON.parse(JSON.stringify(InventoryService.getStockLedger()));
+    const snapshotSheets = JSON.parse(JSON.stringify(InventoryService.getGRNSheetEntries()));
+    const snapshotGL = JSON.parse(JSON.stringify(FinanceService.getLedger()));
+    const snapshotReports = JSON.parse(JSON.stringify(InventoryService.getVendorDefectReports()));
 
-    // ── Phase 9: Post GL entries ───────────────────────────────────────
-    const totalOKValue  = filledLines.reduce((s, l) => {
-      const okSheets  = l.sheetInspections.filter(i => i.status === 'OK');
-      return s + okSheets.reduce((ss) => ss + l.sqftPerSheet * l.ratePKR, 0);
-    }, 0);
-    const totalDefVal = filledLines.reduce((s, l) => {
-      const defSheets = l.sheetInspections.filter(i => i.status !== 'OK');
-      return s + defSheets.reduce((ss, i) => ss + (i.usableSqft || 0) * l.ratePKR, 0);
-    }, 0);
-    orchestrateGRNGL({
-      company, grnId, grnDate,
-      vendorName: selectedVendor?.name || vendorId,
-      totalOKValue, totalDefectiveValue: totalDefVal,
-      freightType, freightAmount: freightPKR, cashPaymentRef,
-      otherCharges, otherChargesDesc,
-      // ── Crane & Labour (new) ──
-      craneVendorName: selectedCraneVendor?.name || '',
-      craneAmount,
-      labourVendorName: selectedLabourVendor?.name || '',
-      labourGross: labourCharges,
-      packingBuyback,
-      labourNetPayable,
-    });
+    try {
+      // Step 1: Stock
+      InventoryService.saveStore(allStore);
+      // Step 2: Ledger
+      InventoryService.saveStockLedger([...InventoryService.getStockLedger(), ...allLedger]);
 
-    // ── Save Pallet Rate History ──────────────────────────────────────
-    if (palletCount > 0 && palletRate > 0) {
-      InventoryService.addPalletRate({
-        id: `PLT-${grnId}`,
-        company: company as any,
-        grnId,
-        date: grnDate,
-        vendorId: labourVendorId,
-        vendorName: selectedLabourVendor?.name || '',
-        ratePerPallet: palletRate,
-        palletCount,
-        totalPacking: packingBuyback,
+      // Step 3: GL entries
+      const totalOKValue  = filledLines.reduce((s, l) => {
+        const okSheets  = l.sheetInspections.filter(i => i.status === 'OK');
+        return s + okSheets.reduce((ss) => ss + l.sqftPerSheet * l.ratePKR, 0);
+      }, 0);
+      const totalDefVal = filledLines.reduce((s, l) => {
+        const defSheets = l.sheetInspections.filter(i => i.status !== 'OK');
+        return s + defSheets.reduce((ss, i) => ss + (i.usableSqft || 0) * l.ratePKR, 0);
+      }, 0);
+      orchestrateGRNGL({
+        company, grnId, grnDate,
+        vendorName: selectedVendor?.name || vendorId,
+        totalOKValue, totalDefectiveValue: totalDefVal,
+        freightType, freightAmount: freightPKR, cashPaymentRef,
+        otherCharges, otherChargesDesc,
+        craneVendorName: selectedCraneVendor?.name || '',
+        craneAmount,
+        labourVendorName: selectedLabourVendor?.name || '',
+        labourGross: labourCharges,
+        packingBuyback,
+        labourNetPayable,
       });
-    }
 
-    const existingSheets = InventoryService.getGRNSheetEntries();
-    InventoryService.saveGRNSheetEntries([...existingSheets, ...grnSheetEntries]);
+      // Step 4: Pallet Rate History
+      if (palletCount > 0 && palletRate > 0) {
+        InventoryService.addPalletRate({
+          id: `PLT-${grnId}`,
+          company: company as any,
+          grnId,
+          date: grnDate,
+          vendorId: labourVendorId,
+          vendorName: selectedLabourVendor?.name || '',
+          ratePerPallet: palletRate,
+          palletCount,
+          totalPacking: packingBuyback,
+        });
+      }
+
+      // Step 5: Sheet entries
+      const existingSheets = InventoryService.getGRNSheetEntries();
+      InventoryService.saveGRNSheetEntries([...existingSheets, ...grnSheetEntries]);
+
+    } catch (err) {
+      // ── ROLLBACK on any failure ──
+      console.error('[GRN POST] FAILED — rolling back:', err);
+      InventoryService.saveStore(snapshotStore);
+      InventoryService.saveStockLedger(snapshotLedger);
+      InventoryService.saveGRNSheetEntries(snapshotSheets);
+      FinanceService.saveLedger(snapshotGL);
+      InventoryService.saveVendorDefectReports(snapshotReports);
+      toast.error(`GRN ${grnId} post FAILED — all changes rolled back. Error: ${(err as Error).message}`, { duration: 10000 });
+      return;
+    }
 
     // ── Post Summary ─────────────────────────────────────────────────
     const pvParts: string[] = [];
