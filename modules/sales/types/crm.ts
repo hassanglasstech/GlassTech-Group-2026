@@ -25,6 +25,15 @@ export interface VendorRate {
   effectiveDate: string;
 }
 
+// ── Vendor Rate List Version — snapshot of rates at a point in time ──────
+export interface VendorRateListVersion {
+  id: string;
+  date: string;                    // when this version was created
+  createdBy: string;
+  label: string;                   // e.g. "Version 3 — 28 Mar 2026"
+  rates: VendorRate[];             // snapshot of all rates at that time
+}
+
 export interface Vendor {
   id: string;
   company?: Company;
@@ -38,4 +47,5 @@ export interface Vendor {
   vehicles?: string[]; 
   balance?: number;
   rates?: VendorRate[];
+  rateListVersions?: VendorRateListVersion[];
 }
