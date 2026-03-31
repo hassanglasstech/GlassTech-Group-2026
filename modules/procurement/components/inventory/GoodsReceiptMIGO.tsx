@@ -464,10 +464,23 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
 
       const okSqft       = okSheets.reduce((s, i) => s + line.sqftPerSheet, 0);
       const defUsableSqft = defSheets.reduce((s, i) => s + (i.usableSqft || 0), 0);
+      const lineTotalSqft = okSqft + defUsableSqft;
+
+      // ── Landed cost allocation (IAS 2) ───────────────────────────
+      // Allocate freight + crane + labour(net) proportionally by sqft
+      const totalGRNSqft = filledLines.reduce((s, l) => {
+        const ok = l.sheetInspections.filter(i => i.status === 'OK').reduce((ss, _i) => ss + l.sqftPerSheet, 0);
+        const def = l.sheetInspections.filter(i => i.status !== 'OK').reduce((ss, i) => ss + (i.usableSqft || 0), 0);
+        return s + ok + def;
+      }, 0);
+      const totalLandedCharges = freightPKR + craneAmount + Math.max(0, labourNetPayable) + otherCharges;
+      const lineShareOfCharges = totalGRNSqft > 0 && lineTotalSqft > 0
+        ? Number(((lineTotalSqft / totalGRNSqft) * totalLandedCharges).toFixed(2))
+        : 0;
 
       const okValue  = Number((okSqft * line.ratePKR).toFixed(2));
       const defValue = Number((defUsableSqft * line.ratePKR).toFixed(2));
-      const totalStockValue = okValue + defValue;
+      const totalStockValue = okValue + defValue + lineShareOfCharges;
 
       if (itemIdx !== -1) {
         item = { ...allStore[itemIdx] };
@@ -650,19 +663,23 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
       // Step 2: Ledger
       InventoryService.saveStockLedger([...InventoryService.getStockLedger(), ...allLedger]);
 
-      // Step 3: GL entries
-      const totalOKValue  = filledLines.reduce((s, l) => {
+      // Step 3: GL entries — IAS 2 landed cost
+      // Material value at vendor rate (for GR/IR clearing — vendor payable amount)
+      const materialOKValue  = filledLines.reduce((s, l) => {
         const okSheets  = l.sheetInspections.filter(i => i.status === 'OK');
         return s + okSheets.reduce((ss) => ss + l.sqftPerSheet * l.ratePKR, 0);
       }, 0);
-      const totalDefVal = filledLines.reduce((s, l) => {
+      const materialDefVal = filledLines.reduce((s, l) => {
         const defSheets = l.sheetInspections.filter(i => i.status !== 'OK');
         return s + defSheets.reduce((ss, i) => ss + (i.usableSqft || 0) * l.ratePKR, 0);
       }, 0);
+      // Total landed charges (freight+crane+labour net+other) — these capitalize into inventory
+      const totalLandedForGL = freightPKR + craneAmount + Math.max(0, labourNetPayable) + otherCharges;
+
       orchestrateGRNGL({
         company, grnId, grnDate,
         vendorName: selectedVendor?.name || vendorId,
-        totalOKValue, totalDefectiveValue: totalDefVal,
+        totalOKValue: materialOKValue, totalDefectiveValue: materialDefVal,
         freightType, freightAmount: freightPKR, cashPaymentRef,
         otherCharges, otherChargesDesc,
         craneVendorName: selectedCraneVendor?.name || '',
@@ -671,6 +688,8 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
         labourGross: labourCharges,
         packingBuyback,
         labourNetPayable,
+        // IAS 2 — total landed charges to capitalize into inventory
+        landedChargesTotal: totalLandedForGL,
       });
 
       // Step 4: Pallet Rate History
