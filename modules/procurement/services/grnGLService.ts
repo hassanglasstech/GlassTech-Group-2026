@@ -53,13 +53,16 @@ export function postGRNMaterialGL(params: {
   grnId: string;
   grnDate: string;
   vendorName: string;
-  totalOKValue: number;        // OK sheets value at MAP
-  totalDefectiveValue: number; // Defective usable value at MAP
+  totalOKValue: number;        // OK sheets value at vendor rate
+  totalDefectiveValue: number; // Defective usable value at vendor rate
   lineCount: number;
+  landedChargesTotal?: number; // IAS 2 — freight+crane+labour+other to capitalize
 }): boolean {
   const { company, grnId, grnDate, vendorName } = params;
-  const totalValue = params.totalOKValue + params.totalDefectiveValue;
-  if (totalValue <= 0) return true; // nothing to post
+  const materialValue = params.totalOKValue + params.totalDefectiveValue;
+  const landedCharges = params.landedChargesTotal || 0;
+  const totalInventoryValue = materialValue + landedCharges;
+  if (totalInventoryValue <= 0) return true;
 
   const accounts = FinanceService.getAccounts().filter(a => a.company === company);
   const invAcc  = findAcc(accounts, ACC.INVENTORY_GLASS);
@@ -70,29 +73,44 @@ export function postGRNMaterialGL(params: {
     return false;
   }
 
+  const details: LedgerTransaction['details'] = [
+    {
+      accountId: invAcc.id,
+      debit: totalInventoryValue,
+      credit: 0,
+      text: `Inventory in — GRN ${grnId} (Material: ${materialValue.toFixed(0)}${landedCharges > 0 ? ` + Landed: ${landedCharges.toFixed(0)}` : ''})`,
+    },
+    {
+      accountId: grirAcc.id,
+      debit: 0,
+      credit: materialValue,
+      text: `GR/IR Clearing — vendor material (${vendorName})`,
+    },
+  ];
+
+  // Landed charges credit Cash (they are paid separately but capitalized into inventory)
+  if (landedCharges > 0) {
+    const cashAcc = findAcc(accounts, ACC.CASH_IN_HAND);
+    if (cashAcc) {
+      details.push({
+        accountId: cashAcc.id,
+        debit: 0,
+        credit: landedCharges,
+        text: `Cash — landed costs capitalized (Freight+Crane+Labour+Other) — GRN ${grnId}`,
+      });
+    }
+  }
+
   const tx: LedgerTransaction = {
     id: genTxId('WE'),
     company: company as any,
     docType: 'JV' as LedgerDocType,
     docDate: grnDate,
     date: grnDate,
-    description: `GRN ${grnId} — Material Receipt (${vendorName})`,
+    description: `GRN ${grnId} — Material + Landed Cost Receipt (${vendorName})`,
     referenceId: grnId,
     status: 'Posted',
-    details: [
-      {
-        accountId: invAcc.id,
-        debit: totalValue,
-        credit: 0,
-        text: `Inventory in — GRN ${grnId} (OK: ${params.totalOKValue.toFixed(0)} + Defective: ${params.totalDefectiveValue.toFixed(0)})`,
-      },
-      {
-        accountId: grirAcc.id,
-        debit: 0,
-        credit: totalValue,
-        text: `GR/IR Clearing — clear on vendor SO match`,
-      },
-    ],
+    details,
   };
 
   FinanceService.recordTransaction(tx);
@@ -487,8 +505,10 @@ export function postLabourPackingPV(params: {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// 6. FULL GRN GL ORCHESTRATOR
-// Call this from GoodsReceiptMIGO after posting stock
+// 6. FULL GRN GL ORCHESTRATOR — IAS 2 Landed Cost
+// All inward charges (freight, crane, labour, other) are CAPITALIZED into
+// inventory via a single material GL entry. No separate expense entries.
+// Call this from GoodsReceiptMIGO after posting stock.
 // ══════════════════════════════════════════════════════════════════════════
 export function orchestrateGRNGL(params: {
   company: string;
@@ -502,75 +522,65 @@ export function orchestrateGRNGL(params: {
   cashPaymentRef?: string;
   otherCharges: number;
   otherChargesDesc: string;
-  // ── Crane & Labour (new) ────────────────────────────────────────
   craneVendorName?: string;
   craneAmount?: number;
   labourVendorName?: string;
   labourGross?: number;
   packingBuyback?: number;
   labourNetPayable?: number;
+  landedChargesTotal?: number;
 }) {
-  const { freightType, freightAmount, otherCharges } = params;
+  const { freightType, freightAmount } = params;
   let glCount = 0;
   const pvSummary: string[] = [];
 
-  // 1. Material receipt
+  // 1. Material + Landed Cost receipt (single GL entry)
+  // Dr Inventory = material + all landed charges
+  // Cr GR/IR = material value (vendor payable)
+  // Cr Cash = landed charges (freight+crane+labour+other paid)
   const ok1 = postGRNMaterialGL({
     company: params.company, grnId: params.grnId, grnDate: params.grnDate,
     vendorName: params.vendorName,
     totalOKValue: params.totalOKValue,
     totalDefectiveValue: params.totalDefectiveValue,
     lineCount: 1,
+    landedChargesTotal: params.landedChargesTotal || 0,
   });
   if (ok1) glCount++;
 
-  // 2. Freight
-  if (freightAmount > 0) {
-    const ok2 = freightType === 'Vendor Included'
-      ? postFreightVendorIncludedGL({
-          company: params.company, grnId: params.grnId, grnDate: params.grnDate,
-          vendorName: params.vendorName, freightAmount,
-          cashPaymentRef: params.cashPaymentRef,
-        })
-      : postFreightOwnExpenseGL({
-          company: params.company, grnId: params.grnId, grnDate: params.grnDate,
-          freightAmount, paidBy: 'Cash',
-        });
+  // 2. Freight — Vendor Included only needs separate PV (Dr Vendor Payable / Cr Cash)
+  // Own Expense freight is already in landed charges → no separate GL needed
+  if (freightAmount > 0 && freightType === 'Vendor Included') {
+    const ok2 = postFreightVendorIncludedGL({
+      company: params.company, grnId: params.grnId, grnDate: params.grnDate,
+      vendorName: params.vendorName, freightAmount,
+      cashPaymentRef: params.cashPaymentRef,
+    });
     if (ok2) glCount++;
   }
 
-  // 3. Other charges
-  if (otherCharges > 0 && params.otherChargesDesc) {
-    const ok3 = postOtherChargesGL({
-      company: params.company, grnId: params.grnId, grnDate: params.grnDate,
-      amount: otherCharges, description: params.otherChargesDesc,
-    });
-    if (ok3) glCount++;
+  // 3-5: Crane, Labour, Other — cash already credited in material GL entry
+  // Labour packing PV still needed for IFRS gross accounting visibility
+  if ((params.craneAmount || 0) > 0) {
+    pvSummary.push(`Crane: PKR ${params.craneAmount!.toLocaleString()}`);
   }
 
-  // 4. Crane PV
-  if ((params.craneAmount || 0) > 0 && params.craneVendorName) {
-    const ok4 = postCranePV({
-      company: params.company, grnId: params.grnId, grnDate: params.grnDate,
-      craneVendorName: params.craneVendorName, craneAmount: params.craneAmount!,
-    });
-    if (ok4) { glCount++; pvSummary.push(`Crane: PKR ${params.craneAmount!.toLocaleString()}`); }
-  }
-
-  // 5. Labour + Packing PV
-  if ((params.labourGross || 0) > 0 && params.labourVendorName) {
+  if ((params.labourGross || 0) > 0) {
     const netPay = params.labourNetPayable ?? (params.labourGross! - (params.packingBuyback || 0));
-    const ok5 = postLabourPackingPV({
-      company: params.company, grnId: params.grnId, grnDate: params.grnDate,
-      labourVendorName: params.labourVendorName, labourGross: params.labourGross!,
-      packingBuyback: params.packingBuyback || 0, netPayable: netPay,
-    });
-    if (ok5) { glCount++; pvSummary.push(`Labour Net: PKR ${netPay.toLocaleString()}`); }
+    if (params.labourVendorName) {
+      const ok5 = postLabourPackingPV({
+        company: params.company, grnId: params.grnId, grnDate: params.grnDate,
+        labourVendorName: params.labourVendorName, labourGross: params.labourGross!,
+        packingBuyback: params.packingBuyback || 0, netPayable: netPay,
+      });
+      if (ok5) glCount++;
+    }
+    pvSummary.push(`Labour Net: PKR ${netPay.toLocaleString()}`);
   }
 
   if (glCount > 0) {
-    const pvNote = pvSummary.length > 0 ? ` | PVs: ${pvSummary.join(', ')}` : '';
-    toast.success(`${glCount} GL entr${glCount > 1 ? 'ies' : 'y'} posted for GRN ${params.grnId}${pvNote}`, { duration: 5000 });
+    const pvNote = pvSummary.length > 0 ? ` | ${pvSummary.join(', ')}` : '';
+    toast.success(`${glCount} GL entr${glCount > 1 ? 'ies' : 'y'} — Landed cost capitalized into inventory${pvNote}`, { duration: 5000 });
   }
 
   return glCount;
