@@ -88,9 +88,9 @@ export interface StoreItem {
   remnantSqft?: number;           // total usable sqft across all remnants
 }
 
-export type MvmntCode = '101' | '102' | '201' | '261' | '551' | '601';
+export type MvmntCode = '101' | '102' | '201' | '261' | '551' | '561' | '601';
 // 101 = GRN, 102 = GRN Reversal, 201 = Consumption/Issue,
-// 261 = Issue to Production, 551 = Remnant Created, 601 = Other
+// 261 = Issue to Production, 551 = Remnant Created, 561 = Opening Balance, 601 = Other
 
 export interface MaterialLedgerEntry { 
   id: string; 
