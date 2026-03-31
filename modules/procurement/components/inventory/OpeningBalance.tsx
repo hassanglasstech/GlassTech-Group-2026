@@ -536,6 +536,7 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                           if (!e.target.value) updateLine(idx, { productId: '', description: '' });
                         }}
                         onFocus={() => updateLine(idx, { showSuggestions: true })}
+                        onBlur={() => setTimeout(() => updateLine(idx, { showSuggestions: false }), 200)}
                         className="w-full pl-9 pr-3 py-2 border rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
@@ -608,22 +609,28 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                   <div>
                     <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Quantity *</label>
                     <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={line.qty || ''}
-                      onChange={e => updateLine(idx, { qty: parseFloat(e.target.value) || 0 })}
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={line.qty > 0 ? line.qty : ''}
+                      onChange={e => {
+                        const val = e.target.value.replace(/[^0-9.]/g, '');
+                        updateLine(idx, { qty: parseFloat(val) || 0 });
+                      }}
                       className="w-full px-3 py-2 border rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <div>
                     <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Rate (PKR) *</label>
                     <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={line.rate || ''}
-                      onChange={e => updateLine(idx, { rate: parseFloat(e.target.value) || 0 })}
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={line.rate > 0 ? line.rate : ''}
+                      onChange={e => {
+                        const val = e.target.value.replace(/[^0-9.]/g, '');
+                        updateLine(idx, { rate: parseFloat(val) || 0 });
+                      }}
                       className="w-full px-3 py-2 border rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
