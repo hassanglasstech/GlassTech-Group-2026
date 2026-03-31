@@ -258,22 +258,24 @@ const ProcessingView: React.FC = () => {
                             : p);
                           ProductionService.saveProductionPieces(updPcs);
 
-                          // ── COGS GL entry (Parked) ──
+                          // ── COGS GL entry (Parked via recordTransaction) ──
                           if (selectedTrip && !isSite && selectedTrip.serviceType !== 'Supply' && totalCost > 0) {
                             const accs = FinanceService.getAccounts().filter(a => a.company === company);
                             const cogsAcc = accs.find(a => a.name.toUpperCase().includes('COGS') || a.name.toUpperCase().includes('DIRECT COST') || a.code.startsWith('51')) || accs.find(a => a.type === 'Expense');
                             const vendorPayable = accs.find(a => a.name.toUpperCase().includes('PAYABLE') || a.code.startsWith('211')) || accs.find(a => a.type === 'Liability');
                             if (cogsAcc && vendorPayable) {
                               const txId = `GL-SO-${selectedTrip.id}`;
-                              FinanceService.saveLedger([...FinanceService.getLedger(), {
-                                id: txId, company, docType: 'KR', docDate: new Date().toISOString().split('T')[0], date: new Date().toISOString().split('T')[0],
-                                description: `[PARKED] SERVICE ORDER: ${selectedTrip.serviceType} — ${selectedTrip.plantName} — ${loadedPcs.length} pcs / ${totalSqFt.toFixed(1)} sqft — PKR ${totalCost.toLocaleString()}`,
+                              FinanceService.recordTransaction({
+                                id: txId, company: company as any, docType: 'KR' as any,
+                                docDate: new Date().toISOString().split('T')[0],
+                                date: new Date().toISOString().split('T')[0],
+                                description: `SERVICE ORDER: ${selectedTrip.serviceType} — ${selectedTrip.plantName} — ${loadedPcs.length} pcs / ${totalSqFt.toFixed(1)} sqft — PKR ${totalCost.toLocaleString()}`,
                                 referenceId: selectedTrip.id, status: 'Parked',
                                 details: [
                                   { accountId: cogsAcc.id, debit: totalCost, credit: 0, text: `${selectedTrip.serviceType}: ${selectedTrip.plantName} (${loadedPcs.length} pcs)` },
                                   { accountId: vendorPayable.id, debit: 0, credit: totalCost, text: `Payable: ${selectedTrip.plantName}` }
                                 ]
-                              } as any]);
+                              });
 
                               // ── Cash Journal entry ──
                               const cashEntries = FinanceService.getPettyCashEntries();
