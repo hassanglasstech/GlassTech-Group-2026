@@ -416,7 +416,18 @@ export interface VendorReview {
   nextReviewDate?: string;
 }
 
-// ── Existing interfaces (unchanged) ───────────────────────────────────────
+// ── Pallet Rate History — tracks packing buyback rates per GRN ───────────
+export interface PalletRateEntry {
+  id: string;
+  company: Company;
+  grnId: string;
+  date: string;
+  vendorId: string;
+  vendorName: string;
+  ratePerPallet: number;
+  palletCount: number;
+  totalPacking: number;            // palletCount × ratePerPallet
+}
 
 export interface RequisitionItem { 
   id: string; 
