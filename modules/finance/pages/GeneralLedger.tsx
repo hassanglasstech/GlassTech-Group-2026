@@ -228,7 +228,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
                 <th className="px-4 py-3 text-right w-32">Debit (PKR)</th>
                 <th className="px-4 py-3 text-right w-32">Credit (PKR)</th>
                 <th className="px-4 py-3 text-center w-24">Status</th>
-                {activeTab === 'Parked' && <th className="px-4 py-3 text-center w-32">Action</th>}
+                <th className="px-4 py-3 text-center w-32">Action</th>
                 </tr>
             </thead>
             <tbody>
@@ -247,14 +247,12 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
                     </td>
                     <td colSpan={2}></td>
                     <td className="px-4 py-2 text-center"><span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${tx.status === 'Posted' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{tx.status}</span></td>
-                    {activeTab === 'Parked' && (
-                        <td className="px-4 py-2 text-center">
-                            <div className="flex items-center justify-center space-x-2">
-                                <button onClick={() => handleEditParked(tx)} className="bg-blue-600 text-white p-1.5 rounded shadow hover:bg-blue-700" title="Review & Post"><PenTool size={12}/></button>
-                                <button onClick={() => handleDeleteParked(tx.id)} className="bg-white border border-slate-200 text-slate-400 p-1.5 rounded hover:text-red-600" title="Delete"><Trash2 size={12}/></button>
-                            </div>
-                        </td>
-                    )}
+                    <td className="px-4 py-2 text-center">
+                        <div className="flex items-center justify-center space-x-2">
+                            <button onClick={() => handleEditParked(tx)} className="bg-blue-600 text-white p-1.5 rounded shadow hover:bg-blue-700" title="Edit"><PenTool size={12}/></button>
+                            <button onClick={() => handleDeleteParked(tx.id)} className="bg-white border border-slate-200 text-slate-400 p-1.5 rounded hover:text-red-600" title="Delete"><Trash2 size={12}/></button>
+                        </div>
+                    </td>
                     </tr>
                     {tx.details.map((d, i) => (
                     <tr key={`${tx.id}-${i}`}>
