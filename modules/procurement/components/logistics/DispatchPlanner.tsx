@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Company, TemperingDispatch, ProductionPiece, Quotation, Client, PettyCashEntry, Vendor } from '@/modules/shared/types';
 import { AppService } from '@/modules/shared/services/appService';
 import { ProductionService } from '@/modules/production/services/productionService';
-import { SalesService } from '@/modules/sales/services/salesService';
+import { SalesService } from '@/modules/sales/services/salesService'; 
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { 
