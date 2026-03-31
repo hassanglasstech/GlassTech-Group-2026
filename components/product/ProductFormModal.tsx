@@ -155,7 +155,7 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 id: editingProduct ? editingProduct.id : `GLS-${Date.now()}`,
                 company, 
                 category: 'Glass', 
-                description: desc,
+                description: desc.toUpperCase(),
                 basePrice: Number(glassForm.salesPrice) || 0, 
                 temperingPrice: (glassForm.type === 'Mirror' || glassForm.subType === 'One Side') ? undefined : (Number(glassForm.temperingPrice) || undefined),
                 costPrice: finalCost, 
