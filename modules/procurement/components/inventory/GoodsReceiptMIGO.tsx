@@ -726,6 +726,32 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
       const existingSheets = InventoryService.getGRNSheetEntries();
       InventoryService.saveGRNSheetEntries([...existingSheets, ...grnSheetEntries]);
 
+      // Step 6: Auto-populate WeightMaster from GRN lines
+      filledLines.forEach(line => {
+        if (line.weightKg > 0 && line.sheetCount > 0 && line.thickness) {
+          const spf = sqftOf(line.sheetSize) || line.sqftPerSheet;
+          InventoryService.addWeightEntry({
+            id: `WM-${grnId}-${line.id}`,
+            company: company as any,
+            productId: line.productId,
+            productName: line.description,
+            thickness: line.thickness,
+            sheetSize: line.sheetSize,
+            date: grnDate,
+            recordedBy: 'GRN Auto',
+            totalWeightKg: line.weightKg,
+            sheetCount: line.sheetCount,
+            perSheetKg: Number((line.weightKg / line.sheetCount).toFixed(3)),
+            sqftPerSheet: spf,
+            perSqftKg: spf > 0 ? Number((line.weightKg / (line.sheetCount * spf)).toFixed(4)) : 0,
+            source: 'GRN',
+            grnId,
+            vendorId: vendorId,
+            vendorName: selectedVendor?.name || '',
+          });
+        }
+      });
+
     } catch (err) {
       // ── ROLLBACK on any failure ──
       console.error('[GRN POST] FAILED — rolling back:', err);
