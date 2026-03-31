@@ -6,9 +6,8 @@ import { FinanceService } from '@/modules/finance/services/financeService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import NCRDefectPrint from '@/modules/glassco/core/prints/NCRDefectPrint';
 import { 
-  LayoutGrid, List, Plus, X, Save, Trash2, Edit, Truck, Layers, Flame, Calculator, CheckCircle2, Ban, Clock, Globe, Filter, Search, Phone, Receipt, Calendar, FileText, Printer, AlertTriangle, BarChart3, ChevronDown, ChevronRight
+  LayoutGrid, List, Plus, X, Save, Trash2, Edit, Truck, Layers, Flame, Calculator, CheckCircle2, Ban, Clock, Globe, Filter, Search, Phone, Receipt, Calendar, FileText, Printer, AlertTriangle, BarChart3
 } from 'lucide-react';
-import { toast } from 'sonner';
 import SupplyChainDashboard from '../../../../components/vendors/SupplyChainDashboard';
 
 interface GlasscoVendorHubProps {
@@ -43,7 +42,6 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
       rate: 0,
       effectiveDate: new Date().toISOString().split('T')[0] 
   });
-  const [viewingVersion, setViewingVersion] = useState<string | null>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [registryFilter, setRegistryFilter] = useState<string>('All');
@@ -203,27 +201,6 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
       setSelectedVendorForRates(updatedVendor);
   };
 
-  const handleSaveRateVersion = () => {
-      if (!selectedVendorForRates || !(selectedVendorForRates.rates?.length)) return;
-      const versions = [...(selectedVendorForRates.rateListVersions || [])];
-      const versionNo = versions.length + 1;
-      const today = new Date().toISOString().split('T')[0];
-      versions.push({
-        id: `RLV-${Date.now()}`,
-        date: today,
-        createdBy: 'Admin',
-        label: `Version ${versionNo} — ${today}`,
-        rates: JSON.parse(JSON.stringify(selectedVendorForRates.rates)),
-      });
-      const updatedVendor = { ...selectedVendorForRates, rateListVersions: versions };
-      const all = SalesService.getVendors();
-      const nextVendors = all.map(v => v.id === selectedVendorForRates.id ? updatedVendor : v);
-      SalesService.saveVendors(nextVendors);
-      setVendors(nextVendors);
-      setSelectedVendorForRates(updatedVendor);
-      toast.success(`Rate List Version ${versionNo} saved for ${selectedVendorForRates.name}`);
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit no-print">
@@ -353,13 +330,12 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
         </div>
       </div></div>)}
 
-      {isRateModalOpen && !!selectedVendorForRates && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]" onClick={() => { setIsRateModalOpen(false); setSelectedVendorForRates(null); setViewingVersion(null); }}><div className="bg-white rounded-xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col border border-slate-200 max-h-[90vh]" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center shrink-0">
-          <div><h3 className="text-lg font-black uppercase">{selectedVendorForRates.name}</h3><p className="text-[10px] text-slate-400 font-bold uppercase">Rate Card Management · {(selectedVendorForRates.rateListVersions || []).length} version(s)</p></div>
-          <button onClick={() => { setIsRateModalOpen(false); setSelectedVendorForRates(null); setViewingVersion(null); }} className="text-white hover:text-rose-400 transition-colors"><X size={24}/></button>
+      {isRateModalOpen && !!selectedVendorForRates && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]" onClick={() => { setIsRateModalOpen(false); setSelectedVendorForRates(null); }}><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
+          <div><h3 className="text-lg font-black uppercase">{selectedVendorForRates.name}</h3><p className="text-[10px] text-slate-400 font-bold uppercase">Rate Card Management</p></div>
+          <button onClick={() => { setIsRateModalOpen(false); setSelectedVendorForRates(null); }} className="text-white hover:text-rose-400 transition-colors"><X size={24}/></button>
         </div>
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50 space-y-6">
-          {/* New Rate Entry */}
+        <div className="p-6 bg-slate-50 space-y-6">
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <h4 className="text-[10px] font-black uppercase text-slate-400 mb-2">New Rate Entry</h4>
             <div className="flex gap-2">
@@ -386,16 +362,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
               <button onClick={handleAddRate} className="bg-slate-900 text-white px-4 rounded-lg text-xs font-bold uppercase"><Plus size={16}/></button>
             </div>
           </div>
-
-          {/* Current Rates Table */}
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border-b">
-              <span className="text-[10px] font-black uppercase text-slate-500">Current Rate List ({(selectedVendorForRates?.rates || []).length} items)</span>
-              <button onClick={handleSaveRateVersion} disabled={!(selectedVendorForRates?.rates?.length)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-black uppercase hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed">
-                <Save size={12}/> Save as New Version
-              </button>
-            </div>
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 font-black text-slate-500 uppercase sticky top-0">
                 <tr>
@@ -422,49 +389,6 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
               </tbody>
             </table>
           </div>
-
-          {/* Rate List Versions */}
-          {(selectedVendorForRates?.rateListVersions || []).length > 0 && (
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <div className="px-4 py-2 bg-blue-50 border-b border-blue-100">
-                <span className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Rate List History — {(selectedVendorForRates?.rateListVersions || []).length} Version(s)</span>
-              </div>
-              <div className="divide-y">
-                {[...(selectedVendorForRates?.rateListVersions || [])].reverse().map(v => (
-                  <div key={v.id}>
-                    <button onClick={() => setViewingVersion(viewingVersion === v.id ? null : v.id)}
-                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors text-left">
-                      <div className="flex items-center gap-3">
-                        <span className="text-slate-400">{viewingVersion === v.id ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}</span>
-                        <span className="text-xs font-black text-slate-700">{v.label}</span>
-                        <span className="text-[9px] font-bold text-slate-400">{v.createdBy}</span>
-                      </div>
-                      <span className="text-[9px] font-bold text-blue-500">{v.rates.length} items</span>
-                    </button>
-                    {viewingVersion === v.id && (
-                      <div className="bg-blue-50/50 px-6 pb-3">
-                        <table className="w-full text-left text-[10px]">
-                          <thead className="font-black text-slate-400 uppercase">
-                            <tr><th className="py-1">Date</th><th>Thickness</th><th>Type</th><th className="text-right">Rate</th></tr>
-                          </thead>
-                          <tbody>
-                            {v.rates.map(r => (
-                              <tr key={r.id} className="border-t border-blue-100">
-                                <td className="py-1 font-mono text-slate-500">{r.effectiveDate}</td>
-                                <td className="font-bold">{r.thickness}</td>
-                                <td className="text-slate-500 uppercase">{r.type}</td>
-                                <td className="text-right font-black text-emerald-600">{r.rate}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div></div>)}
 
