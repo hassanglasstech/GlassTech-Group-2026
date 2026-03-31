@@ -460,8 +460,10 @@ export interface WeightMasterEntry {
   perSheetKg: number;
   sqftPerSheet: number;
   perSqftKg: number;
-  source: 'GRN' | 'Manual';
+  source: 'GRN' | 'Manual' | 'Physical';
   grnId?: string;
+  vendorId?: string;
+  vendorName?: string;
   notes?: string;
 }
 
