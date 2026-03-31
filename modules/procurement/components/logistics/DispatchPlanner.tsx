@@ -7,7 +7,7 @@ import { FinanceService } from '@/modules/finance/services/financeService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { 
   ClipboardList, Plus, X, Activity, Truck, Calendar, Send,  
-  ShieldCheck, Printer, Ban, Receipt, ArrowRightLeft, Trash2
+  ShieldCheck, Printer, Ban, Receipt, ArrowRightLeft, Trash2 
 } from 'lucide-react';
 import { UnifiedPaymentPrint } from '@/modules/finance/components/prints/UnifiedPaymentPrint';
 import { ServiceOrderPrint } from '@/modules/sales/components/prints/ServiceOrderPrint';
