@@ -119,13 +119,40 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
 
         if (selectedVehicle) {
           const existingTrips = InventoryService.getVehicleTrips();
+          // Determine load direction — Site Delivery/Supply = OneWayLoaded (return empty), others = Both (loaded both ways)
+          const isReturnEmpty = newDispatches.some(d => d.serviceType === 'Site Delivery' || d.serviceType === 'Supply');
+          const loadDir = isReturnEmpty ? 'OneWayLoaded' as const : 'Both' as const;
+          const fullRate = selectedVehicle.owner === 'Hired' ? selectedVehicle.hireRate : 0;
+          const tripFare = loadDir === 'OneWayLoaded' ? Math.round(fullRate * 0.5) : fullRate;
+
           const newVehicleTrips = newDispatches.map(d => ({
             id: `VT-${d.id}`, vehicleId: selectedVehicle.id, dispatchId: d.id, company,
             date: tripHeader.date, destination: d.plantName, serviceType: d.serviceType,
-            fare: selectedVehicle.owner === 'Hired' ? selectedVehicle.hireRate : 0,
+            fare: tripFare, fullRate, reducedRate: Math.round(fullRate * 0.5),
+            loadDirection: loadDir,
             fuelCost: 0, tollCharges: 0, status: 'Scheduled' as const, paidStatus: 'Unpaid' as const,
           }));
           InventoryService.saveVehicleTrips([...existingTrips, ...newVehicleTrips]);
+
+          // ── Auto GL: Transport Expense on trip creation ──
+          if (tripFare > 0) {
+            const accs = FinanceService.getAccounts().filter(a => a.company === company);
+            const transportAcc = accs.find(a => a.code === '53210' || a.code?.startsWith('532') || a.name?.toUpperCase().includes('TRANSPORT') || a.name?.toUpperCase().includes('VEHICLE'))
+              || accs.find(a => a.type === 'Expense');
+            const cashAcc = accs.find(a => a.code === '11112' || a.name?.toUpperCase().includes('CASH'));
+            if (transportAcc && cashAcc) {
+              FinanceService.recordTransaction({
+                id: `GL-TRIP-${tripId}`, company: company as any, docType: 'PV' as any,
+                docDate: tripHeader.date, date: tripHeader.date,
+                description: `Transport: ${stops.map(s => s.plantName).join(' → ')} (${selectedVehicle.plateNo}) ${loadDir === 'OneWayLoaded' ? '[One-way]' : '[Round-trip]'}`,
+                referenceId: tripId, status: 'Parked',
+                details: [
+                  { accountId: transportAcc.id, debit: tripFare, credit: 0, text: `Trip ${tripId} — ${stops.map(s => s.serviceType).join(', ')}` },
+                  { accountId: cashAcc.id, debit: 0, credit: tripFare, text: `Cash — ${selectedVehicle.owner === 'Hired' ? 'Hired vehicle' : 'Own vehicle'} ${selectedVehicle.plateNo}` },
+                ],
+              });
+            }
+          }
         }
 
         refreshData();
@@ -371,7 +398,15 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
                            <div className="flex items-center space-x-4">
                                <div className="p-2 bg-blue-100 text-blue-700 rounded-lg"><Truck size={18}/></div>
                                <div>
-                                   <h4 className="font-black text-slate-800 uppercase text-sm leading-none">{group.vehicle} <span className="text-slate-400 mx-2">|</span> {group.driver}</h4>
+                                   <h4 className="font-black text-slate-800 uppercase text-sm leading-none">
+                                     {group.vehicle} <span className="text-slate-400 mx-2">|</span> {group.driver}
+                                     <span className={`ml-3 text-[9px] font-black px-2 py-0.5 rounded-full ${
+                                       group.stops[0]?.company === 'Glassco' ? 'bg-blue-100 text-blue-700' :
+                                       group.stops[0]?.company === 'GTK' ? 'bg-emerald-100 text-emerald-700' :
+                                       group.stops[0]?.company === 'GTI' ? 'bg-purple-100 text-purple-700' :
+                                       'bg-slate-100 text-slate-600'
+                                     }`}>{group.stops[0]?.company || '—'}</span>
+                                   </h4>
                                    <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">Trip ID: {group.id}</p>
                                </div>
                            </div>
