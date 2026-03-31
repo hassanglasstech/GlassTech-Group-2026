@@ -65,6 +65,11 @@ interface GRNLine {
   // Sheet inspections (one per sheet)
   sheetInspections: SheetInspection[];
   expanded: boolean;
+  // ── Undergauge / Custom Size ──────────────────────────────────
+  isUndergauge: boolean;
+  customWidth: string;         // editable width in inches
+  customHeight: string;        // editable height in inches
+  showSizeEditor: boolean;     // toggle inline size editor
 }
 
 interface SheetInspection {
@@ -102,6 +107,7 @@ function blankLine(): GRNLine {
     weightKg: 0, ratePKR: 0, lineValue: 0,
     perSheetWeightKg: 0, perSqftWeightKg: 0,
     tagIds: [], sheetInspections: [], expanded: false,
+    isUndergauge: false, customWidth: '', customHeight: '', showSizeEditor: false,
   };
 }
 
@@ -482,7 +488,7 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
         uom: 'SqFt', valuation: item.movingAveragePrice,
         balanceAfter: item.quantity,
         referenceDoc: grnId, user: 'Store',
-        remarks: `GRN ${grnId} — ${line.description}`,
+        remarks: `GRN ${grnId} — ${line.description}${line.isUndergauge ? ' [UNDERGAUGE ' + line.sheetSize + '"]' : ''}`,
         // GRN extended fields
         dcNo, biltyNo, vendorSoNo, vehicleNo, driverName, driverPhone,
         freightType, freightPKR,
@@ -527,6 +533,10 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
             ? Number(((line.sqftPerSheet - (insp.usableSqft || 0)) * line.ratePKR).toFixed(2))
             : 0,
           claimStatus: insp.status !== 'OK' ? 'Pending' : 'Pending',
+          // ── Undergauge / Custom Size ──
+          isUndergauge: line.isUndergauge || undefined,
+          actualSize: line.isUndergauge && line.customWidth && line.customHeight
+            ? `${line.customWidth}x${line.customHeight}` : undefined,
         };
         grnSheetEntries.push(entry);
 
@@ -792,6 +802,11 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
                                 {line.category} {line.thickness} {line.sheetSize}"
                               </span>
                             )}
+                            {line.isUndergauge && (
+                              <span className="text-[8px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200">
+                                UNDERGAUGE
+                              </span>
+                            )}
                             {line.sheetInspections.length > 0 && (
                               <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${hasDefects ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                 {line.sheetInspections.filter(s => s.status === 'OK').length} OK
@@ -805,7 +820,7 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
                             onChange={e => updateLine(line.id, { searchQuery: e.target.value, showSuggestions: true })}
                             onFocus={() => updateLine(line.id, { showSuggestions: true })}/>
                           {line.showSuggestions && (
-                            <div className="absolute z-50 top-full left-0 right-0 mt-0.5 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden">
+                            <div className="absolute z-50 top-full left-0 right-0 mt-0.5 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-72 overflow-y-auto">
                               {suggs.length === 0
                                 ? <div className="px-3 py-2 text-[10px] text-slate-400 italic">No matches</div>
                                 : suggs.map(s => (
@@ -819,6 +834,60 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
                                   </button>
                                 ))
                               }
+                              {/* ── Add Custom / Undergauge Size ── */}
+                              <button
+                                className="w-full text-left px-3 py-2.5 hover:bg-amber-50 border-t border-slate-200 flex items-center gap-2 bg-slate-50"
+                                onMouseDown={e => {
+                                  e.preventDefault();
+                                  updateLine(line.id, {
+                                    showSuggestions: false,
+                                    showSizeEditor: true,
+                                    isUndergauge: true,
+                                  });
+                                }}>
+                                <Plus size={12} className="text-amber-600"/>
+                                <span className="text-xs font-black text-amber-700 uppercase">Custom / Undergauge Size</span>
+                                <span className="text-[9px] text-slate-400 font-bold ml-auto">Enter W×H manually</span>
+                              </button>
+                            </div>
+                          )}
+                          {/* ── Inline Size Editor (for undergauge / custom) ── */}
+                          {(line.showSizeEditor || line.isUndergauge) && (
+                            <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                              {line.isUndergauge && (
+                                <span className="text-[8px] font-black uppercase bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200">Undergauge</span>
+                              )}
+                              <input type="text" inputMode="decimal" placeholder="W"
+                                className="w-14 px-1.5 py-1 border border-amber-200 rounded text-[10px] font-black text-center bg-amber-50 outline-none focus:ring-1 focus:ring-amber-400"
+                                value={line.customWidth}
+                                onChange={e => {
+                                  const w = e.target.value.replace(/[^0-9.]/g, '');
+                                  const h = line.customHeight;
+                                  const newSize = w && h ? `${w}x${h}` : line.sheetSize;
+                                  updateLine(line.id, { customWidth: w, sheetSize: newSize });
+                                }}/>
+                              <span className="text-[10px] font-black text-slate-400">×</span>
+                              <input type="text" inputMode="decimal" placeholder="H"
+                                className="w-14 px-1.5 py-1 border border-amber-200 rounded text-[10px] font-black text-center bg-amber-50 outline-none focus:ring-1 focus:ring-amber-400"
+                                value={line.customHeight}
+                                onChange={e => {
+                                  const h = e.target.value.replace(/[^0-9.]/g, '');
+                                  const w = line.customWidth;
+                                  const newSize = w && h ? `${w}x${h}` : line.sheetSize;
+                                  updateLine(line.id, { customHeight: h, sheetSize: newSize });
+                                }}/>
+                              <span className="text-[9px] text-slate-400 font-bold">inch</span>
+                              {line.customWidth && line.customHeight && (
+                                <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                  = {sqftOf(`${line.customWidth}x${line.customHeight}`).toFixed(1)} sqft
+                                </span>
+                              )}
+                              <button
+                                className="text-[9px] text-slate-400 hover:text-red-500 ml-1"
+                                onClick={() => updateLine(line.id, { isUndergauge: false, showSizeEditor: false, customWidth: '', customHeight: '' })}
+                                title="Remove custom size">
+                                <X size={10}/>
+                              </button>
                             </div>
                           )}
                         </div>
