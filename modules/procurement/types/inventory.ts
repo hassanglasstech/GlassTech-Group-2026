@@ -184,6 +184,10 @@ export interface GRNSheetEntry {
   // ── Vendor Claim ──────────────────────────────────────────────────
   claimAmount?: number;           // original value - usable value
   claimStatus?: 'Pending' | 'Sent' | 'Confirmed' | 'Disputed';
+
+  // ── Undergauge / Custom Size ───────────────────────────────────
+  isUndergauge?: boolean;         // sheet received smaller than standard
+  actualSize?: string;            // actual WxH if different from standard e.g. "80x140"
 }
 
 // ── Vendor Defect Report — formal report sent to vendor ───────────────────
