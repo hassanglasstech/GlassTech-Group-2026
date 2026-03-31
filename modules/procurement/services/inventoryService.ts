@@ -2,7 +2,7 @@ import {
   StoreItem, MaterialLedgerEntry, InspectionLot, Remnant, RemnantHistoryEntry,
   HandlingUnit, Requisition, PurchaseOrder, Vehicle, VehicleTrip, VehicleExpense,
   GRNSheetEntry, VendorDefectReport, CuttingSession, ManualCountSheet,
-  ScrapDisposal, VendorReview, PalletRateEntry,
+  ScrapDisposal, VendorReview, PalletRateEntry, WeightMasterEntry,
 } from '@/modules/procurement/types/inventory';
 import { initDB } from '@/modules/shared/services/db';
 import { bgSaveToIDB, safeParse, safeSave } from '@/modules/shared/services/utils';
@@ -27,6 +27,7 @@ const KEYS = {
   SCRAP_DISPOSALS:         'gtk_erp_scrap_disposals',
   VENDOR_REVIEWS:          'gtk_erp_vendor_reviews',
   PALLET_RATES:            'gtk_erp_pallet_rates',
+  WEIGHT_MASTER:           'gtk_erp_weight_master',
 };
 
 export const InventoryService = {
@@ -304,5 +305,28 @@ export const InventoryService = {
     const all: PalletRateEntry[] = safeParse(KEYS.PALLET_RATES);
     all.push(entry);
     safeSave(KEYS.PALLET_RATES, all);
+  },
+
+  // ── Weight Master ─────────────────────────────────────────────
+  getWeightMaster: (): WeightMasterEntry[] => safeParse(KEYS.WEIGHT_MASTER),
+  getWeightByCompany: (company: string): WeightMasterEntry[] =>
+    safeParse(KEYS.WEIGHT_MASTER).filter((w: WeightMasterEntry) => w.company === company),
+  getWeightByProduct: (company: string, productId: string): WeightMasterEntry[] =>
+    safeParse(KEYS.WEIGHT_MASTER)
+      .filter((w: WeightMasterEntry) => w.company === company && w.productId === productId)
+      .sort((a: WeightMasterEntry, b: WeightMasterEntry) => b.date.localeCompare(a.date)),
+  getLatestWeight: (company: string, productId: string): WeightMasterEntry | undefined =>
+    safeParse(KEYS.WEIGHT_MASTER)
+      .filter((w: WeightMasterEntry) => w.company === company && w.productId === productId)
+      .sort((a: WeightMasterEntry, b: WeightMasterEntry) => b.date.localeCompare(a.date))[0],
+  saveWeightMaster: (data: WeightMasterEntry[]) => safeSave(KEYS.WEIGHT_MASTER, data),
+  addWeightEntry: (entry: WeightMasterEntry) => {
+    const all: WeightMasterEntry[] = safeParse(KEYS.WEIGHT_MASTER);
+    all.push(entry);
+    safeSave(KEYS.WEIGHT_MASTER, all);
+  },
+  deleteWeightEntry: (id: string) => {
+    const all: WeightMasterEntry[] = safeParse(KEYS.WEIGHT_MASTER).filter((w: WeightMasterEntry) => w.id !== id);
+    safeSave(KEYS.WEIGHT_MASTER, all);
   },
 };
