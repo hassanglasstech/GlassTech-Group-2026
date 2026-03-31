@@ -23,7 +23,8 @@ const CompanyLogistics: React.FC<{ company: Company }> = ({ company }) => {
 
   const refreshData = () => {
     setGatePasses(ProductionService.getGatePasses().filter(g => g.company === company).sort((a,b) => b.id.localeCompare(a.id)));
-    setDispatches(ProductionService.getTemperingDispatches().filter(d => d.company === company || d.company === 'Factory').sort((a,b) => b.id.localeCompare(a.id)));
+    // Cross-company visibility — show all trips, not just own company
+    setDispatches(ProductionService.getTemperingDispatches().sort((a,b) => b.id.localeCompare(a.id)));
     setPieces(ProductionService.getProductionPieces());
     
     const allQuos = SalesService.getQuotations();
