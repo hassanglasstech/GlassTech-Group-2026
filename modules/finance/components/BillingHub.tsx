@@ -5,6 +5,7 @@ import { Company, Quotation, ProductionPiece, LedgerTransaction, Invoice, Paymen
 import { FinanceService } from '../services/financeService';
 import { SalesService } from '../../sales/services/salesService';
 import { ProductionService } from '../../production/services/productionService';
+import { generateDeliveryInvoice } from '@/modules/sales/services/deliveryInvoiceService';
 import { 
   FileText, CheckCircle2, Ban, ArrowRightLeft, DollarSign, Search,
   Receipt, XCircle, X, Save, Banknote, AlertCircle, Clock, Eye, CreditCard
@@ -50,111 +51,21 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
     return invoices.some(inv => inv.orderId === orderId);
   };
 
-  // ── GENERATE INVOICE ──
+  // ── GENERATE INVOICE — now delegates to shared deliveryInvoiceService ──
   const handleGenerateInvoice = (order: Quotation) => {
-    if (isAlreadyInvoiced(order.id)) return toast.error('Already invoiced!');
+    if (isAlreadyInvoiced(order.id)) return toast.error('Already invoiced — check Receivables tab.');
     
-    const client = clients.find(c => c.id === order.clientId);
-    const clientName = client?.name || 'Walk-in';
-    const totalRevenue = order.items.reduce((sum, item) => sum + item.amount, 0);
-    const serviceCharges = (order.serviceCharges || []).reduce((sum: number, sc: any) => sum + (sc.amount || 0), 0);
-    const subtotal = totalRevenue + serviceCharges;
-    const discount = order.discountAmount || (subtotal * (order.discountPercent || 0) / 100);
-    const finalAmount = subtotal - discount;
-
-    // ── JIT Account Creation: Client-specific AR + Service Revenue ──
-    // AR: Assets → Current Assets → Trade Receivables → CLIENT NAME (L5)
-    const arParent = FinanceService.ensureAccount(company as any, 'ASSETS', 1, null, 'Asset', '10');
-    const arCurrent = FinanceService.ensureAccount(company as any, 'CURRENT ASSETS', 2, arParent.id, 'Asset', '11');
-    const arTrade = FinanceService.ensureAccount(company as any, 'TRADE RECEIVABLES', 3, arCurrent.id, 'Asset', '122');
-    const arControl = FinanceService.ensureAccount(company as any, 'CUSTOMERS CONTROL', 4, arTrade.id, 'Asset', '1221');
-    const clientAR = FinanceService.ensureAccount(
-      company as any, 
-      `${clientName.toUpperCase()}${order.projectName ? ' — ' + order.projectName.toUpperCase() : ''}`,
-      5, arControl.id, 'Asset', '12210'
-    );
-
-    // Revenue: Service Revenue (not raw glass — we sell services)
-    const revParent = FinanceService.ensureAccount(company as any, 'REVENUE', 1, null, 'Revenue', '40');
-    const revSales = FinanceService.ensureAccount(company as any, 'SALES REVENUE', 2, revParent.id, 'Revenue', '41');
-    const revService = FinanceService.ensureAccount(company as any, 'SERVICE REVENUE', 3, revSales.id, 'Revenue', '411');
-    const revGlass = FinanceService.ensureAccount(company as any, 'GLASS PROCESSING SERVICES', 4, revService.id, 'Revenue', '4111');
-    const revenueAcc = FinanceService.ensureAccount(company as any, 'SERVICE INCOME', 5, revGlass.id, 'Revenue', '41110');
-
-    const invoiceId = `INV-${company.substring(0, 3).toUpperCase()}-${Date.now().toString().slice(-6)}`;
-    const txId = `GL-${invoiceId}`;
-
-    // ── GL Entry: PARKED (Finance reviews then posts) ──
-    const glTx: LedgerTransaction = {
-      id: txId, company, docType: 'DR', docDate: new Date().toISOString().split('T')[0],
-      date: new Date().toISOString().split('T')[0],
-      description: `[PARKED] INVOICE ${invoiceId}: ${clientName} — ${order.orderNo || order.id}`,
-      referenceId: invoiceId, status: 'Parked',
-      reqId: order.id,
-      details: [
-        { accountId: clientAR.id, debit: finalAmount, credit: 0, text: `AR: ${clientName}${order.projectName ? ' | ' + order.projectName : ''}` },
-        { accountId: revenueAcc.id, debit: 0, credit: finalAmount, text: `Service Revenue: ${order.projectName || 'General'}` }
-      ]
-    };
-
-    FinanceService.saveLedger([...FinanceService.getLedger(), glTx]);
-
-    // ── Event Registry entry ──
-    const events = FinanceService.getFinancialEvents();
-    FinanceService.saveFinancialEvents([...events, {
-      id: `EVT-${invoiceId}`, company, date: new Date().toISOString().split('T')[0],
-      sourceModule: 'Sales', description: `Invoice ${invoiceId} raised — ${clientName} — PKR ${finalAmount.toLocaleString()}`,
-      amount: finalAmount, referenceId: invoiceId, status: 'Pending'
-    }]);
-
-    // Inter-company mirror
-    let targetCompany: Company | null = null;
-    const cNameUpper = clientName.toUpperCase();
-    if (cNameUpper.includes('GTI')) targetCompany = 'GTI';
-    else if (cNameUpper.includes('GTK')) targetCompany = 'GTK';
-    else if (cNameUpper.includes('NIPPON')) targetCompany = 'Nippon';
-    else if (cNameUpper.includes('GLASSCO')) targetCompany = 'Glassco';
-    else if (cNameUpper.includes('FACTORY')) targetCompany = 'Factory';
-
-    if (targetCompany && targetCompany !== company) {
-      const targetAccounts = FinanceService.getAccounts().filter(a => a.company === targetCompany);
-      const costAcc = targetAccounts.find(a => a.name.includes('CONSUMED') || a.name.includes('MATERIAL') || a.code.startsWith('511')) || targetAccounts.find(a => a.type === 'Expense');
-      const payableAcc = targetAccounts.find(a => a.name.includes('PAYABLE') || a.code.startsWith('221')) || targetAccounts.find(a => a.type === 'Liability');
-      if (costAcc && payableAcc) {
-        const mirrorTx: LedgerTransaction = {
-          id: `BILL-${txId}`, company: targetCompany, docType: 'KR',
-          docDate: new Date().toISOString().split('T')[0], date: new Date().toISOString().split('T')[0],
-          description: `AUTO-PURCHASE: From ${company} — ${invoiceId}`,
-          referenceId: txId, status: 'Parked',
-          details: [
-            { accountId: costAcc.id, debit: finalAmount, credit: 0, text: `Service from ${company}` },
-            { accountId: payableAcc.id, debit: 0, credit: finalAmount, text: `Payable to ${company}` }
-          ]
-        };
-        FinanceService.saveLedger([...FinanceService.getLedger(), mirrorTx]);
-      }
+    try {
+      const result = generateDeliveryInvoice(order, company);
+      refreshData();
+      toast.success(
+        `Invoice ${result.invoiceId} — PKR ${result.finalAmount.toLocaleString('en-PK')} — Parked in GL. Finance review required. AR: ${result.clientName}`,
+        { duration: 6000 }
+      );
+    } catch (err) {
+      console.error('[BillingHub] Invoice generation failed:', err);
+      toast.error('Invoice generation failed — check console.');
     }
-
-    // Create Invoice record
-    const dueDate = new Date();
-    dueDate.setDate(dueDate.getDate() + 30);
-
-    const invoice: Invoice = {
-      id: invoiceId, company, orderId: order.id, orderNo: order.orderNo || order.id,
-      clientId: order.clientId, clientName, date: new Date().toISOString().split('T')[0],
-      dueDate: dueDate.toISOString().split('T')[0],
-      totalAmount: finalAmount, receivedAmount: 0, balance: finalAmount,
-      status: 'Outstanding', glTxId: txId, payments: []
-    };
-
-    SalesService.saveInvoices([...SalesService.getInvoices(), invoice]);
-
-    // Update Quotation status
-    const allQuotations = SalesService.getQuotations();
-    SalesService.saveQuotations(allQuotations.map(q => q.id === order.id ? { ...q, status: 'Invoiced' as any, invoiceNo: invoiceId } : q));
-
-    refreshData();
-    toast.success(`Invoice ${invoiceId} — Parked in GL. Finance will review & post. AR: ${clientName}`);
   };
 
   // ── RECORD PAYMENT RECEIPT ──
