@@ -4,6 +4,7 @@ import ClientMaster from './ClientMaster';
 import QuotationManager from './QuotationManager';
 import NipponQuotationManager from '../companies/nippon/NipponQuotationManager';
 import GlasscoQuotationManager from '../companies/glassco/GlasscoQuotationManager';
+import GTKQuotationManager from '../companies/gtk/GTKQuotationManager';
 import DesignStudio from '../../production/pages/DesignStudio';
 import SalesOrders from '../components/SalesOrders';
 import SalesPipeline from '../components/SalesPipeline';
@@ -53,8 +54,10 @@ const SalesCRM: React.FC = () => {
             
             {/* QuotationManager stays company-specific (glass vs hardware are too different) */}
             {activeTab === 'quotations' && (
-                company === 'Nippon' ? <NipponQuotationManager /> :
+                company === 'Nippon'  ? <NipponQuotationManager /> :
                 company === 'Glassco' ? <GlasscoQuotationManager /> :
+                company === 'GTK'     ? <GTKQuotationManager /> :
+                company === 'GTI'     ? <GTKQuotationManager /> :
                 <QuotationManager />
             )}
             
