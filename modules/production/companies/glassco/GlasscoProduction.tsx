@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ProductionProvider } from '@/modules/production/components/ProductionContext';
 import { 
   Scissors, Truck, ShieldCheck, Flame, BarChart3, AlertTriangle, 
-  Zap, Users, Upload, Award, TrendingUp, LayoutGrid, Brain, 
+  Zap, Users, Upload, Award, TrendingUp, LayoutGrid, Brain,
   MessageCircle, Building2
 } from 'lucide-react';
 import NCRModule from './components/ncr/NCRModule';
