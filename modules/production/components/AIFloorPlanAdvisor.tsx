@@ -6,7 +6,7 @@
  *   - EDF (Earliest Due Date First) scheduling with backward scheduling
  *   - Assigns jobs to Cutting/Processing/Dispatch tables
  *   - Output: "Today's Recommended Plan" card
- *   - Supervisor can approve as-is or use drag-drop from Floor Planner
+ *   - Supervisor can approve as-is or use drag-drop from Floor Planner 
  *
  * 6B: Urgent Insert Impact Analyzer
  *   - "Insert Urgent" button → select order + table
