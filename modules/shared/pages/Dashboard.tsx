@@ -34,7 +34,7 @@ const Dashboard: React.FC = () => {
 
         // Load heavy items async (IDB)
         const [allPieces, allStore, allLedger] = await Promise.all([
-            ProductionService.getProductionPiecesAsync(),
+            ProductionService.getProductionPiecesAsync(company),
             Promise.resolve(InventoryService.getStore()), // Store is still relatively small but can be async'd
             Promise.resolve(FinanceService.getLedger())
         ]);
