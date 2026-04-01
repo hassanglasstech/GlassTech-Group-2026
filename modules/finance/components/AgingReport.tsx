@@ -10,7 +10,7 @@ const AgingReport: React.FC<{ company: Company }> = ({ company }) => {
   const [agingDate, setAgingDate] = useState(new Date().toISOString().split('T')[0]);
 
   const accounts = FinanceService.getAccounts().filter(a => a.company === company);
-  const ledger = FinanceService.getLedger().filter(t => t.company === company && t.status === 'Posted');
+  const ledger = FinanceService.getLedger().filter(t => t.company === company && (t.status === 'Posted' || t.status === 'Parked'));
 
   // 1. Identify Parent Control Accounts (Level 4/3) to filter children
   const controlAccounts = useMemo(() => {
