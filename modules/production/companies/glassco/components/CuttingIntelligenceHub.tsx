@@ -4,7 +4,7 @@
  * Cutting Intelligence: 3 sub-tabs
  * 1. Session Logger  — open/close cutting sessions, record actual wastage vs estimated
  * 2. Batch Optimizer — multi-job piece grouper by thickness+type, priority by due date
- * 3. Target Board    — daily target vs actual per cutter, alert if behind pace
+ * 3. Target Board    — daily target vs actual per cutter, alert if behind pace 
  *
  * Plugs into: InventoryService (CuttingSession), LabourService (CutterDailyLog)
  * localStorage-first, same pattern as rest of ERP
