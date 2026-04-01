@@ -11,9 +11,11 @@ import {
 
 import { useAppStore } from '../store/appStore';
 
+import GlasscoDataWiper from '@/modules/shared/components/GlasscoDataWiper';
+
 const AdminSecurity: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'command_center' | 'admin' | 'users'>('command_center');
+  const [activeTab, setActiveTab] = useState<'command_center' | 'admin' | 'users' | 'data_reset'>('command_center');
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [filterModule, setFilterModule] = useState<string>('All');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -104,6 +106,7 @@ const AdminSecurity: React.FC = () => {
           {[
             { id: 'command_center', label: 'Live Activity Feed', icon: Activity },
             { id: 'admin', label: 'Basis (DB Management)', icon: Database },
+          { id: 'data_reset', label: 'Data Reset', icon: ShieldCheck },
             ...(company === 'Factory' ? [{ id: 'users', label: 'User Roles (SU01)', icon: Users }] : []),
           ].map(tab => (
             <button
@@ -207,7 +210,12 @@ const AdminSecurity: React.FC = () => {
             </div>
           </div>
         )}
-      {activeTab === 'users' && (
+      {activeTab === 'data_reset' && (
+          <div className="p-6">
+            <GlasscoDataWiper />
+          </div>
+        )}
+        {activeTab === 'users' && (
         <div className="max-w-6xl">
           <UserAccessManager />
         </div>
