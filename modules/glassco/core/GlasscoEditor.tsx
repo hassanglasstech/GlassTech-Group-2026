@@ -3,6 +3,8 @@ import { Quotation, Client, Product } from '../../shared/types';
 import { ArrowLeft, Building2, ArrowRightLeft, Trash2, Copy, Plus, Layers, Hash, Save, FileText, CheckCircle2, AlertTriangle, Calculator } from 'lucide-react';
 import { PrintSummary } from './GlasscoPrintTemplate';
 import { WastageCalculator } from './WastageCalculator';
+import QuotationWastageTab, { useQuotationWastage } from '@/modules/glassco/core/QuotationWastageTab';
+import { useAppStore } from '@/modules/shared/store/appStore';
 
 interface GlasscoEditorProps {
     formData: Partial<Quotation>;
@@ -18,11 +20,12 @@ interface GlasscoEditorProps {
     onDuplicateItem: (idx: number) => void;
     onRemoveItem: (idx: number) => void;
     onSave: (action: 'draft' | 'save' | 'approve') => void;
+    onSaveWastageDecision?: (decision: any) => void;
 }
 
 export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
     formData, clients, products, isMM, setIsMM, lastSerial = 2427, onClose,
-    onUpdateItem, onAddItem, onAddSection, onDuplicateItem, onRemoveItem, onSave
+    onUpdateItem, onAddItem, onAddSection, onDuplicateItem, onRemoveItem, onSave, onSaveWastageDecision
 }) => {
     const totalAmount = (formData.items || []).reduce((s, i) => s + i.amount, 0);
 
@@ -35,6 +38,8 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
     });
 
     const [activeTab, setActiveTab] = useState<'items' | 'wastage'>('items');
+    const company = useAppStore(s => s.selectedCompany);
+    const { isTriggered: wastageTriggered, usagePct: wastageUsagePct } = useQuotationWastage(formData.items || [], company);
 
     const glassMaster = useMemo(() => products.filter(p => p.category === 'Glass'), [products]);
     const categories = ['Plain', 'Color', 'Mirror', 'Fluted'];
@@ -168,9 +173,13 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                     </button>
                     <button 
                         onClick={() => setActiveTab('wastage')}
-                        className={`px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'wastage' ? 'bg-blue-600 text-white shadow-lg' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-50'}`}
+                        className={`px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 relative ${activeTab === 'wastage' ? 'bg-blue-600 text-white shadow-lg' : wastageTriggered ? 'bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-50'}`}
                     >
-                        <Calculator size={14}/> Wastage Analysis
+                        <Calculator size={14}/>
+                        Wastage Analysis
+                        {wastageTriggered && activeTab !== 'wastage' && (
+                            <span className="ml-1 px-1.5 py-0.5 bg-amber-500 text-white text-[8px] font-black rounded-full">{wastageUsagePct.toFixed(0)}%</span>
+                        )}
                     </button>
                 </div>
 
@@ -331,15 +340,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
             </div>
             ) : (
                 <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <WastageCalculator 
-                        items={formData.items || []} 
-                        sheetSize={(() => {
-                            const firstItemSheet = formData.items?.find(i => i.sheetSize)?.sheetSize;
-                            if (firstItemSheet === '144x84') return { w: 84, h: 144 }; // 7x12
-                            return { w: 96, h: 144 }; // Default to 8x12
-                        })()}
-                        products={products}
-                    />
+                    <QuotationWastageTab items={formData.items || []} onSaveDecision={onSaveWastageDecision} />
                 </div>
             )}
         </div>
