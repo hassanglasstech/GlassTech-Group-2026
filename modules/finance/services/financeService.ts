@@ -188,11 +188,13 @@ export const FinanceService = {
   },
 
   // ── Record a single transaction (append to ledger) ──────────────────
-  // NOTE: All auto-generated entries are PARKED by default (system testing phase).
-  // Manual review required before posting. To revert to auto-post, remove the status override.
+  // Status is respected from the caller. GRN / system entries pass 'Posted'.
+  // Manual / approval-required entries pass 'Parked'.
   recordTransaction: (tx: LedgerTransaction) => {
     const all = FinanceService.getLedger();
-    all.push({ ...tx, status: 'Parked' });
+    // Only default to Parked if caller explicitly did not set a status
+    const finalStatus = tx.status || 'Parked';
+    all.push({ ...tx, status: finalStatus });
     FinanceService.saveLedger(all);
   },
 
