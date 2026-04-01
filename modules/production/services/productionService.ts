@@ -17,7 +17,7 @@ import { bgSaveToIDB, safeParse, safeSave, safeAsync } from '../../shared/servic
 import { toast } from 'sonner';
 
 export const ProductionService = {
-  getProductionPiecesAsync: async (): Promise<ProductionPiece[]> => {
+  getProductionPiecesAsync: async (filterCompany?: string): Promise<ProductionPiece[]> => {
     try {
       const { data, error } = await supabase.from('production_pieces').select('*');
       if (error || !data || data.length === 0) {
@@ -25,9 +25,33 @@ export const ProductionService = {
         try {
           const db = await initDB();
           const items = await db.getAll('productionPieces');
-          if (items.length > 0) return items;
+          if (items.length > 0) {
+            // Filter by company via order_id pattern if requested
+            if (filterCompany) {
+              const glsPattern = /GLS/i;
+              const gtkPattern = /GTK|GTI/i;
+              return items.filter((p: any) => {
+                const id = p.orderId || p.order_id || '';
+                if (filterCompany === 'Glassco') return glsPattern.test(id);
+                if (filterCompany === 'GTK' || filterCompany === 'GTI') return gtkPattern.test(id);
+                return true;
+              });
+            }
+            return items;
+          }
         } catch {}
-        return safeParse(KEYS.PRODUCTION_PIECES);
+        const ls = safeParse(KEYS.PRODUCTION_PIECES);
+        if (filterCompany) {
+          const glsPattern = /GLS/i;
+          const gtkPattern = /GTK|GTI/i;
+          return ls.filter((p: any) => {
+            const id = p.orderId || p.order_id || '';
+            if (filterCompany === 'Glassco') return glsPattern.test(id);
+            if (filterCompany === 'GTK' || filterCompany === 'GTI') return gtkPattern.test(id);
+            return true;
+          });
+        }
+        return ls;
       }
       // Map snake_case → camelCase
       const mapped = data.map((r: any) => ({
@@ -42,6 +66,20 @@ export const ProductionService = {
         spotId: r.spot_id,
         dispatchId: r.dispatch_id,
       })) as ProductionPiece[];
+
+      // Filter by company via order_id pattern (no company column in Supabase)
+      if (filterCompany) {
+        const glsPattern = /GLS/i;
+        const gtkPattern = /GTK|GTI/i;
+        const filtered = mapped.filter((p: any) => {
+          const id = p.orderId || '';
+          if (filterCompany === 'Glassco') return glsPattern.test(id);
+          if (filterCompany === 'GTK' || filterCompany === 'GTI') return gtkPattern.test(id);
+          return true;
+        });
+        return filtered;
+      }
+
       safeSave(KEYS.PRODUCTION_PIECES, mapped);
       return mapped;
     } catch (e) {
