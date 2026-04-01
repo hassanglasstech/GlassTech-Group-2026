@@ -146,8 +146,10 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
 
     // ── GL Entry: Dr GR/IR / Cr Accounts Payable (only on clean match) ─────
     if (matchSt === '3-Way') {
-      const grirAcc    = accounts.find(a => a.code === '21151');
-      const payableAcc = accounts.find(a => a.code === '21111' || a.code?.startsWith('2111'));
+      const grirParent = FinanceService.ensureAccount(company as any, 'GR/IR CLEARING', 3, null, 'Liability', '2115');
+      const grirAcc    = FinanceService.ensureAccount(company as any, 'GR/IR — Glass Material', 4, grirParent.id, 'Liability', '21151');
+      const payParent  = FinanceService.ensureAccount(company as any, 'TRADE PAYABLES', 3, null, 'Liability', '211');
+      const payableAcc = FinanceService.ensureAccount(company as any, 'Payable — Glass Importers', 4, payParent.id, 'Liability', '21111');
       if (grirAcc && payableAcc) {
         const invoiceAmt = invForm.vendorInvoiceAmount;
         const mirId = `IR-${invForm.vendorInvoiceNo}-${Date.now().toString().slice(-5)}`;
@@ -173,8 +175,10 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
       }
 
       // Freight GR/IR clear — if PO had freight, clear 21152 → 21113
-      const grirFrtAcc = accounts.find(a => a.code === '21152');
-      const otherPayAcc = accounts.find(a => a.code === '21113');
+      const grirFrtParent = FinanceService.ensureAccount(company as any, 'GR/IR CLEARING', 3, null, 'Liability', '2115');
+      const grirFrtAcc = FinanceService.ensureAccount(company as any, 'GR/IR — Freight & Transport', 4, grirFrtParent.id, 'Liability', '21152');
+      const tradePayParent = FinanceService.ensureAccount(company as any, 'TRADE PAYABLES', 3, null, 'Liability', '211');
+      const otherPayAcc = FinanceService.ensureAccount(company as any, 'Payable — Other Vendors', 4, tradePayParent.id, 'Liability', '21113');
       const freightAmt: number = (selectedPO as any).totalFreight || 0;
       if (grirFrtAcc && otherPayAcc && freightAmt > 0) {
         const frtMirId = `IR-FRT-${invForm.vendorInvoiceNo}`;
@@ -250,10 +254,9 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
     if (!selectedPO) return;
     if (!payGLId) return toast.error('Select Bank / Cash GL account for payment.', { duration: 4000 });
 
-    // Find AP account — prefer 21111 (Glass Importers), fallback to any 2111x
-    const payableAcc = accounts.find(a => a.code === '21111')
-      || accounts.find(a => a.code?.startsWith('2111'));
-    if (!payableAcc) return toast.error('Accounts Payable GL (21111) not found. Check GlassCo COA.', { duration: 4000 });
+    // Auto-create AP account if missing
+    const payParent  = FinanceService.ensureAccount(company as any, 'TRADE PAYABLES', 3, null, 'Liability', '211');
+    const payableAcc = FinanceService.ensureAccount(company as any, 'Payable — Glass Importers', 4, payParent.id, 'Liability', '21111');
 
     const txId = `KZ-${Date.now().toString().slice(-6)}`;
     const ledgerTx: LedgerTransaction = {
