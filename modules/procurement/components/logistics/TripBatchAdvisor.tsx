@@ -15,7 +15,7 @@ import { ProductionService } from '@/modules/production/services/productionServi
 import { SalesService } from '@/modules/sales/services/salesService';
 import { ProductionPiece, Quotation } from '@/modules/shared/types';
 import { VehicleTrip, Vehicle } from '@/modules/procurement/types/inventory';
-import { Layers, Truck, Zap, Package, Plus, CheckCircle2, AlertCircle, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Layers, Truck, Zap, Package, Plus, CheckCircle2, AlertCircle, X, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 // ─────────────────────────────────────────────────────────────────────
