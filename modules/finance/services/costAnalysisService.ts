@@ -151,9 +151,10 @@ export function calculateTrueCostPerSqft(company: string): TrueCostPerSqft[] {
 // ══════════════════════════════════════════════════════════════════
 export function calculateJobProfitability(company: string): JobProfitability[] {
   const quotations = SalesService.getQuotations().filter(q => q.company === company && q.status !== 'Draft');
-  const clients = SalesService.getClients();
+  const clients    = SalesService.getClients();
+  const invoices   = SalesService.getInvoices().filter((i: any) => i.company === company);
   const dispatches = ProductionService.getTemperingDispatches().filter(d => d.company === company);
-  const costData = calculateTrueCostPerSqft(company);
+  const costData   = calculateTrueCostPerSqft(company);
 
   // Average cost factors
   const avgEnergy = costData.length > 0 ? costData.reduce((s, c) => s + c.energyCost, 0) / costData.length : 0;
@@ -161,7 +162,12 @@ export function calculateJobProfitability(company: string): JobProfitability[] {
 
   return quotations.map(q => {
     const client = clients.find(c => c.id === q.clientId);
-    const revenue = (q.items || []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
+
+    // Prefer actual invoice amount (post-discount, post-revision) over quotation estimate
+    const invoice = invoices.find((i: any) => i.orderId === q.id || i.orderNo === q.orderNo);
+    const revenue = invoice
+      ? invoice.totalAmount
+      : (q.items || []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
     const totalSqft = (q.items || []).reduce((s: number, i: any) => s + (i.totalSqFt || i.sqft || 0), 0);
 
     // Material cost from MAP
