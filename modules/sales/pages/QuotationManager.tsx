@@ -4,12 +4,9 @@ import {
   Search, Info, Calculator, Ruler, Layers, Box, Calendar,
   Edit2, FileCheck, Eye, Component, Anchor, PaintBucket,
   Hammer, Grid, CheckCircle2, Image as ImageIcon, MousePointer2,
-  PenTool, UploadCloud, FileImage, Square, Circle, Save, Scissors
+  PenTool, UploadCloud, FileImage, Square, Circle, Save
 } from 'lucide-react';
 import { useQuotations } from './useQuotations';
-import DeliveryPromise from '@/modules/sales/components/DeliveryPromise';
-import CuttingDiagram, { buildPackingPiecesFromQuotation } from '@/modules/glassco/core/CuttingDiagram';
-import SheetSelector from '@/modules/glassco/core/SheetSelector';
 
 const QuotationManager: React.FC = () => {
   const {
@@ -43,8 +40,6 @@ const QuotationManager: React.FC = () => {
 
   const isLocked = formData.status === 'Approved';
   const subTotal = formData.items?.reduce((s, i) => s + i.amount, 0) || 0;
-  const [show2DPreview, setShow2DPreview] = useState(false);
-  const [previewSheetSize, setPreviewSheetSize] = useState<{ width: number; height: number }>({ width: 84, height: 144 });
 
   const filteredQuotations = useMemo(() => {
     let result = [...quotations];
@@ -68,7 +63,7 @@ const QuotationManager: React.FC = () => {
         {/* Header Bar */}
         <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center space-x-3">
-            <button onClick={() => { setIsModalOpen(false); setShow2DPreview(false); }} className="p-2 hover:bg-slate-100 rounded-full"><X size={20} className="text-slate-500"/></button>
+            <button onClick={() => { setIsModalOpen(false); }} className="p-2 hover:bg-slate-100 rounded-full"><X size={20} className="text-slate-500"/></button>
             <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center"><FileSignature size={20} /></div>
             <div>
               <h2 className="text-lg font-black text-slate-800 tracking-tight">{formData.id ? `Edit ${formData.id}` : 'New Quotation'}</h2>
@@ -102,9 +97,7 @@ const QuotationManager: React.FC = () => {
             <label className="text-xs font-black text-slate-400 uppercase flex items-center"><Layers size={14} className="mr-1"/> Project / Store Name</label>
             <input disabled={isLocked} type="text" className="sap-input w-full" placeholder="e.g. Emporium Mall Outlet" value={formData.projectName} onChange={e => setFormData({...formData, projectName: e.target.value})} />
           </div>
-          {formData.items && formData.items.length > 0 && (
-            <div className="md:col-span-3"><DeliveryPromise company={company} items={formData.items} orderValuePKR={subTotal} /></div>
-          )}
+
         </div>
 
         {/* Items Table */}
@@ -198,29 +191,13 @@ const QuotationManager: React.FC = () => {
           </div>
         </div>
 
-        {/* 2D Wastage Preview — ALWAYS visible section */}
-        <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-5">
-          <button onClick={() => setShow2DPreview(!show2DPreview)} className={`flex items-center gap-2 text-sm font-black uppercase px-5 py-3 rounded-xl border-2 transition-colors ${show2DPreview ? 'bg-blue-700 text-white border-blue-700' : 'border-blue-300 text-blue-700 hover:bg-blue-100 bg-white shadow-sm'}`}>
-            <Scissors size={16}/> {show2DPreview ? 'Hide' : 'Show'} 2D Wastage Preview
-          </button>
-          {show2DPreview && (() => {
-            const cuttingPieces = buildPackingPiecesFromQuotation(formData.items || []);
-            if (cuttingPieces.length === 0) return <div className="mt-3 bg-white border-2 border-dashed border-slate-200 rounded-xl p-6 text-center text-sm text-slate-400 font-bold">Add piece dimensions (width x height) to items first</div>;
-            const totalRequiredSqft = cuttingPieces.reduce((s, p) => s + (p.widthInch * p.heightInch * p.qty) / 144, 0);
-            return (
-              <div className="mt-3 bg-white rounded-xl border border-blue-200 p-4 space-y-3">
-                <SheetSelector company={company} selectedSheet={previewSheetSize} onSelect={(w, h) => setPreviewSheetSize({ width: w, height: h })} requiredSqft={totalRequiredSqft} />
-                <CuttingDiagram pieces={cuttingPieces} sheetWidthInch={previewSheetSize.width} sheetHeightInch={previewSheetSize.height} glassType={cuttingPieces[0]?.glassType} quotationMode={true} />
-              </div>
-            );
-          })()}
-        </div>
+
 
         {/* Sticky Action Bar */}
         <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm sticky bottom-0 z-10">
           <div className="text-2xl font-black text-slate-800"><span className="text-sm text-slate-500 font-bold uppercase mr-2">Total</span>Rs {(Number(subTotal) || 0).toLocaleString()}</div>
           <div className="flex space-x-3">
-            <button onClick={() => { setIsModalOpen(false); setShow2DPreview(false); }} className="sap-btn-light">Close</button>
+            <button onClick={() => { setIsModalOpen(false); }} className="sap-btn-light">Close</button>
             {!isLocked && <button onClick={() => handleSave(false)} className="sap-btn-light"><Save size={16} className="mr-2"/> Save Draft</button>}
             {!isLocked && <button onClick={() => handleSave(true)} className="sap-btn-primary bg-emerald-600 hover:bg-emerald-700"><FileCheck size={16} className="mr-2"/> Approve</button>}
           </div>
