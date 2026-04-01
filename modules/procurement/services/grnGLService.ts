@@ -20,24 +20,77 @@ import { toast } from 'sonner';
 
 // ── Account code constants (GlassCo COA) ─────────────────────────────────
 const ACC = {
-  INVENTORY_GLASS:   '11511',   // Float Glass — Clear (raw glass inventory)
-  GRIR_MATERIAL:     '21151',   // GR/IR — Glass Material
+  INVENTORY_GLASS:   '11512',   // Float Glass — Raw Sheets (GlassCo inventory)
+  GRIR_MATERIAL:     '21151',   // GR/IR — Glass Material (vendor payable clearing)
   GRIR_FREIGHT:      '21152',   // GR/IR — Freight & Transport
   PAYABLE_GLASS:     '21111',   // Payable — Glass Importers
   PAYABLE_TEMPERING: '21112',   // Payable — Tempering Vendors
   PAYABLE_OTHER:     '21113',   // Payable — Other Vendors
   CASH_IN_HAND:      '11112',   // Cash in Hand
   GLASS_BREAKAGE:    '56113',   // Glass Breakage & Write-off
-  FREIGHT_EXPENSE:   '51214',   // Inward Freight Expense (fallback: 51213)
-  SCRAP_INVENTORY:   '11519',   // Scrap Inventory (nominal) — may not exist, fallback to 11511
+  FREIGHT_EXPENSE:   '51214',   // Inward Freight Expense
+  SCRAP_INVENTORY:   '11519',   // Scrap Inventory (nominal)
   OTHER_INCOME:      '44112',   // Other Income / Miscellaneous
   UNLOADING_CRANE:   '51215',   // Unloading Expense — Crane
   UNLOADING_LABOUR:  '51216',   // Unloading Expense — Labour
 };
 
-// ── Helper: find account by code ──────────────────────────────────────────
-function findAcc(accounts: any[], code: string) {
-  return accounts.find(a => a.code === code);
+// Account name map for auto-creation via ensureAccount
+const ACC_META: Record<string, { name: string; level: number; type: 'Asset' | 'Liability' | 'Expense' | 'Revenue' | 'Equity'; parentCode: string | null; parentName: string | null }> = {
+  '11512': { name: 'Float Glass — Raw Sheets',       level: 5, type: 'Asset',     parentCode: '1151',  parentName: 'RAW MATERIAL INVENTORY' },
+  '21151': { name: 'GR/IR — Glass Material',         level: 5, type: 'Liability', parentCode: '2115',  parentName: 'GR/IR CLEARING' },
+  '21152': { name: 'GR/IR — Freight & Transport',    level: 5, type: 'Liability', parentCode: '2115',  parentName: 'GR/IR CLEARING' },
+  '21111': { name: 'Payable — Glass Importers',      level: 4, type: 'Liability', parentCode: '211',   parentName: 'TRADE PAYABLES' },
+  '21112': { name: 'Payable — Tempering Vendors',    level: 4, type: 'Liability', parentCode: '211',   parentName: 'TRADE PAYABLES' },
+  '21113': { name: 'Payable — Other Vendors',        level: 4, type: 'Liability', parentCode: '211',   parentName: 'TRADE PAYABLES' },
+  '11112': { name: 'Cash in Hand',                   level: 3, type: 'Asset',     parentCode: '111',   parentName: 'CASH & BANK' },
+  '56113': { name: 'Glass Breakage & Write-off',     level: 4, type: 'Expense',   parentCode: '561',   parentName: 'PRODUCTION LOSSES' },
+  '51214': { name: 'Inward Freight Expense',         level: 4, type: 'Expense',   parentCode: '512',   parentName: 'PROCUREMENT EXPENSES' },
+  '11519': { name: 'Scrap Inventory',                level: 5, type: 'Asset',     parentCode: '1151',  parentName: 'RAW MATERIAL INVENTORY' },
+  '44112': { name: 'Miscellaneous Income',           level: 4, type: 'Revenue',   parentCode: '441',   parentName: 'OTHER INCOME' },
+  '51215': { name: 'Unloading Expense — Crane',      level: 4, type: 'Expense',   parentCode: '512',   parentName: 'PROCUREMENT EXPENSES' },
+  '51216': { name: 'Unloading Expense — Labour',     level: 4, type: 'Expense',   parentCode: '512',   parentName: 'PROCUREMENT EXPENSES' },
+  '51213': { name: 'Outward Freight Expense',           level: 4, type: 'Expense',   parentCode: '512',   parentName: 'PROCUREMENT EXPENSES' },
+  '52291': { name: 'Miscellaneous Operating Expense',   level: 4, type: 'Expense',   parentCode: '522',   parentName: 'OPERATING EXPENSES' },
+};
+
+/**
+ * Get or create an account by code.
+ * Uses FinanceService.ensureAccount so accounts auto-create if missing from COA.
+ */
+function getOrCreateAcc(company: string, code: string) {
+  const meta = ACC_META[code];
+  if (!meta) {
+    // Fallback: plain find
+    const all = FinanceService.getAccounts().filter((a: any) => a.company === company);
+    return all.find((a: any) => a.code === code) || null;
+  }
+
+  // Ensure parent first (level - 1)
+  let parentId: string | null = null;
+  if (meta.parentCode && meta.parentName) {
+    const parentMeta = ACC_META[meta.parentCode];
+    const parentLevel = meta.level - 1;
+    const grandParentId: string | null = null; // keep simple — 2 levels enough
+    const parent = FinanceService.ensureAccount(
+      company as any,
+      meta.parentName,
+      parentLevel as 1|2|3|4|5,
+      grandParentId,
+      meta.type,
+      meta.parentCode
+    );
+    parentId = parent.id;
+  }
+
+  return FinanceService.ensureAccount(
+    company as any,
+    meta.name,
+    meta.level as 1|2|3|4|5,
+    parentId,
+    meta.type,
+    code
+  );
 }
 
 function genTxId(prefix: string): string {
@@ -64,12 +117,11 @@ export function postGRNMaterialGL(params: {
   const totalInventoryValue = materialValue + landedCharges;
   if (totalInventoryValue <= 0) return true;
 
-  const accounts = FinanceService.getAccounts().filter(a => a.company === company);
-  const invAcc  = findAcc(accounts, ACC.INVENTORY_GLASS);
-  const grirAcc = findAcc(accounts, ACC.GRIR_MATERIAL);
+  const invAcc  = getOrCreateAcc(company, ACC.INVENTORY_GLASS);
+  const grirAcc = getOrCreateAcc(company, ACC.GRIR_MATERIAL);
 
   if (!invAcc || !grirAcc) {
-    console.warn('[GRN GL] Accounts not found — 11511 or 21151');
+    console.warn('[GRN GL] Could not create Inventory or GR/IR accounts for', company);
     return false;
   }
 
@@ -90,7 +142,7 @@ export function postGRNMaterialGL(params: {
 
   // Landed charges credit Cash (they are paid separately but capitalized into inventory)
   if (landedCharges > 0) {
-    const cashAcc = findAcc(accounts, ACC.CASH_IN_HAND);
+    const cashAcc = getOrCreateAcc(company, ACC.CASH_IN_HAND);
     if (cashAcc) {
       details.push({
         accountId: cashAcc.id,
@@ -132,10 +184,9 @@ export function postFreightVendorIncludedGL(params: {
   const { company, grnId, grnDate, freightAmount } = params;
   if (freightAmount <= 0) return true;
 
-  const accounts = FinanceService.getAccounts().filter(a => a.company === company);
-  const payableAcc = findAcc(accounts, ACC.PAYABLE_GLASS)
-    || findAcc(accounts, ACC.PAYABLE_OTHER);
-  const cashAcc = findAcc(accounts, ACC.CASH_IN_HAND);
+  const payableAcc = getOrCreateAcc(company, ACC.PAYABLE_GLASS)
+    || getOrCreateAcc(company, ACC.PAYABLE_OTHER);
+  const cashAcc = getOrCreateAcc(company, ACC.CASH_IN_HAND);
 
   if (!payableAcc || !cashAcc) {
     console.warn('[Freight GL] Payable or Cash account not found');
@@ -184,14 +235,13 @@ export function postFreightOwnExpenseGL(params: {
   const { company, grnId, grnDate, freightAmount, paidBy } = params;
   if (freightAmount <= 0) return true;
 
-  const accounts = FinanceService.getAccounts().filter(a => a.company === company);
   // Try 51214 first (inward freight), fallback to 51213
-  const frtAcc = findAcc(accounts, ACC.FREIGHT_EXPENSE)
-    || findAcc(accounts, '51213')
+  const frtAcc = getOrCreateAcc(company, ACC.FREIGHT_EXPENSE)
+    || getOrCreateAcc(company, '51213')
     || accounts.find(a => a.name?.toLowerCase().includes('freight') && a.type === 'Expense');
   const crAcc = paidBy === 'Cash'
-    ? findAcc(accounts, ACC.CASH_IN_HAND)
-    : findAcc(accounts, ACC.PAYABLE_OTHER);
+    ? getOrCreateAcc(company, ACC.CASH_IN_HAND)
+    : getOrCreateAcc(company, ACC.PAYABLE_OTHER);
 
   if (!frtAcc || !crAcc) {
     console.warn('[Freight Own GL] Expense or Cash/Payable account not found');
@@ -232,9 +282,8 @@ export function postDefectAdjustmentGL(params: {
   const { company, grnId, adjustmentDate, adjustmentAmount } = params;
   if (adjustmentAmount <= 0) return true;
 
-  const accounts = FinanceService.getAccounts().filter(a => a.company === company);
-  const grirAcc     = findAcc(accounts, ACC.GRIR_MATERIAL);
-  const breakageAcc = findAcc(accounts, ACC.GLASS_BREAKAGE);
+  const grirAcc     = getOrCreateAcc(company, ACC.GRIR_MATERIAL);
+  const breakageAcc = getOrCreateAcc(company, ACC.GLASS_BREAKAGE);
 
   if (!grirAcc || !breakageAcc) {
     console.warn('[Defect GL] GR/IR or Breakage account not found');
@@ -287,12 +336,11 @@ export function postScrapDisposalGL(params: {
   const { actualAmountReceived, nominalBookValue } = params;
   if (actualAmountReceived <= 0) return true;
 
-  const accounts = FinanceService.getAccounts().filter(a => a.company === company);
-  const cashAcc = findAcc(accounts, ACC.CASH_IN_HAND);
+  const cashAcc = getOrCreateAcc(company, ACC.CASH_IN_HAND);
   // Scrap inventory — try 11519, fallback to glass inventory
-  const scrapInvAcc = findAcc(accounts, ACC.SCRAP_INVENTORY)
-    || findAcc(accounts, ACC.INVENTORY_GLASS);
-  const otherIncomeAcc = findAcc(accounts, ACC.OTHER_INCOME)
+  const scrapInvAcc = getOrCreateAcc(company, ACC.SCRAP_INVENTORY)
+    || getOrCreateAcc(company, ACC.INVENTORY_GLASS);
+  const otherIncomeAcc = getOrCreateAcc(company, ACC.OTHER_INCOME)
     || accounts.find(a => a.name?.toLowerCase().includes('other income') && a.type === 'Revenue');
 
   if (!cashAcc || !scrapInvAcc) {
@@ -328,7 +376,7 @@ export function postScrapDisposalGL(params: {
 
   // If actual < nominal → Breakage/loss
   if (excess < 0) {
-    const breakageAcc = findAcc(accounts, ACC.GLASS_BREAKAGE);
+    const breakageAcc = getOrCreateAcc(company, ACC.GLASS_BREAKAGE);
     if (breakageAcc) {
       details.push({
         accountId: breakageAcc.id,
@@ -369,11 +417,10 @@ export function postOtherChargesGL(params: {
   const { company, grnId, grnDate, amount, description } = params;
   if (amount <= 0) return true;
 
-  const accounts = FinanceService.getAccounts().filter(a => a.company === company);
   const expAcc  = accounts.find(a => a.name?.toLowerCase().includes('miscellaneous') && a.type === 'Expense')
-    || findAcc(accounts, '52291') // misc operating expense
+    || getOrCreateAcc(company, '52291') // misc operating expense
     || accounts.find(a => a.type === 'Expense' && a.level >= 4);
-  const cashAcc = findAcc(accounts, ACC.CASH_IN_HAND);
+  const cashAcc = getOrCreateAcc(company, ACC.CASH_IN_HAND);
 
   if (!expAcc || !cashAcc) return false;
 
@@ -409,11 +456,10 @@ export function postCranePV(params: {
   const { company, grnId, grnDate, craneAmount, craneVendorName } = params;
   if (craneAmount <= 0) return true;
 
-  const accounts = FinanceService.getAccounts().filter(a => a.company === company);
-  const craneAcc = findAcc(accounts, ACC.UNLOADING_CRANE)
+  const craneAcc = getOrCreateAcc(company, ACC.UNLOADING_CRANE)
     || accounts.find(a => a.name?.toLowerCase().includes('unloading') && a.type === 'Expense')
-    || findAcc(accounts, ACC.FREIGHT_EXPENSE); // fallback
-  const cashAcc = findAcc(accounts, ACC.CASH_IN_HAND);
+    || getOrCreateAcc(company, ACC.FREIGHT_EXPENSE); // fallback
+  const cashAcc = getOrCreateAcc(company, ACC.CASH_IN_HAND);
 
   if (!craneAcc || !cashAcc) {
     console.warn('[Crane PV] Unloading Expense or Cash account not found');
@@ -457,13 +503,12 @@ export function postLabourPackingPV(params: {
   const { company, grnId, grnDate, labourVendorName, labourGross, packingBuyback, netPayable } = params;
   if (labourGross <= 0) return true;
 
-  const accounts = FinanceService.getAccounts().filter(a => a.company === company);
-  const labourAcc = findAcc(accounts, ACC.UNLOADING_LABOUR)
-    || findAcc(accounts, ACC.UNLOADING_CRANE)
+  const labourAcc = getOrCreateAcc(company, ACC.UNLOADING_LABOUR)
+    || getOrCreateAcc(company, ACC.UNLOADING_CRANE)
     || accounts.find(a => a.name?.toLowerCase().includes('unloading') && a.type === 'Expense');
-  const incomeAcc = findAcc(accounts, ACC.OTHER_INCOME)
+  const incomeAcc = getOrCreateAcc(company, ACC.OTHER_INCOME)
     || accounts.find(a => a.name?.toLowerCase().includes('other income') && a.type === 'Revenue');
-  const cashAcc = findAcc(accounts, ACC.CASH_IN_HAND);
+  const cashAcc = getOrCreateAcc(company, ACC.CASH_IN_HAND);
 
   if (!labourAcc || !cashAcc) {
     console.warn('[Labour PV] Unloading Expense or Cash account not found');
