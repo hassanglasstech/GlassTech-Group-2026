@@ -205,28 +205,33 @@ export const NCRService = {
 
     // GL — Vendor Claim Recovery entry
     if (settledAmount > 0) {
-      const accs = FinanceService.getAccounts().filter(a => a.company === company);
-      const cashAcc = accs.find(a => a.code?.startsWith('1001') || a.name?.toLowerCase().includes('cash'));
-      const claimAcc = accs.find(a => a.name?.toLowerCase().includes('vendor claim') || a.name?.toLowerCase().includes('receivable'));
+      // Auto-create accounts if missing (same ensureAccount pattern)
+      const cashAcc = FinanceService.ensureAccount(
+        company as any, 'Cash in Hand', 3, null, 'Asset', '11112'
+      );
+      const claimRecoveryParent = FinanceService.ensureAccount(
+        company as any, 'OTHER INCOME', 2, null, 'Revenue', '441'
+      );
+      const claimAcc = FinanceService.ensureAccount(
+        company as any, 'Vendor Claim Recovery', 3, claimRecoveryParent.id, 'Revenue', '44111'
+      );
 
-      if (cashAcc && claimAcc) {
-        const all = FinanceService.getLedger();
-        FinanceService.saveLedger([...all, {
-          id: `GL-CLM-${claimId}`,
-          company,
-          docType: 'JV',
-          docDate: today,
-          date: today,
-          description: `Vendor Claim Settled — ${claim.vendorName} — ${claimId}`,
-          referenceId: claimId,
-          status: 'Posted',
-          details: [
-            { accountId: cashAcc.id, debit: settledAmount, credit: 0, text: 'Claim recovery received' },
-            { accountId: claimAcc.id, debit: 0, credit: settledAmount, text: `Vendor: ${claim.vendorName}` },
-          ],
-        } as any]);
-        SyncService.markDirty('ledger');
-      }
+      const all = FinanceService.getLedger();
+      FinanceService.saveLedger([...all, {
+        id: `GL-CLM-${claimId}`,
+        company,
+        docType: 'JV',
+        docDate: today,
+        date: today,
+        description: `Vendor Claim Settled — ${claim.vendorName} — ${claimId} — PKR ${settledAmount.toLocaleString()}`,
+        referenceId: claimId,
+        status: 'Posted',
+        details: [
+          { accountId: cashAcc.id,  debit: settledAmount, credit: 0,             text: `Cash received — claim from ${claim.vendorName}` },
+          { accountId: claimAcc.id, debit: 0,             credit: settledAmount, text: `Vendor Claim Recovery: ${claimId}` },
+        ],
+      } as any]);
+      SyncService.markDirty('ledger');
     }
 
     // Update linked NCR
