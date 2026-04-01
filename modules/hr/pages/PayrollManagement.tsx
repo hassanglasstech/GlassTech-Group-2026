@@ -169,15 +169,15 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
         return toast.error(`Payroll JV for ${monthName} already posted (${txId}).`);
       }
 
-      // Find GL Accounts
-      const allAccounts = FinanceService.getAccounts().filter(a => a.company === company);
-      const findAcc = (keyword: string, type: string) => allAccounts.find(a => a.name.toUpperCase().includes(keyword) && a.type === type);
-
-      const salaryExpAcc   = findAcc('SALARIES', 'Expense')   || findAcc('SALARY', 'Expense')   || { id: 'SAL-EXP', name: 'Salaries Expense' };
-      const allowanceAcc   = findAcc('ALLOWANCE', 'Expense')  || salaryExpAcc;
-      const overtimeAcc    = findAcc('OVERTIME', 'Expense')   || salaryExpAcc;
-      const payableAcc     = findAcc('PAYABLE', 'Liability')  || findAcc('SALARIES', 'Liability') || { id: 'SAL-PAY', name: 'Salaries Payable' };
-      const staffLoanAcc   = findAcc('LOAN', 'Asset')         || findAcc('ADVANCE', 'Asset')      || { id: 'STAFF-LOAN', name: 'Staff Loans' };
+      // Find or auto-create GL Accounts via ensureAccount
+      const salaryParent   = FinanceService.ensureAccount(company as any, 'PERSONNEL EXPENSES', 2, null, 'Expense', '521');
+      const salaryExpAcc   = FinanceService.ensureAccount(company as any, 'Salaries & Wages', 3, salaryParent.id, 'Expense', '5211');
+      const allowanceAcc   = FinanceService.ensureAccount(company as any, 'Allowances', 3, salaryParent.id, 'Expense', '5212');
+      const overtimeAcc    = FinanceService.ensureAccount(company as any, 'Overtime Pay', 3, salaryParent.id, 'Expense', '5213');
+      const liabParent     = FinanceService.ensureAccount(company as any, 'CURRENT LIABILITIES', 2, null, 'Liability', '22');
+      const payableAcc     = FinanceService.ensureAccount(company as any, 'Salaries Payable', 3, liabParent.id, 'Liability', '2211');
+      const assetParent    = FinanceService.ensureAccount(company as any, 'CURRENT ASSETS', 2, null, 'Asset', '11');
+      const staffLoanAcc   = FinanceService.ensureAccount(company as any, 'Staff Loans & Advances', 3, assetParent.id, 'Asset', '1121');
 
       // Build detailed GL lines
       const details: { accountId: string; debit: number; credit: number; text: string; costCenterId?: string }[] = [];
