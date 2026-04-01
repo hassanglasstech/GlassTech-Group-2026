@@ -19,13 +19,14 @@ import AdvanceTracker from '@/modules/procurement/components/inventory/AdvanceTr
 import OpeningBalance from '@/modules/procurement/components/inventory/OpeningBalance';
 import GRNRegister from '@/modules/procurement/components/inventory/GRNRegister';
 import WeightMaster from '@/modules/procurement/components/inventory/WeightMaster';
+import GlasscoMRP from '@/modules/procurement/components/inventory/GlasscoMRP';
 import { 
-  LayoutGrid, ArrowUpRight, ShieldCheck, Truck, Database, Loader2, Layers, BarChart3, Wrench, Banknote, PackageOpen, ClipboardList, Scale
+  LayoutGrid, ArrowUpRight, ShieldCheck, Truck, Database, Loader2, Layers, BarChart3, Wrench, Banknote, PackageOpen, ClipboardList, Scale, TrendingDown
 } from 'lucide-react';
 
 const InventoryModule: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'overview' | 'master' | 'issuance' | 'migo' | 'quality' | 'remnants' | 'consumption' | 'tools' | 'advances' | 'opening' | 'grnRegister' | 'weightMaster'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'master' | 'issuance' | 'migo' | 'quality' | 'remnants' | 'consumption' | 'tools' | 'advances' | 'opening' | 'grnRegister' | 'weightMaster' | 'mrp'>('overview');
   const [isLoading, setIsLoading] = useState(true);
   
   const [items, setItems] = useState<StoreItem[]>([]);
@@ -175,6 +176,9 @@ const InventoryModule: React.FC = () => {
         </div>
       )}
 
+      {activeTab === 'mrp' && (
+        <GlasscoMRP />
+      )}
       {activeTab === 'weightMaster' && (
         <div className="animate-in fade-in duration-300">
           <WeightMaster />
