@@ -38,8 +38,8 @@ const MASTER_GROUPS: { id: string; label: string; keys: string[] }[] = [
   },
   {
     id: 'material',
-    label: 'Material master & stock items',
-    keys: ['gtk_erp_store', 'gtk_erp_products', 'gtk_erp_weight_master', 'gtk_erp_pallet_rates'],
+    label: 'Product & glass type definitions (descriptions only — quantities always zeroed)',
+    keys: ['gtk_erp_products', 'gtk_erp_weight_master', 'gtk_erp_pallet_rates'],
   },
   {
     id: 'finance_master',
@@ -65,7 +65,7 @@ const MASTER_GROUPS: { id: string; label: string; keys: string[] }[] = [
 
 const FULL_WIPE_KEYS = ['glassco_floor_planner_teams', 'glassco_daily_plan', 'glassco_cutter_daily_targets'];
 const NOTIF_KEYS = ['gtk_notifications', 'gtk_notifications_v2'];
-const SUPABASE_TRANSACTIONAL = ['quotations', 'production_pieces', 'projects', 'cutter_daily_logs', 'generator_logs', 'payroll', 'loans'];
+const SUPABASE_TRANSACTIONAL = ['quotations', 'projects', 'cutter_daily_logs', 'generator_logs', 'payroll', 'loans'];
 const SUPABASE_MASTER_EMPLOYEES = { id: 'hr_master', tables: ['employees'] };
 const SUPABASE_MASTER_CLIENTS = { id: 'clients_vendors', tables: ['clients', 'products'] };
 
@@ -104,6 +104,37 @@ async function sbDelete(table: string): Promise<number> {
     if (error) { console.warn(`[Wiper] ${table}:`, error.message); return 0; }
     return data?.length || 0;
   } catch { return 0; }
+}
+
+async function sbDeleteProductionPieces(): Promise<number> {
+  // production_pieces has no company column — delete via order_id match
+  try {
+    // Get all order IDs belonging to Glassco from localStorage
+    const quotations = JSON.parse(localStorage.getItem('gtk_erp_quotations') || '[]');
+    // Also check Supabase quotations table directly
+    const { data: sbQuotes } = await supabase.from('quotations').select('id, order_no').eq('company', COMPANY);
+    const sbIds = (sbQuotes || []).flatMap((q: any) => [q.id, q.order_no].filter(Boolean));
+    const lsIds = (Array.isArray(quotations) ? quotations : [])
+      .filter((q: any) => q.company === COMPANY)
+      .flatMap((q: any) => [q.id, q.orderNo, q.order_no].filter(Boolean));
+    const allOrderIds = [...new Set([...sbIds, ...lsIds])];
+
+    if (allOrderIds.length === 0) {
+      // Fallback: get all pieces and delete ones whose order_id starts with Glassco pattern
+      const { data: allPieces } = await supabase.from('production_pieces').select('id, order_id');
+      const glasscoPattern = /^(QT-GLS|SO-GLS|DRF-GLS)/i;
+      const toDelete = (allPieces || []).filter((p: any) => glasscoPattern.test(p.order_id || '')).map((p: any) => p.id);
+      if (toDelete.length === 0) return 0;
+      const { data } = await supabase.from('production_pieces').delete().in('id', toDelete).select('id');
+      return data?.length || 0;
+    }
+
+    const { data } = await supabase.from('production_pieces').delete().in('order_id', allOrderIds).select('id');
+    return data?.length || 0;
+  } catch (e) {
+    console.warn('[Wiper] production_pieces:', e);
+    return 0;
+  }
 }
 
 async function sbDeleteAttendance(): Promise<number> {
@@ -150,6 +181,22 @@ const GlasscoDataWiper: React.FC = () => {
     TRANSACTIONAL_KEYS.forEach(k => { n += filterKey(k); });
     add('Transactional records (orders, GL, NCR, logs…)', n);
 
+    // 1b. Zero out stock quantities in store (keep item definitions, reset qty to 0)
+    // This keeps material master intact but removes GRN-posted stock
+    try {
+      const store = JSON.parse(localStorage.getItem('gtk_erp_store') || '[]');
+      if (Array.isArray(store)) {
+        const zeroed = store.map((item: any) => {
+          if (item.company !== COMPANY) return item;
+          return { ...item, quantity: 0, unrestrictedQty: 0, qiQty: 0, blockedQty: 0,
+            reservedQty: 0, consignmentQty: 0, totalValue: 0, lastMovementDate: '' };
+        });
+        localStorage.setItem('gtk_erp_store', JSON.stringify(zeroed));
+        const count = zeroed.filter((i: any) => i.company === COMPANY).length;
+        add('Stock quantities zeroed (item definitions kept)', count);
+      }
+    } catch { add('Stock quantity reset', 0, 'skip'); }
+
     // 2. Phase-specific keys
     FULL_WIPE_KEYS.forEach(removeKey);
     add('Floor planner & daily plan', FULL_WIPE_KEYS.length);
@@ -175,6 +222,10 @@ const GlasscoDataWiper: React.FC = () => {
       const sn = await sbDelete(t);
       add(`Supabase → ${t}`, sn);
     }
+
+    // 5b. Supabase production_pieces (special — no company column)
+    const ppN = await sbDeleteProductionPieces();
+    add('Supabase → production_pieces', ppN);
 
     // 6. Supabase attendance (before employees)
     const an = await sbDeleteAttendance();
@@ -246,7 +297,7 @@ const GlasscoDataWiper: React.FC = () => {
               {[
                 'All quotations & job orders','All invoices & payments',
                 'All production pieces','All GL ledger entries',
-                'All GRN records & sheet tags','All requisitions & POs',
+                'All GRN records & sheet tags','Stock quantities zeroed (definitions kept)',
                 'All remants & cutting sessions','All petty cash entries',
                 'All attendance & payroll','All NCR events & claims',
                 'All dispatch challans','All vehicle trips',
