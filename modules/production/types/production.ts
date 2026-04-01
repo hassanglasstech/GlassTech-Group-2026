@@ -82,6 +82,19 @@ export interface Quotation {
   actualDeliveryDate?: string;
   delayReason?: string;
   delayCategory?: 'Internal' | 'Outsourcing' | 'Client' | '';
+  // Wastage analysis decision (saved at quotation time)
+  wastageDecision?: {
+    actualWastagePct: number;
+    historicalAvgPct: number | null;
+    industryBenchmarkPct: number;
+    suggestedRateIncrementPct: number;     // e.g. 8.5 = 8.5% increase
+    suggestedNewRatePerSqft: number | null; // computed suggestion
+    decision: 'approve' | 'review' | 'override';
+    overrideNote: string;
+    approvedAt: string;                    // ISO timestamp
+    sheetsRequired: number;
+    selectedSheetSize: string;             // e.g. "84x144"
+  };
 }
 
 export type JobOrder = Quotation;
