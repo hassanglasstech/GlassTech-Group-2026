@@ -47,7 +47,7 @@ export const useGlasscoQuotations = () => {
           // Strictly formal range: below 9000
           if (!isNaN(num) && num > max && num < 9000) max = num;
       });
-      return max || 2450;
+      return max || 2472;
   }, [allQuotations]);
 
   const refreshData = async () => {
@@ -103,8 +103,8 @@ export const useGlasscoQuotations = () => {
     } 
     else if (action === 'save' || action === 'approve') {
         if (!hasFormalId) {
-            // New Formal Quotation/Sales Order (even if it was a draft): Start from 2428
-            let maxSeq = 2450;
+            // New Formal Quotation/Sales Order — start from 2472 (next = 2473)
+            let maxSeq = 2472;
             all.forEach(q => {
                 const refId = q.orderNo || q.id || '';
                 // Only look at formal IDs to determine the next number
