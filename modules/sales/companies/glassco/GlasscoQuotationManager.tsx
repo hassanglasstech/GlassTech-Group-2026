@@ -107,7 +107,8 @@ const GlasscoQuotationManager: React.FC = () => {
                 lastSerial={lastSerial}
                 onClose={() => setIsEditorOpen(false)} onUpdateItem={updateGlassItem} 
                 onAddItem={addItem} onAddSection={addSection} onDuplicateItem={duplicateItem}
-                onRemoveItem={removeItem} onSave={handleSaveQuotation} 
+                onRemoveItem={removeItem} onSave={handleSaveQuotation}
+                onSaveWastageDecision={(dec) => setFormData(prev => ({ ...prev, wastageDecision: dec }))}
               />
           </div>
         )}
