@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { Company, Quotation, Client, ProductionPiece, PieceStatus, TemperingDispatch, GatePass, WarehouseSpot, PieceFault } from '@/modules/shared/types';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { SalesService } from '@/modules/sales/services/salesService';
+import { generateDeliveryInvoice } from '@/modules/sales/services/deliveryInvoiceService';
 import { Loader2 } from 'lucide-react';
 
 interface ProductionContextType {
@@ -271,8 +272,9 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
     if (!directDeliveryForm.vehicleNo || !directDeliveryForm.siteName) return toast.error("Validation: Vehicle and Site Name required.", { duration: 4000 });
     if (selectedPiecesForDelivery.size === 0) return toast.error("No pieces selected.", { duration: 4000 });
 
+    const challanId = `CHL-SITE-${Date.now().toString().slice(-5)}`;
     const newChallan: TemperingDispatch = {
-      id: `CHL-SITE-${Date.now().toString().slice(-5)}`,
+      id: challanId,
       company,
       date: new Date().toISOString().split('T')[0],
       plantName: directDeliveryForm.siteName.toUpperCase(),
@@ -287,17 +289,91 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
     };
 
     ProductionService.saveTemperingDispatches([...dispatches, newChallan]);
-    
+
     ProductionService.getProductionPiecesAsync().then(allPieces => {
-        const updatedPieces = allPieces.map(p => selectedPiecesForDelivery.has(p.id) ? { ...p, status: 'Delivered' as PieceStatus, dispatchId: newChallan.id } : p);
-        ProductionService.saveProductionPieces(updatedPieces);
-        refreshData();
+      const updatedPieces = allPieces.map(p =>
+        selectedPiecesForDelivery.has(p.id)
+          ? { ...p, status: 'Delivered' as PieceStatus, dispatchId: newChallan.id }
+          : p
+      );
+      ProductionService.saveProductionPieces(updatedPieces);
+
+      // ── AUTO-INVOICE: find the order(s) that are now fully delivered ──────
+      const deliveredPieceIds = Array.from(selectedPiecesForDelivery);
+      const affectedOrderIds = [
+        ...new Set(
+          allPieces
+            .filter(p => deliveredPieceIds.includes(p.id))
+            .map(p => p.orderId)
+        ),
+      ];
+
+      let invoicesCreated = 0;
+      let invoicesSkipped = 0;
+
+      affectedOrderIds.forEach(orderId => {
+        // Only auto-invoice if ALL pieces of this order are now delivered
+        const orderPieces = updatedPieces.filter(p => p.orderId === orderId);
+        const allDelivered = orderPieces.length > 0 && orderPieces.every(p => p.status === 'Delivered');
+        if (!allDelivered) return;
+
+        const order = jobOrders.find(j => j.id === orderId || j.orderNo === orderId);
+        if (!order) return;
+
+        try {
+          const result = generateDeliveryInvoice(order, company);
+          if (result.alreadyInvoiced) {
+            invoicesSkipped++;
+          } else {
+            invoicesCreated++;
+            // Notify bell
+            const notifKey = 'gtk_notifications_v2';
+            const notifs = JSON.parse(localStorage.getItem(notifKey) || '[]');
+            notifs.unshift({
+              id: `NOTIF-INV-${result.invoiceId}`,
+              createdAt: new Date().toISOString(),
+              eventType: 'delivery_confirmed',
+              orderRef: order.orderNo || order.id,
+              targetCompany: company,
+              recipientName: result.clientName,
+              message: `Order ${order.orderNo || order.id} delivered. Invoice ${result.invoiceId} raised — PKR ${result.finalAmount.toLocaleString('en-PK')}. Parked in GL — Finance review required.`,
+              isRead: false,
+              waStatus: 'pending',
+              title: `Invoice Created — ${order.orderNo || order.id}`,
+              link: '/accounts',
+              channel: 'internal',
+            });
+            localStorage.setItem(notifKey, JSON.stringify(notifs.slice(0, 200)));
+          }
+        } catch (err) {
+          console.error('[AutoInvoice] Failed for order', orderId, err);
+        }
+      });
+
+      refreshData();
+
+      // Show result toast
+      if (invoicesCreated > 0) {
+        toast.success(
+          `Challan ${challanId} created. ${invoicesCreated} invoice${invoicesCreated > 1 ? 's' : ''} auto-generated → GL Parked. Check Finance → Billing.`,
+          { duration: 6000 }
+        );
+      } else if (invoicesSkipped > 0) {
+        toast.success(
+          `Challan ${challanId} created. Pieces marked Delivered. (Invoice already exists — partial delivery recorded.)`,
+          { duration: 5000 }
+        );
+      } else {
+        toast.success(
+          `Challan ${challanId} created. Remaining pieces delivered — invoice will auto-generate when order is fully delivered.`,
+          { duration: 5000 }
+        );
+      }
     });
 
     setIsDirectDeliveryModalOpen(false);
     setSelectedPiecesForDelivery(new Set());
     setDirectDeliveryForm({ vehicleNo: '', driverName: '', siteName: '' });
-    toast.error(`Direct Delivery Challan ${newChallan.id} Created. Pieces marked Delivered.`, { duration: 4000 });
   };
 
   const handleRecordFault = () => {
