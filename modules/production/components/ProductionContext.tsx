@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { Company, Quotation, Client, ProductionPiece, PieceStatus, TemperingDispatch, GatePass, WarehouseSpot, PieceFault } from '@/modules/shared/types';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { SalesService } from '@/modules/sales/services/salesService';
+import { postTemperingInwardGL, postDeliveryCOGS } from '@/modules/procurement/services/glasscoGLService';
 import { Loader2 } from 'lucide-react';
 
 interface ProductionContextType {
@@ -411,5 +412,4 @@ export const useProductionContext = () => {
   const context = useContext(ProductionContext);
   if (!context) throw new Error("useProductionContext must be used within a ProductionProvider");
   return context;
-import { postTemperingInwardGL, postDeliveryCOGS } from '@/modules/procurement/services/glasscoGLService';
 };

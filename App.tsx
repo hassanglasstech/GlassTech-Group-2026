@@ -38,6 +38,7 @@ const InventoryModule  = React.lazy(() => import('./modules/procurement/pages/In
 const LogisticsModule  = React.lazy(() => import('./modules/procurement/pages/LogisticsModule'));
 const VendorHub        = React.lazy(() => import('./modules/procurement/pages/VendorHub'));
 const MDDashboard       = React.lazy(() => import('./modules/md-dashboard/MDDashboard'));
+const FactoryInchargeModule = React.lazy(() => import('./modules/factory/pages/FactoryInchargeModule'));
 
 // ── All nav items definition ─────────────────────────────────────────
 const ALL_NAV = [
@@ -53,6 +54,7 @@ const ALL_NAV = [
   { name: 'Supply Chain Hub',     path: '/hub',         icon: Globe,           key: 'hub'          },
   { name: 'Procurement (PUR)',    path: '/requisitions',icon: ShoppingBag,     key: 'requisitions' },
   { name: 'MD Dashboard',          path: '/md-dashboard', icon: BarChart3,       key: 'md-dashboard' },
+  { name: 'Factory Incharge',  path: '/factory-incharge', icon: Factory,    key: 'factory-incharge' },
   { name: 'Basis Admin',          path: '/admin',       icon: ShieldCheck,     key: 'admin'        },
 ];
 
@@ -410,6 +412,7 @@ const App: React.FC = () => {
                   <Route path="/requisitions"  element={<ModuleErrorBoundary moduleName="Procurement"><Requisitions /></ModuleErrorBoundary>} />
                   <Route path="/accounts/*"    element={<ModuleErrorBoundary moduleName="Finance"><AccountsModule /></ModuleErrorBoundary>} />
                   <Route path="/md-dashboard" element={<ModuleErrorBoundary moduleName="MD Dashboard"><MDDashboard /></ModuleErrorBoundary>} />
+                  <Route path="/factory-incharge" element={<ModuleErrorBoundary moduleName="Factory Incharge"><FactoryInchargeModule /></ModuleErrorBoundary>} />
                   <Route path="/admin"         element={<ModuleErrorBoundary moduleName="Admin"><AdminSecurity /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />
                 </Routes>              </Suspense>
