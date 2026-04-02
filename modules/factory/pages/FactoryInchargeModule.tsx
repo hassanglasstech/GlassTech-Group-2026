@@ -2,14 +2,15 @@ import React, { useState, useEffect } from 'react';
 import {
   Factory, ShoppingBag, Wrench, Users, Truck, Building2,
   Plus, Clock, AlertTriangle, CheckCircle2, Circle, Loader2,
-  ChevronRight, Bell, FileText, Home
+  ChevronRight, Bell, FileText, Home, Wrench as WrenchIcon
 } from 'lucide-react';
 import { supabase } from '@/src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
 import FactoryEventForm from '../components/incharge/FactoryEventForm';
-import FactoryReqTracker from '../components/incharge/FactoryReqTracker';
+import ReqClosureTracker from '../components/incharge/ReqClosureTracker';
 import FactoryDailySummary from '../components/incharge/FactoryDailySummary';
 import EscalationAlerts from '../components/incharge/EscalationAlerts';
+import AssetRegister from '../components/incharge/AssetRegister';
 
 // ── Types ─────────────────────────────────────────────────────────────
 export type Sector = 'Production' | 'Store' | 'Maintenance' | 'HR' | 'Logistics' | 'Office';
@@ -320,10 +321,13 @@ const FactoryInchargeModule: React.FC = () => {
             {activeTab === 'home' && <HomeScreen />}
             {SECTORS.map(s => s.key).includes(activeTab as Sector) && <SectorScreen />}
             {activeTab === 'tracker' && (
-              <FactoryReqTracker events={events} onRefresh={loadEvents} />
+              <ReqClosureTracker />
             )}
             {activeTab === 'summary' && (
               <FactoryDailySummary events={events} />
+            )}
+            {activeTab === 'assets' && (
+              <AssetRegister />
             )}
           </>
         )}
@@ -335,6 +339,7 @@ const FactoryInchargeModule: React.FC = () => {
           { tab: 'home' as Tab, icon: Home, label: 'Home' },
           { tab: 'tracker' as Tab, icon: FileText, label: 'Requests' },
           { tab: 'summary' as Tab, icon: Bell, label: 'Daily Log' },
+          { tab: 'assets' as Tab, icon: WrenchIcon, label: 'Assets' },
         ].map(({ tab, icon: Icon, label }) => (
           <button
             key={tab}
