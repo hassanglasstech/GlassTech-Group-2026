@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Factory, ShoppingBag, Wrench, Users, Truck, Building2,
   Plus, Clock, AlertTriangle, CheckCircle2, Circle, Loader2,
-  ChevronRight, Bell, FileText, Home, Wrench as WrenchIcon, ShieldCheck, CheckSquare, Send, Handshake, Zap, LayoutGrid, BarChart2, Scissors
+  ChevronRight, Bell, FileText, Home, Wrench as WrenchIcon, ShieldCheck, CheckSquare, Send, Handshake, Zap, LayoutGrid, BarChart2, Scissors, BarChart3, DollarSign, Calculator, Landmark
 } from 'lucide-react';
 import { supabase } from '@/src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
@@ -24,6 +24,12 @@ import FloorPlannerUpgrade from '../components/production/FloorPlannerUpgrade';
 import VehicleLoadOptimizer from '../components/production/VehicleLoadOptimizer';
 import CuttingSequencePlanner from '../components/production/CuttingSequencePlanner';
 import WorkerKPIDashboard from '../components/production/WorkerKPIDashboard';
+import MISDashboard from '../components/mis/MISDashboard';
+import JobPL from '../components/mis/JobPL';
+import TrueCostPerSqft from '../components/mis/TrueCostPerSqft';
+import VendorIntelligence from '../components/mis/VendorIntelligence';
+import DeliveryKPIDashboard from '../components/mis/DeliveryKPIDashboard';
+import FinancialStatementsMobile from '../components/mis/FinancialStatementsMobile';
 
 // ── Types ─────────────────────────────────────────────────────────────
 export type Sector = 'Production' | 'Store' | 'Maintenance' | 'HR' | 'Logistics' | 'Office';
@@ -350,6 +356,12 @@ const FactoryInchargeModule: React.FC = () => {
             {activeTab === 'vehicle' && <VehicleLoadOptimizer />}
             {activeTab === 'cut' && <CuttingSequencePlanner />}
             {activeTab === 'workers' && <WorkerKPIDashboard />}
+            {activeTab === 'mis' && <MISDashboard />}
+            {activeTab === 'jobpl' && <JobPL />}
+            {activeTab === 'cost' && <TrueCostPerSqft />}
+            {activeTab === 'vintel' && <VendorIntelligence />}
+            {activeTab === 'delivery' && <DeliveryKPIDashboard />}
+            {activeTab === 'finance' && <FinancialStatementsMobile />}
           </>
         )}
       </div>
@@ -373,6 +385,12 @@ const FactoryInchargeModule: React.FC = () => {
           { tab: 'vehicle' as Tab, icon: Truck, label: 'Vehicle' },
           { tab: 'cut' as Tab, icon: Scissors, label: 'Cut Seq' },
           { tab: 'workers' as Tab, icon: Users, label: 'Workers' },
+          { tab: 'mis' as Tab, icon: BarChart3, label: 'MIS' },
+          { tab: 'jobpl' as Tab, icon: DollarSign, label: 'Job P&L' },
+          { tab: 'cost' as Tab, icon: Calculator, label: 'Cost/Sqft' },
+          { tab: 'vintel' as Tab, icon: Handshake, label: 'Vendor Intel' },
+          { tab: 'delivery' as Tab, icon: Truck, label: 'Delivery' },
+          { tab: 'finance' as Tab, icon: Landmark, label: 'Finance' },
         ].map(({ tab, icon: Icon, label }) => (
           <button
             key={tab}
