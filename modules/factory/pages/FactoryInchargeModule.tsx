@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Factory, ShoppingBag, Wrench, Users, Truck, Building2,
   Plus, Clock, AlertTriangle, CheckCircle2, Circle, Loader2,
-  ChevronRight, Bell, FileText, Home, Wrench as WrenchIcon, ShieldCheck, CheckSquare, Send, Handshake, Zap
+  ChevronRight, Bell, FileText, Home, Wrench as WrenchIcon, ShieldCheck, CheckSquare, Send, Handshake, Zap, LayoutGrid, BarChart2, Scissors
 } from 'lucide-react';
 import { supabase } from '@/src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
@@ -18,6 +18,12 @@ import TaskManager from '../components/agent/TaskManager';
 import TelegramSetup from '../components/agent/TelegramSetup';
 import VendorSLAMaster from '../components/agent/VendorSLAMaster';
 import GapDetection from '../components/agent/GapDetection';
+import FactoryVisualBoard from '../components/production/FactoryVisualBoard';
+import AnimatedOrderFlow from '../components/production/AnimatedOrderFlow';
+import FloorPlannerUpgrade from '../components/production/FloorPlannerUpgrade';
+import VehicleLoadOptimizer from '../components/production/VehicleLoadOptimizer';
+import CuttingSequencePlanner from '../components/production/CuttingSequencePlanner';
+import WorkerKPIDashboard from '../components/production/WorkerKPIDashboard';
 
 // ── Types ─────────────────────────────────────────────────────────────
 export type Sector = 'Production' | 'Store' | 'Maintenance' | 'HR' | 'Logistics' | 'Office';
@@ -338,6 +344,12 @@ const FactoryInchargeModule: React.FC = () => {
             {activeTab === 'telegram' && <TelegramSetup />}
             {activeTab === 'vendors' && <VendorSLAMaster />}
             {activeTab === 'gaps' && <GapDetection />}
+            {activeTab === 'board' && <FactoryVisualBoard />}
+            {activeTab === 'flow' && <AnimatedOrderFlow />}
+            {activeTab === 'floor' && <FloorPlannerUpgrade />}
+            {activeTab === 'vehicle' && <VehicleLoadOptimizer />}
+            {activeTab === 'cut' && <CuttingSequencePlanner />}
+            {activeTab === 'workers' && <WorkerKPIDashboard />}
           </>
         )}
       </div>
@@ -355,6 +367,12 @@ const FactoryInchargeModule: React.FC = () => {
           { tab: 'telegram' as Tab, icon: Send, label: 'Telegram' },
           { tab: 'vendors' as Tab, icon: Handshake, label: 'Vendors' },
           { tab: 'gaps' as Tab, icon: Zap, label: 'Gaps' },
+          { tab: 'board' as Tab, icon: LayoutGrid, label: 'Board' },
+          { tab: 'flow' as Tab, icon: ChevronRight, label: 'Flow' },
+          { tab: 'floor' as Tab, icon: BarChart2, label: 'Floor' },
+          { tab: 'vehicle' as Tab, icon: Truck, label: 'Vehicle' },
+          { tab: 'cut' as Tab, icon: Scissors, label: 'Cut Seq' },
+          { tab: 'workers' as Tab, icon: Users, label: 'Workers' },
         ].map(({ tab, icon: Icon, label }) => (
           <button
             key={tab}
