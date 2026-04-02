@@ -13,6 +13,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
+import { postCuttingGL } from '@/modules/procurement/services/glasscoGLService';
 import { LabourService, CutterDailyLog } from '@/modules/production/services/labourService';
 import { HRService } from '@/modules/hr/services/hrService';
 import { useProductionContext } from '@/modules/production/components/ProductionContext';
@@ -127,6 +128,15 @@ const SessionLogger: React.FC = () => {
     };
 
     InventoryService.saveCuttingSessions(all.map(s => s.id === sessionId ? updated : s));
+
+    // ── Post Cutting GL: Dr WIP / Cr Glass Inventory ─────────────
+    postCuttingGL({
+      company: company as any,
+      sessionId,
+      sheetsScanned: session.sheetsScanned || [],
+      scrapSqft: closeForm.scrapSqft || 0,
+      date: nowISO().split('T')[0],
+    });
 
     // ── Reduce glass inventory for each sheet consumed ──────────────
     if (session.sheetsScanned && session.sheetsScanned.length > 0) {
