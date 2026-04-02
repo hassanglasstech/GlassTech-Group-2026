@@ -1,14 +1,14 @@
 {
-  "name": "Glasstech ERP 2026",
+  "name": "GlassTech ERP 2026",
   "short_name": "GT ERP",
-  "description": "Glasstech Group Enterprise Resource Planning System",
+  "description": "GlassTech Group Enterprise Resource Planning — Factory to Owner",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f1923",
-  "theme_color": "#354a5f",
+  "background_color": "#0a0f1a",
+  "theme_color": "#0a0f1a",
   "orientation": "any",
   "icons": [
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/icon.svg",     "sizes": "any",     "type": "image/svg+xml", "purpose": "any maskable" },
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
   ],
@@ -16,8 +16,13 @@
   "lang": "en",
   "dir": "ltr",
   "shortcuts": [
-    { "name": "Dashboard", "url": "/#/",        "description": "Go to Dashboard" },
-    { "name": "Sales",     "url": "/#/sales",   "description": "Sales Module"    },
-    { "name": "Finance",   "url": "/#/accounts","description": "Finance Module"  }
-  ]
+    { "name": "Factory Incharge", "url": "/#/factory-incharge", "description": "Factory Operations & AI" },
+    { "name": "Dashboard",        "url": "/#/",                 "description": "Launchpad"               },
+    { "name": "Sales",            "url": "/#/sales",            "description": "Sales & CRM"             },
+    { "name": "Production",       "url": "/#/production",       "description": "Production Floor"        },
+    { "name": "Finance",          "url": "/#/accounts",         "description": "FICO Financials"         }
+  ],
+  "screenshots": [],
+  "related_applications": [],
+  "prefer_related_applications": false
 }

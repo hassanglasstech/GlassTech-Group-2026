@@ -1,11 +1,12 @@
 /**
- * Glasstech ERP — Service Worker
- * Strategy: Cache-first for static assets + Vite bundles, Network-first for navigation
+ * GlassTech ERP — Service Worker v3
+ * Phase 5F: Enhanced caching for Factory Incharge module
+ * Strategy: Cache-first static, Network-first API/navigation
  */
 
-const CACHE_NAME  = 'gt-erp-v2';
+const CACHE_NAME     = 'gt-erp-v3';
+const FACTORY_CACHE  = 'gt-factory-v1';
 
-// Assets to pre-cache on install
 const PRECACHE = [
   '/',
   '/index.html',
@@ -17,9 +18,9 @@ const PRECACHE = [
 // ── Install ───────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(PRECACHE).catch(() => {});
-    }).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(PRECACHE).catch(() => {}))
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -28,7 +29,9 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then(keys =>
       Promise.all(
-        keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
+        keys
+          .filter(k => k !== CACHE_NAME && k !== FACTORY_CACHE)
+          .map(k => caches.delete(k))
       )
     ).then(() => self.clients.claim())
   );
@@ -39,80 +42,78 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Skip non-GET and external API calls
+  // Skip non-GET
   if (request.method !== 'GET') return;
-  if (url.hostname.includes('supabase.co')) return;
-  if (url.hostname.includes('googleapis.com')) return;
 
-  // Vite asset bundles (/assets/*.js, /assets/*.css) → Cache first
-  if (url.pathname.startsWith('/assets/')) {
+  // Supabase API — network only, no cache
+  if (url.hostname.includes('supabase.co') || url.hostname.includes('anthropic.com')) {
+    event.respondWith(fetch(request).catch(() => new Response('', { status: 503 })));
+    return;
+  }
+
+  // Navigation — network first, cache fallback
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then(res => {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(request, clone));
+          return res;
+        })
+        .catch(() => caches.match('/index.html') || caches.match('/'))
+    );
+    return;
+  }
+
+  // Static assets (JS/CSS/fonts) — cache first
+  if (url.pathname.match(/\.(js|css|woff2?|ttf|otf)$/)) {
     event.respondWith(
       caches.match(request).then(cached => {
         if (cached) return cached;
-        return fetch(request).then(response => {
-          if (response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then(c => c.put(request, clone));
-          }
-          return response;
-        }).catch(() => new Response('', { status: 503 }));
-      })
-    );
-    return;
-  }
-
-  // JS/CSS/fonts/images → Cache first, fallback network
-  if (
-    request.destination === 'script'  ||
-    request.destination === 'style'   ||
-    request.destination === 'font'    ||
-    request.destination === 'image'
-  ) {
-    event.respondWith(
-      caches.match(request).then(cached => {
-        return cached || fetch(request).then(response => {
-          if (response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then(c => c.put(request, clone));
-          }
-          return response;
-        }).catch(() => caches.match(request));
-      })
-    );
-    return;
-  }
-
-  // HTML navigation → Network first, fallback cache, then offline page
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request).then(response => {
-        // Cache successful navigation for offline use
-        if (response.ok) {
-          const clone = response.clone();
+        return fetch(request).then(res => {
+          const clone = res.clone();
           caches.open(CACHE_NAME).then(c => c.put(request, clone));
-        }
-        return response;
-      }).catch(() => {
-        return caches.match(request) ||
-               caches.match('/index.html') ||
-               caches.match('/') ||
-               new Response(
-                 '<html><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;background:#0f172a;color:white;flex-direction:column"><h1 style="font-size:2rem;font-weight:900">GlassTech ERP</h1><p style="color:#94a3b8;margin-top:8px">Offline — Connect to internet to load the app</p><p style="color:#64748b;font-size:12px;margin-top:16px">Your data is safe in local storage</p></body></html>',
-                 { headers: { 'Content-Type': 'text/html' } }
-               );
+          return res;
+        });
       })
     );
     return;
   }
+
+  // Images — cache first, long TTL
+  if (url.pathname.match(/\.(svg|png|jpg|jpeg|webp|ico)$/)) {
+    event.respondWith(
+      caches.match(request).then(cached => cached || fetch(request))
+    );
+    return;
+  }
+
+  // Default — network first
+  event.respondWith(
+    fetch(request).catch(() => caches.match(request))
+  );
 });
 
-// ── Background Sync ──────────────────────────────────────────────────
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'gt-sync-pending') {
-    event.waitUntil(
-      self.clients.matchAll().then(clients => {
-        clients.forEach(c => c.postMessage({ type: 'SYNC_NOW' }));
+// ── Push Notifications (for future use) ──────────────────────────────
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+  const data = event.data.json().catch(() => ({ title: 'GlassTech ERP', body: event.data.text() }));
+  event.waitUntil(
+    data.then(d =>
+      self.registration.showNotification(d.title || 'GlassTech ERP', {
+        body:  d.body  || '',
+        icon:  '/icon.svg',
+        badge: '/icon.svg',
+        tag:   d.tag   || 'glasstech-erp',
+        data:  d.url   || '/',
       })
-    );
-  }
+    )
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.openWindow(event.notification.data || '/')
+  );
 });

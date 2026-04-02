@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Factory, ShoppingBag, Wrench, Users, Truck, Building2,
   Plus, Clock, AlertTriangle, CheckCircle2, Circle, Loader2,
-  ChevronRight, Bell, FileText, Home, Wrench as WrenchIcon, ShieldCheck, CheckSquare, Send, Handshake, Zap, LayoutGrid, BarChart2, Scissors, BarChart3, DollarSign, Calculator, Landmark
+  ChevronRight, Bell, FileText, Home, Wrench as WrenchIcon, ShieldCheck, CheckSquare, Send, Handshake, Zap, LayoutGrid, BarChart2, Scissors, BarChart3, DollarSign, Calculator, Landmark, Brain, Sparkles, MessageCircle
 } from 'lucide-react';
 import { supabase } from '@/src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
@@ -30,6 +30,12 @@ import TrueCostPerSqft from '../components/mis/TrueCostPerSqft';
 import VendorIntelligence from '../components/mis/VendorIntelligence';
 import DeliveryKPIDashboard from '../components/mis/DeliveryKPIDashboard';
 import FinancialStatementsMobile from '../components/mis/FinancialStatementsMobile';
+import StrategicMemoryModule from '../components/strategic/StrategicMemoryModule';
+import AIChatInterface from '../components/strategic/AIChatInterface';
+import PredictiveAlerts from '../components/strategic/PredictiveAlerts';
+import ReportNarrativeViewer from '../components/strategic/ReportNarrativeViewer';
+import WhatsAppIntegration from '../components/strategic/WhatsAppIntegration';
+import { usePWAInstall, useOnlineStatus, usePullToRefresh } from '../hooks/usePWA';
 
 // ── Types ─────────────────────────────────────────────────────────────
 export type Sector = 'Production' | 'Store' | 'Maintenance' | 'HR' | 'Logistics' | 'Office';
@@ -131,6 +137,10 @@ const FactoryInchargeModule: React.FC = () => {
   const [events, setEvents] = useState<FactoryEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [urgentCount, setUrgentCount] = useState(0);
+
+  const { canInstall, install }  = usePWAInstall();
+  const online                   = useOnlineStatus();
+  const { pullY, refreshing }    = usePullToRefresh(async () => { await loadEvents(); });
 
   useEffect(() => { loadEvents(); }, []);
 
@@ -311,6 +321,35 @@ const FactoryInchargeModule: React.FC = () => {
   // ── Render ────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-slate-950 text-white">
+
+      {/* Pull-to-refresh indicator */}
+      {pullY > 10 && (
+        <div className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-2 pointer-events-none">
+          <div className="bg-slate-700 rounded-full px-4 py-1.5 text-xs text-slate-300 flex items-center gap-2">
+            <Loader2 size={12} className={refreshing ? 'animate-spin' : ''} />
+            {refreshing ? 'Refreshing...' : pullY >= 60 ? 'Release to refresh' : 'Pull to refresh'}
+          </div>
+        </div>
+      )}
+
+      {/* Offline banner */}
+      {!online && (
+        <div className="bg-yellow-500/20 border-b border-yellow-500/30 px-4 py-2 text-center text-xs text-yellow-400 font-bold">
+          ⚠️ Offline — Cached data dikh raha hai
+        </div>
+      )}
+
+      {/* Install prompt */}
+      {canInstall && (
+        <div className="bg-blue-500/10 border-b border-blue-500/20 px-4 py-2 flex items-center justify-between">
+          <span className="text-xs text-blue-400">📱 Home Screen pe install karo</span>
+          <button onClick={install}
+            className="bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded-lg hover:bg-blue-600 transition-all">
+            Install
+          </button>
+        </div>
+      )}
+
       {/* Top Bar */}
       <div className="bg-slate-900 border-b border-slate-800 px-4 py-4 flex items-center justify-between sticky top-0 z-20">
         <div>
@@ -362,6 +401,11 @@ const FactoryInchargeModule: React.FC = () => {
             {activeTab === 'vintel' && <VendorIntelligence />}
             {activeTab === 'delivery' && <DeliveryKPIDashboard />}
             {activeTab === 'finance' && <FinancialStatementsMobile />}
+            {activeTab === 'strategy' && <StrategicMemoryModule />}
+            {activeTab === 'ai' && <AIChatInterface />}
+            {activeTab === 'predict' && <PredictiveAlerts />}
+            {activeTab === 'report' && <ReportNarrativeViewer />}
+            {activeTab === 'whatsapp' && <WhatsAppIntegration />}
           </>
         )}
       </div>
@@ -391,6 +435,11 @@ const FactoryInchargeModule: React.FC = () => {
           { tab: 'vintel' as Tab, icon: Handshake, label: 'Vendor Intel' },
           { tab: 'delivery' as Tab, icon: Truck, label: 'Delivery' },
           { tab: 'finance' as Tab, icon: Landmark, label: 'Finance' },
+          { tab: 'strategy' as Tab, icon: Brain, label: 'Strategy' },
+          { tab: 'ai' as Tab, icon: Sparkles, label: 'AI Chat' },
+          { tab: 'predict' as Tab, icon: Zap, label: 'Predict' },
+          { tab: 'report' as Tab, icon: FileText, label: 'AI Report' },
+          { tab: 'whatsapp' as Tab, icon: MessageCircle, label: 'WhatsApp' },
         ].map(({ tab, icon: Icon, label }) => (
           <button
             key={tab}
