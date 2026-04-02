@@ -9,6 +9,7 @@ import { useAuthStore } from '@/modules/auth/authStore';
 import FactoryEventForm from '../components/incharge/FactoryEventForm';
 import FactoryReqTracker from '../components/incharge/FactoryReqTracker';
 import FactoryDailySummary from '../components/incharge/FactoryDailySummary';
+import EscalationAlerts from '../components/incharge/EscalationAlerts';
 
 // ── Types ─────────────────────────────────────────────────────────────
 export type Sector = 'Production' | 'Store' | 'Maintenance' | 'HR' | 'Logistics' | 'Office';
@@ -161,6 +162,9 @@ const FactoryInchargeModule: React.FC = () => {
           <div className="text-[10px] text-slate-400 uppercase tracking-widest mt-1">Pending</div>
         </div>
       </div>
+
+      {/* Escalation Alerts */}
+      <EscalationAlerts />
 
       {/* 6 Sector Tiles */}
       <div>
