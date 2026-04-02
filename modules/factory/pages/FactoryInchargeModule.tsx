@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Factory, ShoppingBag, Wrench, Users, Truck, Building2,
   Plus, Clock, AlertTriangle, CheckCircle2, Circle, Loader2,
-  ChevronRight, Bell, FileText, Home, Wrench as WrenchIcon
+  ChevronRight, Bell, FileText, Home, Wrench as WrenchIcon, ShieldCheck, CheckSquare, Send, Handshake, Zap
 } from 'lucide-react';
 import { supabase } from '@/src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
@@ -11,6 +11,13 @@ import ReqClosureTracker from '../components/incharge/ReqClosureTracker';
 import FactoryDailySummary from '../components/incharge/FactoryDailySummary';
 import EscalationAlerts from '../components/incharge/EscalationAlerts';
 import AssetRegister from '../components/incharge/AssetRegister';
+import HSEModule from '../components/incharge/HSEModule';
+import DailyReportViewer from '../components/incharge/DailyReportViewer';
+import AgentWatchlist from '../components/agent/AgentWatchlist';
+import TaskManager from '../components/agent/TaskManager';
+import TelegramSetup from '../components/agent/TelegramSetup';
+import VendorSLAMaster from '../components/agent/VendorSLAMaster';
+import GapDetection from '../components/agent/GapDetection';
 
 // ── Types ─────────────────────────────────────────────────────────────
 export type Sector = 'Production' | 'Store' | 'Maintenance' | 'HR' | 'Logistics' | 'Office';
@@ -323,12 +330,14 @@ const FactoryInchargeModule: React.FC = () => {
             {activeTab === 'tracker' && (
               <ReqClosureTracker />
             )}
-            {activeTab === 'summary' && (
-              <FactoryDailySummary events={events} />
-            )}
-            {activeTab === 'assets' && (
-              <AssetRegister />
-            )}
+            {activeTab === 'summary' && <DailyReportViewer />}
+            {activeTab === 'assets' && <AssetRegister />}
+            {activeTab === 'hse' && <HSEModule />}
+            {activeTab === 'agent' && <AgentWatchlist />}
+            {activeTab === 'tasks' && <TaskManager />}
+            {activeTab === 'telegram' && <TelegramSetup />}
+            {activeTab === 'vendors' && <VendorSLAMaster />}
+            {activeTab === 'gaps' && <GapDetection />}
           </>
         )}
       </div>
@@ -340,6 +349,12 @@ const FactoryInchargeModule: React.FC = () => {
           { tab: 'tracker' as Tab, icon: FileText, label: 'Requests' },
           { tab: 'summary' as Tab, icon: Bell, label: 'Daily Log' },
           { tab: 'assets' as Tab, icon: WrenchIcon, label: 'Assets' },
+          { tab: 'hse' as Tab, icon: ShieldCheck, label: 'HSE' },
+          { tab: 'agent' as Tab, icon: Bell, label: 'Agent' },
+          { tab: 'tasks' as Tab, icon: CheckSquare, label: 'Tasks' },
+          { tab: 'telegram' as Tab, icon: Send, label: 'Telegram' },
+          { tab: 'vendors' as Tab, icon: Handshake, label: 'Vendors' },
+          { tab: 'gaps' as Tab, icon: Zap, label: 'Gaps' },
         ].map(({ tab, icon: Icon, label }) => (
           <button
             key={tab}
