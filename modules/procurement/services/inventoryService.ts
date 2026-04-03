@@ -34,23 +34,91 @@ const KEYS = {
 export const InventoryService = {
   // ── Store ──────────────────────────────────────────────────────────
   getStore: (): StoreItem[] => safeParse(KEYS.STORE),
-  saveStore: (data: StoreItem[]) => safeSave(KEYS.STORE, data),
+  getStoreAsync: async (): Promise<StoreItem[]> => {
+    try {
+      const { data, error } = await supabase.from('store_items').select('*');
+      if (!error && data && data.length > 0) {
+        const mapped: StoreItem[] = data.map((r: any) => ({
+          ...r,
+          unrestrictedQty: r.unrestricted_qty,
+          qiQty: r.qi_qty,
+          blockedQty: r.blocked_qty,
+          reservedQty: r.reserved_qty,
+          movingAveragePrice: r.moving_average_price,
+          totalValue: r.total_value,
+          storageBin: r.storage_bin,
+          lastMovementDate: r.last_movement_date,
+          minLevel: r.min_level,
+          reorderPoint: r.reorder_point,
+        }));
+        safeSave(KEYS.STORE, mapped);
+        return mapped;
+      }
+    } catch (e) {
+      console.error('[InventoryService] getStoreAsync error', e);
+    }
+    return safeParse(KEYS.STORE);
+  },
+  saveStore: (data: StoreItem[]) => {
+    safeSave(KEYS.STORE, data);
+    const rows = data.map((s: any) => ({
+      id: s.id, company: s.company||'', name: s.name||'',
+      category: s.category||'', quantity: s.quantity||0,
+      unrestricted_qty: s.unrestrictedQty||0, qi_qty: s.qiQty||0,
+      blocked_qty: s.blockedQty||0, reserved_qty: s.reservedQty||0,
+      unit: s.unit||'Sqft',
+      moving_average_price: s.movingAveragePrice||0,
+      total_value: s.totalValue||0, storage_bin: s.storageBin||'',
+      last_movement_date: s.lastMovementDate||'',
+      min_level: s.minLevel||0, reorder_point: s.reorderPoint||0,
+    }));
+    supabase.from('store_items').upsert(rows).then(({ error }) => {
+      if (error) console.error('[InventoryService] saveStore Supabase error:', error.message);
+    });
+  },
 
   // ── Stock Ledger ───────────────────────────────────────────────────
   getStockLedger: (): MaterialLedgerEntry[] => safeParse(KEYS.STOCK_LEDGER),
   getStockLedgerAsync: async (): Promise<MaterialLedgerEntry[]> => {
     try {
+      const { data, error } = await supabase.from('stock_ledger').select('*');
+      if (!error && data && data.length > 0) {
+        const mapped: MaterialLedgerEntry[] = data.map((r: any) => ({
+          id: r.id, company: r.company, materialId: r.material_id,
+          timestamp: r.timestamp, mvmntCode: r.mvmnt_code,
+          qty: r.qty, uom: r.uom, valuation: r.valuation,
+          balanceAfter: r.balance_after, referenceDoc: r.reference_doc,
+          user: r.user, remarks: r.remarks,
+          storageBin: r.storage_bin, batchNo: r.batch_no,
+          huId: r.hu_id, projectId: r.project_id,
+          dcNo: r.dc_no, biltyNo: r.bilty_no,
+          biltyFreightPKR: r.bilty_freight_pkr, vendorSoNo: r.vendor_so_no,
+          vehicleNo: r.vehicle_no, driverName: r.driver_name,
+          driverPhone: r.driver_phone, freightType: r.freight_type,
+          freightPKR: r.freight_pkr, otherChargesPKR: r.other_charges_pkr,
+          otherChargesDesc: r.other_charges_desc, lineWeightKg: r.line_weight_kg,
+          perSheetWeightKg: r.per_sheet_weight_kg, perSqftWeightKg: r.per_sqft_weight_kg,
+          vendorId: r.vendor_id, vendorName: r.vendor_name,
+          poId: r.po_id, sheetCount: r.sheet_count,
+          glassCategory: r.glass_category, sheetTags: r.sheet_tags || [],
+          sheetTagMeta: r.sheet_tag_meta,
+          reversalOf: r.reversal_of, isReversal: r.is_reversal,
+          reversalReason: r.reversal_reason,
+        }));
+        safeSave(KEYS.STOCK_LEDGER, mapped);
+        bgSaveToIDB('stockLedger', mapped);
+        return mapped;
+      }
+    } catch (e) {
+      console.error('[InventoryService] getStockLedgerAsync Supabase error', e);
+    }
+    // fallback to IDB then localStorage
+    try {
       const db = await initDB();
       const items = await db.getAll('stockLedger');
-      if (items.length === 0) {
-        const lsItems = safeParse(KEYS.STOCK_LEDGER);
-        if (lsItems.length > 0) { await bgSaveToIDB('stockLedger', lsItems); return lsItems; }
-      }
-      return items;
-    } catch (e) {
-      console.error('IDB Read Error', e);
-      return safeParse(KEYS.STOCK_LEDGER);
-    }
+      if (items.length > 0) return items;
+    } catch {}
+    return safeParse(KEYS.STOCK_LEDGER);
   },
   saveStockLedger: (data: MaterialLedgerEntry[]) => {
     const recent = data.slice(-1000);
