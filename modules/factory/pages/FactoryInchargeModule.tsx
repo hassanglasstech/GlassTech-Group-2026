@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Factory, ShoppingBag, Wrench, Users, Truck, Building2,
   Plus, Clock, AlertTriangle, CheckCircle2, Circle, Loader2,
-  ChevronRight, Bell, FileText, Home, Wrench as WrenchIcon, ShieldCheck, CheckSquare, Send, Handshake, Zap, LayoutGrid, BarChart2, Scissors, BarChart3, DollarSign, Calculator, Landmark, Brain, Sparkles, MessageCircle, Inbox, Scale, Eye, TrendingUp, Activity
+  ChevronRight, Bell, FileText, Home, Wrench as WrenchIcon, ShieldCheck, CheckSquare, Send, Handshake, Zap, LayoutGrid, BarChart2, Scissors, BarChart3, DollarSign, Calculator, Landmark, Brain, Sparkles, MessageCircle, Inbox, Scale, Eye, TrendingUp, Activity, Globe
 } from 'lucide-react';
 import { supabase } from '@/src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
@@ -41,6 +41,7 @@ import CompensationJustice from '@/modules/hr/components/CompensationJustice';
 import IntelligenceDashboard from '../components/strategic/IntelligenceDashboard';
 import PredictiveIntelligence from '../components/strategic/PredictiveIntelligence';
 import SystemCommandCenter from '../components/strategic/SystemCommandCenter';
+import MarketBriefModule from '../components/strategic/MarketBriefModule';
 import { usePWAInstall, useOnlineStatus, usePullToRefresh } from '../hooks/usePWA';
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -139,9 +140,142 @@ type Tab =
   | 'agent' | 'tasks' | 'telegram' | 'vendors' | 'gaps'
   | 'board' | 'flow' | 'floor' | 'vehicle' | 'cut' | 'workers'
   | 'mis' | 'jobpl' | 'cost' | 'vintel' | 'delivery' | 'finance'
-  | 'strategy' | 'ai' | 'predict' | 'report' | 'whatsapp' | 'inbox' | 'semantic' | 'comp' | 'intel' | 'predict7' | 'system';
+  | 'strategy' | 'ai' | 'predict' | 'report' | 'whatsapp' | 'inbox' | 'semantic' | 'comp' | 'intel' | 'predict7' | 'system' | 'market';
 
 // ── Main Component ────────────────────────────────────────────────────
+// ── Grouped Navigation ────────────────────────────────────────────────
+const NAV_GROUPS = [
+  {
+    id: 'ops', label: 'Ops', icon: Factory,
+    tabs: [
+      { tab: 'home',    label: 'Home',      icon: Home },
+      { tab: 'tracker', label: 'Requests',  icon: FileText },
+      { tab: 'summary', label: 'Daily Log', icon: Bell },
+      { tab: 'assets',  label: 'Assets',    icon: WrenchIcon },
+      { tab: 'hse',     label: 'HSE',       icon: ShieldCheck },
+    ]
+  },
+  {
+    id: 'agent', label: 'Agent', icon: Sparkles,
+    tabs: [
+      { tab: 'agent',    label: 'Watchlist', icon: Bell },
+      { tab: 'tasks',    label: 'Tasks',     icon: CheckSquare },
+      { tab: 'telegram', label: 'Telegram',  icon: Send },
+      { tab: 'vendors',  label: 'Vendors',   icon: Handshake },
+      { tab: 'gaps',     label: 'Gaps',      icon: Zap },
+      { tab: 'inbox',    label: 'Inbox AI',  icon: Inbox },
+      { tab: 'whatsapp', label: 'WhatsApp',  icon: MessageCircle },
+    ]
+  },
+  {
+    id: 'prod', label: 'Floor', icon: LayoutGrid,
+    tabs: [
+      { tab: 'board',   label: 'Board',    icon: LayoutGrid },
+      { tab: 'flow',    label: 'Flow',     icon: ChevronRight },
+      { tab: 'floor',   label: 'Floor',    icon: BarChart2 },
+      { tab: 'vehicle', label: 'Vehicle',  icon: Truck },
+      { tab: 'cut',     label: 'Cut Seq',  icon: Scissors },
+      { tab: 'workers', label: 'Workers',  icon: Users },
+    ]
+  },
+  {
+    id: 'mis', label: 'MIS', icon: BarChart3,
+    tabs: [
+      { tab: 'mis',      label: 'MIS',          icon: BarChart3 },
+      { tab: 'jobpl',    label: 'Job P&L',      icon: DollarSign },
+      { tab: 'cost',     label: 'Cost/Sqft',    icon: Calculator },
+      { tab: 'vintel',   label: 'Vendor Intel', icon: Handshake },
+      { tab: 'delivery', label: 'Delivery',     icon: Truck },
+      { tab: 'finance',  label: 'Finance',      icon: Landmark },
+    ]
+  },
+  {
+    id: 'ai', label: 'AI', icon: Brain,
+    tabs: [
+      { tab: 'ai',       label: 'AI Chat',   icon: Sparkles },
+      { tab: 'predict',  label: 'Alerts',    icon: Zap },
+      { tab: 'report',   label: 'AI Report', icon: FileText },
+      { tab: 'strategy', label: 'Strategy',  icon: Brain },
+      { tab: 'semantic', label: 'Semantic',  icon: Brain },
+      { tab: 'comp',     label: 'Comp',      icon: Scale },
+      { tab: 'intel',    label: 'Intel',     icon: Eye },
+      { tab: 'predict7', label: 'Scenarios', icon: TrendingUp },
+      { tab: 'system',   label: 'System',    icon: Activity },
+      { tab: 'market',   label: 'Market',    icon: Globe },
+    ]
+  },
+];
+
+const GroupedNav: React.FC<{ activeTab: string; onSelect: (tab: string) => void }> = ({ activeTab, onSelect }) => {
+  const [openGroup, setOpenGroup] = React.useState<string | null>(null);
+
+  const activeGroup = NAV_GROUPS.find(g => g.tabs.some(t => t.tab === activeTab));
+
+  const toggleGroup = (id: string) => setOpenGroup(prev => prev === id ? null : id);
+
+  return (
+    <>
+      {/* Sub-menu overlay */}
+      {openGroup && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setOpenGroup(null)}
+        />
+      )}
+
+      {/* Sub-menu panel */}
+      {openGroup && (() => {
+        const grp = NAV_GROUPS.find(g => g.id === openGroup);
+        if (!grp) return null;
+        return (
+          <div className="fixed bottom-16 left-0 right-0 z-50 bg-slate-900 border-t border-slate-700 px-2 py-3">
+            <div className="text-[10px] text-slate-500 uppercase tracking-widest px-2 mb-2">{grp.label}</div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {grp.tabs.map(({ tab, label, icon: Icon }) => (
+                <button
+                  key={tab}
+                  onClick={() => { onSelect(tab); setOpenGroup(null); }}
+                  className={`flex flex-col items-center py-2.5 px-1 rounded-xl text-[10px] transition-all
+                    ${activeTab === tab
+                      ? 'bg-white text-slate-900 font-bold'
+                      : 'text-slate-400 hover:bg-slate-800'}`}
+                >
+                  <Icon size={16} className="mb-1" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Main bottom bar — 5 groups only */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900 border-t border-slate-800 flex h-16">
+        {NAV_GROUPS.map(({ id, label, icon: Icon, tabs }) => {
+          const isActiveGroup = tabs.some(t => t.tab === activeTab);
+          const isOpen        = openGroup === id;
+          return (
+            <button
+              key={id}
+              onClick={() => toggleGroup(id)}
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-all
+                ${isActiveGroup ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              <div className={`relative p-1.5 rounded-xl transition-all ${isOpen ? 'bg-white' : isActiveGroup ? 'bg-slate-700' : ''}`}>
+                <Icon size={18} className={isOpen ? 'text-slate-900' : ''} />
+                {isActiveGroup && !isOpen && (
+                  <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-blue-400 rounded-full" />
+                )}
+              </div>
+              <span className="text-[9px] uppercase tracking-widest">{label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+};
+
 const FactoryInchargeModule: React.FC = () => {
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<Tab>('home');
@@ -425,58 +559,16 @@ const FactoryInchargeModule: React.FC = () => {
             {activeTab === 'intel' && <IntelligenceDashboard />}
             {activeTab === 'predict7' && <PredictiveIntelligence />}
             {activeTab === 'system' && <SystemCommandCenter />}
+            {activeTab === 'market' && <MarketBriefModule />}}}
           </>
         )}
       </div>
 
-      {/* Bottom Nav */}
-      <div className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 flex">
-        {[
-          { tab: 'home' as Tab, icon: Home, label: 'Home' },
-          { tab: 'tracker' as Tab, icon: FileText, label: 'Requests' },
-          { tab: 'summary' as Tab, icon: Bell, label: 'Daily Log' },
-          { tab: 'assets' as Tab, icon: WrenchIcon, label: 'Assets' },
-          { tab: 'hse' as Tab, icon: ShieldCheck, label: 'HSE' },
-          { tab: 'agent' as Tab, icon: Bell, label: 'Agent' },
-          { tab: 'tasks' as Tab, icon: CheckSquare, label: 'Tasks' },
-          { tab: 'telegram' as Tab, icon: Send, label: 'Telegram' },
-          { tab: 'vendors' as Tab, icon: Handshake, label: 'Vendors' },
-          { tab: 'gaps' as Tab, icon: Zap, label: 'Gaps' },
-          { tab: 'board' as Tab, icon: LayoutGrid, label: 'Board' },
-          { tab: 'flow' as Tab, icon: ChevronRight, label: 'Flow' },
-          { tab: 'floor' as Tab, icon: BarChart2, label: 'Floor' },
-          { tab: 'vehicle' as Tab, icon: Truck, label: 'Vehicle' },
-          { tab: 'cut' as Tab, icon: Scissors, label: 'Cut Seq' },
-          { tab: 'workers' as Tab, icon: Users, label: 'Workers' },
-          { tab: 'mis' as Tab, icon: BarChart3, label: 'MIS' },
-          { tab: 'jobpl' as Tab, icon: DollarSign, label: 'Job P&L' },
-          { tab: 'cost' as Tab, icon: Calculator, label: 'Cost/Sqft' },
-          { tab: 'vintel' as Tab, icon: Handshake, label: 'Vendor Intel' },
-          { tab: 'delivery' as Tab, icon: Truck, label: 'Delivery' },
-          { tab: 'finance' as Tab, icon: Landmark, label: 'Finance' },
-          { tab: 'strategy' as Tab, icon: Brain, label: 'Strategy' },
-          { tab: 'ai' as Tab, icon: Sparkles, label: 'AI Chat' },
-          { tab: 'predict' as Tab, icon: Zap, label: 'Predict' },
-          { tab: 'report' as Tab, icon: FileText, label: 'AI Report' },
-          { tab: 'whatsapp' as Tab, icon: MessageCircle, label: 'WhatsApp' },
-          { tab: 'inbox' as Tab, icon: Inbox, label: 'Inbox AI' },
-          { tab: 'semantic' as Tab, icon: Brain, label: 'Semantic' },
-          { tab: 'comp' as Tab, icon: Scale, label: 'Comp' },
-          { tab: 'intel' as Tab, icon: Eye, label: 'Intel' },
-          { tab: 'predict7' as Tab, icon: TrendingUp, label: 'Predict' },
-          { tab: 'system' as Tab, icon: Activity, label: 'System' },
-        ].map(({ tab, icon: Icon, label }) => (
-          <button
-            key={tab}
-            onClick={() => { setActiveTab(tab); setActiveSector(null); setShowEventForm(false); }}
-            className={`flex-1 flex flex-col items-center py-3 text-[10px] uppercase tracking-widest transition-colors
-              ${activeTab === tab ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}
-          >
-            <Icon size={18} className="mb-1" />
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* ── Grouped Bottom Nav ─────────────────────── */}
+      <GroupedNav
+        activeTab={activeTab}
+        onSelect={(tab: string) => { setActiveTab(tab as Tab); setActiveSector(null); setShowEventForm(false); }}
+      />
 
       {/* Bottom padding for nav */}
       <div className="h-20" />
