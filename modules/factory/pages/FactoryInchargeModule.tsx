@@ -126,7 +126,14 @@ const STATUS_ICON: Record<EventStatus, React.ElementType> = {
   Closed:      CheckCircle2,
 };
 
-type Tab = 'home' | Sector | 'tracker' | 'summary';
+type Tab =
+  | 'home' | Sector
+  | 'tracker' | 'summary'
+  | 'assets' | 'hse'
+  | 'agent' | 'tasks' | 'telegram' | 'vendors' | 'gaps'
+  | 'board' | 'flow' | 'floor' | 'vehicle' | 'cut' | 'workers'
+  | 'mis' | 'jobpl' | 'cost' | 'vintel' | 'delivery' | 'finance'
+  | 'strategy' | 'ai' | 'predict' | 'report' | 'whatsapp';
 
 // ── Main Component ────────────────────────────────────────────────────
 const FactoryInchargeModule: React.FC = () => {

@@ -333,6 +333,29 @@ let isSubscribed = false;
 // Tables that Realtime is skipped for — local-only
 const SKIP_TABLES = new Set(['activity_logs']);
 
+// ── Phase 1-5 Supabase-native tables (no localStorage — just realtime dispatch) ──
+const NATIVE_SUPABASE_TABLES = [
+  'factory_events',
+  'factory_escalation_alerts',
+  'factory_assets',
+  'hse_incidents',
+  'daily_reports',
+  'agent_memories',
+  'agent_alert_history',
+  'agent_tasks',
+  'build_backlog',
+  'vendor_sla',
+  'vendor_sla_log',
+  'worker_kpi',
+  'team_pairs',
+  'strategic_memory',
+  'predictive_alerts',
+  'whatsapp_log',
+];
+
+// Event name for native table changes (UI can listen to this)
+const NATIVE_TABLE_EVENT = 'glasstech:native_table_change';
+
 // ── Subscribe to all tables ───────────────────────────────────────────
 const subscribeAll = () => {
   if (isSubscribed) return;
@@ -378,6 +401,32 @@ const subscribeAll = () => {
   }
 
   console.log(`[Realtime] Subscribed to ${tables.length} tables across ${channels.length} channels`);
+
+  // ── Subscribe to Phase 1-5 native Supabase tables ──────────────────
+  const NATIVE_BATCH_SIZE = 8;
+  for (let i = 0; i < NATIVE_SUPABASE_TABLES.length; i += NATIVE_BATCH_SIZE) {
+    const batch = NATIVE_SUPABASE_TABLES.slice(i, i + NATIVE_BATCH_SIZE);
+    const channelName = `gtk_native_batch_${Math.floor(i / NATIVE_BATCH_SIZE)}`;
+    let channel = supabase.channel(channelName);
+    for (const table of batch) {
+      channel = channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table },
+        (payload) => {
+          // Dispatch custom event — UI components listen and re-fetch themselves
+          window.dispatchEvent(new CustomEvent(NATIVE_TABLE_EVENT, {
+            detail: { table, eventType: payload.eventType, row: payload.new || payload.old }
+          }));
+        }
+      );
+    }
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED')
+        console.log(`[Realtime] Native channel ${channelName} subscribed (${batch.join(', ')})`);
+    });
+    channels.push(channel);
+  }
+  console.log(`[Realtime] Also subscribed to ${NATIVE_SUPABASE_TABLES.length} native Phase 1-5 tables`);
 };
 
 // ── Unsubscribe all (on logout / cleanup) ─────────────────────────────

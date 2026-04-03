@@ -127,6 +127,9 @@ const TABLE_MAP: Record<string, string> = {
   permissions:        'gtk_erp_permissions',
   role_permissions:   'gtk_erp_role_permissions',
   employee_roles:     'gtk_erp_employee_roles',
+  // ── Phase 1: Factory Operations (Supabase-native, no localStorage) ──
+  // Note: these tables are Supabase-only — SyncService skips them for push/pull
+  // They are listed here only for Realtime subscription coverage
 };
 
 // ── Supabase column mapper (snake_case from DB) ───────────────────────

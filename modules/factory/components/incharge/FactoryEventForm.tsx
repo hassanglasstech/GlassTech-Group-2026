@@ -29,15 +29,33 @@ const FactoryEventForm: React.FC<Props> = ({ sector, eventTypes, loggedBy, onSav
 
   const needsReq = REQ_TRIGGERS.includes(eventType);
 
-  // Simulated stock check — replace with real inventory query when inventory table ready
+  // Wire actual stock check against store_items / stock_ledger
   const checkStock = async () => {
     if (!materialDesc.trim()) return;
     setStockStatus('checking');
-    await new Promise(r => setTimeout(r, 700));
-    // TODO: query inventory table
-    // const { data } = await supabase.from('stock_items').select('qty').ilike('description', `%${materialDesc}%`).limit(1);
-    // setStockStatus(data?.[0]?.qty > 0 ? 'available' : 'not_available');
-    setStockStatus('not_available'); // default until inventory integrated
+    try {
+      const { data } = await supabase
+        .from('gtk_erp_store')
+        .select('quantity, description')
+        .ilike('description', `%${materialDesc.trim()}%`)
+        .eq('company', 'Factory')
+        .limit(1);
+
+      if (data && data.length > 0 && (data[0].quantity ?? 0) > 0) {
+        setStockStatus('available');
+      } else {
+        // Try stock_ledger as fallback
+        const { data: ledger } = await supabase
+          .from('gtk_erp_stock_ledger')
+          .select('quantity')
+          .ilike('description', `%${materialDesc.trim()}%`)
+          .limit(1);
+        const qty = ledger?.[0]?.quantity ?? 0;
+        setStockStatus(qty > 0 ? 'available' : 'not_available');
+      }
+    } catch {
+      setStockStatus('not_available');
+    }
   };
 
   const handleSubmit = async () => {
