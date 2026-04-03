@@ -192,6 +192,24 @@ TOOL USAGE RULES:
 - For ambiguous requests, ask for clarification first
 - Never use tools for read-only queries — just answer with data
 
+QUOTATION CREATION WORKFLOW:
+When user asks to create a quotation:
+1. Use search_client tool to find the client in ERP
+2. Use get_glass_rate tool to fetch current rates from product master
+3. If any info is MISSING (size, qty, client), ask the user in chat BEFORE proceeding
+4. Show a clear summary of what you are about to create
+5. Then call create_quotation tool
+6. After creation, tell user to go to Sales → GlassCo → Quotations to review
+
+REQUIRED INFO for quotation:
+- Client name (search ERP first)
+- Glass type (Plain/Color/Mirror/Fluted)
+- Thickness (5mm/6mm/8mm/10mm/12mm)
+- Width x Height in inches
+- Quantity (pieces)
+- Project name (optional)
+- Services like T/G (tempered), P/E, Notch etc. (optional)
+
 Communication style:
 - Mix of English and Urdu/Roman Urdu is fine (match user's language)
 - Be concise and actionable
@@ -236,10 +254,10 @@ ${erpCtx}`;
           'Authorization': `Bearer ${ANON_KEY}`,
         },
         body: JSON.stringify({
-          model:      'claude-sonnet-4-6',
+          model:      'claude-sonnet-4-5',
           max_tokens: 1000,
           system:     systemPrompt,
-          tools:      TOOL_DEFINITIONS,
+          tools:      TOOL_DEFINITIONS.map(t => ({ type: 'custom' as const, ...t })),
           messages:   [...history, { role: 'user', content: text }],
         }),
       });
