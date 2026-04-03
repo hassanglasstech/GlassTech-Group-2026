@@ -72,20 +72,13 @@ const GlasscoQuotationManager: React.FC = () => {
               sortType={sortType}
               setSortType={setSortType}
               onNew={() => { 
-                  const blankItems = Array.from({ length: 7 }, (_, i) => ({
-                    id: `ITM-${Date.now()}-${i}`, description: '', qty: 1,
-                    inchW: 0, sootW: 0, inchH: 0, sootH: 0, mmW: 0, mmH: 0,
-                    width: 0, height: 0, glassSize: '5mm', glassType: 'Plain',
-                    subCategory: 'Standard', selectedServices: [], totalSqFt: 0,
-                    pricePerUnit: 0, amount: 0, locationCode: '', glazingSpecs: '', inputUnit: 'Inch'
-                  }));
                   setFormData({
                     id: undefined,
                     date: new Date().toISOString().split('T')[0],
                     dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                     clientId: '',
                     projectName: '',
-                    items: blankItems,
+                    items: [],
                     status: 'Draft',
                     isAlreadyDispatched: false,
                     discountPercent: 0,
