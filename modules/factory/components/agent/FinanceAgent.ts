@@ -1,5 +1,3 @@
-import { supabase } from '@/src/services/supabaseClient';
-
 const ls = (key: string) => { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; } };
 
 // ── Date Helpers ──────────────────────────────────────────────────────
