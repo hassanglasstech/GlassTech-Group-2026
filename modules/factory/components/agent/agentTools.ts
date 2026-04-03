@@ -1,4 +1,6 @@
 import { supabase } from '@/src/services/supabaseClient';
+import { FinanceAgent } from './FinanceAgent';
+import { ProductionAgent } from './ProductionAgent';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 const ls = (key: string) => {
@@ -190,6 +192,92 @@ export const TOOL_DEFINITIONS = [
   },
 
   // ── PRINT / PDF ──
+  // ── FINANCE AGENT TOOLS ──
+  {
+    name: 'petty_cash_report',
+    description: 'Petty cash ka hisab do — kisi bhi period ka. PDF bhi generate kar sakta hai. Examples: "is hafte petty cash", "November ka petty cash", "aaj kitna kharch hua".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query:      { type: 'string', description: 'Period query e.g. "is hafte", "last month", "November"' },
+        print_pdf:  { type: 'boolean', description: 'true = PDF bhi generate karo' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'outstanding_payments',
+    description: 'Clients ke outstanding payments — kiski kitni baaki hai, kitne din se.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        client_name: { type: 'string', description: 'Specific client (optional — blank = sab)' },
+        overdue_only: { type: 'boolean', description: 'true = sirf 30+ din wale' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'expense_summary',
+    description: 'Expense summary by category — kaun se kharche zyada hain.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Period e.g. "is mahine", "last week"' },
+      },
+      required: ['query'],
+    },
+  },
+
+  // ── PRODUCTION AGENT TOOLS ──
+  {
+    name: 'floor_status',
+    description: 'Production floor ka full status — active jobs, stuck orders, aaj ki cutting, pending dispatch. Owner ke liye morning briefing.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'ncr_report',
+    description: 'NCR aur breakage report — kitna glass tuta, kis cutter ne, kya reason tha.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Period e.g. "aaj", "is hafte", "is mahine"' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'cutting_report',
+    description: 'Cutting sessions report — aaj kitna kita gaya, kaun sa cutter, kaun si table.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Period e.g. "aaj", "is hafte"' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'dispatch_status',
+    description: 'Dispatch status — kya ready hai, kya bheji gai, kya pending hai.',
+    input_schema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'stuck_jobs',
+    description: 'Jobs jo zyada din se stuck hain — immediate attention chahiye.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        min_days: { type: 'number', description: 'Minimum days stuck (default 3)' },
+      },
+      required: [],
+    },
+  },
+
   {
     name: 'print_document',
     description: 'Open print/PDF window for a document. Always call find_order first to get the doc_id.',
@@ -220,6 +308,14 @@ export const TOOL_DEFINITIONS = [
 
 // ── Tool Labels ───────────────────────────────────────────────────────
 export const TOOL_LABELS: Record<string, { label: string; icon: string; risk: 'low'|'medium'|'high' }> = {
+  petty_cash_report:    { label: 'Petty Cash Report',    icon: '💵', risk: 'low'    },
+  outstanding_payments: { label: 'Outstanding Payments',  icon: '⏰', risk: 'low'    },
+  expense_summary:      { label: 'Expense Summary',       icon: '📊', risk: 'low'    },
+  floor_status:         { label: 'Floor Status',          icon: '🏭', risk: 'low'    },
+  ncr_report:           { label: 'NCR Report',            icon: '🔴', risk: 'low'    },
+  cutting_report:       { label: 'Cutting Report',        icon: '✂️',  risk: 'low'    },
+  dispatch_status:      { label: 'Dispatch Status',       icon: '🚚', risk: 'low'    },
+  stuck_jobs:           { label: 'Stuck Jobs',            icon: '⚠️',  risk: 'low'    },
   find_order:           { label: 'Find Order',            icon: '🔍', risk: 'low'    },
   check_stock:          { label: 'Check Stock',           icon: '📦', risk: 'low'    },
   get_client_balance:   { label: 'Client Balance',        icon: '💰', risk: 'low'    },
@@ -250,8 +346,53 @@ export const executeTool = async (
   try {
     let result: any = null;
 
+    // ── FINANCE AGENT ──
+    if (toolName === 'petty_cash_report') {
+      const report = FinanceAgent.generatePettyCashReport(params.query);
+      if (params.print_pdf) {
+        report.action = 'OPEN_PRINT';
+        report.print_type = 'petty_cash';
+      }
+      result = report;
+    }
+
+    else if (toolName === 'outstanding_payments') {
+      const data = FinanceAgent.outstandingPayments();
+      const filtered = params.client_name
+        ? { ...data, top_5: data.all.filter((q: any) => q.client?.toLowerCase().includes(params.client_name.toLowerCase())) }
+        : params.overdue_only
+          ? { ...data, top_5: data.overdue_30plus }
+          : data;
+      result = filtered;
+    }
+
+    else if (toolName === 'expense_summary') {
+      result = FinanceAgent.expenseSummary(params.query);
+    }
+
+    // ── PRODUCTION AGENT ──
+    else if (toolName === 'floor_status') {
+      result = ProductionAgent.floorStatus();
+    }
+
+    else if (toolName === 'ncr_report') {
+      result = ProductionAgent.ncrSummary(params.query);
+    }
+
+    else if (toolName === 'cutting_report') {
+      result = ProductionAgent.cuttingSessions(params.query);
+    }
+
+    else if (toolName === 'dispatch_status') {
+      result = ProductionAgent.dispatchStatus();
+    }
+
+    else if (toolName === 'stuck_jobs') {
+      result = ProductionAgent.stuckJobs(params.min_days || 3);
+    }
+
     // ── FIND ORDER ──
-    if (toolName === 'find_order') {
+    else if (toolName === 'find_order') {
       const lsKeyMap: Record<string,string> = {
         quotation:   'gtk_erp_quotations',
         sales_order: 'gtk_erp_quotations',
