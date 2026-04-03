@@ -42,6 +42,14 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
     const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; idx: number } | null>(null);
     const tableRef = useRef<HTMLDivElement>(null);
 
+    // Auto-scroll to bottom only when rows exceed 7
+    useEffect(() => {
+      const nonSectionItems = (formData.items || []).filter((i: any) => !i.isSection);
+      if (nonSectionItems.length > 7 && tableRef.current) {
+        tableRef.current.scrollTop = tableRef.current.scrollHeight;
+      }
+    }, [(formData.items || []).length]);
+
     // Focus mode — hide sidebar when editor open
     useEffect(() => {
       document.body.classList.add('erp-focus-mode');
@@ -303,7 +311,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                 </div>
 
                 <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                    <div className="flex-1 overflow-auto min-h-0">
+                    <div className="flex-1 overflow-auto min-h-0" ref={tableRef}>
                         <table className="w-full text-left border-collapse">
                             <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
                                 <tr className="text-xs uppercase font-bold text-slate-400 tracking-widest">
