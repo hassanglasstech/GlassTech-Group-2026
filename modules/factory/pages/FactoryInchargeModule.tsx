@@ -559,7 +559,7 @@ const FactoryInchargeModule: React.FC = () => {
             {activeTab === 'intel' && <IntelligenceDashboard />}
             {activeTab === 'predict7' && <PredictiveIntelligence />}
             {activeTab === 'system' && <SystemCommandCenter />}
-            {activeTab === 'market' && <MarketBriefModule />}}}
+            {activeTab === 'market' && <MarketBriefModule />}
           </>
         )}
       </div>
