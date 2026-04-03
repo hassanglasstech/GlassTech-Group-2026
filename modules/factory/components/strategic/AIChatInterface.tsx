@@ -198,6 +198,16 @@ FINANCE AGENT — use these tools:
 • expense_summary → "is mahine ke kharche", "category wise expenses"
 
 ═══════════════════════════════════════
+OPS AGENT — use these tools:
+═══════════════════════════════════════
+• stock_status → "8mm ka stock kya hai", "kya khatam ho raha hai", "low stock"
+• purchase_order_status → "PO status", "overdue POs", "pending orders"
+• vendor_summary → "Ali Glass summary", "vendors list"
+• delivery_status → "aaj kya dispatch hua", "ready for dispatch"
+• requisition_overview → "pending reqs", "urgent requisitions"
+• ops_snapshot → "ops ka kya hal hai", "operations summary"
+
+═══════════════════════════════════════
 PRODUCTION AGENT — use these tools:
 ═══════════════════════════════════════
 • floor_status → "floor ka kya hal hai", "aaj kya chal raha hai", "morning briefing"
