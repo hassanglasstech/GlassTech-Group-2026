@@ -14,6 +14,8 @@ import { runMultiAgent, shouldUseMultiAgent, AgentResponse } from '../agent/Mult
 import { runAdversarial, needsAdversarial, generateUncomfortableTruths } from '../agent/adversarialIntelligence';
 import { logDecision } from '../agent/decisionLearning';
 import { supabase } from '@/src/services/supabaseClient';
+import { GlassCoQuotationPrint } from '@/modules/glassco/core/prints/GlassCoQuotationPrint';
+import { createRoot } from 'react-dom/client';
 
 // ── Types ─────────────────────────────────────────────────────────────
 interface Message {
@@ -303,6 +305,40 @@ ${erpCtx}`;
 
   const clearChat = () => setMessages([]);
 
+  const handlePrintDocument = async (docType: string, docId: string) => {
+    try {
+      let data: any = null;
+      if (docType === 'quotation') {
+        const { data: q } = await supabase.from('quotations').select('*').eq('id', docId).single();
+        data = q;
+      } else if (docType === 'sales_order') {
+        const { data: so } = await supabase.from('sales_orders').select('*').eq('id', docId).single();
+        data = so;
+      }
+
+      if (!data) {
+        setMessages(prev => [...prev, { role: 'assistant', content: `❌ Document ${docId} nahi mila.`, ts: Date.now() }]);
+        return;
+      }
+
+      // Open print window
+      const printWindow = window.open('', '_blank', 'width=900,height=700');
+      if (!printWindow) {
+        setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ Popup blocked hai — browser mein allow karo.', ts: Date.now() }]);
+        return;
+      }
+      printWindow.document.write('<html><head><title>Print</title><link rel="stylesheet" href="/index.css"></head><body id="root"></body></html>');
+      printWindow.document.close();
+      printWindow.onload = () => {
+        const root = createRoot(printWindow.document.getElementById('root')!);
+        root.render(React.createElement(GlassCoQuotationPrint, { quote: data, clientName: data.client_name || '' }));
+        setTimeout(() => printWindow.print(), 800);
+      };
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'assistant', content: `❌ Print error: ${String(err)}`, ts: Date.now() }]);
+    }
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-180px)] min-h-[400px]">
 
@@ -421,6 +457,12 @@ ${erpCtx}`;
                     setMessages(prev => prev.map((m, idx) =>
                       idx === i ? { ...m, tool_done: true } : m
                     ));
+                    // Check if any result is a OPEN_PRINT action
+                    const printResult = Object.values(results).find((r: any) => r?.action === 'OPEN_PRINT');
+                    if (printResult) {
+                      const { doc_type, doc_id } = printResult as any;
+                      handlePrintDocument(doc_type, doc_id);
+                    }
                     setMessages(prev => [...prev, {
                       role: 'assistant',
                       content: `✅ ${Object.keys(results).length} action${Object.keys(results).length > 1 ? 's' : ''} executed successfully.`,
