@@ -20,31 +20,19 @@ export default defineConfig(({ mode }) => {
         }
       },
       build: {
+        chunkSizeWarningLimit: 5000,
         rollupOptions: {
           output: {
-            manualChunks: (id) => {
-              // Vendor chunks
-              if (id.includes('node_modules/react') || id.includes('node_modules/react-dom'))
-                return 'vendor-react';
-              if (id.includes('node_modules/recharts') || id.includes('node_modules/d3'))
-                return 'vendor-charts';
-              if (id.includes('node_modules/@supabase'))
-                return 'vendor-supabase';
-              if (id.includes('node_modules/xlsx') || id.includes('node_modules/jspdf'))
-                return 'vendor-office';
-              if (id.includes('node_modules/'))
-                return 'vendor-misc';
-              // App chunks by module
-              if (id.includes('/modules/finance/'))   return 'app-finance';
-              if (id.includes('/modules/hr/'))         return 'app-hr';
-              if (id.includes('/modules/sales/'))      return 'app-sales';
-              if (id.includes('/modules/production/')) return 'app-production';
-              if (id.includes('/modules/procurement/'))return 'app-procurement';
-              if (id.includes('/modules/factory/'))    return 'app-factory';
-            },
+            manualChunks(id) {
+              if (id.includes('node_modules/react-dom')) return 'vendor-react-dom';
+              if (id.includes('node_modules/react/')) return 'vendor-react';
+              if (id.includes('node_modules/d3-')) return 'vendor-d3';
+              if (id.includes('node_modules/recharts')) return 'vendor-recharts';
+              if (id.includes('node_modules/@supabase')) return 'vendor-supabase';
+              if (id.includes('node_modules/')) return 'vendor-misc';
+            }
           }
-        },
-        chunkSizeWarningLimit: 1000,
+        }
       }
     };
 });
