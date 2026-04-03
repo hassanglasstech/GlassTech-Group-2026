@@ -16,9 +16,11 @@ export const runAdversarial = async (
 ): Promise<AdversarialResult> => {
 
   // Step 1: Generate challenges against the initial answer
-  const challengeRes = await fetch('https://api.anthropic.com/v1/messages', {
+  const { data: { session: _s1 } } = await supabase.auth.getSession();
+  const _proxy = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/claude-proxy`;
+  const challengeRes = await fetch(_proxy, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_s1?.access_token}` },
     body: JSON.stringify({
       model:      'claude-haiku-4-5-20251001',
       max_tokens: 300,
@@ -42,9 +44,9 @@ Format: bullet points only. No preamble.`,
   }
 
   // Step 2: Revise the answer considering challenges
-  const reviseRes = await fetch('https://api.anthropic.com/v1/messages', {
+  const reviseRes = await fetch(_proxy, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_s1?.access_token}` },
     body: JSON.stringify({
       model:      'claude-sonnet-4-6',
       max_tokens: 400,
@@ -88,9 +90,11 @@ export const needsAdversarial = (query: string): boolean => {
 
 // ── Generate uncomfortable truths ─────────────────────────────────────
 export const generateUncomfortableTruths = async (erpContext: string): Promise<string[]> => {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const { data: { session: _s2 } } = await supabase.auth.getSession();
+  const _proxy2 = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/claude-proxy`;
+  const res = await fetch(_proxy2, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_s2?.access_token}` },
     body: JSON.stringify({
       model:      'claude-sonnet-4-6',
       max_tokens: 500,

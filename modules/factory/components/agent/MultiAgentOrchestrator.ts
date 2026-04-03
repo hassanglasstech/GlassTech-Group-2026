@@ -108,9 +108,11 @@ const callAgent = async (
 ): Promise<AgentResponse> => {
   const start = Date.now();
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const { data: { session: _s } } = await supabase.auth.getSession();
+    const _proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/claude-proxy`;
+    const res = await fetch(_proxyUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_s?.access_token}` },
       body: JSON.stringify({
         model:      'claude-haiku-4-5-20251001',
         max_tokens: 200,
@@ -165,7 +167,7 @@ export const runMultiAgent = async (
   // Master synthesis
   const allFindings = agents.map(a => `${a.emoji} ${a.agent}:\n${a.findings}\n${a.alerts.join('\n')}`).join('\n\n');
 
-  const masterRes = await fetch('https://api.anthropic.com/v1/messages', {
+  const masterRes = await fetch('PROXY_PLACEHOLDER', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
