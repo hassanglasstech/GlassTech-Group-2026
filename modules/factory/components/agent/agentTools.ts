@@ -5,7 +5,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'create_requisition',
     description: 'Create a procurement requisition in ERP',
-    parameters: {
+    input_schema: {
       type: 'object',
       properties: {
         category:    { type: 'string', description: 'Category e.g. Logistics, Store, Maintenance' },
@@ -21,7 +21,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'create_task',
     description: 'Create a task and assign it',
-    parameters: {
+    input_schema: {
       type: 'object',
       properties: {
         title:       { type: 'string', description: 'Task title' },
@@ -36,7 +36,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'draft_payment_voucher',
     description: 'Draft a payment voucher (NOT posted — requires manual approval in Finance)',
-    parameters: {
+    input_schema: {
       type: 'object',
       properties: {
         vendor:      { type: 'string', description: 'Vendor or payee name' },
@@ -50,7 +50,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'log_factory_event',
     description: 'Log a factory event (maintenance, production issue, etc.)',
-    parameters: {
+    input_schema: {
       type: 'object',
       properties: {
         sector:     { type: 'string', enum: ['Production', 'Store', 'Maintenance', 'HR', 'Logistics', 'Office'] },
@@ -64,7 +64,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'send_whatsapp',
     description: 'Send a WhatsApp notification message',
-    parameters: {
+    input_schema: {
       type: 'object',
       properties: {
         message:  { type: 'string', description: 'Message to send' },
@@ -75,9 +75,65 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'create_quotation',
+    description: 'Create a GlassCo sales quotation. Ask user for any missing info before calling this tool. Always confirm details first.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        client_name:   { type: 'string', description: 'Client / customer name' },
+        project_name:  { type: 'string', description: 'Project reference e.g. MAIN, PHASE-1, SHOP' },
+        items: {
+          type: 'array',
+          description: 'List of glass line items',
+          items: {
+            type: 'object',
+            properties: {
+              description:  { type: 'string',  description: 'Item description e.g. Front door glass' },
+              glass_type:   { type: 'string',  enum: ['Plain','Color','Mirror','Fluted'], description: 'Glass category' },
+              thickness:    { type: 'string',  description: 'Thickness e.g. 5mm, 6mm, 8mm, 10mm, 12mm' },
+              width_inch:   { type: 'number',  description: 'Width in inches' },
+              height_inch:  { type: 'number',  description: 'Height in inches' },
+              qty:          { type: 'number',  description: 'Quantity (pieces)' },
+              services:     { type: 'array', items: { type: 'string' }, description: 'Services: T/G, P/E, Notch, R/D, D/G etc.' },
+              rate:         { type: 'number',  description: 'Rate per sqft in PKR (optional — leave 0 if unknown)' },
+            },
+            required: ['glass_type', 'thickness', 'width_inch', 'height_inch', 'qty'],
+          },
+        },
+        validity_days: { type: 'number', description: 'Validity in days (default 3)' },
+        discount_pkr:  { type: 'number', description: 'Discount in PKR (default 0)' },
+        notes:         { type: 'string', description: 'Any special notes' },
+      },
+      required: ['client_name', 'items'],
+    },
+  },
+  {
+    name: 'search_client',
+    description: 'Search for a client by name in ERP to get their ID',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Client name to search' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'get_glass_rate',
+    description: 'Get the current rate for a glass type and thickness from ERP product master',
+    input_schema: {
+      type: 'object',
+      properties: {
+        glass_type: { type: 'string', description: 'Plain, Color, Mirror, Fluted' },
+        thickness:  { type: 'string', description: '5mm, 6mm, 8mm etc.' },
+      },
+      required: ['glass_type', 'thickness'],
+    },
+  },
+  {
     name: 'update_event_status',
     description: 'Update a factory event status',
-    parameters: {
+    input_schema: {
       type: 'object',
       properties: {
         event_id:  { type: 'string', description: 'Factory event ID' },
@@ -93,6 +149,9 @@ export const TOOL_DEFINITIONS = [
 export const TOOL_LABELS: Record<string, { label: string; icon: string; risk: 'low' | 'medium' | 'high' }> = {
   create_requisition:  { label: 'Create Requisition',    icon: '📋', risk: 'medium' },
   create_task:         { label: 'Create Task',           icon: '✅', risk: 'low'    },
+  create_quotation:    { label: 'Create Quotation',      icon: '📄', risk: 'medium' },
+  search_client:       { label: 'Search Client',         icon: '🔍', risk: 'low'    },
+  get_glass_rate:      { label: 'Get Glass Rate',        icon: '💰', risk: 'low'    },
   draft_payment_voucher:{ label: 'Draft Payment Voucher',icon: '💳', risk: 'high'   },
   log_factory_event:   { label: 'Log Factory Event',     icon: '🏭', risk: 'low'    },
   send_whatsapp:       { label: 'Send WhatsApp',         icon: '💬', risk: 'low'    },
@@ -120,30 +179,48 @@ export const executeTool = async (
     let result: any = null;
 
     if (toolName === 'create_requisition') {
-      const { data, error } = await supabase.from('requisitions').insert({
+      const reqId = `REQ-AGENT-${Date.now()}`;
+      const today = new Date().toISOString().split('T')[0];
+      const reqPayload = {
+        id:            reqId,
         company:       'GlassCo',
-        date:          new Date().toISOString().split('T')[0],
+        date:          today,
         header_text:   `[AGENT] ${params.description}`,
         requisitioner: approvedBy,
         priority:      params.priority,
         status:        'Pending',
         category:      params.category,
         req_type:      'Agent Created',
-        items:         JSON.stringify([{
-          id:            crypto.randomUUID(),
-          itemCategory:  params.category,
-          materialDesc:  params.description,
-          qty:           params.qty,
-          unit:          params.unit,
-          estimatedRate: 0,
-          deliveryDate:  new Date(Date.now() + 86400000).toISOString().split('T')[0],
-          costCenter:    params.category.toUpperCase(),
-        }]),
+        reason:        params.reason || '',
         total_value:   0,
         created_at:    new Date().toISOString(),
-      }).select('id').single();
-      if (error) throw error;
-      result = { req_id: data?.id };
+        updated_at:    new Date().toISOString(),
+      };
+      const { data: reqData, error: reqErr } = await supabase
+        .from('requisitions')
+        .insert(reqPayload)
+        .select('id').single();
+      if (reqErr) throw reqErr;
+
+      // Save requisition item
+      await supabase.from('requisition_items').insert({
+        requisition_id: reqData?.id || reqId,
+        item_category:  params.category,
+        material_desc:  params.description,
+        qty:            params.qty,
+        unit:           params.unit,
+        estimated_rate: 0,
+        delivery_date:  new Date(Date.now() + 86400000).toISOString().split('T')[0],
+        cost_center:    params.category.toUpperCase(),
+        created_at:     new Date().toISOString(),
+      });
+
+      // Also save to localStorage for offline access
+      const reqs = JSON.parse(localStorage.getItem('gtk_erp_requisitions') || '[]');
+      reqs.push({ ...reqPayload, items: [{ materialDesc: params.description, qty: params.qty, unit: params.unit }] });
+      localStorage.setItem('gtk_erp_requisitions', JSON.stringify(reqs));
+
+      result = { req_id: reqData?.id || reqId, saved: 'Supabase + localStorage', message: 'Procurement → Requisitions mein nazar aayegi' };
     }
 
     else if (toolName === 'create_task') {
@@ -194,6 +271,144 @@ export const executeTool = async (
         message: `PV draft saved — Finance → Payment Vouchers mein manually post karo`,
         vendor:  params.vendor,
         amount:  params.amount,
+      };
+    }
+
+    else if (toolName === 'search_client') {
+      // Search in Supabase clients table (correct table name)
+      const { data } = await supabase
+        .from('clients')
+        .select('id, name, phone, address')
+        .ilike('name', `%${params.name}%`)
+        .limit(5);
+      // Also check localStorage
+      const localClients = JSON.parse(localStorage.getItem('gtk_erp_clients') || '[]');
+      const localMatch = localClients.filter((c: any) =>
+        c.name?.toLowerCase().includes(params.name.toLowerCase()) && c.company === 'GlassCo'
+      ).slice(0, 5);
+      const all = [...(data || []), ...localMatch].slice(0, 5);
+      result = { clients: all, count: all.length };
+    }
+
+    else if (toolName === 'get_glass_rate') {
+      const localProducts = JSON.parse(localStorage.getItem('gtk_erp_products') || '[]');
+      const match = localProducts.find((p: any) =>
+        p.company === 'GlassCo' &&
+        p.category === 'Glass' &&
+        p.glassType?.toLowerCase() === params.glass_type?.toLowerCase() &&
+        p.thickness === params.thickness
+      );
+      result = match
+        ? { found: true, rate: match.salePrice || match.price || 0, product: match.name }
+        : { found: false, rate: 0, message: 'Rate not found in product master' };
+    }
+
+    else if (toolName === 'create_quotation') {
+      // Find client ID
+      const localClients = JSON.parse(localStorage.getItem('gtk_erp_clients') || '[]');
+      const client = localClients.find((c: any) =>
+        c.name?.toLowerCase().includes(params.client_name.toLowerCase()) && c.company === 'GlassCo'
+      );
+      const clientId = client?.id || '';
+
+      // Build quotation items
+      const localProducts = JSON.parse(localStorage.getItem('gtk_erp_products') || '[]');
+      const items = (params.items || []).map((item: any, idx: number) => {
+        const sqFt = (item.width_inch * item.height_inch * item.qty) / 144;
+        const product = localProducts.find((p: any) =>
+          p.company === 'GlassCo' &&
+          p.category === 'Glass' &&
+          p.glassType?.toLowerCase() === item.glass_type?.toLowerCase() &&
+          p.thickness === item.thickness
+        );
+        const rate = item.rate > 0 ? item.rate : (product?.salePrice || product?.price || 0);
+        return {
+          id:               `ITM-${Date.now()}-${idx}`,
+          description:      item.description || `${item.glass_type} ${item.thickness}`,
+          glassType:        item.glass_type,
+          subCategory:      'Standard',
+          glassSize:        item.thickness,
+          glassColor:       'Clear',
+          inchW:            item.width_inch,
+          sootW:            0,
+          inchH:            item.height_inch,
+          sootH:            0,
+          width:            item.width_inch,
+          height:           item.height_inch,
+          qty:              item.qty,
+          totalSqFt:        Math.round(sqFt * 100) / 100,
+          pricePerUnit:     rate,
+          amount:           Math.round(sqFt * rate),
+          selectedServices: item.services || [],
+          isSection:        false,
+          locationCode:     '',
+          glazingSpecs:     '',
+          inputUnit:        'Inch',
+        };
+      });
+
+      const totalAmount = items.reduce((s: number, i: any) => s + i.amount, 0);
+      const discount = params.discount_pkr || 0;
+      const validityDays = params.validity_days || 3;
+      const today = new Date().toISOString().split('T')[0];
+      const dueDate = new Date(Date.now() + validityDays * 86400000).toISOString().split('T')[0];
+
+      // Save to localStorage (same as manual quotation)
+      const quotations = JSON.parse(localStorage.getItem('gtk_erp_quotations') || '[]');
+      const newQuotation = {
+        id:                 `QT-AGENT-${Date.now()}`,
+        company:            'GlassCo',
+        date:               today,
+        dueDate,
+        clientId,
+        clientName:         params.client_name,
+        projectName:        params.project_name || 'AGENT ORDER',
+        items,
+        status:             'Draft',
+        discountAmount:     discount,
+        discountPercent:    0,
+        isAlreadyDispatched: false,
+        notes:              params.notes || `Created by AI Agent — approved by ${approvedBy}`,
+        totalAmount:        totalAmount - discount,
+        createdBy:          `Agent (${approvedBy})`,
+        createdAt:          new Date().toISOString(),
+      };
+
+      // Save to Supabase
+      const { data: qtData, error: qtErr } = await supabase
+        .from('quotations')
+        .insert({
+          id:              newQuotation.id,
+          company:         'GlassCo',
+          date:            newQuotation.date,
+          due_date:        newQuotation.dueDate,
+          client_id:       clientId || null,
+          client_name:     params.client_name,
+          project_name:    params.project_name || 'AGENT ORDER',
+          items:           items,
+          status:          'Draft',
+          discount_amount: discount,
+          total_amount:    totalAmount - discount,
+          notes:           newQuotation.notes,
+          created_by:      `Agent (${approvedBy})`,
+          created_at:      new Date().toISOString(),
+          updated_at:      new Date().toISOString(),
+        })
+        .select('id').single();
+
+      // Also localStorage fallback
+      quotations.push(newQuotation);
+      localStorage.setItem('gtk_erp_quotations', JSON.stringify(quotations));
+
+      result = {
+        quotation_id:  qtData?.id || newQuotation.id,
+        client:        params.client_name,
+        project:       params.project_name || 'N/A',
+        items_count:   items.length,
+        total_sqft:    Math.round(items.reduce((s: number, i: any) => s + i.totalSqFt, 0) * 100) / 100,
+        total_amount:  totalAmount - discount,
+        status:        'Draft — Sales → GlassCo → Quotations mein nazar aayegi',
+        saved:         qtErr ? 'localStorage only' : 'Supabase + localStorage',
       };
     }
 
