@@ -41,7 +41,8 @@ const InventoryModule: React.FC = () => {
   useEffect(() => {
     const refreshData = async () => {
         setIsLoading(true);
-        setItems(InventoryService.getStore().filter(i => i.company === company));
+        const storeItems = await InventoryService.getStoreAsync();
+        setItems(storeItems.filter(i => i.company === company));
         setProducts(SalesService.getProducts().filter(p => p.company === company));
         setCostCenters(FinanceService.getCostCenters().filter(c => c.company === company));
         setProjects(SalesService.getProjects().filter(p => p.company === company && p.status === 'Active'));
@@ -59,7 +60,7 @@ const InventoryModule: React.FC = () => {
 
   const refreshSync = () => {
       // Helper for modal updates that might update sync stores
-      setItems(InventoryService.getStore().filter(i => i.company === company));
+      InventoryService.getStoreAsync().then(items => setItems(items.filter(i => i.company === company)));
       // Load full IDB data after render
       setTimeout(() => InventoryService.getStockLedgerAsync().then(all => {
           setLedger(all.filter(l => l.company === company).sort((a,b) => b.timestamp.localeCompare(a.timestamp)));
