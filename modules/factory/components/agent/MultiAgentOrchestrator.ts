@@ -108,11 +108,10 @@ const callAgent = async (
 ): Promise<AgentResponse> => {
   const start = Date.now();
   try {
-    const { data: { session: _s } } = await supabase.auth.getSession();
     const _proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/claude-proxy`;
     const res = await fetch(_proxyUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_s?.access_token}` },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
       body: JSON.stringify({
         model:      'claude-haiku-4-5-20251001',
         max_tokens: 200,

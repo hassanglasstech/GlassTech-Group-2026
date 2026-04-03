@@ -226,14 +226,14 @@ ${erpCtx}`;
     }
 
     // ── Single agent mode (default) ───────────────────────────────
-      const { data: { session } } = await supabase.auth.getSession();
       const PROXY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/claude-proxy`;
+      const ANON_KEY  = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
       const res = await fetch(PROXY_URL, {
         method: 'POST',
         headers: {
           'Content-Type':  'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
+          'Authorization': `Bearer ${ANON_KEY}`,
         },
         body: JSON.stringify({
           model:      'claude-sonnet-4-6',
