@@ -424,7 +424,7 @@ const FactoryInchargeModule: React.FC = () => {
             {activeTab === 'comp' && <CompensationJustice />}
             {activeTab === 'intel' && <IntelligenceDashboard />}
             {activeTab === 'predict7' && <PredictiveIntelligence />}
-            {activeTab === 'system' && <SystemCommandCenter />}}
+            {activeTab === 'system' && <SystemCommandCenter />}
           </>
         )}
       </div>
