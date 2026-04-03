@@ -131,6 +131,33 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'find_order',
+    description: 'Find a quotation, sales order, or job order by ID, order number, client name, or date range. Use this before print_document.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        doc_type:   { type: 'string', enum: ['quotation', 'sales_order', 'job_order', 'requisition'], description: 'Type of document' },
+        search_id:  { type: 'string', description: 'Order ID or number e.g. 2367, QT-123, SO-456' },
+        client_name:{ type: 'string', description: 'Client name to search by' },
+        month:      { type: 'string', description: 'Month name e.g. November, January' },
+        year:       { type: 'string', description: 'Year e.g. 2024' },
+      },
+      required: ['doc_type'],
+    },
+  },
+  {
+    name: 'print_document',
+    description: 'Open the print/PDF view for a document. Must call find_order first to get the document ID.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        doc_type: { type: 'string', enum: ['quotation', 'sales_order', 'job_order', 'requisition'] },
+        doc_id:   { type: 'string', description: 'Document ID from find_order result' },
+      },
+      required: ['doc_type', 'doc_id'],
+    },
+  },
+  {
     name: 'update_event_status',
     description: 'Update a factory event status',
     input_schema: {
@@ -155,6 +182,8 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string; risk: 'l
   draft_payment_voucher:{ label: 'Draft Payment Voucher',icon: '💳', risk: 'high'   },
   log_factory_event:   { label: 'Log Factory Event',     icon: '🏭', risk: 'low'    },
   send_whatsapp:       { label: 'Send WhatsApp',         icon: '💬', risk: 'low'    },
+  find_order:          { label: 'Find Order',            icon: '🔍', risk: 'low'    },
+  print_document:      { label: 'Print / PDF',           icon: '🖨️', risk: 'low'    },
   update_event_status: { label: 'Update Event Status',   icon: '🔄', risk: 'low'    },
 };
 
@@ -409,6 +438,65 @@ export const executeTool = async (
         total_amount:  totalAmount - discount,
         status:        'Draft — Sales → GlassCo → Quotations mein nazar aayegi',
         saved:         qtErr ? 'localStorage only' : 'Supabase + localStorage',
+      };
+    }
+
+    else if (toolName === 'find_order') {
+      const docType = params.doc_type;
+      let table = 'quotations';
+      if (docType === 'sales_order') table = 'sales_orders';
+      else if (docType === 'job_order') table = 'job_orders';
+      else if (docType === 'requisition') table = 'requisitions';
+
+      let query = supabase.from(table).select('id, created_at, client_name, project_name, status, total_amount, order_no').limit(10);
+
+      if (params.search_id) {
+        // Search by ID or order number
+        const searchVal = params.search_id.trim();
+        query = query.or(`id.ilike.%${searchVal}%,order_no.ilike.%${searchVal}%`);
+      }
+      if (params.client_name) {
+        query = query.ilike('client_name', `%${params.client_name}%`);
+      }
+      if (params.month || params.year) {
+        const months: Record<string,string> = {
+          january:'01',february:'02',march:'03',april:'04',may:'05',june:'06',
+          july:'07',august:'08',september:'09',october:'10',november:'11',december:'12'
+        };
+        const mm = params.month ? months[params.month.toLowerCase()] : null;
+        const yy = params.year || new Date().getFullYear().toString();
+        if (mm) {
+          query = query.gte('created_at', `${yy}-${mm}-01`).lte('created_at', `${yy}-${mm}-31`);
+        } else {
+          query = query.gte('created_at', `${yy}-01-01`).lte('created_at', `${yy}-12-31`);
+        }
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
+      if (error) throw error;
+      result = {
+        found: (data || []).length,
+        documents: (data || []).map((d: any) => ({
+          id: d.id,
+          order_no: d.order_no || d.id,
+          client: d.client_name,
+          project: d.project_name,
+          status: d.status,
+          amount: d.total_amount,
+          date: d.created_at?.split('T')[0],
+        })),
+        message: (data || []).length === 0 ? 'Koi document nahi mila — search criteria check karo' : `${(data||[]).length} document mila`,
+      };
+    }
+
+    else if (toolName === 'print_document') {
+      // This tool triggers a custom event that AIChatInterface listens to
+      // The actual print window opens in the browser
+      result = {
+        doc_type: params.doc_type,
+        doc_id:   params.doc_id,
+        action:   'OPEN_PRINT',
+        message:  'Print window khul rahi hai...',
       };
     }
 
