@@ -11,6 +11,8 @@ import { HRService } from '@/modules/hr/services/hrService';
 import { TOOL_DEFINITIONS } from '../agent/agentTools';
 import ConfirmationCard from '../agent/ConfirmationCard';
 import { runMultiAgent, shouldUseMultiAgent, AgentResponse } from '../agent/MultiAgentOrchestrator';
+import { runAdversarial, needsAdversarial, generateUncomfortableTruths } from '../agent/adversarialIntelligence';
+import { logDecision } from '../agent/decisionLearning';
 import { supabase } from '@/src/services/supabaseClient';
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -19,9 +21,11 @@ interface Message {
   content:     string;
   ts:          number;
   tool_calls?: { id: string; name: string; params: Record<string, any> }[];
-  tool_done?:  boolean;
-  multi_agent?: { agents: AgentResponse[]; synthesis: string };
+  tool_done?:      boolean;
+  multi_agent?:    { agents: AgentResponse[]; synthesis: string };
   agents_loading?: boolean;
+  adversarial?:    { challenges: string[]; revisedAnswer: string; wasRevised: boolean };
+  notifiedAt?:     Date;
 }
 
 // ── Quick prompts ─────────────────────────────────────────────────────
@@ -241,18 +245,23 @@ ${erpCtx}`;
       const reply      = textBlock?.text || '';
 
       if (toolBlocks.length > 0) {
-        const toolCalls = toolBlocks.map((b: any) => ({
-          id:     b.id,
-          name:   b.name,
-          params: b.input,
-        }));
+        const toolCalls = toolBlocks.map((b: any) => ({ id: b.id, name: b.name, params: b.input }));
         setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: reply || `${toolCalls.length} action${toolCalls.length > 1 ? 's' : ''} propose kar raha hun — review karo:`,
-          ts: Date.now(),
-          tool_calls: toolCalls,
-          tool_done:  false,
+          role: 'assistant', content: reply || `${toolCalls.length} action${toolCalls.length > 1 ? 's' : ''} propose kar raha hun:`,
+          ts: Date.now(), tool_calls: toolCalls, tool_done: false,
         }]);
+      } else if (needsAdversarial(text) && reply.length > 50) {
+        // Run adversarial check on decision queries
+        const adv = await runAdversarial(text, reply, erpCtx);
+        setMessages(prev => [...prev, {
+          role:        'assistant',
+          content:     adv.wasRevised ? adv.revisedAnswer : reply,
+          ts:          Date.now(),
+          adversarial: adv.challenges.length > 0 ? adv : undefined,
+          notifiedAt:  new Date(),
+        }]);
+        // Log decision opportunity
+        await logDecision({ type: 'chat_recommendation', decision: 'viewed', context: { query: text }, createdBy: 'Hassan' });
       } else {
         setMessages(prev => [...prev, { role: 'assistant', content: reply || 'Response nahi mili.', ts: Date.now() }]);
       }
@@ -345,7 +354,25 @@ ${erpCtx}`;
                     : msg.content}
                 </div>
               )}
-              {/* Multi-agent breakdown */}
+              {/* Adversarial challenges */}
+              {msg.adversarial && msg.adversarial.challenges.length > 0 && (
+                <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 space-y-2 mt-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+                    <span className="text-[10px] font-bold text-orange-400 uppercase tracking-widest">
+                      Devil's Advocate — {msg.adversarial.challenges.length} counter-arguments
+                    </span>
+                  </div>
+                  {msg.adversarial.challenges.map((c, j) => (
+                    <p key={j} className="text-xs text-orange-300">⚠️ {c}</p>
+                  ))}
+                  {msg.adversarial.wasRevised && (
+                    <div className="border-t border-orange-500/20 pt-2">
+                      <span className="text-[10px] text-orange-400">↑ Answer revised considering above challenges</span>
+                    </div>
+                  )}
+                </div>
+              )}
               {msg.multi_agent && (
                 <div className="space-y-2 mt-1">
                   {msg.multi_agent.agents.map(a => (
