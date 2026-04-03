@@ -25,9 +25,16 @@ export const AsyncSalesService = {
         return safeParse(KEYS.CLIENTS);
       }
       if (data && data.length > 0) {
-        safeSave(KEYS.CLIENTS, data);
-        return data as Client[];
+        const mapped = data.map((r: any) => ({
+          ...r,
+          contactPerson: r.contact_person ?? r.contactPerson ?? '',
+          creditLimit: r.credit_limit ?? r.creditLimit ?? 0,
+          createdAt: r.created_at ?? r.createdAt ?? '',
+        }));
+        safeSave(KEYS.CLIENTS, mapped);
+        return mapped as Client[];
       }
+      // Supabase empty — fall back to localStorage
       return safeParse(KEYS.CLIENTS);
     } catch (err: any) {
       console.error('[AsyncSalesService] getClients exception:', err.message);
@@ -35,8 +42,30 @@ export const AsyncSalesService = {
     }
   },
   saveClients: async (data: Client[]): Promise<void> => {
-    await delay(100);
+    // Always save locally first
     safeSave(KEYS.CLIENTS, data);
+    // Upsert to Supabase (snake_case mapping)
+    try {
+      const rows = data.map((c: any) => ({
+        id: c.id,
+        company: c.company,
+        name: c.name,
+        contact_person: c.contactPerson ?? c.contact_person ?? '',
+        email: c.email ?? '',
+        phone: c.phone ?? '',
+        address: c.address ?? '',
+        ntn: c.ntn ?? '',
+        credit_limit: c.creditLimit ?? c.credit_limit ?? 0,
+        status: c.status ?? 'Active',
+        created_at: c.createdAt ?? c.created_at ?? new Date().toISOString(),
+      }));
+      const { error } = await supabase.from('clients').upsert(rows);
+      if (error) {
+        console.error('[AsyncSalesService] saveClients Supabase error:', error.message);
+      }
+    } catch (err: any) {
+      console.error('[AsyncSalesService] saveClients exception:', err.message);
+    }
   },
   
   getProducts: async (): Promise<Product[]> => {
