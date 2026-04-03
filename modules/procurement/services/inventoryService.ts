@@ -6,6 +6,7 @@ import {
 } from '@/modules/procurement/types/inventory';
 import { initDB } from '@/modules/shared/services/db';
 import { bgSaveToIDB, safeParse, safeSave } from '@/modules/shared/services/utils';
+import { supabase } from '../../../src/services/supabaseClient';
 
 const KEYS = {
   STORE:              'gtk_erp_store',
@@ -55,6 +56,52 @@ export const InventoryService = {
     const recent = data.slice(-1000);
     safeSave(KEYS.STOCK_LEDGER, recent);
     bgSaveToIDB('stockLedger', data);
+    // Supabase upsert — snake_case mapping
+    const rows = recent.map((e: any) => ({
+      id: e.id,
+      company: e.company || '',
+      material_id: e.materialId || '',
+      timestamp: e.timestamp || '',
+      mvmnt_code: e.mvmntCode || '',
+      qty: e.qty || 0,
+      uom: e.uom || '',
+      valuation: e.valuation || 0,
+      balance_after: e.balanceAfter || 0,
+      reference_doc: e.referenceDoc || '',
+      user: e.user || '',
+      remarks: e.remarks || '',
+      storage_bin: e.storageBin || null,
+      batch_no: e.batchNo || null,
+      hu_id: e.huId || null,
+      project_id: e.projectId || null,
+      dc_no: e.dcNo || null,
+      bilty_no: e.biltyNo || null,
+      bilty_freight_pkr: e.biltyFreightPKR || 0,
+      vendor_so_no: e.vendorSoNo || null,
+      vehicle_no: e.vehicleNo || null,
+      driver_name: e.driverName || null,
+      driver_phone: e.driverPhone || null,
+      freight_type: e.freightType || null,
+      freight_pkr: e.freightPKR || 0,
+      other_charges_pkr: e.otherChargesPKR || 0,
+      other_charges_desc: e.otherChargesDesc || null,
+      line_weight_kg: e.lineWeightKg || 0,
+      per_sheet_weight_kg: e.perSheetWeightKg || 0,
+      per_sqft_weight_kg: e.perSqftWeightKg || 0,
+      vendor_id: e.vendorId || null,
+      vendor_name: e.vendorName || null,
+      po_id: e.poId || null,
+      sheet_count: e.sheetCount || 0,
+      glass_category: e.glassCategory || null,
+      sheet_tags: e.sheetTags || [],
+      sheet_tag_meta: e.sheetTagMeta || null,
+      reversal_of: e.reversalOf || null,
+      is_reversal: e.isReversal || false,
+      reversal_reason: e.reversalReason || null,
+    }));
+    supabase.from('stock_ledger').upsert(rows).then(({ error }) => {
+      if (error) console.error('[InventoryService] saveStockLedger Supabase error:', error.message);
+    });
   },
 
   // ── Requisitions ───────────────────────────────────────────────────
