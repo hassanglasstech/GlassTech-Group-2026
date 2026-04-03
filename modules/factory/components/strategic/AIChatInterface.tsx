@@ -307,13 +307,25 @@ ${erpCtx}`;
 
   const handlePrintDocument = async (docType: string, docId: string) => {
     try {
-      let data: any = null;
-      if (docType === 'quotation') {
-        const { data: q } = await supabase.from('quotations').select('*').eq('id', docId).single();
-        data = q;
-      } else if (docType === 'sales_order') {
-        const { data: so } = await supabase.from('sales_orders').select('*').eq('id', docId).single();
-        data = so;
+      // First try localStorage
+      const lsKeyMap: Record<string,string> = {
+        quotation:   'gtk_erp_quotations',
+        sales_order: 'gtk_erp_quotations',
+        job_order:   'gtk_erp_job_orders',
+        requisition: 'gtk_erp_requisitions',
+      };
+      const lsKey = lsKeyMap[docType] || 'gtk_erp_quotations';
+      const allDocs = JSON.parse(localStorage.getItem(lsKey) || '[]');
+      let data = allDocs.find((d: any) => d.id === docId || d.orderNo === docId);
+
+      // Fallback to Supabase
+      if (!data) {
+        const tableMap: Record<string,string> = {
+          quotation: 'quotations', sales_order: 'quotations',
+          job_order: 'job_orders', requisition: 'requisitions',
+        };
+        const { data: remote } = await supabase.from(tableMap[docType] || 'quotations').select('*').eq('id', docId).single();
+        data = remote;
       }
 
       if (!data) {
@@ -321,19 +333,17 @@ ${erpCtx}`;
         return;
       }
 
-      // Open print window
-      const printWindow = window.open('', '_blank', 'width=900,height=700');
-      if (!printWindow) {
-        setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ Popup blocked hai — browser mein allow karo.', ts: Date.now() }]);
-        return;
-      }
-      printWindow.document.write('<html><head><title>Print</title><link rel="stylesheet" href="/index.css"></head><body id="root"></body></html>');
-      printWindow.document.close();
-      printWindow.onload = () => {
-        const root = createRoot(printWindow.document.getElementById('root')!);
-        root.render(React.createElement(GlassCoQuotationPrint, { quote: data, clientName: data.client_name || '' }));
-        setTimeout(() => printWindow.print(), 800);
-      };
+      // Trigger ERP print using existing print mechanism
+      window.dispatchEvent(new CustomEvent('erp-print-request', {
+        detail: { docType, docId, data }
+      }));
+
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `🖨️ ${data.clientName || data.client_name || ''} — ${docId} ki print request bheji gai. Agar print window nahi khuli toh ERP mein manually print karo.`,
+        ts: Date.now(),
+      }]);
+
     } catch (err) {
       setMessages(prev => [...prev, { role: 'assistant', content: `❌ Print error: ${String(err)}`, ts: Date.now() }]);
     }
