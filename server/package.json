@@ -1,0 +1,18 @@
+{
+  "name": "glasstech-whatsapp-bridge",
+  "version": "1.0.0",
+  "description": "GlassTech WhatsApp Intelligence Bridge",
+  "main": "server.js",
+  "scripts": {
+    "start": "node whatsapp-bridge.js",
+    "dev": "node whatsapp-bridge.js"
+  },
+  "dependencies": {
+    "whatsapp-web.js": "^1.23.0",
+    "qrcode-terminal": "^0.12.0",
+    "node-fetch": "^2.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Factory, ShoppingBag, Wrench, Users, Truck, Building2,
   Plus, Clock, AlertTriangle, CheckCircle2, Circle, Loader2,
-  ChevronRight, Bell, FileText, Home, Wrench as WrenchIcon, ShieldCheck, CheckSquare, Send, Handshake, Zap, LayoutGrid, BarChart2, Scissors, BarChart3, DollarSign, Calculator, Landmark, Brain, Sparkles, MessageCircle
+  ChevronRight, Bell, FileText, Home, Wrench as WrenchIcon, ShieldCheck, CheckSquare, Send, Handshake, Zap, LayoutGrid, BarChart2, Scissors, BarChart3, DollarSign, Calculator, Landmark, Brain, Sparkles, MessageCircle, Inbox, Scale
 } from 'lucide-react';
 import { supabase } from '@/src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
@@ -35,6 +35,9 @@ import AIChatInterface from '../components/strategic/AIChatInterface';
 import PredictiveAlerts from '../components/strategic/PredictiveAlerts';
 import ReportNarrativeViewer from '../components/strategic/ReportNarrativeViewer';
 import WhatsAppIntegration from '../components/strategic/WhatsAppIntegration';
+import InboxIntelligence from '../components/agent/InboxIntelligence';
+import SemanticMemoryModule from '../components/strategic/SemanticMemoryModule';
+import CompensationJustice from '@/modules/hr/components/CompensationJustice';
 import { usePWAInstall, useOnlineStatus, usePullToRefresh } from '../hooks/usePWA';
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -133,7 +136,7 @@ type Tab =
   | 'agent' | 'tasks' | 'telegram' | 'vendors' | 'gaps'
   | 'board' | 'flow' | 'floor' | 'vehicle' | 'cut' | 'workers'
   | 'mis' | 'jobpl' | 'cost' | 'vintel' | 'delivery' | 'finance'
-  | 'strategy' | 'ai' | 'predict' | 'report' | 'whatsapp';
+  | 'strategy' | 'ai' | 'predict' | 'report' | 'whatsapp' | 'inbox' | 'semantic' | 'comp';
 
 // ── Main Component ────────────────────────────────────────────────────
 const FactoryInchargeModule: React.FC = () => {
@@ -413,6 +416,9 @@ const FactoryInchargeModule: React.FC = () => {
             {activeTab === 'predict' && <PredictiveAlerts />}
             {activeTab === 'report' && <ReportNarrativeViewer />}
             {activeTab === 'whatsapp' && <WhatsAppIntegration />}
+            {activeTab === 'inbox' && <InboxIntelligence />}
+            {activeTab === 'semantic' && <SemanticMemoryModule />}
+            {activeTab === 'comp' && <CompensationJustice />}
           </>
         )}
       </div>
@@ -447,6 +453,9 @@ const FactoryInchargeModule: React.FC = () => {
           { tab: 'predict' as Tab, icon: Zap, label: 'Predict' },
           { tab: 'report' as Tab, icon: FileText, label: 'AI Report' },
           { tab: 'whatsapp' as Tab, icon: MessageCircle, label: 'WhatsApp' },
+          { tab: 'inbox' as Tab, icon: Inbox, label: 'Inbox AI' },
+          { tab: 'semantic' as Tab, icon: Brain, label: 'Semantic' },
+          { tab: 'comp' as Tab, icon: Scale, label: 'Comp' },
         ].map(({ tab, icon: Icon, label }) => (
           <button
             key={tab}

@@ -8,13 +8,20 @@ import { ProductionService } from '@/modules/production/services/productionServi
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { HRService } from '@/modules/hr/services/hrService';
+import { TOOL_DEFINITIONS } from '../agent/agentTools';
+import ConfirmationCard from '../agent/ConfirmationCard';
+import { runMultiAgent, shouldUseMultiAgent, AgentResponse } from '../agent/MultiAgentOrchestrator';
 import { supabase } from '@/src/services/supabaseClient';
 
 // ── Types ─────────────────────────────────────────────────────────────
 interface Message {
-  role:    'user' | 'assistant';
-  content: string;
-  ts:      number;
+  role:        'user' | 'assistant';
+  content:     string;
+  ts:          number;
+  tool_calls?: { id: string; name: string; params: Record<string, any> }[];
+  tool_done?:  boolean;
+  multi_agent?: { agents: AgentResponse[]; synthesis: string };
+  agents_loading?: boolean;
 }
 
 // ── Quick prompts ─────────────────────────────────────────────────────
@@ -173,7 +180,13 @@ const AIChatInterface: React.FC = () => {
     try {
       const systemPrompt = `You are GlassTech ERP Assistant — an intelligent business assistant for GlassTech Group, a glass & aluminium manufacturing company in Karachi, Pakistan.
 
-You have access to live ERP data. Answer questions about factory operations, sales, finance, HR, procurement, and production.
+You have access to live ERP data AND can take actions using tools.
+
+TOOL USAGE RULES:
+- Use tools ONLY when user explicitly asks to CREATE, LOG, SEND, or UPDATE something
+- ALWAYS explain what you are about to do BEFORE calling a tool
+- For ambiguous requests, ask for clarification first
+- Never use tools for read-only queries — just answer with data
 
 Communication style:
 - Mix of English and Urdu/Roman Urdu is fine (match user's language)
@@ -181,7 +194,6 @@ Communication style:
 - Use bullet points for lists
 - Highlight urgent items with ⚠️
 - Format numbers in PKR with commas
-- Always be helpful and direct
 
 ${erpCtx}`;
 
@@ -190,21 +202,60 @@ ${erpCtx}`;
         content: m.content,
       }));
 
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+    // ── Multi-agent mode ───────────────────────────────────────────
+    if (shouldUseMultiAgent(text)) {
+      const placeholderIdx = messages.length + 1;
+      setMessages(prev => [...prev, {
+        role:            'assistant',
+        content:         '🤖 5 agents parallel mein analyze kar rahe hain...',
+        ts:              Date.now(),
+        agents_loading:  true,
+      }]);
+      setLoading(false);
+
+      const { agents, synthesis } = await runMultiAgent(text);
+      setMessages(prev => prev.map((m, i) =>
+        m.agents_loading ? { ...m, content: synthesis, agents_loading: false, multi_agent: { agents, synthesis } } : m
+      ));
+      inputRef.current?.focus();
+      return;
+    }
+
+    // ── Single agent mode (default) ───────────────────────────────
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model:      'claude-sonnet-4-20250514',
+          model:      'claude-sonnet-4-6',
           max_tokens: 1000,
           system:     systemPrompt,
+          tools:      TOOL_DEFINITIONS,
           messages:   [...history, { role: 'user', content: text }],
         }),
       });
 
       const data = await res.json();
-      const reply = data.content?.[0]?.text || 'Sorry, response nahi mili.';
 
-      setMessages(prev => [...prev, { role: 'assistant', content: reply, ts: Date.now() }]);
+      // Check for tool_use blocks
+      const toolBlocks = data.content?.filter((b: any) => b.type === 'tool_use') ?? [];
+      const textBlock  = data.content?.find((b: any) => b.type === 'text');
+      const reply      = textBlock?.text || '';
+
+      if (toolBlocks.length > 0) {
+        const toolCalls = toolBlocks.map((b: any) => ({
+          id:     b.id,
+          name:   b.name,
+          params: b.input,
+        }));
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: reply || `${toolCalls.length} action${toolCalls.length > 1 ? 's' : ''} propose kar raha hun — review karo:`,
+          ts: Date.now(),
+          tool_calls: toolCalls,
+          tool_done:  false,
+        }]);
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: reply || 'Response nahi mili.', ts: Date.now() }]);
+      }
     } catch (err) {
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -283,13 +334,59 @@ ${erpCtx}`;
                 <Bot size={12} className="text-white" />
               </div>
             )}
-            <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed
-              ${msg.role === 'user'
-                ? 'bg-blue-500 text-white rounded-tr-sm'
-                : 'bg-slate-800 text-slate-300 rounded-tl-sm'}`}>
-              {msg.role === 'assistant'
-                ? <div className="space-y-1">{formatMessage(msg.content)}</div>
-                : msg.content}
+            <div className="max-w-[85%] space-y-2">
+              {msg.content && (
+                <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed
+                  ${msg.role === 'user'
+                    ? 'bg-blue-500 text-white rounded-tr-sm'
+                    : 'bg-slate-800 text-slate-300 rounded-tl-sm'}`}>
+                  {msg.role === 'assistant'
+                    ? <div className="space-y-1">{formatMessage(msg.content)}</div>
+                    : msg.content}
+                </div>
+              )}
+              {/* Multi-agent breakdown */}
+              {msg.multi_agent && (
+                <div className="space-y-2 mt-1">
+                  {msg.multi_agent.agents.map(a => (
+                    <div key={a.agent} className="bg-slate-800 rounded-xl px-3 py-2.5 text-xs space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-white">{a.emoji} {a.agent}</span>
+                        <span className="text-slate-600">{a.duration}ms</span>
+                      </div>
+                      <p className="text-slate-400">{a.findings}</p>
+                      {a.alerts.map((al, j) => (
+                        <p key={j} className="text-orange-400">{al}</p>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {msg.tool_calls && !msg.tool_done && (
+                <ConfirmationCard
+                  toolCalls={msg.tool_calls}
+                  onAllDone={(results) => {
+                    setMessages(prev => prev.map((m, idx) =>
+                      idx === i ? { ...m, tool_done: true } : m
+                    ));
+                    setMessages(prev => [...prev, {
+                      role: 'assistant',
+                      content: `✅ ${Object.keys(results).length} action${Object.keys(results).length > 1 ? 's' : ''} executed successfully.`,
+                      ts: Date.now(),
+                    }]);
+                  }}
+                  onReject={() => {
+                    setMessages(prev => prev.map((m, idx) =>
+                      idx === i ? { ...m, tool_done: true } : m
+                    ));
+                    setMessages(prev => [...prev, {
+                      role: 'assistant',
+                      content: 'Actions cancelled.',
+                      ts: Date.now(),
+                    }]);
+                  }}
+                />
+              )}
             </div>
             {msg.role === 'user' && (
               <div className="w-6 h-6 bg-slate-700 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
