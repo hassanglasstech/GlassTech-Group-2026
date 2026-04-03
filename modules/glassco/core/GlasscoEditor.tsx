@@ -303,7 +303,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                 </div>
 
                 <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                    <div className="flex-1 overflow-auto min-h-[500px]">
+                    <div className="flex-1 overflow-auto min-h-0">
                         <table className="w-full text-left border-collapse">
                             <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
                                 <tr className="text-xs uppercase font-bold text-slate-400 tracking-widest">

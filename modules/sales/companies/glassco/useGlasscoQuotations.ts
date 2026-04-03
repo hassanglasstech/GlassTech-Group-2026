@@ -237,13 +237,17 @@ export const useGlasscoQuotations = () => {
     setFormData(prev => ({ ...prev, items: nextItems }));
   };
 
+  const makeBlankItem = (ts: number = Date.now()): QuotationItem => ({
+    id: `ITM-${ts}`, description: '', qty: 1, inchW: 0, sootW: 0, inchH: 0, sootH: 0, mmW: 0, mmH: 0,
+    width: 0, height: 0, glassSize: '5mm', glassType: 'Plain', subCategory: 'Standard', selectedServices: [],
+    totalSqFt: 0, pricePerUnit: calculateAutoRate('5mm', 'Plain', 'Standard', [], products), amount: 0,
+    locationCode: '', glazingSpecs: '', inputUnit: isMM ? 'MM' : 'Inch'
+  });
+
+  const DEFAULT_ROW_COUNT = 7;
+
   const addItem = () => {
-    const newItem: QuotationItem = { 
-        id: `ITM-${Date.now()}`, description: '', qty: 1, inchW: 0, sootW: 0, inchH: 0, sootH: 0, mmW: 0, mmH: 0, 
-        width: 0, height: 0, glassSize: '5mm', glassType: 'Plain', subCategory: 'Standard', selectedServices: [], 
-        totalSqFt: 0, pricePerUnit: calculateAutoRate('5mm', 'Plain', 'Standard', [], products), amount: 0, 
-        locationCode: '', glazingSpecs: '', inputUnit: isMM ? 'MM' : 'Inch' 
-    };
+    const newItem = makeBlankItem();
     setFormData(prev => ({ ...prev, items: [...(prev.items || []), newItem] }));
   };
 
