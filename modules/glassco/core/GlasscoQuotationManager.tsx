@@ -101,14 +101,16 @@ const GlasscoQuotationManager: React.FC = () => {
         ) : null}
 
         {isEditorOpen && (
-          <GlasscoEditor 
+          <div className="bg-white rounded-xl w-full shadow-sm border border-slate-200 overflow-hidden flex flex-col" style={{ minHeight: 'calc(100vh - 120px)' }}>
+              <GlasscoEditor 
                 formData={formData} clients={clients} products={products} isMM={isMM} setIsMM={setIsMM} 
                 lastSerial={lastSerial}
                 onClose={() => setIsEditorOpen(false)} onUpdateItem={updateGlassItem} 
                 onAddItem={addItem} onAddSection={addSection} onDuplicateItem={duplicateItem}
                 onRemoveItem={removeItem} onSave={handleSaveQuotation}
                 onSaveWastageDecision={(dec) => setFormData(prev => ({ ...prev, wastageDecision: dec }))}
-          />
+              />
+          </div>
         )}
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { Quotation, Client, Product } from '../../shared/types';
 import { ArrowLeft, Building2, ArrowRightLeft, Trash2, Copy, Plus, Layers, Hash, Save, FileText, CheckCircle2, AlertTriangle, Calculator } from 'lucide-react';
 import { PrintSummary } from './GlasscoPrintTemplate';
@@ -38,6 +38,43 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
     });
 
     const [activeTab, setActiveTab] = useState<'items' | 'wastage'>('items');
+    const [isDirty, setIsDirty] = useState(false);
+    const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; idx: number } | null>(null);
+    const tableRef = useRef<HTMLDivElement>(null);
+
+    // Focus mode — hide sidebar when editor open
+    useEffect(() => {
+      document.body.classList.add('erp-focus-mode');
+      return () => document.body.classList.remove('erp-focus-mode');
+    }, []);
+
+    // Keyboard shortcuts
+    useEffect(() => {
+      const handler = (e: KeyboardEvent) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); onSave('save'); }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'd') { e.preventDefault(); onSave('draft'); }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); onSave('approve'); }
+        if (e.key === 'Escape') { setCtxMenu(null); }
+      };
+      window.addEventListener('keydown', handler);
+      return () => window.removeEventListener('keydown', handler);
+    }, [onSave]);
+
+    // Unsaved changes warning
+    useEffect(() => {
+      const handler = (e: BeforeUnloadEvent) => {
+        if (isDirty) { e.preventDefault(); e.returnValue = ''; }
+      };
+      window.addEventListener('beforeunload', handler);
+      return () => window.removeEventListener('beforeunload', handler);
+    }, [isDirty]);
+
+    // Close context menu on outside click
+    useEffect(() => {
+      const handler = () => setCtxMenu(null);
+      window.addEventListener('click', handler);
+      return () => window.removeEventListener('click', handler);
+    }, []);
     const company = useAppStore(s => s.selectedCompany);
     const { isTriggered: wastageTriggered, usagePct: wastageUsagePct } = useQuotationWastage(formData.items || [], company);
 
@@ -86,6 +123,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
     // Enhanced Update Item to Check for Wastage Logic
     const handleUpdateItemWithLogic = (idx: number, field: string, val: any) => {
         onUpdateItem(idx, field, val);
+        setIsDirty(true);
         
         // Logic Trigger: Only if modifying Sheet Size or Dimensions
         if (['sheetSize', 'inchW', 'sootW', 'inchH', 'sootH', 'mmW', 'mmH'].includes(field)) {
@@ -135,30 +173,74 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
     };
 
     return (
-        <div className="bg-white rounded-3xl w-full h-[95vh] shadow-2xl flex flex-col overflow-visible border border-slate-300 no-print">
-            <div className="sap-object-header flex justify-between items-center shrink-0 py-4 px-6 bg-white border-b border-slate-200">
-                <div className="flex items-center space-x-4">
-                    <button onClick={onClose} className="hover:bg-slate-100 p-2 rounded-full text-slate-600 transition-colors" aria-label="Go back"><ArrowLeft size={24}/></button>
-                    <div className="flex items-center space-x-3">
-                        <div className="p-2 bg-blue-600 rounded-lg text-white"><Building2 size={20}/></div>
-                        <h3 className="text-xl font-bold uppercase text-slate-800 tracking-tight">Order Configurator</h3>
+        <div className="bg-white w-full flex flex-col no-print" style={{height:'100vh', position:'fixed', top:0, left:0, right:0, bottom:0, zIndex:1000}}>
+            {/* ── Fixed Action Bar — always visible ── */}
+            <div className="shrink-0 flex items-center justify-between px-4 py-2.5 bg-slate-900 border-b border-slate-700" style={{minHeight:'52px'}}>
+                {/* Left: Back + Title */}
+                <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => {
+                        if (isDirty && !window.confirm('Unsaved changes hain — wapas jayen?')) return;
+                        onClose();
+                      }}
+                      className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest px-2 py-1.5 rounded-lg hover:bg-slate-800"
+                    >
+                      <ArrowLeft size={15}/> Back
+                    </button>
+                    <div className="h-4 w-px bg-slate-700" />
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 bg-blue-500 rounded flex items-center justify-center"><Building2 size={13} className="text-white"/></div>
+                      <span className="text-white font-bold text-sm uppercase tracking-wide">Order Configurator</span>
+                      {isDirty && <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded font-bold">UNSAVED</span>}
                     </div>
                 </div>
-                <div className="flex space-x-3">
-                    <button onClick={() => setIsMM(!isMM)} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase border transition-all flex items-center ${isMM ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}>
-                        <ArrowRightLeft size={14} className="mr-2"/> {isMM ? 'Input: MM' : 'Input: Inch'}
+
+                {/* Right: All action buttons always visible */}
+                <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setIsMM(!isMM)}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase border transition-all flex items-center gap-1.5 ${isMM ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-800 text-slate-300 border-slate-600 hover:bg-slate-700'}`}
+                    >
+                      <ArrowRightLeft size={12}/>{isMM ? 'MM Mode' : 'Inch Mode'}
                     </button>
-                    
-                    <button onClick={() => onSave('draft')} className="bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 px-4 py-2 rounded-xl text-xs font-bold uppercase shadow-sm transition-all flex items-center gap-2">
-                        <Save size={14}/> Save Draft (9000+)
+
+                    <div className="h-4 w-px bg-slate-700" />
+
+                    <button
+                      onClick={() => onSave('draft')}
+                      title="Ctrl+D"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase bg-slate-700 hover:bg-slate-600 text-slate-200 transition-all"
+                    >
+                      <Save size={13}/> Draft
+                      <span className="text-[9px] text-slate-500 font-normal hidden lg:block">Ctrl+D</span>
                     </button>
-                    
-                    <button onClick={() => onSave('save')} className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase shadow-md transition-all flex items-center gap-2">
-                        <FileText size={14}/> Save Quotation (2428+)
+
+                    <button
+                      onClick={() => onSave('save')}
+                      title="Ctrl+S"
+                      className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[11px] font-bold uppercase bg-amber-500 hover:bg-amber-600 text-white transition-all shadow-lg"
+                    >
+                      <FileText size={13}/> Save Quotation
+                      <span className="text-[9px] text-amber-200 font-normal hidden lg:block">Ctrl+S</span>
                     </button>
-                    
-                    <button onClick={() => onSave('approve')} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase shadow-md transition-all flex items-center gap-2">
-                        <CheckCircle2 size={14}/> Approve & Order
+
+                    <button
+                      onClick={() => onSave('approve')}
+                      title="Ctrl+Enter"
+                      className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[11px] font-bold uppercase bg-emerald-500 hover:bg-emerald-600 text-white transition-all shadow-lg"
+                    >
+                      <CheckCircle2 size={13}/> Approve & Order
+                      <span className="text-[9px] text-emerald-200 font-normal hidden lg:block">Ctrl+↵</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        if (isDirty && !window.confirm('Unsaved changes hain — discard karen?')) return;
+                        onClose();
+                      }}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-all"
+                    >
+                      ✕ Close
                     </button>
                 </div>
             </div>
@@ -257,7 +339,16 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                                         const isNonTemperable = curCat === 'Mirror' || (curCat === 'Color' && curSub === 'One Side');
 
                                         return (
-                                            <tr key={idx} className={`group transition-all ${item.isSection ? 'bg-slate-50' : 'hover:bg-blue-50/20'}`}>
+                                            <tr
+                                              key={idx}
+                                              className={`group transition-all ${item.isSection ? 'bg-slate-50' : 'hover:bg-blue-50/20'}`}
+                                              onContextMenu={(e) => {
+                                                if (!item.isSection) {
+                                                  e.preventDefault();
+                                                  setCtxMenu({ x: e.clientX, y: e.clientY, idx });
+                                                }
+                                              }}
+                                            >
                                                 <td className="text-center font-bold text-slate-300 align-middle py-1">{item.isSection ? '' : sNo}</td>
                                                 <td className="align-middle py-2 px-2">
                                                     {item.isSection ? (
@@ -362,8 +453,32 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                        <p className="text-2xl font-bold text-blue-400">PKR {Math.round((totalAmount - (formData.discountAmount || 0)) * 0.5).toLocaleString()}</p>
                    </div>
                </div>
-               <button onClick={onClose} className="px-10 py-3 text-slate-500 font-bold uppercase text-xs tracking-widest hover:text-white transition-colors">Discard & Exit</button>
+               <button onClick={onAddItem} className="px-6 py-2 text-blue-400 font-bold uppercase text-xs tracking-widest hover:text-white transition-colors flex items-center gap-1"><Plus size={14}/> Add Row</button>
             </div>
+
+            {/* RIGHT-CLICK CONTEXT MENU */}
+            {ctxMenu && (
+              <div
+                className="fixed z-[600] bg-white border border-slate-200 rounded-xl shadow-2xl py-1 w-48"
+                style={{ left: ctxMenu.x, top: ctxMenu.y }}
+                onClick={e => e.stopPropagation()}
+              >
+                {[
+                  { label: '📋 Duplicate Row', action: () => { onDuplicateItem(ctxMenu.idx); setCtxMenu(null); } },
+                  { label: '⬆️ Move Up', action: () => { if (ctxMenu.idx > 0) { const items = [...(formData.items||[])]; [items[ctxMenu.idx-1], items[ctxMenu.idx]] = [items[ctxMenu.idx], items[ctxMenu.idx-1]]; items.forEach((item,i) => onUpdateItem(i, '__reorder__', item)); } setCtxMenu(null); } },
+                  { label: '⬇️ Move Down', action: () => { const items = formData.items||[]; if (ctxMenu.idx < items.length-1) { const arr = [...items]; [arr[ctxMenu.idx], arr[ctxMenu.idx+1]] = [arr[ctxMenu.idx+1], arr[ctxMenu.idx]]; arr.forEach((item,i) => onUpdateItem(i, '__reorder__', item)); } setCtxMenu(null); } },
+                  { label: '─', action: null },
+                  { label: '🗑️ Delete Row', action: () => { onRemoveItem(ctxMenu.idx); setCtxMenu(null); } },
+                ].map((item, i) => item.action === null ? (
+                  <div key={i} className="h-px bg-slate-100 my-1" />
+                ) : (
+                  <button key={i} onClick={item.action}
+                    className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors">
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* MANUAL SQFT MODAL */}
             {manualSqFtModal.isOpen && (
