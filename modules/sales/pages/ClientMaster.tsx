@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { Company, Client } from '../../shared/types';
-import { SalesService } from '../services/salesService';
+import { AsyncSalesService } from '../services/asyncSalesService';
 import { UserPlus, Search, Edit2, Trash2, X, Building, Phone, Save, Briefcase } from 'lucide-react';
 
 import { useAppStore } from '../../shared/store/appStore';
@@ -27,19 +26,18 @@ const ClientMaster: React.FC = () => {
 
   const [formData, setFormData] = useState<Partial<Client>>(initialForm);
 
-
   const { refreshKey } = useRealtimeRefresh(['clients']);
 
   useEffect(() => {
     refreshData();
   }, [company, refreshKey]);
 
-  const refreshData = () => {
-    const all = SalesService.getClients().filter(c => c.company === company);
-    setClients(all);
+  const refreshData = async () => {
+    const all = await AsyncSalesService.getClients();
+    setClients(all.filter(c => c.company === company));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name || !formData.phone) {
       toast.error("Business Partner Name and Phone are required.");
       return;
@@ -52,17 +50,18 @@ const ClientMaster: React.FC = () => {
       createdAt: new Date().toISOString()
     };
 
-    const all = SalesService.getClients();
-    SalesService.saveClients([...all, newClient]);
+    const all = await AsyncSalesService.getClients();
+    await AsyncSalesService.saveClients([...all, newClient]);
+    toast.success("Business Partner created and synced to cloud.");
     refreshData();
     setIsModalOpen(false);
     setFormData(initialForm);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm("Delete this Business Partner profile?")) {
-      const all = SalesService.getClients();
-      SalesService.saveClients(all.filter(c => c.id !== id));
+      const all = await AsyncSalesService.getClients();
+      await AsyncSalesService.saveClients(all.filter(c => c.id !== id));
       refreshData();
       toast.success("Business Partner profile deleted.");
     }
