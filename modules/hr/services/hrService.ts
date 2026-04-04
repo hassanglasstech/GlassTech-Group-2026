@@ -3,7 +3,7 @@
  * 
  * All data lives in Supabase. In-memory cache for fast reads.
  * Cache refreshes on every write and on init.
- * Falls back to localStorage if Supabase is unreachable.
+ * Pure Supabase — in-memory cache for fast reads.
  * 
  * Tables: employees, attendance, loans, payroll
  */
@@ -207,7 +207,7 @@ const ensureCache = async () => {
 };
 
 // ═════════════════════════════════════════════════════════════════════
-// HR SERVICE — Supabase-primary, localStorage fallback
+// HR SERVICE — Pure Supabase + in-memory cache
 // ═════════════════════════════════════════════════════════════════════
 export const HRService = {
 
