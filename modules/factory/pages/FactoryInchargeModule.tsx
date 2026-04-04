@@ -129,6 +129,8 @@ const STATUS_ICON: Record<EventStatus, React.ElementType> = {
   Closed:      CheckCircle2,
 };
 
+type Group = 'overview' | 'production' | 'mis' | 'ai' | 'management';
+
 type Tab =
   | 'home' | Sector
   | 'tracker' | 'summary'
@@ -136,12 +138,88 @@ type Tab =
   | 'agent' | 'tasks' | 'telegram' | 'vendors' | 'gaps'
   | 'board' | 'flow' | 'floor' | 'vehicle' | 'cut' | 'workers'
   | 'mis' | 'jobpl' | 'cost' | 'vintel' | 'delivery' | 'finance'
-  | 'strategy' | 'ai' | 'briefing' | 'predict' | 'report' | 'whatsapp' | 'inbox';
+  | 'strategy' | 'ai' | 'briefing' | 'predict' | 'report' | 'whatsapp' | 'inbox'
+  | 'fmdash';
+
+// ── Group definitions ──────────────────────────────────────────────────
+const GROUPS: {
+  id: Group;
+  label: string;
+  icon: string;
+  tabs: { tab: Tab; label: string }[];
+}[] = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    icon: '🏠',
+    tabs: [
+      { tab: 'home',    label: 'Home'        },
+      { tab: 'fmdash',  label: 'FM Dashboard'},
+      { tab: 'summary', label: 'Daily Log'   },
+      { tab: 'tracker', label: 'Requests'    },
+    ],
+  },
+  {
+    id: 'production',
+    label: 'Production',
+    icon: '🏭',
+    tabs: [
+      { tab: 'board',   label: 'Visual Board'  },
+      { tab: 'flow',    label: 'Order Flow'    },
+      { tab: 'floor',   label: 'Floor Planner' },
+      { tab: 'vehicle', label: 'Vehicle Opt.'  },
+      { tab: 'cut',     label: 'Cut Sequence'  },
+      { tab: 'workers', label: 'Worker KPI'    },
+      { tab: 'hse',     label: 'HSE'           },
+      { tab: 'assets',  label: 'Assets'        },
+    ],
+  },
+  {
+    id: 'mis',
+    label: 'MIS & Reports',
+    icon: '📊',
+    tabs: [
+      { tab: 'mis',      label: 'MIS Dashboard'   },
+      { tab: 'jobpl',    label: 'Job P&L'          },
+      { tab: 'cost',     label: 'Cost / Sqft'      },
+      { tab: 'vintel',   label: 'Vendor Intel'     },
+      { tab: 'delivery', label: 'Delivery KPI'     },
+      { tab: 'finance',  label: 'Financials'       },
+    ],
+  },
+  {
+    id: 'ai',
+    label: 'AI & Alerts',
+    icon: '🤖',
+    tabs: [
+      { tab: 'briefing', label: 'Morning Briefing' },
+      { tab: 'ai',       label: 'AI Chat'          },
+      { tab: 'predict',  label: 'Predictions'      },
+      { tab: 'agent',    label: 'Agent Watchlist'  },
+      { tab: 'inbox',    label: 'Inbox AI'         },
+      { tab: 'gaps',     label: 'Gap Detection'    },
+      { tab: 'report',   label: 'AI Report'        },
+      { tab: 'whatsapp', label: 'WhatsApp'         },
+    ],
+  },
+  {
+    id: 'management',
+    label: 'Management',
+    icon: '⚙',
+    tabs: [
+      { tab: 'tasks',    label: 'Tasks'        },
+      { tab: 'vendors',  label: 'Vendor SLA'   },
+      { tab: 'strategy', label: 'Strategy'     },
+      { tab: 'telegram', label: 'Telegram'     },
+    ],
+  },
+];
 
 // ── Main Component ────────────────────────────────────────────────────
 const FactoryInchargeModule: React.FC = () => {
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<Tab>('home');
+  const [activeGroup, setActiveGroup] = useState<Group>('overview');
   const [activeSector, setActiveSector] = useState<Sector | null>(null);
   const [showEventForm, setShowEventForm] = useState(false);
   const [events, setEvents] = useState<FactoryEvent[]>([]);
@@ -422,49 +500,55 @@ const FactoryInchargeModule: React.FC = () => {
         )}
       </div>
 
-      {/* Bottom Nav */}
-      <div className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 flex">
-        {[
-          { tab: 'home' as Tab, icon: Home, label: 'Home' },
-          { tab: 'tracker' as Tab, icon: FileText, label: 'Requests' },
-          { tab: 'summary' as Tab, icon: Bell, label: 'Daily Log' },
-          { tab: 'assets' as Tab, icon: WrenchIcon, label: 'Assets' },
-          { tab: 'hse' as Tab, icon: ShieldCheck, label: 'HSE' },
-          { tab: 'agent' as Tab, icon: Bell, label: 'Agent' },
-          { tab: 'tasks' as Tab, icon: CheckSquare, label: 'Tasks' },
-          { tab: 'telegram' as Tab, icon: Send, label: 'Telegram' },
-          { tab: 'vendors' as Tab, icon: Handshake, label: 'Vendors' },
-          { tab: 'gaps' as Tab, icon: Zap, label: 'Gaps' },
-          { tab: 'board' as Tab, icon: LayoutGrid, label: 'Board' },
-          { tab: 'flow' as Tab, icon: ChevronRight, label: 'Flow' },
-          { tab: 'floor' as Tab, icon: BarChart2, label: 'Floor' },
-          { tab: 'vehicle' as Tab, icon: Truck, label: 'Vehicle' },
-          { tab: 'cut' as Tab, icon: Scissors, label: 'Cut Seq' },
-          { tab: 'workers' as Tab, icon: Users, label: 'Workers' },
-          { tab: 'mis' as Tab, icon: BarChart3, label: 'MIS' },
-          { tab: 'jobpl' as Tab, icon: DollarSign, label: 'Job P&L' },
-          { tab: 'cost' as Tab, icon: Calculator, label: 'Cost/Sqft' },
-          { tab: 'vintel' as Tab, icon: Handshake, label: 'Vendor Intel' },
-          { tab: 'delivery' as Tab, icon: Truck, label: 'Delivery' },
-          { tab: 'finance' as Tab, icon: Landmark, label: 'Finance' },
-          { tab: 'strategy' as Tab, icon: Brain, label: 'Strategy' },
-          { tab: 'ai' as Tab, icon: Sparkles, label: 'AI Chat' },
-          { tab: 'briefing' as Tab, icon: Sun, label: 'Briefing' },
-          { tab: 'predict' as Tab, icon: Zap, label: 'Predict' },
-          { tab: 'report' as Tab, icon: FileText, label: 'AI Report' },
-          { tab: 'whatsapp' as Tab, icon: MessageCircle, label: 'WhatsApp' },
-          { tab: 'inbox' as Tab, icon: Inbox, label: 'Inbox AI' },
-        ].map(({ tab, icon: Icon, label }) => (
-          <button
-            key={tab}
-            onClick={() => { setActiveTab(tab); setActiveSector(null); setShowEventForm(false); }}
-            className={`flex-1 flex flex-col items-center py-3 text-[10px] uppercase tracking-widest transition-colors
-              ${activeTab === tab ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}
-          >
-            <Icon size={18} className="mb-1" />
-            {label}
-          </button>
-        ))}
+      {/* ── Grouped Navigation ── */}
+      <div className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800" style={{zIndex:50}}>
+
+        {/* Sub-tabs for active group */}
+        {(() => {
+          const grp = GROUPS.find(g => g.id === activeGroup);
+          if (!grp || grp.tabs.length === 0) return null;
+          return (
+            <div className="flex overflow-x-auto border-b border-slate-800" style={{scrollbarWidth:'none'}}>
+              {grp.tabs.map(({ tab, label }) => (
+                <button
+                  key={tab}
+                  onClick={() => { setActiveTab(tab); setActiveSector(null); setShowEventForm(false); }}
+                  className="flex-shrink-0 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-colors whitespace-nowrap"
+                  style={{
+                    color: activeTab === tab ? '#ffffff' : '#475569',
+                    borderBottom: activeTab === tab ? '2px solid #3b82f6' : '2px solid transparent',
+                    background: 'none', border: activeTab === tab ? 'none' : 'none',
+                    borderBottom: activeTab === tab ? '2px solid #3b82f6' : '2px solid transparent',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
+
+        {/* 5 group buttons */}
+        <div className="flex">
+          {GROUPS.map(grp => {
+            const isActive = activeGroup === grp.id;
+            return (
+              <button
+                key={grp.id}
+                onClick={() => {
+                  setActiveGroup(grp.id);
+                  const firstTab = grp.tabs[0]?.tab;
+                  if (firstTab) { setActiveTab(firstTab); setActiveSector(null); setShowEventForm(false); }
+                }}
+                className="flex-1 flex flex-col items-center py-2.5 transition-colors"
+                style={{ color: isActive ? '#ffffff' : '#475569', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                <span style={{fontSize:'16px', lineHeight:1, marginBottom:'3px'}}>{grp.icon}</span>
+                <span style={{fontSize:'9px', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', whiteSpace:'nowrap'}}>{grp.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Bottom padding for nav */}
