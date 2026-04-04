@@ -123,6 +123,14 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
       
       const existing = existingPayrolls.find(ep => ep.employeeId === emp.id);
 
+      // Floor: prevent net salary going negative — cap at 50% of gross
+      const salaryBeforeLoan = Math.max(0, grossSalary - absentDeduction - latePenaltyAmount - eobiDeduction);
+      const maxLoanCap = Math.round(salaryBeforeLoan * 0.5);
+      if (monthlyLoanDeduction + monthlyAdvanceDeduction > maxLoanCap) {
+        monthlyLoanDeduction = Math.min(monthlyLoanDeduction, maxLoanCap);
+        monthlyAdvanceDeduction = Math.min(monthlyAdvanceDeduction, Math.max(0, maxLoanCap - monthlyLoanDeduction));
+      }
+
       return {
         id: existing?.id || `PAY-${emp.id}-${selectedMonth}`,
         employeeId: emp.id,
@@ -132,15 +140,8 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
         overtimePay: Math.round(finalOvertimePay),
         overtimeHours: rawOtHours,
         earlyDeductionHours: 0,
-        lateDeduction: Math.round(latePenaltyAmount), 
+        lateDeduction: Math.round(latePenaltyAmount),
         absentDeduction: Math.round(absentDeduction),
-        // Floor: prevent net salary going negative — cap at 50% of gross
-        const salaryBeforeLoan = Math.max(0, grossSalary - absentDeduction - latePenaltyAmount - eobiDeduction);
-        const maxLoanCap = Math.round(salaryBeforeLoan * 0.5);
-        if (monthlyLoanDeduction + monthlyAdvanceDeduction > maxLoanCap) {
-          monthlyLoanDeduction = Math.min(monthlyLoanDeduction, maxLoanCap);
-          monthlyAdvanceDeduction = Math.min(monthlyAdvanceDeduction, Math.max(0, maxLoanCap - monthlyLoanDeduction));
-        }
         loanDeduction: monthlyLoanDeduction,
         advanceDeduction: monthlyAdvanceDeduction,
         netSalary: Math.round(Math.max(0, grossSalary + finalOvertimePay - absentDeduction - latePenaltyAmount - monthlyLoanDeduction - monthlyAdvanceDeduction - eobiDeduction)),
