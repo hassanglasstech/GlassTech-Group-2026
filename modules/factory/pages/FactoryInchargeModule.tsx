@@ -517,8 +517,7 @@ const FactoryInchargeModule: React.FC = () => {
                   style={{
                     color: activeTab === tab ? '#ffffff' : '#475569',
                     borderBottom: activeTab === tab ? '2px solid #3b82f6' : '2px solid transparent',
-                    background: 'none', border: activeTab === tab ? 'none' : 'none',
-                    borderBottom: activeTab === tab ? '2px solid #3b82f6' : '2px solid transparent',
+                    background: 'none',
                   }}
                 >
                   {label}
