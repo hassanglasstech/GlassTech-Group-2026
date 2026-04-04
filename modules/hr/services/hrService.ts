@@ -112,16 +112,25 @@ const rowToPayroll = (r: any): Payroll => ({
 });
 
 // ── Mappers: App object → Supabase row ──────────────────────────────
-const attendanceToRow = (a: AttendanceRecord & { company?: string }) => ({
-  id: a.id,
-  employee_id: a.employeeId,
-  date: a.date,
-  status: a.status,
-  late_minutes: a.lateMinutes || 0,
-  early_minutes: a.earlyMinutes || 0,
-  overtime_hours: a.overtimeHours || 0,
-  company: (a as any).company || '',
-});
+const attendanceToRow = (a: AttendanceRecord & { company?: string }) => {
+  // Supabase enum only has: Present, Absent — map others safely
+  const statusMap: Record<string, string> = {
+    Present: 'Present',
+    Absent:  'Absent',
+    Late:    'Present', // Late = Present with late_minutes > 0
+    Leave:   'Absent',  // Leave treated as Absent in DB
+  };
+  return {
+    id: a.id,
+    employee_id: a.employeeId,
+    date: a.date,
+    status: statusMap[a.status] || 'Present',
+    late_minutes: a.lateMinutes || 0,
+    early_minutes: a.earlyMinutes || 0,
+    overtime_hours: a.overtimeHours || 0,
+    company: (a as any).company || '',
+  };
+};
 
 const loanToRow = (l: LoanAdvance & { company?: string }) => ({
   id: l.id,
