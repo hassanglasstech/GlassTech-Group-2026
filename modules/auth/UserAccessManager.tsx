@@ -34,19 +34,41 @@ import { toast } from 'sonner';
 
 // ── Constants ─────────────────────────────────────────────────────────
 const ROLES_LIST = [
-  { value: 'super_admin',        label: 'Super Admin',      desc: 'Full access — all companies, all modules', color: 'bg-purple-100 text-purple-800 border-purple-200' },
-  { value: 'gtk_admin',          label: 'GTK Admin',        desc: 'GTK + GTI full access',                     color: 'bg-blue-100 text-blue-800 border-blue-200' },
-  { value: 'glassco_admin',      label: 'Glassco Admin',    desc: 'Glassco full access',                       color: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-  { value: 'glassco_production', label: 'Production Staff', desc: 'Production modules only',                   color: 'bg-amber-100 text-amber-800 border-amber-200' },
-  { value: 'nippon_admin',       label: 'Nippon Admin',     desc: 'Nippon full access',                        color: 'bg-rose-100 text-rose-800 border-rose-200' },
+  // ── Management ──────────────────────────────────────────────────────
+  { value: 'super_admin',        label: 'Super Admin',          desc: 'Full access — all companies, all modules',              color: 'bg-purple-100 text-purple-800 border-purple-200' },
+  { value: 'owner',              label: 'Owner',                desc: 'Owner — full visibility, MD Dashboard home',            color: 'bg-purple-100 text-purple-800 border-purple-200' },
+  { value: 'hassan',             label: 'Hassan (System Admin)',desc: 'ERP Admin — full access + system settings',            color: 'bg-purple-100 text-purple-800 border-purple-200' },
+  { value: 'factory_manager',    label: 'Factory Manager',      desc: 'All 3 companies production — Factory Incharge home',    color: 'bg-blue-100 text-blue-800 border-blue-200' },
+  { value: 'admin_officer',      label: 'Admin Officer',        desc: 'Orders, billing, dispatch, HR — Sales home',           color: 'bg-cyan-100 text-cyan-800 border-cyan-200' },
+  // ── Supervisors ─────────────────────────────────────────────────────
+  { value: 'glassco_supervisor', label: 'GlassCo Supervisor',  desc: 'GlassCo production supervisor — Production home',       color: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+  { value: 'gtk_supervisor',     label: 'GTK Supervisor',       desc: 'GTK production supervisor — Production home',           color: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+  { value: 'gti_supervisor',     label: 'GTI Supervisor',       desc: 'GTI production supervisor — Production home',           color: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+  // ── Floor Staff ─────────────────────────────────────────────────────
+  { value: 'glassco_cutter',     label: 'Cutter (GlassCo)',     desc: 'Cutting floor only — sees assigned tasks only',         color: 'bg-amber-100 text-amber-800 border-amber-200' },
+  { value: 'dispatch_staff',     label: 'Dispatch Staff',       desc: 'Dispatch desk only — load, DC print, delivery confirm', color: 'bg-amber-100 text-amber-800 border-amber-200' },
+  // ── Legacy ──────────────────────────────────────────────────────────
+  { value: 'gtk_admin',          label: 'GTK Admin',            desc: 'GTK + GTI full access',                                 color: 'bg-blue-100 text-blue-800 border-blue-200' },
+  { value: 'glassco_admin',      label: 'Glassco Admin',        desc: 'Glassco full access',                                   color: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+  { value: 'glassco_production', label: 'Production Staff',     desc: 'Production modules only (legacy)',                      color: 'bg-amber-100 text-amber-800 border-amber-200' },
+  { value: 'nippon_admin',       label: 'Nippon Admin',         desc: 'Nippon full access',                                    color: 'bg-rose-100 text-rose-800 border-rose-200' },
 ];
 
 const ROLE_DEFAULTS: Record<string, { companies: string[]; modules: string[] }> = {
-  super_admin:        { companies: ['GTK','GTI','Glassco','Nippon','Factory'], modules: [] },
-  gtk_admin:          { companies: ['GTK','GTI'],   modules: [] },
-  glassco_admin:      { companies: ['Glassco'],      modules: [] },
-  glassco_production: { companies: ['Glassco'],      modules: ['production','inventory','logistics','requisitions'] },
-  nippon_admin:       { companies: ['Nippon'],        modules: ['sales','inventory','hr','accounts','requisitions'] },
+  super_admin:         { companies: ['GTK','GTI','Glassco','Nippon','Factory'], modules: [] },
+  owner:               { companies: ['GTK','GTI','Glassco','Nippon','Factory'], modules: [] },
+  hassan:              { companies: ['GTK','GTI','Glassco','Nippon','Factory'], modules: [] },
+  factory_manager:     { companies: ['GTK','GTI','Glassco'],                   modules: ['production','inventory','requisitions','factory-incharge'] },
+  admin_officer:       { companies: ['Glassco'],                                modules: ['sales','inventory','logistics','requisitions','accounts'] },
+  glassco_supervisor:  { companies: ['Glassco'],                                modules: ['production','inventory','requisitions'] },
+  gtk_supervisor:      { companies: ['GTK'],                                    modules: ['production','inventory','requisitions'] },
+  gti_supervisor:      { companies: ['GTI'],                                    modules: ['production','inventory','requisitions'] },
+  glassco_cutter:      { companies: ['Glassco'],                                modules: ['production'] },
+  dispatch_staff:      { companies: ['Glassco'],                                modules: ['production','logistics'] },
+  gtk_admin:           { companies: ['GTK','GTI'],                              modules: [] },
+  glassco_admin:       { companies: ['Glassco'],                                modules: [] },
+  glassco_production:  { companies: ['Glassco'],                                modules: ['production','inventory','logistics','requisitions'] },
+  nippon_admin:        { companies: ['Nippon'],                                 modules: ['sales','inventory','hr','accounts','requisitions'] },
 };
 
 type UserStatus = 'active' | 'pending' | 'revoked';
