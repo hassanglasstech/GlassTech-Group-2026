@@ -105,8 +105,6 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
       console.error('[BillingHub] Invoice generation failed:', err);
       toast.error('Invoice generation failed — check console.');
     }
-
-    }
   };
 
   // ── RECORD PAYMENT RECEIPT ──
