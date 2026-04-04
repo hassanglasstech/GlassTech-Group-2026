@@ -80,7 +80,7 @@ const writeLog = (entry: Omit<LogEntry, 'id' | 'timestamp' | 'user' | 'company'>
       company: full.company || '',
       reference_id: full.referenceId || null,
       amount: full.amount || null,
-      meta: full.meta ? JSON.stringify(full.meta) : null,
+      // meta column not in schema — omitted
     }).then(({ error }) => {
       if (error) console.warn('[Logger] Supabase audit push failed:', error.message);
     });

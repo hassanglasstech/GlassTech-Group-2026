@@ -130,6 +130,7 @@ const AttendanceRegister: React.FC = () => {
     toast.success(`Attendance saved — pending supervisor approval`);
   };
 
+  const [pendingApproval, setPendingApproval] = useState(false);
   const [showSupervisorModal, setShowSupervisorModal] = useState(false);
   const [supervisorInput, setSupervisorInput] = useState('');
 

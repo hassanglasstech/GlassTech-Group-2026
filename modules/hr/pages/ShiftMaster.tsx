@@ -29,7 +29,13 @@ export const getShiftRules = (): ShiftRule[] => _shiftCache || [];
 
 export const loadShiftRules = async (): Promise<ShiftRule[]> => {
   try {
-    const { data } = await supabase.from('shift_master').select('*').order('date_from');
+    const { data, error } = await supabase.from('shift_master').select('*').order('date_from');
+    if (error) {
+      // Table may not exist yet — fail silently, use empty rules
+      console.warn('[ShiftMaster] shift_master table not found — run SQL migration');
+      _shiftCache = [];
+      return [];
+    }
     _shiftCache = (data || []).map((r: any) => ({
       id: r.id, company: r.company, name: r.name,
       dateFrom: r.date_from, dateTo: r.date_to,
@@ -39,7 +45,10 @@ export const loadShiftRules = async (): Promise<ShiftRule[]> => {
       priority: r.priority || 10,
     }));
     return _shiftCache;
-  } catch { return []; }
+  } catch {
+    _shiftCache = [];
+    return [];
+  }
 };
 
 export const saveShiftRules = async (rules: ShiftRule[]) => {
