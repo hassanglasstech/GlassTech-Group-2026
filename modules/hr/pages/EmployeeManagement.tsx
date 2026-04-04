@@ -218,15 +218,13 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
           <input type="text" placeholder="Search by name or code..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
         </div>
         <div className="flex space-x-3 w-full md:w-auto overflow-x-auto no-scrollbar">
-          {inactiveCount > 0 && (
-            <button onClick={() => setShowInactive(!showInactive)}
-              className={`px-4 py-2 rounded-lg flex items-center space-x-2 transition-all font-bold text-sm border whitespace-nowrap ${
-                showInactive ? 'bg-red-50 text-red-700 border-red-200' : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
-              }`}>
-              {showInactive ? <EyeOff size={16} /> : <Eye size={16} />}
-              <span>{showInactive ? 'Hide' : 'Show'} Inactive ({inactiveCount})</span>
-            </button>
-          )}
+          <button onClick={() => setShowInactive(!showInactive)}
+            className={`px-4 py-2 rounded-lg flex items-center space-x-2 transition-all font-bold text-sm border whitespace-nowrap ${
+              showInactive ? 'bg-red-50 text-red-700 border-red-200' : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+            }`}>
+            {showInactive ? <EyeOff size={16} /> : <Eye size={16} />}
+            <span>{showInactive ? 'Active Employees' : `Resigned / Terminated (${inactiveCount})`}</span>
+          </button>
           <input type="file" ref={fileInputRef} onChange={handleImportExcel} className="hidden" accept=".xlsx, .xls" />
           <button onClick={() => fileInputRef.current?.click()} className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-slate-200 transition-all font-bold text-sm border border-slate-200 whitespace-nowrap"><FileUp size={18} /><span>Import</span></button>
           <button onClick={handleExportExcel} className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-slate-200 transition-all font-bold text-sm border border-slate-200 whitespace-nowrap"><Download size={18} /><span>Export</span></button>
@@ -278,6 +276,9 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
                             )}
                           </div>
                           <p className="text-[11px] text-slate-400 font-semibold">{emp.work.employeeCode}</p>
+                          {(emp.work as any).lastDate && (
+                            <p className="text-[10px] text-red-400 font-semibold">Last day: {(emp.work as any).lastDate}</p>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -393,6 +394,7 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
                           </select>
                         </div>
                         <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Joining date</label><input type="date" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold" value={formData.work?.joinDate} onChange={e => setFormData({...formData, work: {...formData.work!, joinDate: e.target.value}})} /></div>
+                        <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Last Working Date</label><input type="date" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold" value={(formData.work as any)?.lastDate || ''} onChange={e => setFormData({...formData, work: {...formData.work!, lastDate: e.target.value}})} /></div>
                         <div className="space-y-1.5">
                           <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Status</label>
                           <select
