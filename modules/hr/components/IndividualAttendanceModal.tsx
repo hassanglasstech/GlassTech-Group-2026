@@ -44,23 +44,63 @@ const getDaysInMonth = (month: string) => {
   return new Date(y, m, 0).getDate();
 };
 
-const getShift = () => ({ start: '09:00', end: '18:00' }); // default shift
+// ── Shift config — date-aware ─────────────────────────────────────────
+// March 2026 special: Ramzan + Eid timings per company
+const getShift = (company?: string, dateStr?: string): { start: string; end: string; lateGrace: number } => {
+  const DEFAULT = { start: '09:00', end: '18:00', lateGrace: 15 };
 
-const calcLateMinutes = (inTime: string): number => {
+  if (!dateStr) return DEFAULT;
+  const date = new Date(dateStr);
+  const day   = date.getDate();
+  const month = date.getMonth() + 1; // 1-based
+  const year  = date.getFullYear();
+
+  // March 2026 — Ramzan / Eid special timings
+  if (year === 2026 && month === 3) {
+    const co = (company || '').toLowerCase();
+    const isGlassco = co.includes('glassco') || co.includes('glass fabrication');
+    const isGTK     = co.includes('gtk') || co.includes('aluminum fabrication') || co.includes('netting');
+    const isAdmin   = co.includes('admin') || co.includes('management');
+
+    // Eid holidays 20-24 March
+    if (day >= 20 && day <= 24) return { start: '00:00', end: '00:00', lateGrace: 0 };
+
+    // GlassCo Ramzan shift
+    if (isGlassco) {
+      if (day >= 1  && day <= 7)  return { start: '08:00', end: '16:00', lateGrace: 15 };
+      if (day >= 9  && day <= 19) return { start: '07:00', end: '14:00', lateGrace: 15 };
+      if (day >= 25)              return { start: '09:00', end: '18:00', lateGrace: 15 };
+    }
+
+    // GTK / Admin — 1-19: 08:00-16:00, 25+: 09:00-18:00
+    if (isGTK || isAdmin) {
+      if (day >= 1  && day <= 19) return { start: '08:00', end: '16:00', lateGrace: 15 };
+      if (day >= 25)              return { start: '09:00', end: '18:00', lateGrace: 15 };
+    }
+  }
+
+  return DEFAULT;
+};
+
+const calcLateMinutes = (inTime: string, company?: string, dateStr?: string): number => {
   if (!inTime) return 0;
   const [h, m] = inTime.split(':').map(Number);
-  const shiftStartMins = 9 * 60; // 9:00 AM
   const actualMins = h * 60 + m;
+  const shift = getShift(company, dateStr);
+  const [sh, sm] = shift.start.split(':').map(Number);
+  const shiftStartMins = sh * 60 + sm + shift.lateGrace;
   return Math.max(0, actualMins - shiftStartMins);
 };
 
-const calcOT = (outTime: string): number => {
+const calcOT = (outTime: string, company?: string, dateStr?: string): number => {
   if (!outTime) return 0;
   const [h, m] = outTime.split(':').map(Number);
-  const shiftEndMins = 18 * 60; // 6:00 PM
   const actualMins = h * 60 + m;
+  const shift = getShift(company, dateStr);
+  const [eh, em] = shift.end.split(':').map(Number);
+  const shiftEndMins = eh * 60 + em;
   const extraMins = Math.max(0, actualMins - shiftEndMins);
-  return Math.round((extraMins / 60) * 10) / 10; // rounded to 1dp
+  return Math.round((extraMins / 60) * 10) / 10;
 };
 
 const statusConfig: Record<AttendanceStatus, { label: string; color: string; bg: string; icon: any }> = {
@@ -91,8 +131,8 @@ const IndividualAttendanceModal: React.FC<Props> = ({ employee, month, onClose, 
       return {
         date,
         status: rec?.status ?? (isSunday ? 'Present' : 'Present'),
-        inTime: (rec as any)?.inTime ?? (isSunday ? '' : '09:00'),
-        outTime: (rec as any)?.outTime ?? (isSunday ? '' : '18:00'),
+        inTime: (rec as any)?.inTime ?? (isSunday ? '' : getShift(employee?.company, dateStr).start),
+        outTime: (rec as any)?.outTime ?? (isSunday ? '' : getShift(employee?.company, dateStr).end),
         lateMinutes: rec?.lateMinutes ?? 0,
         earlyMinutes: rec?.earlyMinutes ?? 0,
         overtimeHours: rec?.overtimeHours ?? 0,
@@ -145,7 +185,8 @@ const IndividualAttendanceModal: React.FC<Props> = ({ employee, month, onClose, 
 
       // Auto-calc late minutes from in time if provided
       if (patch.inTime !== undefined) {
-        const lm = calcLateMinutes(patch.inTime);
+        const dateStr2 = entries[idx] ? `${month.slice(0,7)}-${String(idx+1).padStart(2,'0')}` : '';
+        const lm = calcLateMinutes(patch.inTime, employee?.company, dateStr2);
         updated.lateMinutes = lm;
         if (lm > 0 && updated.status === 'Present') updated.status = 'Late';
         if (lm === 0 && updated.status === 'Late') updated.status = 'Present';
@@ -153,7 +194,8 @@ const IndividualAttendanceModal: React.FC<Props> = ({ employee, month, onClose, 
 
       // Auto-calc OT from out time if provided
       if (patch.outTime !== undefined) {
-        updated.overtimeHours = calcOT(patch.outTime);
+        const dateStr3 = entries[idx] ? `${month.slice(0,7)}-${String(idx+1).padStart(2,'0')}` : '';
+        updated.overtimeHours = calcOT(patch.outTime, employee?.company, dateStr3);
       }
 
       return updated;
