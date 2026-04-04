@@ -432,6 +432,84 @@ const AttendanceRegister: React.FC = () => {
     XLSX.writeFile(wb, `Attendance_${company}_${selectedMonth}.xlsx`);
   };
 
+  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const wb = XLSX.read(data, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+
+        if (rows.length < 2) { toast.error('Empty file'); return; }
+
+        const headerRow = rows[0] as string[];
+        // Find day columns: columns 2..N-3 are day numbers
+        // Format: [Code, Name, 1,2,...,31, P, A, OT]
+        const dayStartIdx = 2;
+        const dayEndIdx = headerRow.length - 3; // before P, A, OT
+
+        const allStorage = HRService.getAttendance();
+        // Remove existing records for this month + company employees
+        const empIds = new Set(employees.map(e => e.id));
+        const otherData = allStorage.filter(r => !(r.date?.startsWith(selectedMonth) && empIds.has(r.employeeId)));
+
+        const newRecords: AttendanceRecord[] = [];
+
+        for (let ri = 1; ri < rows.length; ri++) {
+          const row = rows[ri];
+          if (!row || !row[0]) continue;
+          const code = String(row[0]).trim();
+          const emp = employees.find(e => e.work?.employeeCode === code || e.personal?.name === String(row[1]).trim());
+          if (!emp) continue;
+
+          for (let ci = dayStartIdx; ci <= dayEndIdx; ci++) {
+            const day = Number(headerRow[ci]);
+            if (isNaN(day) || day < 1 || day > 31) continue;
+            const cell = String(row[ci] || '').trim();
+            if (!cell || cell === '-') continue;
+
+            const dateStr = `${selectedMonth}-${String(day).padStart(2, '0')}`;
+            const dt = new Date(dateStr);
+            if (isNaN(dt.getTime())) continue;
+
+            // Parse cell: P, A, L, V, P+2 (OT hours), etc.
+            let status: AttendanceStatus = 'Present';
+            let ot = 0;
+            const firstChar = cell.charAt(0).toUpperCase();
+            if (firstChar === 'A') status = 'Absent';
+            else if (firstChar === 'L') status = 'Late';
+            else if (firstChar === 'V') status = 'Leave';
+            else status = 'Present';
+
+            const otMatch = cell.match(/\+(\d+\.?\d*)/);
+            if (otMatch) ot = parseFloat(otMatch[1]);
+
+            newRecords.push({
+              id: `ATT-IMP-${emp.id}-${dateStr}`,
+              employeeId: emp.id,
+              date: dateStr,
+              status,
+              lateMinutes: 0,
+              earlyMinutes: 0,
+              overtimeHours: ot,
+            } as AttendanceRecord);
+          }
+        }
+
+        HRService.saveAttendance([...otherData, ...newRecords]);
+        refreshAllData();
+        toast.success(`Imported ${newRecords.length} attendance records from Excel.`);
+        if (excelImportRef.current) excelImportRef.current.value = '';
+      } catch (err: any) {
+        toast.error('Excel import failed: ' + (err.message || 'Unknown error'));
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row justify-between items-center bg-white p-4 rounded-xl border no-print shadow-sm gap-4">
@@ -460,10 +538,12 @@ const AttendanceRegister: React.FC = () => {
           {viewType === 'monthly' && (
             <div className="flex items-center space-x-2 border-r pr-3 mr-1">
               <input type="file" ref={jsonInputRef} onChange={handleImportJSON} className="hidden" accept=".json" />
+              <input type="file" ref={excelImportRef} onChange={handleImportExcel} className="hidden" accept=".xlsx,.xls" />
               <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl">
                  <button onClick={handleExportJSON} className="p-2 text-slate-600 hover:bg-white rounded-lg transition-all" title="Backup JSON"><FileJson size={18}/></button>
                  <button onClick={handleExportExcel} className="p-2 text-emerald-600 hover:bg-white rounded-lg transition-all" title="Export Excel"><FileSpreadsheet size={18}/></button>
                  <div className="w-px h-6 bg-slate-200 mx-1"></div>
+                 <button onClick={() => excelImportRef.current?.click()} className="p-2 text-blue-600 hover:bg-white rounded-lg transition-all" title="Import Excel"><FileUp size={18}/></button>
                  <button onClick={() => jsonInputRef.current?.click()} className="p-2 text-slate-600 hover:bg-white rounded-lg transition-all" title="Restore JSON"><UploadCloud size={18}/></button>
               </div>
             </div>
