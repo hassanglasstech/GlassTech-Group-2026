@@ -59,7 +59,7 @@ const getShift = (company?: string, dateStr?: string): { start: string; end: str
   if (year === 2026 && month === 3) {
     const co = (company || '').toLowerCase();
     const isGlassco = co.includes('glassco') || co.includes('glass fabrication');
-    const isGTK     = co.includes('gtk') || co.includes('aluminum fabrication') || co.includes('netting');
+    const isGTK     = co.includes('gtk') || co.includes('gti') || co.includes('aluminum fabrication') || co.includes('netting') || co.includes('factory') || co.includes('nippon');
     const isAdmin   = co.includes('admin') || co.includes('management');
 
     // Eid holidays 20-23 March
