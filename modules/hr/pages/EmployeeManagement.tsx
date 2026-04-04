@@ -407,6 +407,23 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
                             {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                           </select>
                         </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Site / Location</label>
+                          <select
+                            className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold appearance-none"
+                            value={formData.work?.site || ''}
+                            onChange={e => setFormData({...formData, work: {...formData.work!, site: e.target.value}})}
+                          >
+                            <option value="">Select site...</option>
+                            <option value="Factory - Main">Factory - Main</option>
+                            <option value="Factory - GTK">Factory - GTK</option>
+                            <option value="Factory - GTI">Factory - GTI</option>
+                            <option value="Office - Head Office">Office - Head Office</option>
+                            <option value="Site - Field">Site - Field</option>
+                            <option value="Warehouse">Warehouse</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
                       </div>
                     </section>
 
