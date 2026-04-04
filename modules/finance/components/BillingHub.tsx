@@ -4,6 +4,7 @@ import { useDebounce } from '@/modules/shared/hooks/useDebounce';
 import { Company, Quotation, ProductionPiece, LedgerTransaction, Invoice, PaymentReceipt } from '../../shared/types';
 import { FinanceService } from '../services/financeService';
 import { SalesService } from '../../sales/services/salesService';
+import { AsyncSalesService } from '../../sales/services/asyncSalesService';
 import { ProductionService } from '../../production/services/productionService';
 import { generateDeliveryInvoice } from '@/modules/sales/services/deliveryInvoiceService';
 import { 
@@ -29,14 +30,14 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
     refreshData();
   }, [company]);
 
-  const refreshData = () => {
+  const refreshData = async () => {
     const today = new Date().toISOString().split('T')[0];
-    const allInvoices = SalesService.getInvoices();
+    const allInvoices = await AsyncSalesService.getInvoices();
     const hasOverdueToUpdate = allInvoices.some(
       (i: any) => i.company === company && i.status === 'Outstanding' && i.dueDate < today
     );
     if (hasOverdueToUpdate) {
-      SalesService.saveInvoices(
+      await AsyncSalesService.saveInvoices(
         allInvoices.map((i: any) =>
           i.company === company && i.status === 'Outstanding' && i.dueDate < today
             ? { ...i, status: 'Overdue' }
@@ -44,12 +45,18 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
         )
       );
     }
-    setOrders(SalesService.getQuotations().filter(q => q.company === company && (q.status === 'Approved' || q.status === 'Invoiced' || q.status === 'Partial' || q.status === 'Paid')));
+    const [allQuotations, allClients, freshInvoices, allReceipts] = await Promise.all([
+      AsyncSalesService.getQuotations(),
+      AsyncSalesService.getClients(),
+      AsyncSalesService.getInvoices(),
+      AsyncSalesService.getPaymentReceipts(),
+    ]);
+    setOrders(allQuotations.filter(q => q.company === company && (q.status === 'Approved' || q.status === 'Invoiced' || q.status === 'Partial' || q.status === 'Paid')));
     setPieces(ProductionService.getProductionPieces());
-    setClients(SalesService.getClients());
-    setInvoices(SalesService.getInvoices().filter((i: Invoice) => i.company === company));
-    setReceipts(SalesService.getPaymentReceipts().filter((r: any) => {
-      const inv = SalesService.getInvoices().find((i: any) => i.id === r.invoiceId);
+    setClients(allClients);
+    setInvoices(freshInvoices.filter((i: Invoice) => i.company === company));
+    setReceipts(allReceipts.filter((r: any) => {
+      const inv = freshInvoices.find((i: any) => i.id === r.invoiceId);
       return inv?.company === company;
     }));
   };
@@ -73,7 +80,7 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
     if (client) {
       const creditLimit = (client as any).creditLimit || 0;
       if (creditLimit > 0) {
-        const outstanding = SalesService.getInvoices()
+        const outstanding = invoices
           .filter((i: any) => i.clientId === order.clientId && i.status !== 'Paid')
           .reduce((s: number, i: any) => s + (i.balance || 0), 0);
         const orderTotal = (order.items || []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
@@ -103,7 +110,7 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
   };
 
   // ── RECORD PAYMENT RECEIPT ──
-  const handleRecordPayment = () => {
+  const handleRecordPayment = async () => {
     if (!receiptModalInvoice) return;
     if (receiptForm.amount <= 0) return toast.error('Amount must be greater than 0');
     if (receiptForm.amount > receiptModalInvoice.balance) return toast.error(`Cannot exceed balance of PKR ${receiptModalInvoice.balance.toLocaleString()}`);
@@ -176,7 +183,7 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
     }]);
 
     // ── Update Invoice ──
-    const allInvoices = SalesService.getInvoices() as Invoice[];
+    const allInvoices = await AsyncSalesService.getInvoices() as Invoice[];
     const newReceived = receiptModalInvoice.receivedAmount + receiptForm.amount;
     const newBalance = receiptModalInvoice.totalAmount - newReceived;
     const newStatus = newBalance <= 0 ? 'Paid' : 'Partial';
@@ -191,21 +198,23 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
         ? { ...inv, receivedAmount: newReceived, balance: newBalance, status: newStatus, payments: [...(inv.payments || []), payment] }
         : inv
     );
-    SalesService.saveInvoices(updatedInvoices);
-    SalesService.savePaymentReceipts([...SalesService.getPaymentReceipts(), payment]);
+    await AsyncSalesService.saveInvoices(updatedInvoices);
+    const allReceipts = await AsyncSalesService.getPaymentReceipts();
+    await AsyncSalesService.savePaymentReceipts([...allReceipts, payment]);
 
     // Update Quotation status
-    const allQ = SalesService.getQuotations();
-    const updQ = allQ.map(q => q.id === receiptModalInvoice.orderId 
-      ? { ...q, status: (newBalance <= 0 ? 'Paid' : 'Partial') as any, receivedAmount: newReceived } 
+    const allQ = await AsyncSalesService.getQuotations();
+    const updQ = allQ.map(q => q.id === receiptModalInvoice.orderId
+      ? { ...q, status: (newBalance <= 0 ? 'Paid' : 'Partial') as any, receivedAmount: newReceived }
       : q
     );
-    SalesService.saveQuotations(updQ);
+    await AsyncSalesService.saveQuotations(updQ);
 
     refreshData();
     setReceiptModalInvoice(null);
     setReceiptForm({ amount: 0, method: 'Bank Transfer', reference: '' });
     toast.success(`PKR ${receiptForm.amount.toLocaleString()} recorded via ${receiptForm.method} — GL Parked. ${newBalance <= 0 ? 'FULLY PAID' : `Balance: PKR ${newBalance.toLocaleString()}`}`);
+
   };
 
   // ── Aging calculation ──

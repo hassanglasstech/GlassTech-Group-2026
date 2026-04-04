@@ -1,5 +1,6 @@
 import { Client, Vendor } from '../types/crm';
 import { Product, Quotation, Project } from '../../shared/types';
+import { Invoice, PaymentReceipt } from '../../finance/types/finance';
 import { safeParse, safeSave } from '../../shared/services/utils';
 import { toast } from 'sonner';
 import { Logger } from '@/modules/shared/services/logger';
@@ -210,17 +211,97 @@ export const AsyncSalesService = {
       return safeParse(KEYS.PROJECTS);
     }
   },
-  saveProjects: async (data: Project[]): Promise<void> => {
-    await delay(100);
-    safeSave(KEYS.PROJECTS, data);
-  },
-  
+
+
   getVendors: async (): Promise<Vendor[]> => {
-    await delay(100);
-    return safeParse(KEYS.VENDORS);
+    try {
+      const { data, error } = await supabase.from('vendor_contracts').select('*');
+      if (error || !data || data.length === 0) return safeParse(KEYS.VENDORS);
+      const mapped = data.map((r: any) => ({ ...r }));
+      safeSave(KEYS.VENDORS, mapped);
+      return mapped as Vendor[];
+    } catch {
+      return safeParse(KEYS.VENDORS);
+    }
   },
   saveVendors: async (data: Vendor[]): Promise<void> => {
-    await delay(100);
     safeSave(KEYS.VENDORS, data);
+    try {
+      const { error } = await supabase.from('vendor_contracts').upsert(data.map((v: any) => ({ ...v })));
+      if (error) Logger.error('Sales', 'saveVendors failed', error);
+    } catch (err: any) {
+      Logger.error('Sales', 'saveVendors exception', err);
+    }
+  },
+
+  getInvoices: async (): Promise<Invoice[]> => {
+    try {
+      const { data, error } = await supabase.from('invoices').select('*');
+      if (error || !data || data.length === 0) return safeParse('gtk_erp_invoices');
+      const mapped = data.map((r: any) => ({
+        id: r.id, company: r.company, orderId: r.order_id, orderNo: r.order_no,
+        clientId: r.client_id, clientName: r.client_name, date: r.date, dueDate: r.due_date,
+        totalAmount: r.total_amount, receivedAmount: r.received_amount, balance: r.balance,
+        status: r.status, glTxId: r.gl_tx_id, payments: r.payments || [],
+      }));
+      safeSave('gtk_erp_invoices', mapped);
+      return mapped as Invoice[];
+    } catch {
+      return safeParse('gtk_erp_invoices');
+    }
+  },
+  saveInvoices: async (data: Invoice[]): Promise<void> => {
+    safeSave('gtk_erp_invoices', data);
+    try {
+      const rows = data.map((i: any) => ({
+        id: i.id, company: i.company, order_id: i.orderId, order_no: i.orderNo,
+        client_id: i.clientId, client_name: i.clientName, date: i.date, due_date: i.dueDate,
+        total_amount: i.totalAmount, received_amount: i.receivedAmount, balance: i.balance,
+        status: i.status, gl_tx_id: i.glTxId, payments: i.payments || [],
+        updated_at: new Date().toISOString(),
+      }));
+      const { error } = await supabase.from('invoices').upsert(rows);
+      if (error) Logger.error('Sales', 'saveInvoices failed', error);
+    } catch (err: any) {
+      Logger.error('Sales', 'saveInvoices exception', err);
+    }
+  },
+
+  getPaymentReceipts: async (): Promise<PaymentReceipt[]> => {
+    try {
+      const { data, error } = await supabase.from('payment_receipts').select('*');
+      if (error || !data || data.length === 0) return safeParse('gtk_erp_payment_receipts');
+      const mapped = data.map((r: any) => ({
+        id: r.id, invoiceId: r.invoice_id, date: r.date, amount: r.amount,
+        method: r.method, reference: r.reference, glTxId: r.gl_tx_id,
+      }));
+      safeSave('gtk_erp_payment_receipts', mapped);
+      return mapped as PaymentReceipt[];
+    } catch {
+      return safeParse('gtk_erp_payment_receipts');
+    }
+  },
+  savePaymentReceipts: async (data: PaymentReceipt[]): Promise<void> => {
+    safeSave('gtk_erp_payment_receipts', data);
+    try {
+      const rows = data.map((r: any) => ({
+        id: r.id, invoice_id: r.invoiceId, date: r.date, amount: r.amount,
+        method: r.method, reference: r.reference, gl_tx_id: r.glTxId,
+      }));
+      const { error } = await supabase.from('payment_receipts').upsert(rows);
+      if (error) Logger.error('Sales', 'savePaymentReceipts failed', error);
+    } catch (err: any) {
+      Logger.error('Sales', 'savePaymentReceipts exception', err);
+    }
+  },
+
+  saveProjects: async (data: Project[]): Promise<void> => {
+    safeSave(KEYS.PROJECTS, data);
+    try {
+      const { error } = await supabase.from('projects').upsert(data.map((p: any) => ({ ...p })));
+      if (error) Logger.error('Sales', 'saveProjects failed', error);
+    } catch (err: any) {
+      Logger.error('Sales', 'saveProjects exception', err);
+    }
   },
 };
