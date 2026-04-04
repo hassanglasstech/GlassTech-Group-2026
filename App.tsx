@@ -17,7 +17,8 @@ import { DataIntegrity } from '@/modules/shared/services/dataIntegrity';
 import { checkSchemaVersion } from '@/modules/shared/services/utils';
 import { Logger, setLogContext, installConsoleOverride } from '@/modules/shared/services/logger';
 import { Toaster, toast } from 'sonner';
-import { useAuthStore, isOfficeHours, ROLE_DEFAULT_COMPANY, ROLE_MODULES } from '@/modules/auth/authStore';
+import { useAuthStore, isOfficeHours, ROLE_DEFAULT_COMPANY, ROLE_MODULES, ROLE_DEFAULT_ROUTE, ROLE_LABELS } from '@/modules/auth/authStore';
+import { useNavigate } from 'react-router-dom';
 import LoginPage from '@/modules/auth/LoginPage';
 
 import NotificationCenter from './modules/shared/components/NotificationCenter';
@@ -39,6 +40,7 @@ const LogisticsModule  = React.lazy(() => import('./modules/procurement/pages/Lo
 const VendorHub        = React.lazy(() => import('./modules/procurement/pages/VendorHub'));
 const MDDashboard       = React.lazy(() => import('./modules/md-dashboard/MDDashboard'));
 const FactoryInchargeModule = React.lazy(() => import('./modules/factory/pages/FactoryInchargeModule'));
+const RoleHomePage = React.lazy(() => import('./modules/shared/pages/RoleHomePage'));
 
 // ── All nav items definition ─────────────────────────────────────────
 const ALL_NAV = [
@@ -113,13 +115,7 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
     ? `fixed inset-y-0 left-0 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} w-72 shadow-2xl z-[100]`
     : `relative ${isSidebarOpen ? 'w-64' : 'w-16'} translate-x-0`;
 
-  const roleLabels: Record<string, string> = {
-    super_admin:        'Super Admin',
-    gtk_admin:          'GTK Admin',
-    glassco_admin:      'Glassco Admin',
-    glassco_production: 'Production',
-    nippon_admin:       'Nippon Admin',
-  };
+  const roleLabels = ROLE_LABELS;
   
   if (!user || !user.email) {
     console.error('[Sidebar] user is null or invalid:', user);
@@ -299,10 +295,9 @@ const App: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []); // resize listener always active
 
-  // Set default company based on role on first login
+  // Set default company + redirect to role home on first login
   useEffect(() => {
     if (user) {
-      // Set logger context
       setLogContext(user.fullName || user.email, user.allowedCompanies[0] || 'GTK');
       Logger.auth('LOGIN', user.email);
       const defaultCompany = ROLE_DEFAULT_COMPANY[user.role];
@@ -400,7 +395,7 @@ const App: React.FC = () => {
                 </div>
               }>
                 <Routes>
-                  <Route path="/"             element={<ModuleErrorBoundary moduleName="Dashboard"><Dashboard /></ModuleErrorBoundary>} />
+                  <Route path="/"             element={<ModuleErrorBoundary moduleName="Dashboard"><RoleHomePage /></ModuleErrorBoundary>} />
                   <Route path="/hr/*"          element={<ModuleErrorBoundary moduleName="HR"><HRModule /></ModuleErrorBoundary>} />
                   <Route path="/sales/*"       element={<ModuleErrorBoundary moduleName="Sales"><SalesCRM /></ModuleErrorBoundary>} />
                   <Route path="/inventory"     element={<ModuleErrorBoundary moduleName="Inventory"><InventoryModule /></ModuleErrorBoundary>} />
