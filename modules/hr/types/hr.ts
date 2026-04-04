@@ -102,6 +102,7 @@ export interface Employee {
     employeeCode: string;
     status?: EmployeeStatus; // NEW: probation/confirmed/etc
     site?: string;           // Site/location
+    lastDate?: string;       // Last working date (for resigned/terminated)
   };
   salary: {
     basic: number;
