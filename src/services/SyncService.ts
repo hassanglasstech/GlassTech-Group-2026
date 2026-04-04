@@ -652,6 +652,138 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     grn_id: w.grnId||w.grn_id||null,
     notes: w.notes||null,
   }),
+  // ── Finance tables ────────────────────────────────────────────────
+  accounts: (a: any) => ({
+    id: a.id, company: a.company||'',
+    code: a.code||'', name: a.name||'',
+    level: a.level||1, parent_id: a.parentId||a.parent_id||null,
+    type: a.type||'Asset',
+    updated_at: a._updatedAt||a.updatedAt||new Date().toISOString(),
+  }),
+  cost_centers: (c: any) => ({
+    id: c.id, company: c.company||'',
+    code: c.code||'', name: c.name||'',
+    department: c.department||'', manager: c.manager||'',
+    category: c.category||'F', hierarchy_area: c.hierarchyArea||c.hierarchy_area||'',
+    updated_at: c._updatedAt||c.updatedAt||new Date().toISOString(),
+  }),
+  petty_cash: (p: any) => ({
+    id: p.id, company: p.company||'',
+    date: p.date||'', type: p.type||p.entryType||'Payment',
+    amount: p.amount||0, description: p.description||'',
+    reference_doc: p.referenceDoc||p.reference_doc||'',
+    created_at: p._createdAt||p.createdAt||new Date().toISOString(),
+  }),
+  recurring_expenses: (r: any) => ({
+    id: r.id, company: r.company||'',
+    description: r.description||'', amount: r.amount||0,
+    frequency: r.frequency||'Monthly', category: r.category||'',
+    next_due: r.nextDue||r.next_due||'',
+    gl_account: r.glAccount||r.gl_account||'',
+    cost_center: r.costCenter||r.cost_center||'',
+    is_active: r.isActive !== undefined ? r.isActive : true,
+    updated_at: r._updatedAt||r.updatedAt||new Date().toISOString(),
+  }),
+  financial_events: (e: any) => ({
+    id: e.id, company: e.company||'',
+    event_type: e.eventType||e.event_type||'',
+    amount: e.amount||0, date: e.date||'',
+    description: e.description||'', reference: e.reference||'',
+    updated_at: e._updatedAt||e.updatedAt||new Date().toISOString(),
+  }),
+  mapping_rules: (m: any) => ({
+    id: m.id, company: m.company||'',
+    subcategory: m.subcategory||'',
+    debit_code: m.debitCode||m.debit_code||'',
+    debit_name: m.debitName||m.debit_name||'',
+    credit_code: m.creditCode||m.credit_code||'',
+    credit_name: m.creditName||m.credit_name||'',
+    updated_at: m._updatedAt||m.updatedAt||new Date().toISOString(),
+  }),
+  gl_config: (g: any) => ({
+    id: g.id, company: g.company||'',
+    key: g.key||'', value: g.value||'',
+    description: g.description||'',
+    updated_at: g._updatedAt||g.updatedAt||new Date().toISOString(),
+  }),
+
+  // ── Procurement tables ────────────────────────────────────────────
+  inspection_lots: (i: any) => ({
+    id: i.id, company: i.company||'',
+    grn_id: i.grnId||i.grn_id||'',
+    vendor_id: i.vendorId||i.vendor_id||'',
+    product_id: i.productId||i.product_id||'',
+    status: i.status||'Pending',
+    items: i.items||[],
+    updated_at: i._updatedAt||i.updatedAt||new Date().toISOString(),
+  }),
+  handling_units: (h: any) => ({
+    id: h.id, company: h.company||'',
+    grn_id: h.grnId||h.grn_id||'',
+    hu_number: h.huNumber||h.hu_number||'',
+    material: h.material||'',
+    quantity: h.quantity||0, unit: h.unit||'',
+    storage_bin: h.storageBin||h.storage_bin||'',
+    status: h.status||'Active',
+    updated_at: h._updatedAt||h.updatedAt||new Date().toISOString(),
+  }),
+  remnants: (r: any) => ({
+    id: r.id, company: r.company||'',
+    glass_type: r.glassType||r.glass_type||'',
+    thickness: r.thickness||'', length: r.length||0, width: r.width||0,
+    area_sqft: r.areaSqft||r.area_sqft||0,
+    location: r.location||'', status: r.status||'Available',
+    source_grn: r.sourceGrn||r.source_grn||'',
+    updated_at: r._updatedAt||r.updatedAt||new Date().toISOString(),
+  }),
+  stock_ledger: (s: any) => ({
+    id: s.id, company: s.company||'',
+    material_id: s.materialId||s.material_id||'',
+    movement_type: s.movementType||s.movement_type||'',
+    quantity: s.quantity||0, uom: s.uom||'',
+    posting_date: s.postingDate||s.posting_date||'',
+    document_no: s.documentNo||s.document_no||'',
+    reference: s.reference||'', plant: s.plant||'',
+    storage_loc: s.storageLoc||s.storage_loc||'',
+    value: s.value||0, moving_avg_price: s.movingAvgPrice||s.moving_avg_price||0,
+    updated_at: s._updatedAt||s.updatedAt||new Date().toISOString(),
+  }),
+
+  // ── Production / Sales ────────────────────────────────────────────
+  job_orders: (j: any) => ({
+    id: j.id, company: j.company||'',
+    order_no: j.orderNo||j.order_no||'',
+    client_id: j.clientId||j.client_id||'',
+    client_name: j.clientName||j.client_name||'',
+    project_name: j.projectName||j.project_name||'',
+    status: j.status||'Open',
+    items: j.items||[], notes: j.notes||'',
+    created_date: j.createdDate||j.created_date||'',
+    updated_at: j._updatedAt||j.updatedAt||new Date().toISOString(),
+  }),
+  projects: (p: any) => ({
+    id: p.id, company: p.company||'',
+    name: p.name||'', client_id: p.clientId||p.client_id||'',
+    client_name: p.clientName||p.client_name||'',
+    status: p.status||'Active',
+    start_date: p.startDate||p.start_date||'',
+    end_date: p.endDate||p.end_date||'',
+    total_value: p.totalValue||p.total_value||0,
+    notes: p.notes||'',
+    updated_at: p._updatedAt||p.updatedAt||new Date().toISOString(),
+  }),
+
+  // ── Employee docs ─────────────────────────────────────────────────
+  employee_docs: (d: any) => ({
+    id: d.id, company: d.company||'',
+    employee_id: d.employeeId||d.employee_id||'',
+    doc_type: d.docType||d.doc_type||'',
+    doc_name: d.docName||d.doc_name||'',
+    file_url: d.fileUrl||d.file_url||'',
+    expiry_date: d.expiryDate||d.expiry_date||null,
+    notes: d.notes||'',
+    updated_at: d._updatedAt||d.updatedAt||new Date().toISOString(),
+  }),
 };
 
 // ── Pull mappers: Supabase row → app object ───────────────────────────
@@ -947,6 +1079,78 @@ const TABLE_PULL: Record<string, (row: any) => any> = {
     perSheetKg: r.per_sheet_kg, sqftPerSheet: r.sqft_per_sheet,
     perSqftKg: r.per_sqft_kg, grnId: r.grn_id,
   }),
+  // ── Finance tables ────────────────────────────────────────────────
+  accounts: (r: any) => ({
+    ...r,
+    parentId: r.parent_id,
+  }),
+  cost_centers: (r: any) => ({
+    ...r,
+    hierarchyArea: r.hierarchy_area,
+  }),
+  petty_cash: (r: any) => ({
+    ...r,
+    entryType: r.type,
+    referenceDoc: r.reference_doc,
+    createdAt: r.created_at,
+  }),
+  recurring_expenses: (r: any) => ({
+    ...r,
+    nextDue: r.next_due,
+    glAccount: r.gl_account,
+    costCenter: r.cost_center,
+    isActive: r.is_active,
+  }),
+  financial_events: (r: any) => ({
+    ...r,
+    eventType: r.event_type,
+  }),
+  mapping_rules: (r: any) => ({
+    ...r,
+    debitCode: r.debit_code, debitName: r.debit_name,
+    creditCode: r.credit_code, creditName: r.credit_name,
+  }),
+  gl_config: (r: any) => ({ ...r }),
+
+  // ── Procurement ────────────────────────────────────────────────────
+  inspection_lots: (r: any) => ({
+    ...r,
+    grnId: r.grn_id, vendorId: r.vendor_id, productId: r.product_id,
+  }),
+  handling_units: (r: any) => ({
+    ...r,
+    grnId: r.grn_id, huNumber: r.hu_number, storageBin: r.storage_bin,
+  }),
+  remnants: (r: any) => ({
+    ...r,
+    glassType: r.glass_type, areaSqft: r.area_sqft, sourceGrn: r.source_grn,
+  }),
+  stock_ledger: (r: any) => ({
+    ...r,
+    materialId: r.material_id, movementType: r.movement_type,
+    postingDate: r.posting_date, documentNo: r.document_no,
+    storageLoc: r.storage_loc, movingAvgPrice: r.moving_avg_price,
+  }),
+
+  // ── Production / Sales ────────────────────────────────────────────
+  job_orders: (r: any) => ({
+    ...r,
+    orderNo: r.order_no, clientId: r.client_id, clientName: r.client_name,
+    projectName: r.project_name, createdDate: r.created_date,
+  }),
+  projects: (r: any) => ({
+    ...r,
+    clientId: r.client_id, clientName: r.client_name,
+    startDate: r.start_date, endDate: r.end_date,
+    totalValue: r.total_value,
+  }),
+
+  // ── Employee docs ─────────────────────────────────────────────────
+  employee_docs: (r: any) => ({
+    ...r,
+    employeeId: r.employee_id, docType: r.doc_type,
+    docName: r.doc_name, fileUrl: r.file_url, expiryDate: r.expiry_date,
+  }),
 };
 
 const pushTable = async (table: string, localKey: string): Promise<boolean> => {
@@ -959,12 +1163,15 @@ const pushTable = async (table: string, localKey: string): Promise<boolean> => {
   const pusher = TABLE_PUSH[table];
   if (pusher) {
     data = rawData.map(pusher).filter((r: any) => r.id);
-  } else if (['assets','ledger','petty_cash'].includes(table)) {
+  } else if (TABLE_COLUMNS[table]) {
+    // Tables with known column lists — use filterColumns
     const mapped = rawData.map(mapToSupabase);
     data = filterColumns(table, mapped);
   } else {
-    console.log(`[Sync] No push handler for ${table} — skipping`);
-    return true;
+    // No specific handler — use generic camelCase→snake_case mapping
+    // This is safe: Supabase will ignore unknown columns
+    data = rawData.map(mapToSupabase).filter((r: any) => r.id);
+    if (data.length === 0) return true;
   }
   
   try {
