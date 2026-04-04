@@ -129,6 +129,11 @@ export const useGlasscoQuotations = () => {
 
     let finalOrderNo = dataToSave.orderNo;
     if (action === 'approve') {
+        const today = new Date().toISOString().split('T')[0];
+        if (dataToSave.dueDate && dataToSave.dueDate < today) {
+            toast.error(`Quotation expired on ${dataToSave.dueDate}. Update due date or get manager approval before converting to order.`);
+            return;
+        }
         finalOrderNo = finalId.replace('QT-', 'SO-');
     }
 

@@ -11,6 +11,7 @@ import {
 import Pagination from '@/components/Pagination';
 import { GlasscoPrintTemplate } from '../../glassco/core/GlasscoPrintTemplate';
 import { NipponPrintTemplate } from '../../nippon/prints/NipponPrintTemplate';
+import { PrintQuotation as GTKPrintQuotation } from '../companies/gtk/PrintQuotation';
 import { UnifiedPaymentPrint } from '../../finance/components/prints/UnifiedPaymentPrint';
 import { GlasscoServiceOrderPrint } from '../../glassco/core/prints/GlasscoServiceOrderPrint';
 import { useLocation } from 'react-router-dom';
@@ -265,22 +266,23 @@ const SalesOrders: React.FC = () => {
             return;
         }
         const client = clients.find(c => c.id === selectedOrder.clientId);
-        
-        const dummyEntry: PettyCashEntry = {
-            id: `RCP-${Date.now().toString().slice(-6)}`,
+        const existingInvoice = SalesService.getInvoices().find((i: any) => i.orderId === selectedOrder.id);
+
+        const receiptEntry: PettyCashEntry = {
+            id: existingInvoice?.id || `RCP-${Date.now().toString().slice(-6)}`,
             company,
             date: new Date().toISOString().split('T')[0],
-            description: `Advance Payment for Order ${selectedOrder.orderNo}`,
+            description: `Payment received — Order ${selectedOrder.orderNo || selectedOrder.id}`,
             amount: detailForm.receivedAmount,
             type: 'Receipt',
-            balance: 0,
+            balance: existingInvoice ? (existingInvoice.totalAmount - detailForm.receivedAmount) : 0,
             recordedBy: 'Sales Desk',
             status: 'Posted',
-            businessTransaction: 'Customer Advance',
-            referenceDoc: selectedOrder.orderNo || selectedOrder.id
+            businessTransaction: 'Customer Payment',
+            referenceDoc: selectedOrder.orderNo || selectedOrder.id,
         };
 
-        setPrintingReceipt({ data: dummyEntry, client: client?.name || 'Walk-in Customer' });
+        setPrintingReceipt({ data: receiptEntry, client: client?.name || 'Walk-in Customer' });
         setTimeout(() => {
             window.print();
             setPrintingReceipt(null);
@@ -460,8 +462,10 @@ const SalesOrders: React.FC = () => {
         <div className="space-y-6">
             {/* Print Mode Overlays */}
             {isPrinting && selectedOrder && (
-                company === 'Nippon' 
+                company === 'Nippon'
                     ? <NipponPrintTemplate printingQuote={selectedOrder} clients={clients} printMode={printMode} printType={nipponPrintType} />
+                    : (company === 'GTK' || company === 'GTI')
+                    ? <GTKPrintQuotation quotation={selectedOrder} company={company} />
                     : <GlasscoPrintTemplate printingQuote={selectedOrder} clients={clients} printMode={printMode} />
             )}
             

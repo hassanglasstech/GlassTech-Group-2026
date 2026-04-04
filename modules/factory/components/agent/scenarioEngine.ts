@@ -15,7 +15,7 @@ const buildSnapshot = async () => {
   const quotes    = SalesService.getQuotations().filter((q: any) => q.company === 'Glassco');
   const mQuotes   = quotes.filter((q: any) => q.date?.startsWith(month));
   const invoices  = SalesService.getInvoices().filter((i: any) => i.company === 'Glassco');
-  const overdue   = invoices.filter((i: any) => i.status === 'Unpaid' && i.dueDate < today);
+  const overdue   = invoices.filter((i: any) => i.status === 'Outstanding' && i.dueDate < today);
   const revenue   = invoices.filter((i: any) => i.date?.startsWith(month)).reduce((s: number, i: any) => s + (i.amount || i.totalAmount || 0), 0);
 
   // Finance
@@ -172,7 +172,7 @@ export const detectCrossEntitySignals = async (): Promise<void> => {
 
   if (totalPayroll > 0) {
     const allInvoices = SalesService.getInvoices();
-    const overdueAll  = allInvoices.filter((i: any) => i.status === 'Unpaid' && i.dueDate < new Date().toISOString().split('T')[0]);
+    const overdueAll  = allInvoices.filter((i: any) => (i.status === 'Outstanding' || i.status === 'Overdue') && i.dueDate < new Date().toISOString().split('T')[0]);
     const overdueVal  = overdueAll.reduce((s: number, i: any) => s + (i.amount || i.totalAmount || 0), 0);
 
     if (overdueVal > totalPayroll * 2) {

@@ -100,7 +100,7 @@ const MISDashboard: React.FC = () => {
         monthQuotations:  monthQuotes.length,
         totalRevenue,
         monthRevenue,
-        pendingInvoices:  invoices.filter((i: any) => i.status === 'Pending' || i.status === 'Unpaid').length,
+        pendingInvoices:  invoices.filter((i: any) => i.status === 'Outstanding' || i.status === 'Partial' || i.status === 'Overdue').length,
       });
 
       // ── Finance ────────────────────────────────────────────────

@@ -54,7 +54,7 @@ const buildFinanceContext = (): string => {
   const exp = Math.abs(accounts.filter((a: any) => a.type === 'Expense').reduce((s: number, a: any) => s + (balances[a.id] || 0), 0));
   const monthLedger = ledger.filter((t: any) => t.date?.startsWith(month));
   const invoices = SalesService.getInvoices().filter((i: any) => i.company === 'GlassCo');
-  const overdue  = invoices.filter((i: any) => i.status === 'Unpaid' && i.dueDate < new Date().toISOString().split('T')[0]);
+  const overdue  = invoices.filter((i: any) => (i.status === 'Outstanding' || i.status === 'Overdue') && i.dueDate < new Date().toISOString().split('T')[0]);
   return `FINANCE STATUS:
 - Revenue (all time): PKR ${rev.toLocaleString()} | Expenses: PKR ${exp.toLocaleString()}
 - Net profit: PKR ${(rev - exp).toLocaleString()}

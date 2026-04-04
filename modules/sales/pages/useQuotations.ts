@@ -152,6 +152,14 @@ export const useQuotations = () => {
     let finalId = formData.id;
     if (!finalId) finalId = AppService.generateSequenceID('QT', company, all);
 
+    if (approve) {
+        const today = new Date().toISOString().split('T')[0];
+        if (formData.dueDate && formData.dueDate < today) {
+            toast.error(`Quotation expired on ${formData.dueDate}. Update due date before converting to order.`);
+            return;
+        }
+    }
+
     const finalQuo: Quotation = { 
         ...(formData as Quotation), 
         id: finalId!, 

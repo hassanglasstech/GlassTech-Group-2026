@@ -167,7 +167,7 @@ export const AsyncSalesService = {
         project_name: q.projectName,
         subject: q.subject,
         items: q.items || [],
-        service_charges: q.serviceCharges || 0,
+        service_charges: q.serviceCharges || [],
         discount_percent: q.discountPercent || 0,
         discount_amount: q.discountAmount || 0,
         status: q.status,

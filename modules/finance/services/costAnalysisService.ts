@@ -164,7 +164,7 @@ export function calculateJobProfitability(company: string): JobProfitability[] {
     const client = clients.find(c => c.id === q.clientId);
 
     // Prefer actual invoice amount (post-discount, post-revision) over quotation estimate
-    const invoice = invoices.find((i: any) => i.orderId === q.id || i.orderNo === q.orderNo);
+    const invoice = invoices.find((i: any) => i.orderId === q.id);
     const revenue = invoice
       ? invoice.totalAmount
       : (q.items || []).reduce((s: number, i: any) => s + (i.amount || 0), 0);

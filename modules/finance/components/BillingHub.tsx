@@ -30,7 +30,21 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
   }, [company]);
 
   const refreshData = () => {
-    setOrders(SalesService.getQuotations().filter(q => q.company === company && (q.status === 'Approved' || q.status === 'Invoiced' || q.status === 'Partial Payment' || q.status === 'Paid')));
+    const today = new Date().toISOString().split('T')[0];
+    const allInvoices = SalesService.getInvoices();
+    const hasOverdueToUpdate = allInvoices.some(
+      (i: any) => i.company === company && i.status === 'Outstanding' && i.dueDate < today
+    );
+    if (hasOverdueToUpdate) {
+      SalesService.saveInvoices(
+        allInvoices.map((i: any) =>
+          i.company === company && i.status === 'Outstanding' && i.dueDate < today
+            ? { ...i, status: 'Overdue' }
+            : i
+        )
+      );
+    }
+    setOrders(SalesService.getQuotations().filter(q => q.company === company && (q.status === 'Approved' || q.status === 'Invoiced' || q.status === 'Partial' || q.status === 'Paid')));
     setPieces(ProductionService.getProductionPieces());
     setClients(SalesService.getClients());
     setInvoices(SalesService.getInvoices().filter((i: Invoice) => i.company === company));
@@ -54,7 +68,25 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
   // ── GENERATE INVOICE — now delegates to shared deliveryInvoiceService ──
   const handleGenerateInvoice = (order: Quotation) => {
     if (isAlreadyInvoiced(order.id)) return toast.error('Already invoiced — check Receivables tab.');
-    
+
+    const client = clients.find((c: any) => c.id === order.clientId);
+    if (client) {
+      const creditLimit = (client as any).creditLimit || 0;
+      if (creditLimit > 0) {
+        const outstanding = SalesService.getInvoices()
+          .filter((i: any) => i.clientId === order.clientId && i.status !== 'Paid')
+          .reduce((s: number, i: any) => s + (i.balance || 0), 0);
+        const orderTotal = (order.items || []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
+        if (outstanding + orderTotal > creditLimit) {
+          toast.error(
+            `Credit limit exceeded for ${client.name}. Outstanding: PKR ${outstanding.toLocaleString()} + This order: PKR ${orderTotal.toLocaleString()} > Limit: PKR ${creditLimit.toLocaleString()}`,
+            { duration: 8000 }
+          );
+          return;
+        }
+      }
+    }
+
     try {
       const result = generateDeliveryInvoice(order, company);
       refreshData();
@@ -65,6 +97,8 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
     } catch (err) {
       console.error('[BillingHub] Invoice generation failed:', err);
       toast.error('Invoice generation failed — check console.');
+    }
+
     }
   };
 
@@ -163,7 +197,7 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
     // Update Quotation status
     const allQ = SalesService.getQuotations();
     const updQ = allQ.map(q => q.id === receiptModalInvoice.orderId 
-      ? { ...q, status: (newBalance <= 0 ? 'Paid' : 'Partial Payment') as any, receivedAmount: newReceived } 
+      ? { ...q, status: (newBalance <= 0 ? 'Paid' : 'Partial') as any, receivedAmount: newReceived } 
       : q
     );
     SalesService.saveQuotations(updQ);
@@ -186,6 +220,19 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
   const totalAR = outstandingInvoices.reduce((s, i) => s + i.balance, 0);
   const overdueInvoices = outstandingInvoices.filter(i => getAgingDays(i.dueDate) > 0);
 
+  const handleBulkPostGL = () => {
+    const ledger = FinanceService.getLedger();
+    const parked = ledger.filter((t: any) => t.company === company && t.status === 'Parked');
+    if (parked.length === 0) return toast.error('No parked GL entries to post.');
+    const posted = ledger.map((t: any) =>
+      t.company === company && t.status === 'Parked' ? { ...t, status: 'Posted' } : t
+    );
+    FinanceService.saveLedger(posted);
+    toast.success(`${parked.length} GL entries posted.`);
+    refreshData();
+  };
+  const parkedCount = FinanceService.getLedger().filter((t: any) => t.company === company && t.status === 'Parked').length;
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header with AR Summary */}
@@ -205,6 +252,7 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
       </div>
 
       {/* Tabs */}
+      <div className="flex items-center gap-2 flex-wrap">
       <div className="flex items-center space-x-1 bg-white p-1 rounded-xl border shadow-sm w-fit">
         <button onClick={() => setActiveView('billing')} className={`flex items-center space-x-2 px-5 py-2 rounded-lg text-xs font-bold transition-all ${activeView === 'billing' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
           <FileText size={15}/><span>Generate Invoice</span>
@@ -217,6 +265,12 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
         <button onClick={() => setActiveView('receipts')} className={`flex items-center space-x-2 px-5 py-2 rounded-lg text-xs font-bold transition-all ${activeView === 'receipts' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
           <Receipt size={15}/><span>Payment History</span>
         </button>
+      </div>
+      {parkedCount > 0 && (
+        <button onClick={handleBulkPostGL} className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-violet-600 text-white hover:bg-violet-700 transition-all">
+          <CheckCircle2 size={14}/> Post {parkedCount} Parked GL
+        </button>
+      )}
       </div>
 
       {/* ═══ TAB: GENERATE INVOICE ═══ */}
