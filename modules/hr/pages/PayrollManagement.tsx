@@ -7,6 +7,8 @@ import { CreditCard, Printer, Eye, X, Calculator, Calendar, FileUp, Download, Ar
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
+import { TagService } from '@/modules/hr/services/tagService';
+import CompensationJustice from '@/modules/hr/components/CompensationJustice';
 
 const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -15,7 +17,10 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [selectedSlip, setSelectedSlip] = useState<Payroll | null>(null);
   const [showSummaryReport, setShowSummaryReport] = useState(false);
   const [showAllSlipsPrint, setShowAllSlipsPrint] = useState(false);
-  const [viewTab, setViewTab] = useState<'cumulative' | 'salary' | 'overtime'>('cumulative');
+  const [viewTab, setViewTab] = useState<'cumulative' | 'salary' | 'overtime' | 'analysis'>('cumulative');
+  const [isApproved, setIsApproved] = useState(false);
+  const [slipsPer2, setSlipsPer2] = useState(false);
+  const [approvedBy, setApprovedBy] = useState('');
 
 
   const { refreshKey } = useRealtimeRefresh(['payroll', 'employees', 'attendance', 'loans']);
@@ -29,7 +34,8 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
   const generatePayrolls = (emps: Employee[]) => {
     const attendance = HRService.getAttendance();
     const loans = HRService.getLoans();
-    const daysInMonth = 30; 
+    const SALARY_DAYS = 25; // Working days basis per month (Mon-Sat, industry standard Pakistan)
+    const daysInMonth = SALARY_DAYS;
     const existingPayrolls = HRService.getPayroll().filter(p => p?.month === selectedMonth);
     const [year, monthNum] = selectedMonth.split('-').map(Number);
     const actualDaysInMonth = new Date(year, monthNum, 0).getDate();
@@ -95,6 +101,7 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
       const dayRate = grossSalary / daysInMonth;
       const hourlyRate = dayRate / 8;
       
+      const eobiDeduction = (emp?.salary as any)?.eobi ? 370 : 0;
       const absentDeduction = finalAbsentCount * dayRate;
       const latePenaltyAmount = manualLatePenalty * dayRate;
       
@@ -127,21 +134,86 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
         earlyDeductionHours: 0,
         lateDeduction: Math.round(latePenaltyAmount), 
         absentDeduction: Math.round(absentDeduction),
+        // Floor: prevent net salary going negative — cap at 50% of gross
+        const salaryBeforeLoan = Math.max(0, grossSalary - absentDeduction - latePenaltyAmount - eobiDeduction);
+        const maxLoanCap = Math.round(salaryBeforeLoan * 0.5);
+        if (monthlyLoanDeduction + monthlyAdvanceDeduction > maxLoanCap) {
+          monthlyLoanDeduction = Math.min(monthlyLoanDeduction, maxLoanCap);
+          monthlyAdvanceDeduction = Math.min(monthlyAdvanceDeduction, Math.max(0, maxLoanCap - monthlyLoanDeduction));
+        }
         loanDeduction: monthlyLoanDeduction,
         advanceDeduction: monthlyAdvanceDeduction,
-        netSalary: Math.round(Math.max(0, grossSalary + finalOvertimePay - absentDeduction - latePenaltyAmount - monthlyLoanDeduction - monthlyAdvanceDeduction)),
+        netSalary: Math.round(Math.max(0, grossSalary + finalOvertimePay - absentDeduction - latePenaltyAmount - monthlyLoanDeduction - monthlyAdvanceDeduction - eobiDeduction)),
         absentDates: override ? [] : empAttendance.filter(a => a.status === 'Absent').map(a => a.date),
         lateDates: empAttendance.filter(a => a.status === 'Late').map(a => ({ date: a.date, minutes: a.lateMinutes })),
         loanRepayments: empLoans.map(l => ({ date: l.date, amount: l.type === 'Advance' ? l.amount : l.repaymentAmount, type: l.type })),
         isSalaryPaid: (existing as any)?.isSalaryPaid || false,
         isOvertimePaid: (existing as any)?.isOvertimePaid || false,
         allowedAbsentCount,
-        loanWaived: skipLoan
+        loanWaived: skipLoan,
+        eobiDeduction,
       };
     });
     
+    setIsApproved(false);
+    setApprovedBy('');
     setPayrolls(newPayrolls);
-    HRService.savePayroll(newPayrolls);
+    // Merge: keep other companies' payroll, replace only current company+month
+    const allExisting = HRService.getPayroll();
+    const otherPayrolls = allExisting.filter(p => 
+      !(p.month === selectedMonth && employees.some(e => e.id === p.employeeId))
+    );
+    HRService.savePayroll([...otherPayrolls, ...newPayrolls]);
+  };
+
+  // ── Mark Salary Paid + GL clearing entry ──────────────────────────
+  const handleMarkPaid = async (payId: string, type: 'salary' | 'ot') => {
+    const pay = payrolls.find(p => p.id === payId);
+    if (!pay) return;
+    const emp = employees.find(e => e.id === pay.employeeId);
+    if (!emp) return;
+
+    const alreadyPaid = type === 'salary' ? pay.isSalaryPaid : pay.isOvertimePaid;
+    if (alreadyPaid) { toast.error('Already marked as paid'); return; }
+
+    // GL clearing entry: Dr Salaries Payable (2211), Cr Cash (1111)
+    try {
+      const liabParent   = FinanceService.ensureAccount(company as any, 'CURRENT LIABILITIES', 2, null, 'Liability', '22');
+      const payableAcc   = FinanceService.ensureAccount(company as any, 'Salaries Payable', 3, liabParent.id, 'Liability', '2211');
+      const assetParent  = FinanceService.ensureAccount(company as any, 'CURRENT ASSETS', 2, null, 'Asset', '11');
+      const cashAcc      = FinanceService.ensureAccount(company as any, 'Cash in Hand', 3, assetParent.id, 'Asset', '1111');
+
+      const salaryAmt = (pay.basicPay + pay.allowances) - pay.absentDeduction - pay.lateDeduction - pay.loanDeduction - pay.advanceDeduction;
+      const otAmt     = pay.overtimePay;
+      const amount    = type === 'salary' ? salaryAmt : otAmt;
+      const label     = type === 'salary' ? 'Salary' : 'Overtime';
+
+      const existingLedger = FinanceService.getLedger();
+      const transaction = {
+        id: `PAY-DISB-${pay.id}-${type}-${Date.now()}`,
+        date: new Date().toISOString().split('T')[0],
+        description: `${label} Disbursement — ${emp.personal.name} — ${selectedMonth}`,
+        company,
+        details: [
+          { accountId: payableAcc.id, debit: amount, credit: 0, text: `${label} paid — ${emp.personal.name}` },
+          { accountId: cashAcc.id,    debit: 0, credit: amount, text: `Cash out — ${label}` },
+        ],
+        postedBy: 'HR',
+      };
+      await Promise.resolve(FinanceService.recordTransaction(transaction));
+    } catch (e) { console.warn('GL disbursement entry failed', e); }
+
+    // Update flag
+    const updated = payrolls.map(p =>
+      p.id === payId
+        ? { ...p, isSalaryPaid: type === 'salary' ? true : p.isSalaryPaid, isOvertimePaid: type === 'ot' ? true : p.isOvertimePaid }
+        : p
+    );
+    setPayrolls(updated);
+    const allExisting = HRService.getPayroll();
+    const others = allExisting.filter(p => !(p.month === selectedMonth && employees.some(e => e.id === p.employeeId)));
+    HRService.savePayroll([...others, ...updated]);
+    toast.success(`${label} marked as paid — GL entry posted`);
   };
 
   const summary = payrolls.reduce((acc, p) => {
@@ -157,9 +229,24 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
   }, { totalBasic: 0, totalAllowances: 0, totalOTAmount: 0, totalOTHours: 0, totalDeductionsCombined: 0, totalNetDisbursable: 0, totalPaidDisbursement: 0, totalPureSalary: 0, totalPaidSalary: 0, totalPaidOT: 0, totalLoanRecovery: 0 });
 
   // --- PHASE 3: AUTOMATED LEDGER POSTING (Enhanced: Full Breakdown) ---
+  const handleApprovePayroll = () => {
+    if (!payrolls.length) { toast.error('Generate payroll first'); return; }
+    setApproverInput('');
+    setShowApproveModal(true);
+  };
+
+  const confirmApproval = () => {
+    if (!approverInput.trim()) { toast.error('Enter your name'); return; }
+    setIsApproved(true);
+    setApprovedBy(approverInput.trim());
+    setShowApproveModal(false);
+    toast.success(`Payroll approved by ${approverInput.trim()}`);
+  };
+
   const handlePostPayrollToLedger = async () => {
+      if (!isApproved) { toast.error('Payroll must be approved before posting. Click Approve first.'); return; }
       const monthName = new Date(selectedMonth).toLocaleString('default', { month: 'long', year: 'numeric' });
-      if (!confirm(`Generate Ledger Entry for ${monthName} Payroll?\n\nTotal Payable: PKR ${summary.totalNetDisbursable.toLocaleString()}`)) return;
+      if (!confirm(`Post ${monthName} Payroll to Ledger?\n\nApproved by: ${approvedBy}\nTotal Payable: PKR ${summary.totalNetDisbursable.toLocaleString()}`)) return;
 
       const txId = `PAY-JV-${selectedMonth.replace('-','')}`;
       
@@ -231,7 +318,42 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
         HRService.saveLoans(updatedLoans);
       }
 
-      toast.success(`Payroll JV ${txId} posted — Basic: ${totalBasic.toLocaleString()}, Allow: ${totalAllowances.toLocaleString()}, OT: ${totalOvertime.toLocaleString()}, Loan Rec: ${totalLoanRec.toLocaleString()}`);
+      // ── Gratuity Accrual (1 month basic per year = basic/12 per month) ──
+      const gratTxId = `GRAT-JV-${selectedMonth.replace('-','')}`;
+      if (!existingLedger.some(t => t.id === gratTxId)) {
+        const [yr, mo] = selectedMonth.split('-').map(Number);
+        const gratDetails: { accountId: string; debit: number; credit: number; text: string }[] = [];
+        let totalGrat = 0;
+
+        payrolls.forEach(pay => {
+          const emp = employees.find(e => e.id === pay.employeeId);
+          if (!emp?.work?.joinDate) return;
+          const joinDate = new Date(emp.work.joinDate);
+          const monthDate = new Date(yr, mo - 1, 1);
+          const tenureMonths = (monthDate.getFullYear() - joinDate.getFullYear()) * 12 + (monthDate.getMonth() - joinDate.getMonth());
+          if (tenureMonths < 12) return; // No gratuity in first year
+          const monthlyAccrual = Math.round(pay.basicPay / 12);
+          if (monthlyAccrual > 0) totalGrat += monthlyAccrual;
+        });
+
+        if (totalGrat > 0) {
+          const gratExpParent = FinanceService.ensureAccount(company as any, 'PERSONNEL EXPENSES', 2, null, 'Expense', '521');
+          const gratExpAcc    = FinanceService.ensureAccount(company as any, 'Gratuity Expense', 3, gratExpParent.id, 'Expense', '5214');
+          const gratLiabParent = FinanceService.ensureAccount(company as any, 'NON-CURRENT LIABILITIES', 2, null, 'Liability', '23');
+          const gratProvAcc   = FinanceService.ensureAccount(company as any, 'Gratuity Provision', 3, gratLiabParent.id, 'Liability', '2311');
+          gratDetails.push({ accountId: gratExpAcc.id,  debit: totalGrat, credit: 0,          text: `Gratuity Accrual — ${monthName}` });
+          gratDetails.push({ accountId: gratProvAcc.id, debit: 0,          credit: totalGrat, text: `Gratuity Provision — ${monthName}` });
+          FinanceService.recordTransaction({
+            id: gratTxId, company, docType: 'SA',
+            docDate: new Date().toISOString().split('T')[0],
+            date: new Date().toISOString().split('T')[0],
+            description: `GRATUITY ACCRUAL: ${monthName.toUpperCase()}`,
+            referenceId: selectedMonth, status: 'Posted', details: gratDetails
+          });
+        }
+      }
+
+      toast.success(`Payroll JV ${txId} posted — Basic: ${totalBasic.toLocaleString()}, Allow: ${totalAllowances.toLocaleString()}, OT: ${totalOvertime.toLocaleString()}, Loan Rec: ${totalLoanRec.toLocaleString()}${(() => { return ''; })()}`);
   };
 
   const renderSlip = (pay: any) => {
@@ -255,7 +377,7 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
                 <div className="space-y-1">
                     <p className="font-bold uppercase text-slate-400 text-[8px]">Employee Identification</p>
                     <p className="text-lg font-black text-slate-900 leading-none">{emp?.personal?.name ?? "—"}</p>
-                    <p className="text-[10px] font-bold text-blue-700 uppercase">{emp?.work?.employeeCode ?? "—"} | {emp?.work?.designation ?? "—"}</p>
+                    <p className="text-[10px] font-bold text-blue-700 uppercase">{emp?.work?.employeeCode ?? "—"} | {(() => { const tags = TagService.getEmployeeTags(emp.id); const primary = tags.find(t => t.isPrimary); const tag = primary ? TagService.getTags(company as any).find(t => t.id === primary.tagId) : null; return tag?.label || emp?.work?.designation || "—"; })()}</p>
                     <p className="text-[10px] font-medium text-slate-500">{emp.work.department}</p>
                 </div>
                 <div className="text-right space-y-1">
@@ -331,7 +453,14 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
         </div>
         <div className="flex space-x-3">
           <button onClick={handlePrintAll} className="bg-slate-100 text-slate-700 px-4 py-2.5 rounded-xl flex items-center space-x-2 font-bold text-sm hover:bg-slate-200 transition-all"><Printer size={18} /><span>Print Slips</span></button>
-          <button onClick={handlePostPayrollToLedger} className="bg-slate-900 text-white px-4 py-2.5 rounded-xl flex items-center space-x-2 font-bold text-sm shadow-xl hover:bg-slate-800 transition-all"><Landmark size={18} /><span>Post to Ledger</span></button>
+          <div className="flex items-center gap-2">
+              {!isApproved ? (
+                <button onClick={handleApprovePayroll} className="bg-emerald-600 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 font-bold text-sm shadow-xl hover:bg-emerald-700 transition-all"><Check size={18}/><span>Approve Payroll</span></button>
+              ) : (
+                <span className="text-xs font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-xl">✓ Approved by {approvedBy}</span>
+              )}
+              <button onClick={handlePostPayrollToLedger} disabled={!isApproved} className={`px-4 py-2.5 rounded-xl flex items-center space-x-2 font-bold text-sm shadow-xl transition-all ${isApproved ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}><Landmark size={18}/><span>Post to Ledger</span></button>
+            </div>
           <button onClick={() => generatePayrolls(employees)} className="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold flex items-center space-x-2 shadow-lg hover:bg-blue-700 transition-all"><Calculator size={18} /><span>Run Engine</span></button>
         </div>
       </div>
@@ -353,7 +482,7 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
               const grossSalary = pay.basicPay + pay.allowances;
               const salaryDeds = pay.absentDeduction + pay.lateDeduction;
               const financialDeds = pay.loanDeduction + pay.advanceDeduction;
-              const hourlyRate = Math.round((grossSalary / 30) / 8);
+              const hourlyRate = Math.round((grossSalary / 25) / 8);
               
               return (
                 <tr key={pay.id} className="hover:bg-slate-50/50 transition-colors text-sm">
@@ -423,15 +552,80 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
                 </div>
                 <div className="px-10 py-6 bg-white border-t flex justify-end space-x-4 shrink-0">
                     <button onClick={() => setSelectedSlip(null)} className="px-8 py-3 text-slate-400 font-black uppercase text-xs">Close</button>
+                    {(() => {
+                      const emp = employees.find(e => e.id === selectedSlip?.employeeId);
+                      const phone = emp?.personal?.phone?.replace(/[^0-9]/g,'');
+                      if (!phone) return null;
+                      const wa = `92${phone.replace(/^0/,'')}`;
+                      const msg = encodeURIComponent(`Payslip — ${emp?.personal?.name} — ${selectedSlip?.month}\nNet Salary: PKR ${selectedSlip?.netSalary?.toLocaleString()}\nSent from GlassTech ERP`);
+                      return (
+                        <a href={`https://wa.me/${wa}?text=${msg}`} target="_blank" rel="noreferrer"
+                          className="bg-green-600 text-white px-6 py-3 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-2 hover:bg-green-700">
+                          <span>💬</span> WhatsApp
+                        </a>
+                      );
+                    })()}
+                    {!selectedSlip.isSalaryPaid && (
+                      <button onClick={() => { handleMarkPaid(selectedSlip.id, 'salary'); setSelectedSlip(null); }} className="bg-emerald-600 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-emerald-700 flex items-center gap-2"><Check size={16}/> Mark Salary Paid</button>
+                    )}
+                    {!selectedSlip.isOvertimePaid && selectedSlip.overtimePay > 0 && (
+                      <button onClick={() => { handleMarkPaid(selectedSlip.id, 'ot'); setSelectedSlip(null); }} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-indigo-700 flex items-center gap-2"><Check size={16}/> Mark OT Paid</button>
+                    )}
                     <button onClick={() => window.print()} className="bg-blue-600 text-white px-12 py-3 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl flex items-center space-x-3 hover:bg-blue-700"><Printer size={18}/> <span>Print Slip</span></button>
                 </div>
             </div>
         </div>
       )}
 
+      {viewTab === 'analysis' && <CompensationJustice />}
+
+      {showApproveModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[600] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm">
+            <h3 className="font-black text-slate-900 uppercase tracking-widest text-sm mb-2">Approve Payroll</h3>
+            <p className="text-xs text-slate-500 mb-4">{new Date(selectedMonth).toLocaleString('default',{month:'long',year:'numeric'})} — PKR {summary.totalNetDisbursable.toLocaleString()}</p>
+            <input
+              type="text" placeholder="Your full name"
+              className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:ring-2 focus:ring-emerald-500 mb-4"
+              value={approverInput} onChange={e => setApproverInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && confirmApproval()}
+              autoFocus
+            />
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowApproveModal(false)} className="px-6 py-2.5 text-slate-400 font-black text-xs uppercase">Cancel</button>
+              <button onClick={confirmApproval} className="bg-emerald-600 text-white px-8 py-2.5 rounded-xl font-black text-xs uppercase hover:bg-emerald-700">Approve</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showAllSlipsPrint && (
         <div className="hidden print:block fixed inset-0 bg-white z-[9999]">
             {payrolls.map(p => renderSlip(p))}
+        </div>
+      )}
+
+      {slipsPer2 && (
+        <div className="hidden print:block fixed inset-0 bg-white z-[9999] p-4">
+          <style>{`
+            @media print {
+              @page { size: A4 portrait; margin: 8mm; }
+              .slip-pair { page-break-after: always; }
+              .slip-pair:last-child { page-break-after: avoid; }
+            }
+          `}</style>
+          {Array.from({ length: Math.ceil(payrolls.length / 2) }, (_, i) => (
+            <div key={i} className="slip-pair" style={{display:'flex', flexDirection:'column', gap:'4mm', height:'calc(297mm - 16mm)', pageBreakAfter: i < Math.ceil(payrolls.length/2)-1 ? 'always' : 'avoid'}}>
+              <div style={{flex:1, transform:'scale(0.82)', transformOrigin:'top center'}}>
+                {renderSlip(payrolls[i*2])}
+              </div>
+              {payrolls[i*2+1] && (
+                <div style={{flex:1, transform:'scale(0.82)', transformOrigin:'top center'}}>
+                  {renderSlip(payrolls[i*2+1])}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
