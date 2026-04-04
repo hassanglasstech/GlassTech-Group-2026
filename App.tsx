@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, ShoppingBag, Landmark, ShieldCheck,
   Briefcase, Factory, Globe, Warehouse, Menu, Bell, Search, 
   Truck, Handshake, Folder, Loader2, X, LogOut, ChevronDown,
-  Home, DollarSign, Settings, BarChart3
+  Home, DollarSign, Settings, BarChart3, Package
 } from 'lucide-react';
 import { Company } from '@/modules/shared/constants';
 import { AppService } from '@/modules/shared/services/appService';
@@ -17,8 +17,7 @@ import { DataIntegrity } from '@/modules/shared/services/dataIntegrity';
 import { checkSchemaVersion } from '@/modules/shared/services/utils';
 import { Logger, setLogContext, installConsoleOverride } from '@/modules/shared/services/logger';
 import { Toaster, toast } from 'sonner';
-import { useAuthStore, isOfficeHours, ROLE_DEFAULT_COMPANY, ROLE_MODULES, ROLE_DEFAULT_ROUTE, ROLE_LABELS } from '@/modules/auth/authStore';
-import { useNavigate } from 'react-router-dom';
+import { useAuthStore, isOfficeHours, ROLE_DEFAULT_COMPANY, ROLE_MODULES, ROLE_LABELS } from '@/modules/auth/authStore';
 import LoginPage from '@/modules/auth/LoginPage';
 
 import NotificationCenter from './modules/shared/components/NotificationCenter';
@@ -40,24 +39,42 @@ const LogisticsModule  = React.lazy(() => import('./modules/procurement/pages/Lo
 const VendorHub        = React.lazy(() => import('./modules/procurement/pages/VendorHub'));
 const MDDashboard       = React.lazy(() => import('./modules/md-dashboard/MDDashboard'));
 const FactoryInchargeModule = React.lazy(() => import('./modules/factory/pages/FactoryInchargeModule'));
-const RoleHomePage = React.lazy(() => import('./modules/shared/pages/RoleHomePage'));
 
 // ── All nav items definition ─────────────────────────────────────────
+// ── Core nav — always visible (role-filtered) ───────────────────────
+const CORE_NAV = [
+  { name: 'Home',              path: '/',                 icon: LayoutDashboard, key: 'dashboard'        },
+  { name: 'Sales & Orders',    path: '/sales',            icon: Briefcase,       key: 'sales'            },
+  { name: 'Production',        path: '/production',       icon: Factory,         key: 'production'       },
+  { name: 'Procurement',       path: '/requisitions',     icon: Package,         key: 'requisitions'     },
+  { name: 'Finance (FICO)',     path: '/accounts',         icon: Landmark,        key: 'accounts'         },
+  { name: 'People (HCM)',       path: '/hr',               icon: Users,           key: 'hr'               },
+];
+
+// ── Role-specific nav — shown based on user role ─────────────────────
+const ROLE_NAV: Record<string, { name: string; path: string; icon: any; key: string }[]> = {
+  super_admin:        [{ name: 'MD Dashboard', path: '/md-dashboard',    icon: BarChart3,  key: 'md-dashboard'     }, { name: 'Basis Admin', path: '/admin', icon: ShieldCheck, key: 'admin' }],
+  owner:              [{ name: 'MD Dashboard', path: '/md-dashboard',    icon: BarChart3,  key: 'md-dashboard'     }],
+  hassan:             [{ name: 'MD Dashboard', path: '/md-dashboard',    icon: BarChart3,  key: 'md-dashboard'     }, { name: 'Basis Admin', path: '/admin', icon: ShieldCheck, key: 'admin' }],
+  factory_manager:    [{ name: 'Factory Desk', path: '/factory-incharge',icon: Factory,   key: 'factory-incharge' }],
+  glassco_supervisor: [],
+  gtk_supervisor:     [],
+  gti_supervisor:     [],
+  glassco_cutter:     [],
+  dispatch_staff:     [],
+  admin_officer:      [],
+  gtk_admin:          [{ name: 'MD Dashboard', path: '/md-dashboard',    icon: BarChart3,  key: 'md-dashboard'     }],
+  glassco_admin:      [],
+  glassco_production: [],
+  nippon_admin:       [],
+};
+
+// Legacy — kept for backward compat
 const ALL_NAV = [
-  { name: 'Launchpad',            path: '/',            icon: LayoutDashboard, key: 'dashboard'    },
-  { name: 'Human Capital (HCM)',  path: '/hr',          icon: Users,           key: 'hr'           },
-  { name: 'Sales & Dist. (SD)',   path: '/sales',       icon: Briefcase,       key: 'sales'        },
-  { name: 'Project Systems (PS)', path: '/projects',    icon: Folder,          key: 'projects'     },
-  { name: 'Material Mgmt (MM)',   path: '/inventory',   icon: Warehouse,       key: 'inventory'    },
-  { name: 'Logistics (LE)',       path: '/logistics',   icon: Truck,           key: 'logistics'    },
-  { name: 'Vendor Network',       path: '/vendors',     icon: Handshake,       key: 'vendors'      },
-  { name: 'Production (PP)',      path: '/production',  icon: Factory,         key: 'production'   },
-  { name: 'FICO Financials',      path: '/accounts',    icon: Landmark,        key: 'accounts'     },
-  { name: 'Supply Chain Hub',     path: '/hub',         icon: Globe,           key: 'hub'          },
-  { name: 'Procurement (PUR)',    path: '/requisitions',icon: ShoppingBag,     key: 'requisitions' },
-  { name: 'MD Dashboard',          path: '/md-dashboard', icon: BarChart3,       key: 'md-dashboard' },
-  { name: 'Factory Incharge',  path: '/factory-incharge', icon: Factory,    key: 'factory-incharge' },
-  { name: 'Basis Admin',          path: '/admin',       icon: ShieldCheck,     key: 'admin'        },
+  ...CORE_NAV,
+  { name: 'Factory Incharge', path: '/factory-incharge', icon: Factory,    key: 'factory-incharge' },
+  { name: 'MD Dashboard',     path: '/md-dashboard',     icon: BarChart3,  key: 'md-dashboard'     },
+  { name: 'Basis Admin',      path: '/admin',            icon: ShieldCheck,key: 'admin'            },
 ];
 
 // ── Session timeout watcher ───────────────────────────────────────────
@@ -96,20 +113,16 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
     ? user.allowedModules
     : null; // null = show all
 
-  const navItems = ALL_NAV.filter(item => {
-    // Module permission check
+  // Build nav: core items filtered by role permissions + role-specific items
+  const coreItems = CORE_NAV.filter(item => {
     if (allowedModuleKeys && !allowedModuleKeys.includes(item.key)) return false;
-    // Production only for Glassco
     if (item.key === 'production' && selectedCompany !== 'Glassco') return false;
-    // Hub not for Factory
-    if (item.key === 'hub' && selectedCompany === 'Factory') return false;
-    // Sales/Projects/Inventory not for Factory
-    if (['sales','projects','inventory'].includes(item.key) && selectedCompany === 'Factory') return false;
-    // Admin: only visible when Factory company is selected
-    if (item.key === 'admin' && selectedCompany !== 'Factory') return false;
-    // MD Dashboard visible to all logged-in users (each sees their own company data)
+    if (['sales'].includes(item.key) && selectedCompany === 'Factory') return false;
     return true;
   });
+
+  const roleItems = (user?.role ? (ROLE_NAV[user.role] || []) : []);
+  const navItems = [...coreItems, ...roleItems];
 
   const sidebarClasses = isMobile
     ? `fixed inset-y-0 left-0 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} w-72 shadow-2xl z-[100]`
@@ -295,9 +308,10 @@ const App: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []); // resize listener always active
 
-  // Set default company + redirect to role home on first login
+  // Set default company based on role on first login
   useEffect(() => {
     if (user) {
+      // Set logger context
       setLogContext(user.fullName || user.email, user.allowedCompanies[0] || 'GTK');
       Logger.auth('LOGIN', user.email);
       const defaultCompany = ROLE_DEFAULT_COMPANY[user.role];
@@ -395,7 +409,7 @@ const App: React.FC = () => {
                 </div>
               }>
                 <Routes>
-                  <Route path="/"             element={<ModuleErrorBoundary moduleName="Dashboard"><RoleHomePage /></ModuleErrorBoundary>} />
+                  <Route path="/"             element={<ModuleErrorBoundary moduleName="Dashboard"><Dashboard /></ModuleErrorBoundary>} />
                   <Route path="/hr/*"          element={<ModuleErrorBoundary moduleName="HR"><HRModule /></ModuleErrorBoundary>} />
                   <Route path="/sales/*"       element={<ModuleErrorBoundary moduleName="Sales"><SalesCRM /></ModuleErrorBoundary>} />
                   <Route path="/inventory"     element={<ModuleErrorBoundary moduleName="Inventory"><InventoryModule /></ModuleErrorBoundary>} />
