@@ -11,7 +11,7 @@ import {
 import Pagination from '@/components/Pagination';
 import { GlasscoPrintTemplate } from '../../glassco/core/GlasscoPrintTemplate';
 import { NipponPrintTemplate } from '../../nippon/prints/NipponPrintTemplate';
-import { PrintQuotation as GTKPrintQuotation } from '../companies/gtk/PrintQuotation';
+import UniversalSalesOrderPrint from './prints/UniversalSalesOrderPrint';
 import { UnifiedPaymentPrint } from '../../finance/components/prints/UnifiedPaymentPrint';
 import { GlasscoServiceOrderPrint } from '../../glassco/core/prints/GlasscoServiceOrderPrint';
 import { useLocation } from 'react-router-dom';
@@ -465,7 +465,7 @@ const SalesOrders: React.FC = () => {
                 company === 'Nippon'
                     ? <NipponPrintTemplate printingQuote={selectedOrder} clients={clients} printMode={printMode} printType={nipponPrintType} />
                     : (company === 'GTK' || company === 'GTI')
-                    ? <GTKPrintQuotation quotation={selectedOrder} company={company} />
+                    ? <UniversalSalesOrderPrint quotation={selectedOrder} company={company} clientName={clients.find(c => c.id === selectedOrder.clientId)?.name} printMode={printMode} />
                     : <GlasscoPrintTemplate printingQuote={selectedOrder} clients={clients} printMode={printMode} />
             )}
             
