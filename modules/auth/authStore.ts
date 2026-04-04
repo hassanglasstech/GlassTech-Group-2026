@@ -4,6 +4,15 @@ import { supabase } from '@/src/services/supabaseClient';
 
 export type UserRole =
   | 'super_admin'
+  | 'owner'
+  | 'hassan'
+  | 'factory_manager'
+  | 'admin_officer'
+  | 'glassco_supervisor'
+  | 'gtk_supervisor'
+  | 'gti_supervisor'
+  | 'glassco_cutter'
+  | 'dispatch_staff'
   | 'glassco_admin'
   | 'glassco_production'
   | 'nippon_admin'
@@ -22,19 +31,74 @@ export interface UserProfile {
 }
 
 export const ROLE_DEFAULT_COMPANY: Record<UserRole, string> = {
-  super_admin:        'GTK',
-  gtk_admin:          'GTK',
-  glassco_admin:      'Glassco',
-  glassco_production: 'Glassco',
-  nippon_admin:       'Nippon',
+  super_admin:         'GTK',
+  owner:               'GTK',
+  hassan:              'GTK',
+  factory_manager:     'Glassco',
+  admin_officer:       'Glassco',
+  glassco_supervisor:  'Glassco',
+  gtk_supervisor:      'GTK',
+  gti_supervisor:      'GTI',
+  glassco_cutter:      'Glassco',
+  dispatch_staff:      'Glassco',
+  gtk_admin:           'GTK',
+  glassco_admin:       'Glassco',
+  glassco_production:  'Glassco',
+  nippon_admin:        'Nippon',
 };
 
+// Empty array = all modules allowed
 export const ROLE_MODULES: Record<UserRole, string[]> = {
   super_admin:        [],
+  owner:              [],
+  hassan:             [],
+  factory_manager:    ['production','inventory','requisitions','factory-incharge'],
+  admin_officer:      ['sales','inventory','logistics','requisitions','accounts'],
+  glassco_supervisor: ['production','inventory','requisitions'],
+  gtk_supervisor:     ['production','inventory','requisitions'],
+  gti_supervisor:     ['production','inventory','requisitions'],
+  glassco_cutter:     ['production'],
+  dispatch_staff:     ['production','logistics'],
   gtk_admin:          [],
   glassco_admin:      [],
   glassco_production: ['production','inventory','logistics','requisitions'],
   nippon_admin:       ['sales','inventory','hr','accounts','requisitions'],
+};
+
+// Default route after login per role
+export const ROLE_DEFAULT_ROUTE: Record<UserRole, string> = {
+  super_admin:        '/',
+  owner:              '/md-dashboard',
+  hassan:             '/',
+  factory_manager:    '/factory-incharge',
+  admin_officer:      '/sales',
+  glassco_supervisor: '/production',
+  gtk_supervisor:     '/production',
+  gti_supervisor:     '/production',
+  glassco_cutter:     '/production',
+  dispatch_staff:     '/logistics',
+  gtk_admin:          '/',
+  glassco_admin:      '/sales',
+  glassco_production: '/production',
+  nippon_admin:       '/sales',
+};
+
+// Role display labels
+export const ROLE_LABELS: Record<UserRole, string> = {
+  super_admin:        'Super Admin',
+  owner:              'Owner',
+  hassan:             'System Admin',
+  factory_manager:    'Factory Manager',
+  admin_officer:      'Admin Officer',
+  glassco_supervisor: 'GlassCo Supervisor',
+  gtk_supervisor:     'GTK Supervisor',
+  gti_supervisor:     'GTI Supervisor',
+  glassco_cutter:     'Cutter',
+  dispatch_staff:     'Dispatch',
+  gtk_admin:          'GTK Admin',
+  glassco_admin:      'GlassCo Admin',
+  glassco_production: 'Production',
+  nippon_admin:       'Nippon Admin',
 };
 
 export const isOfficeHours = (): boolean => {
