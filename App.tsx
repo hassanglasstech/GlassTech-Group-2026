@@ -15,6 +15,8 @@ import { RealtimeService } from '@/src/services/RealtimeService';
 import { getNetworkStatus, OfflineQueue } from '@/modules/shared/services/networkService';
 import { DataIntegrity } from '@/modules/shared/services/dataIntegrity';
 import { checkSchemaVersion } from '@/modules/shared/services/utils';
+import { prefetchCriticalTables } from '@/modules/shared/hooks/useSupabaseData';
+import { flushOfflineQueue } from '@/modules/shared/services/supabaseDB';
 import { Logger, setLogContext, installConsoleOverride } from '@/modules/shared/services/logger';
 import { Toaster, toast } from 'sonner';
 import { useAuthStore, isOfficeHours, ROLE_DEFAULT_COMPANY, ROLE_MODULES, ROLE_LABELS } from '@/modules/auth/authStore';
@@ -292,6 +294,8 @@ const App: React.FC = () => {
       checkSchemaVersion();
       DataIntegrity.autoRepairOnStartup();
       await SyncService.fetchFromCloud();
+      await prefetchCriticalTables();   // prime Supabase cache on login
+      await flushOfflineQueue();         // push any offline writes
       await AppService.seedInitialData();
       await HRService.loadCache();   // prime HR in-memory cache
       await loadShiftRules();         // prime shift rules cache

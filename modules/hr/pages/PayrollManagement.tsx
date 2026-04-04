@@ -21,6 +21,8 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [isApproved, setIsApproved] = useState(false);
   const [slipsPer2, setSlipsPer2] = useState(false);
   const [approvedBy, setApprovedBy] = useState('');
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [approverInput, setApproverInput] = useState('');
 
 
   const { refreshKey } = useRealtimeRefresh(['payroll', 'employees', 'attendance', 'loans']);

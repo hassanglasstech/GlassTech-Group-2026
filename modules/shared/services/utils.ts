@@ -1,5 +1,17 @@
 import { initDB } from './db';
 import { toast } from 'sonner';
+import { dbRead, dbWrite } from './supabaseDB';
+
+// ── ASYNC: Fetch fresh data from Supabase, update cache ───────────────
+// Use this in useEffect / component mount for live data
+export const safeFetch = async (key: string): Promise<any[]> => {
+  try {
+    return await dbRead(key);
+  } catch (err: any) {
+    console.warn(`[safeFetch] Failed for ${key}:`, err.message);
+    return safeParse(key);
+  }
+};
 
 // ── Background IDB save ───────────────────────────────────────────────
 export const bgSaveToIDB = async (storeName: string, items: any[]) => {
@@ -34,10 +46,10 @@ export const safeParse = (key: string, defaultValue: string = '[]') => {
   }
 };
 
-// ── Safe localStorage write (with auto audit stamp) ─────────────────
+// ── Safe write: localStorage cache + Supabase push (non-blocking) ────
+// Supabase is PRIMARY. localStorage is just a fast cache for instant UI.
 export const safeSave = (key: string, data: any): boolean => {
   try {
-    // Auto-stamp _updatedAt and _version on array items with id
     let toSave = data;
     if (Array.isArray(data) && key.startsWith('gtk_erp')) {
       const now = new Date().toISOString();
@@ -45,6 +57,7 @@ export const safeSave = (key: string, data: any): boolean => {
         if (item && typeof item === 'object' && item.id) {
           return {
             ...item,
+            updated_at: now,
             _updatedAt: now,
             _version: (item._version || 0) + 1,
             _createdAt: item._createdAt || now,
@@ -54,22 +67,19 @@ export const safeSave = (key: string, data: any): boolean => {
       });
     }
 
-    const serialized = JSON.stringify(toSave);
-    const currentUsage = Object.keys(localStorage)
-      .reduce((sum, k) => sum + (localStorage.getItem(k)?.length || 0), 0);
-    if (currentUsage + serialized.length > 4.5 * 1024 * 1024) {
-      toast.error('Storage nearly full — please backup and clear old data.', { duration: 6000 });
-      console.error(`[Storage] Quota warning: ${Math.round(currentUsage/1024)}KB used`);
-      return false;
+    // 1. Write to localStorage cache immediately — UI stays instant
+    try { localStorage.setItem(key, JSON.stringify(toSave)); } catch { /* quota ok — Supabase is primary */ }
+
+    // 2. Push to Supabase in background — non-blocking, won't slow UI
+    if (Array.isArray(toSave)) {
+      dbWrite(key, toSave).catch(err => {
+        console.warn(`[safeSave] Supabase push queued for ${key}:`, err?.message);
+      });
     }
-    localStorage.setItem(key, serialized);
+
     return true;
   } catch (err: any) {
-    if (err?.name === 'QuotaExceededError') {
-      toast.error('Storage full — cannot save. Please backup data from Admin panel.', { duration: 8000, id: 'storage-full' });
-    } else {
-      toast.error(`Save failed: ${err?.message || 'Unknown error'}`, { duration: 4000 });
-    }
+    toast.error(`Save failed: ${err?.message || 'Unknown error'}`, { duration: 4000 });
     console.error(`[Storage] Save failed for ${key}:`, err);
     return false;
   }
@@ -130,11 +140,17 @@ export const getStorageHealth = () => {
       totalKB:    Math.round(totalBytes / 1024),
       erpKB:      Math.round(erpBytes / 1024),
       usedPercent: Math.round((totalBytes / (5 * 1024 * 1024)) * 100),
-      isHealthy:  totalBytes < 4 * 1024 * 1024,
+      isHealthy:  true, // Supabase is primary — localStorage size no longer critical
+      primaryDB:  'Supabase',
     };
   } catch {
-    return { totalKeys: 0, erpKeys: 0, totalKB: 0, erpKB: 0, usedPercent: 0, isHealthy: true };
+    return { totalKeys: 0, erpKeys: 0, totalKB: 0, erpKB: 0, usedPercent: 0, isHealthy: true, primaryDB: 'Supabase' };
   }
+};
+
+// ── Prefetch multiple keys into cache (call on app start) ────────────
+export const prefetchToCache = async (keys: string[]): Promise<void> => {
+  await Promise.allSettled(keys.map(key => safeFetch(key)));
 };
 
 // ── Schema version management ─────────────────────────────────────────

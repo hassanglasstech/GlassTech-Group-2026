@@ -13,6 +13,8 @@
  */
 
 import { supabase } from './supabaseClient';
+import { flushOfflineQueue, getDBStatus } from '../../modules/shared/services/supabaseDB';
+import { safeFetch } from '../../modules/shared/services/utils';
 import { toast } from 'sonner';
 import { translateError, OfflineQueue, withRetry } from '../../modules/shared/services/networkService';
 
@@ -1078,7 +1080,7 @@ export const SyncService = {
       console.log('[Sync] Network restored — flushing queue + pushing pending...');
       toast.success('Back online — syncing changes...', { id: 'back-online', duration: 3000 });
       // Flush offline queue first, then sync
-      OfflineQueue.flush(supabase).then(() => SyncService.pushPending());
+      flushOfflineQueue().then(() => SyncService.pushPending());
     });
 
     window.addEventListener('offline', () => {

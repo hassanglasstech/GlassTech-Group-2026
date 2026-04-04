@@ -131,6 +131,7 @@ const AttendanceRegister: React.FC = () => {
   };
 
   const [pendingApproval, setPendingApproval] = useState(false);
+  const [leaveBalances, setLeaveBalances] = useState<Record<string, number>>({});
   const [showSupervisorModal, setShowSupervisorModal] = useState(false);
   const [supervisorInput, setSupervisorInput] = useState('');
 
