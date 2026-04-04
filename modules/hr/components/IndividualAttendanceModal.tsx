@@ -62,20 +62,21 @@ const getShift = (company?: string, dateStr?: string): { start: string; end: str
     const isGTK     = co.includes('gtk') || co.includes('aluminum fabrication') || co.includes('netting');
     const isAdmin   = co.includes('admin') || co.includes('management');
 
-    // Eid holidays 20-24 March
-    if (day >= 20 && day <= 24) return { start: '00:00', end: '00:00', lateGrace: 0 };
+    // Eid holidays 20-23 March
+    if (day >= 20 && day <= 23) return { start: '00:00', end: '00:00', lateGrace: 0 };
 
-    // GlassCo Ramzan shift
+    // 24 March onward — all companies 09:00-18:00
+    if (day >= 24) return { start: '09:00', end: '18:00', lateGrace: 15 };
+
+    // GlassCo Ramzan shift (1-19)
     if (isGlassco) {
       if (day >= 1  && day <= 7)  return { start: '08:00', end: '16:00', lateGrace: 15 };
       if (day >= 9  && day <= 19) return { start: '07:00', end: '14:00', lateGrace: 15 };
-      if (day >= 25)              return { start: '09:00', end: '18:00', lateGrace: 15 };
     }
 
-    // GTK / Admin — 1-19: 08:00-16:00, 25+: 09:00-18:00
+    // GTK / Admin Ramzan shift (1-19)
     if (isGTK || isAdmin) {
       if (day >= 1  && day <= 19) return { start: '08:00', end: '16:00', lateGrace: 15 };
-      if (day >= 25)              return { start: '09:00', end: '18:00', lateGrace: 15 };
     }
   }
 
