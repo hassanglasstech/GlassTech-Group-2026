@@ -18,6 +18,8 @@ import { checkSchemaVersion } from '@/modules/shared/services/utils';
 import { Logger, setLogContext, installConsoleOverride } from '@/modules/shared/services/logger';
 import { Toaster, toast } from 'sonner';
 import { useAuthStore, isOfficeHours, ROLE_DEFAULT_COMPANY, ROLE_MODULES, ROLE_LABELS } from '@/modules/auth/authStore';
+import { HRService } from '@/modules/hr/services/hrService';
+import { loadShiftRules } from '@/modules/hr/pages/ShiftMaster';
 import LoginPage from '@/modules/auth/LoginPage';
 
 import NotificationCenter from './modules/shared/components/NotificationCenter';
@@ -291,6 +293,8 @@ const App: React.FC = () => {
       DataIntegrity.autoRepairOnStartup();
       await SyncService.fetchFromCloud();
       await AppService.seedInitialData();
+      await HRService.loadCache();   // prime HR in-memory cache
+      await loadShiftRules();         // prime shift rules cache
       AppService.checkAndTriggerAutoBackup();
       // Start Realtime AFTER initial fetch — live cross-device sync
       RealtimeService.start();

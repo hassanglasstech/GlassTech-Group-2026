@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Employee, AttendanceRecord, AttendanceStatus } from '@/modules/shared/types';
 import { HRService } from '@/modules/hr/services/hrService';
+import { resolveShift } from '@/modules/hr/pages/ShiftMaster';
 import { toast } from 'sonner';
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -51,6 +52,15 @@ const getShift = (company?: string, dateStr?: string): { start: string; end: str
   const DEFAULT = { start: '09:00', end: '18:00', lateGrace: 15 };
 
   if (!dateStr) return DEFAULT;
+
+  // Check ShiftMaster rules first — dynamic config overrides hardcode
+  if (company) {
+    const rule = resolveShift(company, dateStr);
+    if (rule) {
+      if (rule.isHoliday) return { start: '00:00', end: '00:00', lateGrace: 0 };
+      return { start: rule.start, end: rule.end, lateGrace: rule.lateGrace };
+    }
+  }
   const date = new Date(dateStr);
   const day   = date.getDate();
   const month = date.getMonth() + 1; // 1-based

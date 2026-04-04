@@ -10,6 +10,7 @@ import { useAppStore } from '../../shared/store/appStore';
 import { toast } from 'sonner';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 import IndividualAttendanceModal from '@/modules/hr/components/IndividualAttendanceModal';
+import AttendanceReconciliation from './AttendanceReconciliation';
 
 const AttendanceRegister: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
@@ -17,7 +18,7 @@ const AttendanceRegister: React.FC = () => {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [allMonthRecords, setAllMonthRecords] = useState<AttendanceRecord[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [viewType, setViewType] = useState<'daily' | 'monthly' | 'summary'>('daily');
+  const [viewType, setViewType] = useState<'daily' | 'monthly' | 'summary' | 'reconcile'>('daily');
   const [isBulkEditing, setIsBulkEditing] = useState(false);
   const [individualEditEmp, setIndividualEditEmp] = useState<Employee | null>(null);
   const [bulkData, setBulkData] = useState<Record<string, Record<string, { status: AttendanceStatus, ot: number, early: number, late: number }>>>({});
@@ -77,6 +78,24 @@ const AttendanceRegister: React.FC = () => {
     });
     setAllMonthRecords(monthFiltered);
 
+    // Compute leave balances with carryforward
+    const currentYear = new Date().getFullYear();
+    const ANNUAL_ENTITLEMENT = 18;
+    const balances: Record<string, number> = {};
+    emps.forEach(emp => {
+      const used = allAttendance.filter(r =>
+        r.employeeId === emp.id && r.status === 'Leave' &&
+        r.date >= `${currentYear}-01-01` && r.date <= `${currentYear}-12-31`
+      ).length;
+      const prevUsed = allAttendance.filter(r =>
+        r.employeeId === emp.id && r.status === 'Leave' &&
+        r.date >= `${currentYear-1}-01-01` && r.date <= `${currentYear-1}-12-31`
+      ).length;
+      const carryforward = Math.min(6, Math.max(0, ANNUAL_ENTITLEMENT - prevUsed));
+      balances[emp.id] = Math.max(0, ANNUAL_ENTITLEMENT + carryforward - used);
+    });
+    setLeaveBalances(balances);
+
     // Fetch Authorized Requisitions for Phase 2/3 (HR Control)
     const allReqs = InventoryService.getRequisitions().filter(Boolean);
     setAuthorizedWaiveReqs(allReqs.filter(r => r.company === company && r.status === 'Approved' && r.reqType === 'Waive Absent'));
@@ -103,9 +122,35 @@ const AttendanceRegister: React.FC = () => {
   const handleSaveAll = () => {
     const allStorage = HRService.getAttendance();
     const otherDates = allStorage.filter(r => r?.date !== selectedDate);
-    HRService.saveAttendance([...otherDates, ...records]);
+    // Mark records as pending supervisor approval
+    const markedRecords = records.map(r => ({ ...r, approvalStatus: 'pending' } as any));
+    HRService.saveAttendance([...otherDates, ...markedRecords]);
+    setPendingApproval(true);
     refreshAllData();
-    toast.success(`Success: Attendance for ${selectedDate} has been saved.`);
+    toast.success(`Attendance saved — pending supervisor approval`);
+  };
+
+  const [showSupervisorModal, setShowSupervisorModal] = useState(false);
+  const [supervisorInput, setSupervisorInput] = useState('');
+
+  const handleSupervisorApprove = () => {
+    setSupervisorInput('');
+    setShowSupervisorModal(true);
+  };
+
+  const confirmSupervisorApproval = () => {
+    const supervisor = supervisorInput.trim();
+    if (!supervisor) { toast.error('Enter supervisor name'); return; }
+    const allStorage = HRService.getAttendance();
+    const approved = allStorage.map(r =>
+      r.date === selectedDate
+        ? { ...r, approvalStatus: 'approved', approvedBy: supervisor.trim(), approvedAt: new Date().toISOString() } as any
+        : r
+    );
+    HRService.saveAttendance(approved);
+    setPendingApproval(false);
+    setShowSupervisorModal(false);
+    toast.success(`Attendance approved by ${supervisor}`);
   };
 
   const startBulkEdit = () => {
@@ -462,7 +507,15 @@ const AttendanceRegister: React.FC = () => {
           const row = rows[ri];
           if (!row || !row[0]) continue;
           const code = String(row[0]).trim();
-          const emp = employees.find(e => e.work?.employeeCode === code || e.personal?.name === String(row[1]).trim());
+          // Normalize: '003' → matches 'GTK-003', '0114' → 'GTK-114' etc.
+          const stripNum = (s: string) => s.replace(/^[A-Za-z]+-?0*/,'').replace(/^0+/,'') || '0';
+          const emp = employees.find(e => {
+            const ec = e.work?.employeeCode || '';
+            return ec === code ||
+              ec === code.replace(/^0+/,'').padStart(3,'0') ||
+              stripNum(ec) === stripNum(code) ||
+              e.personal?.name?.toLowerCase() === String(row[1]||'').trim().toLowerCase();
+          });
           if (!emp) continue;
 
           for (let ci = dayStartIdx; ci <= dayEndIdx; ci++) {
@@ -518,6 +571,7 @@ const AttendanceRegister: React.FC = () => {
             <button onClick={() => { setViewType('daily'); setIsBulkEditing(false); }} className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${viewType === 'daily' ? 'bg-white shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>Daily Mark</button>
             <button onClick={() => { setViewType('monthly'); setIsBulkEditing(false); }} className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${viewType === 'monthly' ? 'bg-white shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>Monthly View</button>
             <button onClick={() => { setViewType('summary'); setIsBulkEditing(false); }} className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${viewType === 'summary' ? 'bg-white shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>Summary Input</button>
+            <button onClick={() => { setViewType('reconcile'); setIsBulkEditing(false); }} className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${viewType === 'reconcile' ? 'bg-white shadow text-red-600' : 'text-slate-400 hover:text-slate-600'}`}>Reconcile</button>
           </div>
           <div className="flex items-center space-x-4">
             <Calendar className="text-blue-600" size={20} />
@@ -554,7 +608,14 @@ const AttendanceRegister: React.FC = () => {
           )}
 
           {viewType === 'daily' ? (
-            !isSelectedDateSunday && <button onClick={handleSaveAll} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-blue-700 transition-all whitespace-nowrap">Save Register</button>
+            !isSelectedDateSunday && (
+              <div className="flex items-center gap-2">
+                <button onClick={handleSaveAll} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-blue-700 transition-all whitespace-nowrap">Save Register</button>
+                {pendingApproval && (
+                  <button onClick={() => setShowSupervisorModal(true)} className="bg-amber-500 text-white px-4 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest hover:bg-amber-600 transition-all whitespace-nowrap animate-pulse">⚠ Supervisor Approve</button>
+                )}
+              </div>
+            )
           ) : viewType === 'monthly' ? (
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Click employee row to edit</span>
           ) : null}

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Employee, LoanAdvance, Requisition, Company } from '@/modules/shared/types';
 import { HRService } from '@/modules/hr/services/hrService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
+import { FinanceService } from '@/modules/finance/services/financeService';
 import { Plus, Search, CheckCircle, Clock, Banknote, HandCoins, X, AlertCircle, FileUp, Download, Calendar, Edit2, Trash2, Fingerprint } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
@@ -16,6 +17,7 @@ const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'Loan' | 'Advance'>('Advance');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [statementEmpId, setStatementEmpId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [newLoan, setNewLoan] = useState<Partial<LoanAdvance>>({
@@ -101,6 +103,25 @@ const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
             const updatedReqs = allReqs.map(r => r.id === newLoan.requisitionId ? { ...r, status: 'Completed' as const } : r);
             InventoryService.saveRequisitions(updatedReqs);
         }
+
+        // GL Entry: Dr Staff Loans/Advances (1121), Cr Cash (1111)
+        try {
+          const emp = employees.find(e => e.id === newLoan.employeeId);
+          const assetParent = FinanceService.ensureAccount(company as any, 'CURRENT ASSETS', 2, null, 'Asset', '11');
+          const loanAcc     = FinanceService.ensureAccount(company as any, 'Staff Loans & Advances', 3, assetParent.id, 'Asset', '1121');
+          const cashAcc     = FinanceService.ensureAccount(company as any, 'Cash in Hand', 3, assetParent.id, 'Asset', '1111');
+          FinanceService.recordTransaction({
+            id: `LOAN-DISB-${Date.now()}`,
+            date: loanData.date,
+            description: `${modalType} Disbursed — ${emp?.personal?.name || ''} — PKR ${loanData.amount?.toLocaleString()}`,
+            company,
+            details: [
+              { accountId: loanAcc.id, debit: Number(loanData.amount), credit: 0, text: `${modalType} issued` },
+              { accountId: cashAcc.id, debit: 0, credit: Number(loanData.amount), text: 'Cash paid out' },
+            ],
+            postedBy: 'HR',
+          });
+        } catch(e) { console.warn('Loan GL entry failed', e); }
     }
     
     refreshData(employees);
@@ -181,6 +202,10 @@ const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
 
   return (
     <div className="space-y-6">
+      {statementEmpId && (() => {
+        const emp = employees.find(e => e.id === statementEmpId);
+        return emp ? <LoanStatementModal empId={statementEmpId} empName={emp.personal.name} onClose={() => setStatementEmpId(null)} /> : null;
+      })()}
       <div className="flex justify-between items-center bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div className="flex items-center space-x-6">
            <div><h3 className="text-xl font-black text-slate-800 tracking-tight leading-none">Financial Ledger</h3><p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-1.5">Employee Loans & Advances</p></div>
@@ -206,7 +231,7 @@ const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
               const emp = employees.find(e => e.id === loan.employeeId);
               return (
                 <tr key={loan.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-8 py-4"><p className="font-bold text-slate-900 leading-tight">{emp?.personal.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{emp?.work.employeeCode}</p></td>
+                  <td className="px-8 py-4"><div className="flex items-center gap-2"><div><p className="font-bold text-slate-900 leading-tight">{emp?.personal.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{emp?.work.employeeCode}</p></div><button onClick={() => setStatementEmpId(loan.employeeId)} title="View full statement" className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><FileText size={13}/></button></div></td>
                   <td className="px-6 py-4 font-black text-slate-500 text-xs uppercase tracking-tighter">{loan.date}</td>
                   <td className="px-6 py-4">
                       <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${loan.type === 'Loan' ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{loan.type}</span>
@@ -264,6 +289,56 @@ const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
           <button onClick={handleSaveLoan} className={`${modalType === 'Loan' ? 'bg-slate-900' : 'bg-blue-600'} text-white px-12 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-2xl transition-all hover:scale-[1.02] active:scale-95`}>{editingId ? 'Update Record' : 'Post Transaction'}</button>
         </div>
       </div></div>)}
+    </div>
+  );
+};
+
+
+// ── Loan Statement Modal ──────────────────────────────────────────────
+const LoanStatementModal: React.FC<{ empId: string; empName: string; onClose: () => void }> = ({ empId, empName, onClose }) => {
+  const allLoans = HRService.getLoans().filter(l => l.employeeId === empId).sort((a,b) => a.date.localeCompare(b.date));
+  const total = allLoans.reduce((s, l) => s + l.amount, 0);
+  const recovered = allLoans.reduce((s, l) => s + (l.repaymentAmount || 0), 0);
+  const outstanding = total - recovered;
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[500] p-4">
+      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-900 rounded-t-2xl">
+          <div>
+            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Loan Statement</p>
+            <p className="text-white font-black text-lg">{empName}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white p-2"><X size={20}/></button>
+        </div>
+        <div className="grid grid-cols-3 gap-4 p-4 border-b bg-slate-50">
+          <div className="text-center"><p className="text-[10px] font-black text-slate-400 uppercase">Total Disbursed</p><p className="text-xl font-black text-slate-800">PKR {total.toLocaleString()}</p></div>
+          <div className="text-center"><p className="text-[10px] font-black text-slate-400 uppercase">Recovered</p><p className="text-xl font-black text-emerald-600">PKR {recovered.toLocaleString()}</p></div>
+          <div className="text-center"><p className="text-[10px] font-black text-slate-400 uppercase">Outstanding</p><p className="text-xl font-black text-rose-600">PKR {outstanding.toLocaleString()}</p></div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          {allLoans.length === 0 ? <p className="text-sm text-slate-400 italic text-center py-8">No loans/advances on record</p> : (
+            <table className="w-full text-xs border-collapse">
+              <thead><tr className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase">
+                <th className="p-2 text-left">Date</th><th className="p-2 text-left">Type</th>
+                <th className="p-2 text-right">Amount</th><th className="p-2 text-right">Recovered</th>
+                <th className="p-2 text-right">Outstanding</th><th className="p-2 text-center">Status</th>
+              </tr></thead>
+              <tbody>
+                {allLoans.map(l => (
+                  <tr key={l.id} className="border-t border-slate-100 hover:bg-slate-50">
+                    <td className="p-2 font-bold">{l.date}</td>
+                    <td className="p-2"><span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${l.type === 'Loan' ? 'bg-slate-100 text-slate-600' : 'bg-blue-50 text-blue-600'}`}>{l.type}</span></td>
+                    <td className="p-2 text-right font-bold">{l.amount.toLocaleString()}</td>
+                    <td className="p-2 text-right text-emerald-600 font-bold">{(l.repaymentAmount||0).toLocaleString()}</td>
+                    <td className="p-2 text-right text-rose-600 font-black">{(l.amount - (l.repaymentAmount||0)).toLocaleString()}</td>
+                    <td className="p-2 text-center"><span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${l.status === 'Completed' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>{l.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

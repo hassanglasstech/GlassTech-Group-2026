@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Employee, AttendanceRecord, LoanAdvance, Payroll, LedgerTransaction, Company } from '@/modules/shared/types';
 import { HRService } from '@/modules/hr/services/hrService';
 import { FinanceService } from '@/modules/finance/services/financeService';
-import { CreditCard, Printer, Eye, X, Calculator, Calendar, FileUp, Download, ArrowLeft, CheckCircle2, ShieldCheck, BarChart3, FileText, Info, Check, AlertCircle, Buildi ng2, User, Ban, ShieldCheck as Shield, Send, Landmark } from 'lucide-react';
+import { CreditCard, Printer, Eye, X, Calculator, Calendar, FileUp, Download, ArrowLeft, CheckCircle2, ShieldCheck, BarChart3, FileText, Info, Check, AlertCircle, Building2, User, Ban, ShieldCheck as Shield, Send, Landmark } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';

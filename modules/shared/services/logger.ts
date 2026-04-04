@@ -12,6 +12,7 @@
 
 import { toast } from 'sonner';
 import { safeSave, safeParse } from './utils';
+import { supabase } from '@/src/services/supabaseClient';
 
 // ── Log types ─────────────────────────────────────────────────────────
 export type LogLevel   = 'info' | 'warn' | 'error' | 'success' | 'audit';
@@ -64,6 +65,25 @@ const writeLog = (entry: Omit<LogEntry, 'id' | 'timestamp' | 'user' | 'company'>
     safeSave(LOG_KEY, updated);
   } catch (err) {
     console.warn('[Logger] Failed to write log:', err);
+  }
+
+  // Push to Supabase audit trail (fire and forget)
+  if (full.level === 'audit' || full.level === 'error') {
+    supabase.from('activity_logs').insert({
+      id: full.id,
+      timestamp: full.timestamp,
+      level: full.level,
+      module: full.module,
+      action: full.action,
+      description: full.description,
+      user_name: full.user || 'System',
+      company: full.company || '',
+      reference_id: full.referenceId || null,
+      amount: full.amount || null,
+      meta: full.meta ? JSON.stringify(full.meta) : null,
+    }).then(({ error }) => {
+      if (error) console.warn('[Logger] Supabase audit push failed:', error.message);
+    });
   }
 
   // Also write to console in dev

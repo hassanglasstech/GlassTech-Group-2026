@@ -6,7 +6,7 @@
  * Pure Supabase — in-memory cache for fast reads.
  * 
  * Tables: employees, attendance, loans, payroll
- */ 
+ */
 
 import { Employee, AttendanceRecord, LoanAdvance, Payroll } from '../types/hr';
 import { supabase } from '@/src/services/supabaseClient';

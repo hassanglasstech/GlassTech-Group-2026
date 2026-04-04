@@ -109,10 +109,64 @@ export interface Employee {
     houseRent: number;
     conveyance: number;
     specialAllowance: number;
+    medicalAllowance?: number;
+    fuelAllowance?: number;
+    eobi?: boolean;          // EOBI registered (PKR 370/month deduction)
   };
+  personal: {
+    name: string;
+    cnic: string;
+    phone: string;
+    address: string;
+    photoUrl?: string;
+    emergencyContact?: string;
+    emergencyPhone?: string;
+  };
+  transferHistory?: {
+    date: string;
+    fromCompany: string;
+    toCompany: string;
+    reason: string;
+    approvedBy: string;
+  }[];
+  salaryHistory?: {
+    date: string;
+    basic: number;
+    gross: number;
+    reason: string;
+    changedBy: string;
+  }[];
 }
 
 export type EmployeeStatus = 'probation' | 'confirmed' | 'resigned' | 'terminated' | 'suspended';
+
+// ── Disciplinary Actions ─────────────────────────────────────────────
+export type DisciplinaryType = 'verbal_warning' | 'written_warning' | 'show_cause' | 'suspension' | 'termination';
+
+export interface DisciplinaryAction {
+  id: string;
+  employeeId: string;
+  company: string;
+  date: string;
+  type: DisciplinaryType;
+  subject: string;
+  details: string;
+  issuedBy: string;
+  acknowledged: boolean;
+  acknowledgedDate?: string;
+}
+
+// ── Leave Balance ───────────────────────────────────────────────────
+export interface LeaveBalance {
+  id: string;
+  employeeId: string;
+  year: number;
+  company: string;
+  annualEntitlement: number;  // default 18 days
+  used: number;
+  remaining: number;
+  lastUpdated: string;
+}
 
 // ── Attendance ──────────────────────────────────────────────────────
 export interface AttendanceRecord {
