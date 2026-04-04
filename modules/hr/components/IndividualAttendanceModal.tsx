@@ -27,7 +27,8 @@ interface DayEntry {
   earlyMinutes: number;
   overtimeHours: number;
   isSunday: boolean;
-  isSandwichAbsent: boolean; // calculated
+  isSandwichAbsent: boolean;
+  isNA: boolean; // before join date or after last working date // calculated
   notes: string;
 }
 
@@ -123,23 +124,35 @@ const IndividualAttendanceModal: React.FC<Props> = ({ employee, month, onClose, 
       r => r.employeeId === employee.id && r.date?.startsWith(month)
     );
 
+    const joinDate  = employee?.work?.joinDate  ? new Date(employee.work.joinDate)  : null;
+    const lastDate  = (employee?.work as any)?.lastDate ? new Date((employee.work as any).lastDate) : null;
+
     return Array.from({ length: numDays }, (_, i) => {
       const day = i + 1;
       const date = `${month}-${String(day).padStart(2, '0')}`;
-      const isSunday = new Date(date).getDay() === 0;
+      const dateObj = new Date(date);
+      const isSunday = dateObj.getDay() === 0;
       const rec = existing.find(r => r.date === date);
+
+      // Day is N/A if before join date or after last working date
+      const beforeJoin = joinDate ? dateObj < new Date(joinDate.toISOString().split('T')[0]) : false;
+      const afterLast  = lastDate ? dateObj > new Date(lastDate.toISOString().split('T')[0])  : false;
+      const isNA = beforeJoin || afterLast;
 
       return {
         date,
-        status: rec?.status ?? (isSunday ? 'Present' : 'Present'),
-        inTime: (rec as any)?.inTime ?? (isSunday ? '' : getShift(employee?.company, date).start),
-        outTime: (rec as any)?.outTime ?? (isSunday ? '' : getShift(employee?.company, date).end),
-        lateMinutes: rec?.lateMinutes ?? 0,
-        earlyMinutes: rec?.earlyMinutes ?? 0,
-        overtimeHours: rec?.overtimeHours ?? 0,
+        status: isNA ? 'Absent' : rec?.status ?? (isSunday ? 'Present' : 'Present'),
+        inTime: isNA ? '' : (rec as any)?.inTime ?? (isSunday ? '' : getShift(employee?.company, date).start),
+        outTime: isNA ? '' : (rec as any)?.outTime ?? (isSunday ? '' : getShift(employee?.company, date).end),
+        lateMinutes: isNA ? 0 : rec?.lateMinutes ?? 0,
+        earlyMinutes: isNA ? 0 : rec?.earlyMinutes ?? 0,
+        overtimeHours: isNA ? 0 : rec?.overtimeHours ?? 0,
         isSunday,
         isSandwichAbsent: false,
-        notes: (rec as any)?.notes ?? '',
+        isNA,
+        notes: isNA
+          ? (beforeJoin ? 'Before joining' : 'After resignation')
+          : (rec as any)?.notes ?? '',
       };
     });
   };
@@ -335,6 +348,25 @@ const IndividualAttendanceModal: React.FC<Props> = ({ employee, month, onClose, 
                 const dayName = DAY_NAMES[new Date(entry.date).getDay()];
                 const cfg = statusConfig[entry.status];
                 const isActive = activeDay === idx;
+
+                if (entry.isNA) {
+                  return (
+                    <tr key={entry.date} className="bg-slate-100/60 opacity-50">
+                      <td className="px-4 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="w-7 h-7 rounded-lg bg-slate-200 text-slate-400 flex items-center justify-center text-xs font-black">{dayNum}</span>
+                          <span className="text-[10px] font-black text-slate-400 uppercase">{dayName}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2" colSpan={5}>
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 border border-slate-200 text-[9px] font-black text-slate-400 uppercase">
+                          {entry.notes || '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2"></td>
+                    </tr>
+                  );
+                }
 
                 if (entry.isSunday) {
                   return (
