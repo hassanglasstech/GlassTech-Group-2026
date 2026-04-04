@@ -10,7 +10,7 @@
 
 import { Employee, AttendanceRecord, LoanAdvance, Payroll } from '../types/hr';
 import { supabase } from '@/src/services/supabaseClient';
-import { safeParse, safeSave } from '../../shared/services/utils';
+// localStorage removed — pure Supabase
 import { SyncService } from '@/src/services/SyncService';
 import { Logger } from '@/modules/shared/services/logger';
 import { toast } from 'sonner';
@@ -172,50 +172,32 @@ const payrollToRow = (p: Payroll & { company?: string }) => ({
 // ── Cache Loader ────────────────────────────────────────────────────
 const refreshCache = async (): Promise<void> => {
   try {
-    // Employees
     const empRes = await supabase.from('employees').select('*');
-    if (empRes.data && empRes.data.length > 0) {
+    if (empRes.data) {
       _cache.employees = empRes.data.map(rowToEmployee);
-      safeSave(KEYS.EMPLOYEES, _cache.employees);
     }
   } catch (e: any) { console.warn('[HRService] employees pull failed:', e.message); }
 
   try {
     const attRes = await supabase.from('attendance').select('*');
-    if (attRes.data && attRes.data.length > 0) {
+    if (attRes.data) {
       _cache.attendance = attRes.data.map(rowToAttendance);
-      safeSave(KEYS.ATTENDANCE, _cache.attendance);
     }
   } catch (e: any) { console.warn('[HRService] attendance pull failed:', e.message); }
 
   try {
     const loanRes = await supabase.from('loans').select('*');
-    if (loanRes.data && loanRes.data.length > 0) {
+    if (loanRes.data) {
       _cache.loans = loanRes.data.map(rowToLoan);
-      safeSave(KEYS.LOANS, _cache.loans);
     }
   } catch (e: any) { console.warn('[HRService] loans pull failed:', e.message); }
 
   try {
     const payRes = await supabase.from('payroll').select('*');
-    if (payRes.data && payRes.data.length > 0) {
+    if (payRes.data) {
       _cache.payroll = payRes.data.map(rowToPayroll);
-      safeSave(KEYS.PAYROLL, _cache.payroll);
     }
   } catch (e: any) { console.warn('[HRService] payroll pull failed:', e.message); }
-
-  // Fallback: if Supabase had nothing, use localStorage
-  if (_cache.employees.length === 0) {
-    _cache.employees = safeParse(KEYS.EMPLOYEES).filter(Boolean).map((e: any) => ({
-      ...e,
-      personal: e.personal ?? { name: '', cnic: '', phone: '', address: '' },
-      work: e.work ?? { designation: '', department: '', grade: '', joinDate: '', employeeCode: '' },
-      salary: e.salary ?? { basic: 0, houseRent: 0, conveyance: 0, specialAllowance: 0 },
-    }));
-  }
-  if (_cache.attendance.length === 0) _cache.attendance = safeParse(KEYS.ATTENDANCE);
-  if (_cache.loans.length === 0) _cache.loans = safeParse(KEYS.LOANS);
-  if (_cache.payroll.length === 0) _cache.payroll = safeParse(KEYS.PAYROLL);
 
   _cache.loaded = true;
 };
@@ -235,56 +217,37 @@ export const HRService = {
 
   // ── EMPLOYEES ─────────────────────────────────────────────────────
   getEmployees: (): Employee[] => {
-    if (_cache.loaded && _cache.employees.length > 0) return _cache.employees;
-    // Fallback to localStorage if cache not loaded yet
-    const raw: any[] = safeParse(KEYS.EMPLOYEES);
-    return raw.filter(Boolean).map(e => ({
-      ...e,
-      personal: e.personal ?? { name: '', cnic: '', phone: '', address: '' },
-      work: e.work ?? { designation: '', department: '', grade: '', joinDate: '', employeeCode: '' },
-      salary: e.salary ?? { basic: 0, houseRent: 0, conveyance: 0, specialAllowance: 0 },
-    }));
+    return _cache.employees;
   },
 
   saveEmployees: (data: Employee[]) => {
-    // Write to localStorage immediately (fast UI)
-    safeSave(KEYS.EMPLOYEES, data);
     _cache.employees = data;
-    // Push to Supabase in background
     SyncService.markDirty('employees');
     Logger.action('HR', 'SAVE_EMPLOYEES', `${data.length} employees saved`);
   },
 
   // ── ATTENDANCE ────────────────────────────────────────────────────
   getAttendance: (): AttendanceRecord[] => {
-    if (_cache.loaded && _cache.attendance.length > 0) return _cache.attendance;
-    return safeParse(KEYS.ATTENDANCE);
+    return _cache.attendance;
   },
 
   saveAttendance: async (data: AttendanceRecord[]) => {
-    // Save to localStorage
-    safeSave(KEYS.ATTENDANCE, data);
     _cache.attendance = data;
-
-    // Push to Supabase
     try {
       const rows = data.map(attendanceToRow);
       const { error } = await supabase.from('attendance').upsert(rows, { onConflict: 'id' });
       if (error) throw error;
     } catch (err: any) {
       console.warn('[HRService] Attendance push failed:', err.message);
-      SyncService.markDirty('attendance'); // queue for later
     }
   },
 
   // ── LOANS ─────────────────────────────────────────────────────────
   getLoans: (): LoanAdvance[] => {
-    if (_cache.loaded && _cache.loans.length > 0) return _cache.loans;
-    return safeParse(KEYS.LOANS);
+    return _cache.loans;
   },
 
   saveLoans: async (data: LoanAdvance[]) => {
-    safeSave(KEYS.LOANS, data);
     _cache.loans = data;
 
     try {
@@ -299,12 +262,10 @@ export const HRService = {
 
   // ── PAYROLL ───────────────────────────────────────────────────────
   getPayroll: (): Payroll[] => {
-    if (_cache.loaded && _cache.payroll.length > 0) return _cache.payroll;
-    return safeParse(KEYS.PAYROLL);
+    return _cache.payroll;
   },
 
   savePayroll: async (data: Payroll[]) => {
-    safeSave(KEYS.PAYROLL, data);
     _cache.payroll = data;
 
     try {
