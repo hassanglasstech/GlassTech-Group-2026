@@ -101,6 +101,7 @@ export interface Employee {
     joinDate: string;
     employeeCode: string;
     status?: EmployeeStatus; // NEW: probation/confirmed/etc
+    site?: string;           // Site/location
   };
   salary: {
     basic: number;
