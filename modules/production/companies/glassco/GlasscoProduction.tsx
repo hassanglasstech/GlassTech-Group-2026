@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ProductionProvider } from '@/modules/production/components/ProductionContext';
 import { 
   Scissors, Truck, ShieldCheck, Flame, BarChart3, AlertTriangle, 
   Zap, Users, Upload, Award, TrendingUp, LayoutGrid, Brain,
-  MessageCircle, Building2
+  Building2, ChevronDown
 } from 'lucide-react';
 import NCRModule from './components/ncr/NCRModule';
 import GeneratorLogModule from '@/modules/production/components/GeneratorLog';
@@ -15,8 +15,6 @@ import ProductionFloorPlanner from './components/ProductionFloorPlanner';
 import CuttingIntelligenceHub from './components/CuttingIntelligenceHub';
 import AIFloorPlanAdvisor from '@/modules/production/components/AIFloorPlanAdvisor';
 import CrossCompanyStatusBoard from '@/modules/production/components/CrossCompanyStatusBoard';
-
-// Split Views
 import FabricationView from './components/views/FabricationView'; 
 import ProcessingView from './components/views/ProcessingView';
 import DispatchView from './components/views/DispatchView';
@@ -27,75 +25,267 @@ type ActiveView =
   'fabrication' | 'processing' | 'dispatch' | 'ncr' | 'energy' | 
   'labour' | 'import' | 'performance' | 'finance';
 
-const GlasscoProductionContent: React.FC = () => {
-  const [activeView, setActiveView] = useState<ActiveView>('dashboard');
+// ── Primary tabs — daily workflow ─────────────────────────────────────
+const PRIMARY_TABS: { id: ActiveView; label: string; icon: React.ReactNode }[] = [
+  { id: 'fabrication', label: 'Fabrication',   icon: <Scissors size={14}/> },
+  { id: 'processing',  label: 'Processing',    icon: <Flame size={14}/> },
+  { id: 'dispatch',    label: 'QC & Dispatch', icon: <ShieldCheck size={14}/> },
+  { id: 'ncr',         label: 'NCR',           icon: <AlertTriangle size={14}/> },
+  { id: 'dashboard',   label: 'Dashboard',     icon: <BarChart3 size={14}/> },
+];
 
-  const tabClass = (id: string, activeColor: string, bgColor: string) => 
-    `flex items-center space-x-2 px-4 py-3 rounded-lg text-xs font-black uppercase tracking-widest transition-all border-b-4 whitespace-nowrap ${activeView === id ? `${activeColor} ${bgColor}` : 'border-transparent text-slate-500 hover:bg-slate-50'}`;
+// ── More tabs — management / planning ────────────────────────────────
+const MORE_TABS: { id: ActiveView; label: string; icon: React.ReactNode; group: string }[] = [
+  { id: 'floorplan',     label: 'Floor Planner',    icon: <LayoutGrid size={14}/>,  group: 'Planning' },
+  { id: 'ai_plan',       label: 'AI Plan',           icon: <Zap size={14}/>,         group: 'Planning' },
+  { id: 'cutting',       label: 'Cutting Intel',     icon: <Brain size={14}/>,       group: 'Planning' },
+  { id: 'cross_company', label: 'GTK / GTI Orders',  icon: <Building2 size={14}/>,   group: 'Planning' },
+  { id: 'performance',   label: 'Cutter Performance',icon: <Award size={14}/>,       group: 'Management' },
+  { id: 'energy',        label: 'Energy / Generator',icon: <Zap size={14}/>,         group: 'Management' },
+  { id: 'labour',        label: 'Labour Log',        icon: <Users size={14}/>,       group: 'Management' },
+  { id: 'finance',       label: 'Finance Intel',     icon: <TrendingUp size={14}/>,  group: 'Management' },
+  { id: 'import',        label: 'Data Import',       icon: <Upload size={14}/>,      group: 'Management' },
+];
+
+const styles = `
+  .pp-nav {
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 0 16px;
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .pp-nav::-webkit-scrollbar { display: none; }
+
+  .pp-tab {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 12px 16px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: #64748b;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color .15s, border-color .15s, background .15s;
+    font-family: inherit;
+  }
+  .pp-tab:hover {
+    color: #1e293b;
+    background: #f8fafc;
+  }
+  .pp-tab.active {
+    color: #1e40af;
+    border-bottom-color: #2563eb;
+    background: #eff6ff;
+  }
+  .pp-tab.active-more {
+    color: #6d28d9;
+    border-bottom-color: #7c3aed;
+    background: #f5f3ff;
+  }
+
+  /* More dropdown */
+  .pp-more-wrap {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+  .pp-more-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 16px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    border-left: 1px solid #e2e8f0;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all .15s;
+    font-family: inherit;
+  }
+  .pp-more-btn:hover { color: #475569; background: #f8fafc; }
+  .pp-more-btn.open { color: #6d28d9; background: #f5f3ff; border-bottom-color: #7c3aed; }
+
+  .pp-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.12);
+    min-width: 220px;
+    z-index: 100;
+    overflow: hidden;
+    animation: ddFadeIn .12s ease;
+  }
+  @keyframes ddFadeIn {
+    from { opacity:0; transform: translateY(-4px); }
+    to   { opacity:1; transform: translateY(0); }
+  }
+
+  .pp-dd-group {
+    padding: 6px 0;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .pp-dd-group:last-child { border-bottom: none; }
+
+  .pp-dd-group-label {
+    padding: 6px 14px 4px;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: #94a3b8;
+  }
+
+  .pp-dd-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #374151;
+    background: none;
+    border: none;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    transition: background .12s, color .12s;
+    font-family: inherit;
+  }
+  .pp-dd-item:hover { background: #f8fafc; color: #111827; }
+  .pp-dd-item.active { background: #f5f3ff; color: #6d28d9; }
+  .pp-dd-item svg { opacity: .6; flex-shrink: 0; }
+  .pp-dd-item.active svg { opacity: 1; }
+
+  .pp-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    background: #f8fafc;
+  }
+  .pp-body-inner { max-width: 1600px; margin: 0 auto; }
+`;
+
+const GlasscoProductionContent: React.FC = () => {
+  const [activeView, setActiveView] = useState<ActiveView>('fabrication');
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+        setMoreOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const isMoreActive = MORE_TABS.some(t => t.id === activeView);
+
+  const selectView = (id: ActiveView) => {
+    setActiveView(id);
+    setMoreOpen(false);
+  };
+
+  // Group more tabs
+  const groups = Array.from(new Set(MORE_TABS.map(t => t.group)));
 
   return (
-    <div className="flex flex-col h-full -m-6">
-      <div className="bg-white border-b border-slate-200 px-4 py-2 no-print shrink-0 sticky top-0 z-20 flex space-x-1 shadow-sm overflow-x-auto">
-        <button onClick={() => setActiveView('dashboard')} className={tabClass('dashboard', 'border-purple-600 text-purple-700', 'bg-purple-50')}>
-          <BarChart3 size={14}/> <span>Dashboard</span>
-        </button>
-        <button onClick={() => setActiveView('floorplan')} className={tabClass('floorplan', 'border-slate-700 text-slate-800', 'bg-slate-100')}>
-          <LayoutGrid size={14}/> <span>Floor Planner</span>
-        </button>
-        <button onClick={() => setActiveView('ai_plan')} className={tabClass('ai_plan', 'border-violet-700 text-violet-800', 'bg-violet-50')}>
-          <Zap size={14}/> <span>AI Plan</span>
-        </button>
-        <button onClick={() => setActiveView('cutting')} className={tabClass('cutting', 'border-blue-700 text-blue-800', 'bg-blue-50')}>
-          <Brain size={14}/> <span>Cutting Intel</span>
-        </button>
-        <button onClick={() => setActiveView('cross_company')} className={tabClass('cross_company', 'border-emerald-700 text-emerald-800', 'bg-emerald-50')}>
-          <Building2 size={14}/> <span>GTK/GTI Orders</span>
-        </button>
-        <button onClick={() => setActiveView('fabrication')} className={tabClass('fabrication', 'border-blue-600 text-blue-700', 'bg-blue-50')}>
-          <Scissors size={14}/> <span>Fabrication</span>
-        </button>
-        <button onClick={() => setActiveView('processing')} className={tabClass('processing', 'border-orange-600 text-orange-700', 'bg-orange-50')}>
-          <Flame size={14}/> <span>Processing</span>
-        </button>
-        <button onClick={() => setActiveView('dispatch')} className={tabClass('dispatch', 'border-emerald-600 text-emerald-700', 'bg-emerald-50')}>
-          <ShieldCheck size={14}/> <span>QC & Dispatch</span>
-        </button>
-        <button onClick={() => setActiveView('ncr')} className={tabClass('ncr', 'border-rose-600 text-rose-700', 'bg-rose-50')}>
-          <AlertTriangle size={14}/> <span>NCR</span>
-        </button>
-        <button onClick={() => setActiveView('energy')} className={tabClass('energy', 'border-amber-600 text-amber-700', 'bg-amber-50')}>
-          <Zap size={14}/> <span>Energy</span>
-        </button>
-        <button onClick={() => setActiveView('labour')} className={tabClass('labour', 'border-sky-600 text-sky-700', 'bg-sky-50')}>
-          <Users size={14}/> <span>Labour</span>
-        </button>
-        <button onClick={() => setActiveView('import')} className={tabClass('import', 'border-indigo-600 text-indigo-700', 'bg-indigo-50')}>
-          <Upload size={14}/> <span>Import</span>
-        </button>
-        <button onClick={() => setActiveView('performance')} className={tabClass('performance', 'border-purple-600 text-purple-700', 'bg-purple-50')}>
-          <Award size={14}/> <span>Cutters</span>
-        </button>
-        <button onClick={() => setActiveView('finance')} className={tabClass('finance', 'border-emerald-600 text-emerald-700', 'bg-emerald-50')}>
-          <TrendingUp size={14}/> <span>Finance</span>
-        </button>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', margin: '-24px' }}>
+      <style>{styles}</style>
 
-      <div className="flex-1 overflow-y-auto p-6 bg-[#f8fafc]">
-        <div className="max-w-[1600px] mx-auto">
+      {/* ── Navigation ── */}
+      <nav className="pp-nav">
+
+        {/* Primary tabs */}
+        {PRIMARY_TABS.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => selectView(tab.id)}
+            className={`pp-tab${activeView === tab.id ? ' active' : ''}`}
+          >
+            {tab.icon}
+            {tab.label}
+          </button>
+        ))}
+
+        {/* More dropdown */}
+        <div className="pp-more-wrap" ref={moreRef}>
+          <button
+            className={`pp-more-btn${moreOpen ? ' open' : ''}${isMoreActive && !moreOpen ? ' active-more' : ''}`}
+            onClick={() => setMoreOpen(o => !o)}
+          >
+            {isMoreActive && !moreOpen
+              ? MORE_TABS.find(t => t.id === activeView)?.label
+              : 'More'}
+            <ChevronDown size={12} style={{ transform: moreOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}/>
+          </button>
+
+          {moreOpen && (
+            <div className="pp-dropdown">
+              {groups.map(group => (
+                <div key={group} className="pp-dd-group">
+                  <div className="pp-dd-group-label">{group}</div>
+                  {MORE_TABS.filter(t => t.group === group).map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => selectView(tab.id)}
+                      className={`pp-dd-item${activeView === tab.id ? ' active' : ''}`}
+                    >
+                      {tab.icon}
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </nav>
+
+      {/* ── Content ── */}
+      <div className="pp-body">
+        <div className="pp-body-inner">
+          {activeView === 'fabrication'   && <FabricationView />}
+          {activeView === 'processing'    && <ProcessingView />}
+          {activeView === 'dispatch'      && <DispatchView />}
+          {activeView === 'ncr'           && <NCRModule />}
           {activeView === 'dashboard'     && <DashboardView />}
           {activeView === 'floorplan'     && <ProductionFloorPlanner />}
           {activeView === 'ai_plan'       && <AIFloorPlanAdvisor />}
           {activeView === 'cutting'       && <CuttingIntelligenceHub />}
           {activeView === 'cross_company' && <CrossCompanyStatusBoard />}
-          {activeView === 'fabrication'   && <FabricationView />}
-          {activeView === 'processing'    && <ProcessingView />}
-          {activeView === 'dispatch'      && <DispatchView />}
-          {activeView === 'ncr'           && <NCRModule />}
+          {activeView === 'performance'   && <CutterDashboard />}
           {activeView === 'energy'        && <GeneratorLogModule />}
           {activeView === 'labour'        && <LabourLogModule />}
-          {activeView === 'import'        && <DataImportTool />}
-          {activeView === 'performance'   && <CutterDashboard />}
           {activeView === 'finance'       && <FinancialIntelligenceHub />}
+          {activeView === 'import'        && <DataImportTool />}
         </div>
       </div>
     </div>
