@@ -5,7 +5,7 @@ import { Employee, Account, Company, TagMaster, Department, EmployeeStatus } fro
 import { HRService } from '@/modules/hr/services/hrService';
 import { TagService } from '@/modules/hr/services/tagService';
 import { EmployeeDocService } from '@/modules/hr/services/employeeDocService';
-import { FinanceService } from '@/modules/finance/services/financeService';
+import { FinanceService } from '@/modules/finance/services/financeService'; 
 import { EmployeeTagPills, TagSelector } from '@/modules/hr/components/TagPills';
 import DocumentFolder from '@/modules/hr/components/DocumentFolder';
 import DocExpiryAlerts from '@/modules/hr/components/DocExpiryAlerts';
