@@ -39,6 +39,7 @@ const LogisticsModule  = React.lazy(() => import('./modules/procurement/pages/Lo
 const VendorHub        = React.lazy(() => import('./modules/procurement/pages/VendorHub'));
 const MDDashboard       = React.lazy(() => import('./modules/md-dashboard/MDDashboard'));
 const FactoryInchargeModule = React.lazy(() => import('./modules/factory/pages/FactoryInchargeModule'));
+const ProcurementHub   = React.lazy(() => import('./modules/procurement/pages/ProcurementHub'));
 
 // ── All nav items definition ─────────────────────────────────────────
 // ── Core nav — always visible (role-filtered) ───────────────────────
@@ -46,6 +47,7 @@ const CORE_NAV = [
   { name: 'Home',              path: '/',                 icon: LayoutDashboard, key: 'dashboard'        },
   { name: 'Sales & Orders',    path: '/sales',            icon: Briefcase,       key: 'sales'            },
   { name: 'Production',        path: '/production',       icon: Factory,         key: 'production'       },
+  { name: 'Material Mgmt',     path: '/inventory',        icon: Warehouse,       key: 'inventory'        },
   { name: 'Procurement',       path: '/requisitions',     icon: Package,         key: 'requisitions'     },
   { name: 'Finance (FICO)',     path: '/accounts',         icon: Landmark,        key: 'accounts'         },
   { name: 'People (HCM)',       path: '/hr',               icon: Users,           key: 'hr'               },
@@ -418,7 +420,7 @@ const App: React.FC = () => {
                   <Route path="/projects/*"    element={<ModuleErrorBoundary moduleName="Projects"><ProjectsModule /></ModuleErrorBoundary>} />
                   <Route path="/production"    element={<ModuleErrorBoundary moduleName="Production"><ProductionModule /></ModuleErrorBoundary>} />
                   <Route path="/hub/*"         element={<ModuleErrorBoundary moduleName="Supply Hub"><IntercompanyHub /></ModuleErrorBoundary>} />
-                  <Route path="/requisitions"  element={<ModuleErrorBoundary moduleName="Procurement"><Requisitions /></ModuleErrorBoundary>} />
+                  <Route path="/requisitions"  element={<ModuleErrorBoundary moduleName="Procurement"><ProcurementHub /></ModuleErrorBoundary>} />
                   <Route path="/accounts/*"    element={<ModuleErrorBoundary moduleName="Finance"><AccountsModule /></ModuleErrorBoundary>} />
                   <Route path="/md-dashboard" element={<ModuleErrorBoundary moduleName="MD Dashboard"><MDDashboard /></ModuleErrorBoundary>} />
                   <Route path="/factory-incharge" element={<ModuleErrorBoundary moduleName="Factory Incharge"><FactoryInchargeModule /></ModuleErrorBoundary>} />
