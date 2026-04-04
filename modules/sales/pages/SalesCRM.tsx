@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Company } from '../../shared/types';
 import ClientMaster from './ClientMaster';
 import QuotationManager from './QuotationManager';
 import NipponQuotationManager from '../companies/nippon/NipponQuotationManager';
@@ -8,62 +7,180 @@ import GTKQuotationManager from '../companies/gtk/GTKQuotationManager';
 import DesignStudio from '../../production/pages/DesignStudio';
 import SalesOrders from '../components/SalesOrders';
 import SalesPipeline from '../components/SalesPipeline';
-import { 
-  Users, FileSignature, Layout, ShoppingCart, BarChart3
-} from 'lucide-react';
-
+import { Users, FileSignature, Layout, ShoppingCart, BarChart3 } from 'lucide-react';
 import { useAppStore } from '../../shared/store/appStore';
+
+type ActiveTab = 'orders' | 'quotations' | 'clients' | 'design' | 'pipeline';
+
+const styles = `
+  .sd-wrap {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    margin: -24px;
+  }
+
+  .sd-nav {
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 0 20px;
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    overflow-x: auto;
+    scrollbar-width: none;
+    flex-shrink: 0;
+  }
+  .sd-nav::-webkit-scrollbar { display: none; }
+
+  .sd-tab {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 13px 18px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: #64748b;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color .15s, border-color .15s, background .15s;
+    font-family: inherit;
+  }
+  .sd-tab:hover {
+    color: #1e293b;
+    background: #f8fafc;
+  }
+  .sd-tab.active {
+    color: #1d4ed8;
+    border-bottom-color: #2563eb;
+    background: #eff6ff;
+  }
+  .sd-tab .sd-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #2563eb;
+    color: white;
+    font-size: 9px;
+    font-weight: 800;
+    border-radius: 10px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    margin-left: 2px;
+  }
+  .sd-tab:not(.active) .sd-badge {
+    background: #e2e8f0;
+    color: #64748b;
+  }
+
+  .sd-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    background: #f8fafc;
+  }
+  .sd-body-inner {
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+`;
 
 const SalesCRM: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'clients' | 'quotations' | 'orders' | 'design' | 'pipeline'>('clients');
 
-  const tabs = [
-    { id: 'clients', label: 'Business Partners', icon: Users },
-    ...(company !== 'Glassco' && company !== 'Nippon' ? [{ id: 'design', label: 'Design Studio', icon: Layout }] : []),
-    { id: 'quotations', label: 'Quotations', icon: FileSignature },
-    { id: 'orders', label: 'Sales Orders', icon: ShoppingCart },
-    { id: 'pipeline', label: 'Pipeline', icon: BarChart3 },
-  ];
+  // Default to 'orders' for Glassco (most used) — others start at quotations
+  const [activeTab, setActiveTab] = useState<ActiveTab>(
+    company === 'Glassco' ? 'orders' : 'quotations'
+  );
+
+  const showDesign = company !== 'Glassco' && company !== 'Nippon';
 
   return (
-    <div className="flex flex-col h-full -m-6">
-      <div className="no-print sticky top-0 z-30 shrink-0 bg-white/80 backdrop-blur-sm border-b border-slate-200">
-        <div className="sap-scroll-container p-4">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-bold text-xs uppercase tracking-wide whitespace-nowrap transition-all ${
-                activeTab === tab.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'
-              }`}
-            >
-              <tab.icon size={16} />
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+    <div className="sd-wrap">
+      <style>{styles}</style>
 
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-[1600px] mx-auto">
-            {/* Unified ClientMaster for all companies */}
-            {activeTab === 'clients' && <ClientMaster />}
+      {/* ── Navigation ── */}
+      <nav className="sd-nav">
 
-            {activeTab === 'design' && company !== 'Glassco' && company !== 'Nippon' && <DesignStudio />}
-            
-            {/* QuotationManager stays company-specific (glass vs hardware are too different) */}
-            {activeTab === 'quotations' && (
-                company === 'Nippon'  ? <NipponQuotationManager /> :
-                company === 'Glassco' ? <GlasscoQuotationManager /> :
-                company === 'GTK'     ? <GTKQuotationManager /> :
-                company === 'GTI'     ? <GTKQuotationManager /> :
-                <QuotationManager />
-            )}
-            
-            {/* Unified SalesOrders & Pipeline for all companies */}
-            {activeTab === 'orders' && <SalesOrders />}
-            {activeTab === 'pipeline' && <SalesPipeline />}
+        {/* Sales Orders — first for Glassco (order-centric) */}
+        <button
+          onClick={() => setActiveTab('orders')}
+          className={`sd-tab${activeTab === 'orders' ? ' active' : ''}`}
+        >
+          <ShoppingCart size={14}/>
+          Sales Orders
+        </button>
+
+        {/* Quotations */}
+        <button
+          onClick={() => setActiveTab('quotations')}
+          className={`sd-tab${activeTab === 'quotations' ? ' active' : ''}`}
+        >
+          <FileSignature size={14}/>
+          Quotations
+        </button>
+
+        {/* Business Partners / Clients */}
+        <button
+          onClick={() => setActiveTab('clients')}
+          className={`sd-tab${activeTab === 'clients' ? ' active' : ''}`}
+        >
+          <Users size={14}/>
+          Business Partners
+        </button>
+
+        {/* Design Studio — GTK/GTI only */}
+        {showDesign && (
+          <button
+            onClick={() => setActiveTab('design')}
+            className={`sd-tab${activeTab === 'design' ? ' active' : ''}`}
+          >
+            <Layout size={14}/>
+            Design Studio
+          </button>
+        )}
+
+        {/* Pipeline */}
+        <button
+          onClick={() => setActiveTab('pipeline')}
+          className={`sd-tab${activeTab === 'pipeline' ? ' active' : ''}`}
+        >
+          <BarChart3 size={14}/>
+          Pipeline
+        </button>
+
+      </nav>
+
+      {/* ── Content ── */}
+      <div className="sd-body">
+        <div className="sd-body-inner">
+
+          {activeTab === 'orders' && <SalesOrders />}
+
+          {activeTab === 'quotations' && (
+            company === 'Nippon'  ? <NipponQuotationManager /> :
+            company === 'Glassco' ? <GlasscoQuotationManager /> :
+            company === 'GTK'     ? <GTKQuotationManager /> :
+            company === 'GTI'     ? <GTKQuotationManager /> :
+            <QuotationManager />
+          )}
+
+          {activeTab === 'clients' && <ClientMaster />}
+
+          {activeTab === 'design' && showDesign && <DesignStudio />}
+
+          {activeTab === 'pipeline' && <SalesPipeline />}
+
         </div>
       </div>
     </div>
