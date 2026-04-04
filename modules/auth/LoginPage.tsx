@@ -358,16 +358,17 @@ const LoginPage: React.FC = () => {
   const completeLogin = async (profile: UserProfile) => {
     try {
       sessionStorage.removeItem('_pending_profile');
-      // Update last_login
       await supabase.from('user_profiles')
         .update({ last_login: new Date().toISOString() })
         .eq('id', profile.id)
         .then(() => {});
-      // Set user — triggers App re-render
       setUser(profile);
+      // Warm localStorage cache from Supabase in background
+      import('./../../modules/sales/services/salesService').then(({ SalesService }) => {
+        SalesService.warmCache().catch(() => {});
+      });
     } catch (err) {
       console.error('completeLogin error:', err);
-      // Still login even if update fails
       setUser(profile);
     }
   };
