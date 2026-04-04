@@ -8,6 +8,8 @@ import { EmployeeDocService } from '@/modules/hr/services/employeeDocService';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { EmployeeTagPills, TagSelector } from '@/modules/hr/components/TagPills';
 import DocumentFolder from '@/modules/hr/components/DocumentFolder';
+import DocExpiryAlerts from '@/modules/hr/components/DocExpiryAlerts';
+import DisciplinaryManager from './DisciplinaryManager';
 import EmployeeProfileCard from '@/modules/hr/components/EmployeeProfileCard';
 import { UserPlus, Search, Edit2, Trash2, X, Briefcase, Wallet, UserCircle, FileUp, Download, Building2, Tags, FolderOpen, Eye, EyeOff } from 'lucide-react';
 import Pagination from '@/components/Pagination';
@@ -25,7 +27,7 @@ const STATUS_OPTIONS: { value: EmployeeStatus; label: string; color: string }[] 
 ];
 const INACTIVE_STATUSES: EmployeeStatus[] = ['resigned', 'terminated'];
 
-type ModalTab = 'personal' | 'employment' | 'salary' | 'documents';
+type ModalTab = 'personal' | 'employment' | 'salary' | 'documents' | 'salaryhistory' | 'disciplinary' | 'transfer';
 
 const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -164,6 +166,22 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
       if (accountMsg) successMsg += `\n\n${accountMsg}`;
     }
     HRService.saveEmployees(updated);
+    // Record salary history if salary changed
+    if (editingId) {
+      const prev = employees.find(e => e.id === editingId);
+      const prevGross = prev ? (prev.salary.basic + prev.salary.houseRent + prev.salary.conveyance + prev.salary.specialAllowance) : 0;
+      const newGross = (formData.salary?.basic||0) + (formData.salary?.houseRent||0) + (formData.salary?.conveyance||0) + (formData.salary?.specialAllowance||0);
+      if (prevGross !== newGross && formData.salary?.basic) {
+        const history = (formData as any).salaryHistory || [];
+        (formData as any).salaryHistory = [...history, {
+          date: new Date().toISOString().split('T')[0],
+          basic: formData.salary.basic,
+          gross: newGross,
+          reason: 'Manual update',
+          changedBy: 'HR',
+        }];
+      }
+    }
     if (selectedTagIds.length > 0) TagService.setEmployeeTags(empId, selectedTagIds);
     setEmployees(updated.filter(e => e.company === company));
     setIsModalOpen(false);
@@ -215,6 +233,29 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
       <div className="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm gap-4">
         <div className="relative w-full md:w-96">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <DocExpiryAlerts />
+          {/* Probation alerts */}
+          {(() => {
+            const today = new Date();
+            const in30 = new Date(today); in30.setDate(today.getDate() + 30);
+            const alerts = employees.filter(e => {
+              if (e.work.status !== 'probation' || !e.work.joinDate) return false;
+              const probEnd = new Date(e.work.joinDate);
+              probEnd.setMonth(probEnd.getMonth() + 3);
+              return probEnd >= today && probEnd <= in30;
+            });
+            if (!alerts.length) return null;
+            return (
+              <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                <p className="text-xs font-black text-amber-700 uppercase tracking-widest mb-2">⚠ Probation Ending Soon</p>
+                {alerts.map(e => {
+                  const probEnd = new Date(e.work.joinDate); probEnd.setMonth(probEnd.getMonth() + 3);
+                  const days = Math.ceil((probEnd.getTime() - today.getTime()) / 86400000);
+                  return <p key={e.id} className="text-xs text-amber-800 font-bold">{e.personal.name} ({e.work.employeeCode}) — {days} days left</p>;
+                })}
+              </div>
+            );
+          })()}
           <input type="text" placeholder="Search by name or code..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
         </div>
         <div className="flex space-x-3 w-full md:w-auto overflow-x-auto no-scrollbar">
@@ -340,6 +381,9 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
                   { id: 'employment', label: 'Work & Tags', icon: Tags },
                   { id: 'salary', label: 'Salary', icon: Wallet },
                   ...(editingId ? [{ id: 'documents', label: 'Documents', icon: FolderOpen }] : []),
+                  ...(editingId ? [{ id: 'salaryhistory', label: 'Salary History', icon: Wallet }] : []),
+                  ...(editingId ? [{ id: 'disciplinary', label: 'Disciplinary', icon: Briefcase }] : []),
+                  ...(editingId ? [{ id: 'transfer', label: 'Transfers', icon: Building2 }] : []),
                 ] as { id: ModalTab; label: string; icon: any }[]).map(tab => (
                   <button
                     key={tab.id}
@@ -372,6 +416,7 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
                       <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">CNIC number</label><input type="text" placeholder="35201-XXXXXXX-X" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold" value={formData.personal?.cnic} onChange={e => setFormData({...formData, personal: {...formData.personal!, cnic: e.target.value}})} /></div>
                       <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Phone number</label><input type="text" placeholder="0300-XXXXXXX" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold" value={formData.personal?.phone} onChange={e => setFormData({...formData, personal: {...formData.personal!, phone: e.target.value}})} /></div>
                       <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Address</label><input type="text" placeholder="Full home address" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold" value={formData.personal?.address} onChange={e => setFormData({...formData, personal: {...formData.personal!, address: e.target.value}})} /></div>
+                      <div className="grid grid-cols-2 gap-4"><div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Emergency Contact Name</label><input type="text" placeholder="Next of kin name" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold" value={(formData.personal as any)?.emergencyContact || ''} onChange={e => setFormData({...formData, personal: {...formData.personal!, emergencyContact: e.target.value}})} /></div><div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Emergency Phone</label><input type="text" placeholder="0300-XXXXXXX" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold" value={(formData.personal as any)?.emergencyPhone || ''} onChange={e => setFormData({...formData, personal: {...formData.personal!, emergencyPhone: e.target.value}})} /></div></div>
                     </div>
                   </section>
                 )}
@@ -461,12 +506,82 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
                       <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">House rent</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-[10px]">PKR</span><input type="number" className="w-full bg-slate-50 border border-slate-200 p-3 pl-12 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-900" value={formData.salary?.houseRent || ''} onChange={e => setFormData({...formData, salary: {...formData.salary!, houseRent: Number(e.target.value)}})} /></div></div>
                       <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Conveyance</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-[10px]">PKR</span><input type="number" className="w-full bg-slate-50 border border-slate-200 p-3 pl-12 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-900" value={formData.salary?.conveyance || ''} onChange={e => setFormData({...formData, salary: {...formData.salary!, conveyance: Number(e.target.value)}})} /></div></div>
                       <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Special allowance</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-[10px]">PKR</span><input type="number" className="w-full bg-slate-50 border border-slate-200 p-3 pl-12 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-900" value={formData.salary?.specialAllowance || ''} onChange={e => setFormData({...formData, salary: {...formData.salary!, specialAllowance: Number(e.target.value)}})} /></div></div>
+                      <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Medical Allowance</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-[10px]">PKR</span><input type="number" className="w-full bg-slate-50 border border-slate-200 p-3 pl-12 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-900" value={(formData.salary as any)?.medicalAllowance || ''} onChange={e => setFormData({...formData, salary: {...formData.salary!, medicalAllowance: Number(e.target.value)}})} /></div></div>
+                      <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-100 rounded-xl"><input type="checkbox" id="eobi" checked={(formData.salary as any)?.eobi || false} onChange={e => setFormData({...formData, salary: {...formData.salary!, eobi: e.target.checked}})} className="w-4 h-4 accent-blue-600" /><label htmlFor="eobi" className="text-xs font-black text-blue-700 uppercase tracking-widest cursor-pointer">EOBI Registered (PKR 370/month deduction)</label></div>
                     </div>
                     <div className="mt-4 p-4 bg-blue-50 rounded-2xl border border-blue-100 flex justify-between items-center">
                       <span className="text-sm font-black text-blue-900 uppercase tracking-tighter">Gross monthly:</span>
                       <span className="text-xl font-black text-blue-600">PKR {((formData.salary?.basic||0) + (formData.salary?.houseRent||0) + (formData.salary?.conveyance||0) + (formData.salary?.specialAllowance||0)).toLocaleString()}</span>
                     </div>
                   </section>
+                )}
+
+                {/* ── Salary History Tab ─────────────────────────── */}
+                {modalTab === 'salaryhistory' && editingId && (
+                  <div className="space-y-3">
+                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Salary Change History</p>
+                    {((formData as any).salaryHistory || []).length === 0 ? (
+                      <p className="text-sm text-slate-400 italic">No salary changes recorded yet.</p>
+                    ) : (
+                      <table className="w-full text-sm border-collapse">
+                        <thead><tr className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase"><th className="p-2 text-left">Date</th><th className="p-2 text-right">Basic</th><th className="p-2 text-right">Gross</th><th className="p-2 text-left">Reason</th></tr></thead>
+                        <tbody>
+                          {((formData as any).salaryHistory || []).map((h: any, i: number) => (
+                            <tr key={i} className="border-t border-slate-100">
+                              <td className="p-2 font-bold">{h.date}</td>
+                              <td className="p-2 text-right">{h.basic?.toLocaleString()}</td>
+                              <td className="p-2 text-right font-black text-blue-600">{h.gross?.toLocaleString()}</td>
+                              <td className="p-2 text-slate-500">{h.reason}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Disciplinary Tab ─────────────────────────────── */}
+                {modalTab === 'disciplinary' && editingId && <DisciplinaryManager employeeId={editingId} />}
+
+                {/* ── Transfer Tab ─────────────────────────────────── */}
+                {modalTab === 'transfer' && editingId && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Inter-Company Transfers</p>
+                      <button onClick={() => {
+                        const toCompany = prompt('Transfer to (GTK/GTI/Glassco/Nippon/Factory):');
+                        if (!toCompany) return;
+                        const reason = prompt('Reason:');
+                        if (!reason) return;
+                        const approver = prompt('Approved by:');
+                        if (!approver) return;
+                        const history = (formData as any).transferHistory || [];
+                        setFormData({...formData, transferHistory: [...history, {
+                          date: new Date().toISOString().split('T')[0],
+                          fromCompany: String(formData.company),
+                          toCompany, reason, approvedBy: approver,
+                        }], company: toCompany} as any);
+                      }} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-black uppercase hover:bg-blue-700">+ Transfer</button>
+                    </div>
+                    {((formData as any).transferHistory || []).length === 0 ? (
+                      <p className="text-sm text-slate-400 italic">No transfers on record</p>
+                    ) : (
+                      <table className="w-full text-xs border-collapse">
+                        <thead><tr className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase"><th className="p-2 text-left">Date</th><th className="p-2 text-center">From</th><th className="p-2 text-center">To</th><th className="p-2 text-left">Reason</th><th className="p-2">By</th></tr></thead>
+                        <tbody>
+                          {((formData as any).transferHistory || []).map((h: any, i: number) => (
+                            <tr key={i} className="border-t border-slate-100">
+                              <td className="p-2 font-bold">{h.date}</td>
+                              <td className="p-2 text-center font-bold text-rose-600">{h.fromCompany}</td>
+                              <td className="p-2 text-center font-bold text-emerald-600">{h.toCompany}</td>
+                              <td className="p-2 text-slate-500">{h.reason}</td>
+                              <td className="p-2 text-slate-500">{h.approvedBy}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
                 )}
 
                 {/* ── Documents Tab (only for existing employees) ─────── */}
