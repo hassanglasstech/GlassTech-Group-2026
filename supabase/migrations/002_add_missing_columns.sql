@@ -133,3 +133,20 @@ ALTER TABLE vendor_rates ADD COLUMN IF NOT EXISTS effective_date TEXT;
 ALTER TABLE vendor_rates ADD COLUMN IF NOT EXISTS notes TEXT;
 
 -- DONE
+
+-- ── Backup audit log table ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS erp_backups (
+  id TEXT PRIMARY KEY,
+  backup_date TIMESTAMPTZ DEFAULT now(),
+  backup_type TEXT,
+  table_count INTEGER DEFAULT 0,
+  record_count INTEGER DEFAULT 0,
+  source TEXT,
+  meta JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE erp_backups ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "authenticated_access_erp_backups" ON erp_backups;
+CREATE POLICY "authenticated_access_erp_backups" ON erp_backups
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);

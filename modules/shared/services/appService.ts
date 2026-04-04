@@ -1,4 +1,5 @@
 import { initDB } from './db';
+import { supabase } from '@/src/services/supabaseClient';
 import { FactoryCOA } from '../data/factory/FactoryCOA';
 import { GlasscoCOA } from '../data/glassco/GlasscoCOA';
 import { safeParse } from './utils';
@@ -192,118 +193,185 @@ export const AppService = {
   },
 
   exportDatabaseToFile: async (isAuto = false) => {
-    const ledger = await FinanceService.getLedger();
-    const stockLedger = await InventoryService.getStockLedger();
-    const productionPieces = await ProductionService.getProductionPiecesAsync();
-    const activityLogs = await AppService.getActivityLogsAsync();
-    const data = {
-      meta: { version: CURRENT_VERSION, timestamp: new Date().toISOString(), type: isAuto ? 'AutoBackup' : 'FullBackup' },
-      employees: HRService.getEmployees(),
-      attendance: HRService.getAttendance(),
-      loans: HRService.getLoans(),
-      payroll: HRService.getPayroll(),
-      accounts: FinanceService.getAccounts(),
-      ledger: ledger, 
-      costCenters: FinanceService.getCostCenters(),
-      pettyCash: FinanceService.getPettyCashEntries(),
-      recurringExpenses: FinanceService.getRecurringExpenses(),
-      financialEvents: FinanceService.getFinancialEvents(),
-      mappingRules: FinanceService.getMappingRules(),
-      glConfig: FinanceService.getGLConfig(),
-      clients: SalesService.getClients(),
-      quotations: SalesService.getQuotations(),
-      projects: SalesService.getProjects(),
-      products: SalesService.getProducts(),
-      store: InventoryService.getStore(),
-      stockLedger: stockLedger, 
-      inspectionLots: InventoryService.getInspectionLots(),
-      remnants: InventoryService.getRemnants(),
-      handlingUnits: InventoryService.getHandlingUnits(),
-      requisitions: InventoryService.getRequisitions(),
-      productionPieces: productionPieces, 
-      dispatches: ProductionService.getTemperingDispatches(),
-      gatePasses: ProductionService.getGatePasses(),
-      warehouseSpots: ProductionService.getWarehouseSpots(),
-      jobOrders: ProductionService.getJobOrders(),
-      purchaseOrders: ProductionService.getPurchaseOrders(),
-      vendors: SalesService.getVendors(),
-      activityLogs: activityLogs, 
+    // Pull ALL tables directly from Supabase for authoritative backup
+    const tables = [
+      'employees','attendance','loans','payroll','tag_master','employee_tags',
+      'departments','employee_docs','accounts','cost_centers','ledger',
+      'petty_cash','recurring_expenses','financial_events','mapping_rules',
+      'gl_config','clients','quotations','projects','invoices','payment_receipts',
+      'products','vendors','vendor_rates','store_items','assets','stock_ledger',
+      'inspection_lots','remnants','handling_units','requisitions','purchase_orders',
+      'grn_sheet_entries','vendor_defect_reports','cutting_sessions',
+      'manual_count_sheets','scrap_disposals','vendor_reviews','pallet_rates',
+      'weight_master','production_pieces','job_orders','cutter_daily_logs',
+      'generator_logs','gate_passes','warehouse_spots','vehicles','vehicle_trips',
+      'vehicle_expenses','tempering_dispatches','ncr_events','ncr_reproductions',
+      'ncr_claims','ncr_remnants','roles','permissions','role_permissions','employee_roles',
+    ];
+
+    const snapshot: Record<string, any[]> = {};
+    let fetchedFromSupabase = false;
+
+    if (navigator.onLine) {
+      try {
+        await Promise.all(tables.map(async (table) => {
+          const { data, error } = await supabase.from(table).select('*');
+          if (!error && data) {
+            snapshot[table] = data;
+            fetchedFromSupabase = true;
+          }
+        }));
+      } catch { /* fall through to localStorage */ }
+    }
+
+    // Fallback: read from localStorage cache if Supabase unavailable
+    if (!fetchedFromSupabase) {
+      const KEY_MAP: Record<string,string> = {
+        employees:'gtk_erp_employees', attendance:'gtk_erp_attendance',
+        loans:'gtk_erp_loans', payroll:'gtk_erp_payroll',
+        accounts:'gtk_erp_accounts', ledger:'gtk_erp_ledger',
+        clients:'gtk_erp_clients', quotations:'gtk_erp_quotations',
+        products:'gtk_erp_products', vendors:'gtk_erp_vendors',
+        requisitions:'gtk_erp_requisitions', stock_ledger:'gtk_erp_stock_ledger',
+        grn_sheet_entries:'gtk_erp_grn_sheet_entries',
+        production_pieces:'gtk_erp_production_pieces',
+      };
+      for (const [table, key] of Object.entries(KEY_MAP)) {
+        try { snapshot[table] = JSON.parse(localStorage.getItem(key)||'[]'); } catch { snapshot[table] = []; }
+      }
+    }
+
+    const backup = {
+      meta: {
+        version: CURRENT_VERSION,
+        timestamp: new Date().toISOString(),
+        type: isAuto ? 'AutoBackup' : 'FullBackup',
+        source: fetchedFromSupabase ? 'Supabase' : 'localStorage-cache',
+        tableCount: Object.keys(snapshot).length,
+        recordCount: Object.values(snapshot).reduce((s, a) => s + a.length, 0),
+      },
+      ...snapshot,
     };
-    const blob = new globalThis.Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+
+    // 1. Download JSON file to disk
+    const json = JSON.stringify(backup, null, 2);
+    const blob = new globalThis.Blob([json], { type: 'application/json' });
     const url = globalThis.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Glasstech_ERP_BACKUP_${new Date().toISOString().slice(0,10)}_${isAuto ? 'AUTO' : 'MANUAL'}.json`;
+    const dateStr = new Date().toISOString().slice(0,10);
+    link.download = `GlassTech_ERP_BACKUP_${dateStr}_${isAuto ? 'AUTO' : 'MANUAL'}.json`;
     link.click();
+    globalThis.URL.revokeObjectURL(url);
+
+    // 2. Also store backup record in Supabase erp_backups table (cloud copy)
+    if (navigator.onLine) {
+      try {
+        await supabase.from('erp_backups').upsert({
+          id: `backup_${dateStr}_${isAuto ? 'auto' : 'manual'}`,
+          backup_date: new Date().toISOString(),
+          backup_type: isAuto ? 'AutoBackup' : 'FullBackup',
+          table_count: backup.meta.tableCount,
+          record_count: backup.meta.recordCount,
+          source: backup.meta.source,
+          // Store compact version (without full data — just metadata)
+          meta: backup.meta,
+        });
+      } catch { /* non-critical — file backup already done */ }
+    }
+
+    localStorage.setItem(KEYS.LAST_AUTO_BACKUP, new Date().toISOString().split('T')[0]);
+    return backup;
   },
 
   importDatabaseFromFile: async (jsonContent: string): Promise<boolean> => {
     try {
       const data = JSON.parse(jsonContent);
-      if (!data.meta || !data.meta.version) {
-        alert("Invalid Backup File Format");
-        return false;
+      if (!data.meta?.version) { alert('Invalid Backup File'); return false; }
+
+      // ── Step 1: Restore localStorage cache ───────────────────────
+      const KEY_MAP: Record<string,string> = {
+        employees:'gtk_erp_employees', attendance:'gtk_erp_attendance',
+        loans:'gtk_erp_loans', payroll:'gtk_erp_payroll',
+        tag_master:'gtk_erp_tag_master', employee_tags:'gtk_erp_employee_tags',
+        departments:'gtk_erp_departments', employee_docs:'gtk_erp_employee_docs',
+        accounts:'gtk_erp_accounts', cost_centers:'gtk_erp_cost_centers',
+        ledger:'gtk_erp_ledger', petty_cash:'gtk_erp_petty_cash',
+        recurring_expenses:'gtk_erp_recurring_expenses',
+        financial_events:'gtk_erp_financial_events',
+        mapping_rules:'gtk_erp_mapping_rules', gl_config:'gtk_erp_gl_config',
+        clients:'gtk_erp_clients', quotations:'gtk_erp_quotations',
+        projects:'gtk_erp_projects', invoices:'gtk_erp_invoices',
+        payment_receipts:'gtk_erp_payment_receipts',
+        products:'gtk_erp_products', vendors:'gtk_erp_vendors',
+        store_items:'gtk_erp_store', assets:'gtk_erp_assets',
+        stock_ledger:'gtk_erp_stock_ledger',
+        inspection_lots:'gtk_erp_inspection_lots',
+        remnants:'gtk_erp_remnants', handling_units:'gtk_erp_handling_units',
+        requisitions:'gtk_erp_requisitions', purchase_orders:'gtk_erp_purchase_orders',
+        grn_sheet_entries:'gtk_erp_grn_sheet_entries',
+        vendor_defect_reports:'gtk_erp_vendor_defect_reports',
+        cutting_sessions:'gtk_erp_cutting_sessions',
+        manual_count_sheets:'gtk_erp_manual_count_sheets',
+        scrap_disposals:'gtk_erp_scrap_disposals',
+        vendor_reviews:'gtk_erp_vendor_reviews',
+        pallet_rates:'gtk_erp_pallet_rates', weight_master:'gtk_erp_weight_master',
+        production_pieces:'gtk_erp_production_pieces', job_orders:'gtk_erp_job_orders',
+        cutter_daily_logs:'gtk_erp_cutter_daily_logs',
+        generator_logs:'gtk_erp_generator_logs',
+        gate_passes:'gtk_erp_gate_pass', warehouse_spots:'gtk_erp_warehouse_spots',
+        vehicles:'gtk_erp_vehicles', vehicle_trips:'gtk_erp_vehicle_trips',
+        vehicle_expenses:'gtk_erp_vehicle_expenses',
+        tempering_dispatches:'gtk_erp_tempering_dispatches',
+        ncr_events:'gtk_erp_ncr_events', ncr_reproductions:'gtk_erp_ncr_reproductions',
+        ncr_claims:'gtk_erp_ncr_claims', ncr_remnants:'gtk_erp_ncr_remnants',
+        roles:'gtk_erp_roles', permissions:'gtk_erp_permissions',
+        role_permissions:'gtk_erp_role_permissions', employee_roles:'gtk_erp_employee_roles',
+      };
+
+      for (const [table, lsKey] of Object.entries(KEY_MAP)) {
+        const rows = data[table] ?? data[lsKey]; // support both old and new backup formats
+        if (Array.isArray(rows) && rows.length > 0) {
+          localStorage.setItem(lsKey, JSON.stringify(rows));
+        }
       }
 
-      // Restore LocalStorage
-      if (data.employees) localStorage.setItem('gtk_erp_employees', JSON.stringify(data.employees));
-      if (data.attendance) localStorage.setItem('gtk_erp_attendance', JSON.stringify(data.attendance));
-      if (data.loans) localStorage.setItem('gtk_erp_loans', JSON.stringify(data.loans));
-      if (data.payroll) localStorage.setItem('gtk_erp_payroll', JSON.stringify(data.payroll));
-      if (data.accounts) localStorage.setItem('gtk_erp_accounts', JSON.stringify(data.accounts));
-      if (data.costCenters) localStorage.setItem('gtk_erp_cost_centers', JSON.stringify(data.costCenters));
-      if (data.pettyCash) localStorage.setItem('gtk_erp_petty_cash', JSON.stringify(data.pettyCash));
-      if (data.recurringExpenses) localStorage.setItem('gtk_erp_recurring_expenses', JSON.stringify(data.recurringExpenses));
-      if (data.financialEvents) localStorage.setItem('gtk_erp_financial_events', JSON.stringify(data.financialEvents));
-      if (data.mappingRules) localStorage.setItem('gtk_erp_mapping_rules', JSON.stringify(data.mappingRules));
-      if (data.glConfig) localStorage.setItem('gtk_erp_gl_config', JSON.stringify(data.glConfig));
-      if (data.clients) localStorage.setItem('gtk_erp_clients', JSON.stringify(data.clients));
-      if (data.quotations) localStorage.setItem('gtk_erp_quotations', JSON.stringify(data.quotations));
-      if (data.projects) localStorage.setItem('gtk_erp_projects', JSON.stringify(data.projects));
-      if (data.products) localStorage.setItem('gtk_erp_products', JSON.stringify(data.products));
-      if (data.store) localStorage.setItem('gtk_erp_store', JSON.stringify(data.store));
-      if (data.inspectionLots) localStorage.setItem('gtk_erp_inspection_lots', JSON.stringify(data.inspectionLots));
-      if (data.remnants) localStorage.setItem('gtk_erp_remnants', JSON.stringify(data.remnants));
-      if (data.handlingUnits) localStorage.setItem('gtk_erp_handling_units', JSON.stringify(data.handlingUnits));
-      if (data.requisitions) localStorage.setItem('gtk_erp_requisitions', JSON.stringify(data.requisitions));
-      if (data.dispatches) localStorage.setItem('gtk_erp_tempering_dispatches', JSON.stringify(data.dispatches));
-      if (data.gatePasses) localStorage.setItem('gtk_erp_gate_passes', JSON.stringify(data.gatePasses));
-      if (data.warehouseSpots) localStorage.setItem('gtk_erp_warehouse_spots', JSON.stringify(data.warehouseSpots));
-      if (data.jobOrders) localStorage.setItem('gtk_erp_job_orders', JSON.stringify(data.jobOrders));
-      if (data.purchaseOrders) localStorage.setItem('gtk_erp_purchase_orders', JSON.stringify(data.purchaseOrders));
-      if (data.vendors) localStorage.setItem('gtk_erp_vendors', JSON.stringify(data.vendors));
+      // ── Step 2: Restore to Supabase (authoritative copy) ─────────
+      if (navigator.onLine) {
+        const supabaseTables = Object.keys(KEY_MAP);
+        let restored = 0;
+        for (const table of supabaseTables) {
+          const rows = data[table];
+          if (!Array.isArray(rows) || rows.length === 0) continue;
+          try {
+            const { error } = await supabase.from(table).upsert(rows, { onConflict: 'id' });
+            if (!error) restored++;
+          } catch { /* skip table on error */ }
+        }
+        console.log(`[Restore] Pushed ${restored}/${supabaseTables.length} tables to Supabase`);
+      }
 
-      // Restore IndexedDB
-      const db = await initDB();
-      if (data.ledger) {
-          await db.clear('ledger');
-          const tx = db.transaction('ledger', 'readwrite');
-          await Promise.all(data.ledger.map((item: any) => tx.store.put(item)));
-          await tx.done;
-      }
-      if (data.stockLedger) {
-          await db.clear('stockLedger');
-          const tx = db.transaction('stockLedger', 'readwrite');
-          await Promise.all(data.stockLedger.map((item: any) => tx.store.put(item)));
-          await tx.done;
-      }
-      if (data.productionPieces) {
-          await db.clear('productionPieces');
-          const tx = db.transaction('productionPieces', 'readwrite');
-          await Promise.all(data.productionPieces.map((item: any) => tx.store.put(item)));
-          await tx.done;
-      }
-      if (data.activityLogs) {
-          await db.clear('activityLogs');
-          const tx = db.transaction('activityLogs', 'readwrite');
-          await Promise.all(data.activityLogs.map((item: any) => tx.store.put(item)));
-          await tx.done;
-      }
+      // ── Step 3: Restore IndexedDB ─────────────────────────────────
+      try {
+        const db = await initDB();
+        for (const store of ['ledger','stockLedger','productionPieces','activityLogs']) {
+          const key = store === 'ledger' ? 'ledger'
+                    : store === 'stockLedger' ? 'stock_ledger'
+                    : store === 'productionPieces' ? 'production_pieces'
+                    : 'activityLogs';
+          const rows = data[key] || data[store];
+          if (Array.isArray(rows) && rows.length > 0) {
+            await db.clear(store as any);
+            const tx = db.transaction(store as any, 'readwrite');
+            await Promise.all(rows.map((item: any) => tx.store.put(item)));
+            await tx.done;
+          }
+        }
+      } catch { /* IDB optional */ }
 
       return true;
-    } catch (e) {
-      console.error("Import Failed", e);
-      alert("Import Failed: " + (e as any).message);
+    } catch (err: any) {
+      alert(`Restore failed: ${err.message}`);
       return false;
     }
   },

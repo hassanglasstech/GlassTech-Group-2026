@@ -24,12 +24,33 @@ const AdminSecurity: React.FC = () => {
     refreshLogs();
   }, [company]);
 
+  const [backupHistory, setBackupHistory] = useState<any[]>([]);
+  const [backupLoading, setBackupLoading] = useState(false);
+
   const refreshLogs = async () => {
     const allLogs = await AppService.getActivityLogsAsync();
     setLogs(allLogs.filter(l => l.company === company).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
   };
 
-  const handleManualBackup = () => AppService.exportDatabaseToFile(false);
+  const loadBackupHistory = async () => {
+    try {
+      const { supabase } = await import('@/src/services/supabaseClient');
+      const { data } = await supabase.from('erp_backups').select('*').order('backup_date', { ascending: false }).limit(10);
+      if (data) setBackupHistory(data);
+    } catch { /* Supabase unavailable */ }
+  };
+
+  useEffect(() => { loadBackupHistory(); }, []);
+
+  const handleManualBackup = async () => {
+    setBackupLoading(true);
+    try {
+      await AppService.exportDatabaseToFile(false);
+      await loadBackupHistory();
+    } finally {
+      setBackupLoading(false);
+    }
+  };
   const handleManualRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -173,11 +194,28 @@ const AdminSecurity: React.FC = () => {
                   <div className="space-y-6">
                      <p className="text-sm font-medium text-slate-500">Manage local data persistence and system snapshots for {company}.</p>
                      <div className="flex flex-col space-y-3">
-                        <button onClick={handleManualBackup} className="sap-btn-primary flex items-center justify-center space-x-3 w-full"><Download size={16}/> <span>Export Full System Backup</span></button>
-                        <button onClick={() => fileInputRef.current?.click()} className="sap-btn-ghost flex items-center justify-center space-x-3 w-full"><FileUp size={16}/> <span>Restore from JSON Point</span></button>
+                        <button onClick={handleManualBackup} disabled={backupLoading} className="sap-btn-primary flex items-center justify-center space-x-3 w-full disabled:opacity-60">
+                          {backupLoading ? <RefreshCw size={16} className="animate-spin"/> : <Download size={16}/>}
+                          <span>{backupLoading ? 'Fetching from Supabase...' : 'Export Full Backup (Supabase)'}</span>
+                        </button>
+                        <button onClick={() => fileInputRef.current?.click()} className="sap-btn-ghost flex items-center justify-center space-x-3 w-full"><FileUp size={16}/> <span>Restore from JSON Backup</span></button>
                         <input type="file" ref={fileInputRef} onChange={handleManualRestore} className="hidden" accept=".json" />
                         <button onClick={handleArchive} className="bg-amber-100 text-amber-700 px-4 py-2 rounded-xl text-xs font-bold uppercase hover:bg-amber-200 flex items-center justify-center gap-2"><Archive size={16}/> <span>Archive Old Data</span></button>
                      </div>
+                     {backupHistory.length > 0 && (
+                       <div className="mt-4">
+                         <p className="text-xs font-bold text-slate-500 uppercase mb-2">Recent Backups</p>
+                         <div className="space-y-1">
+                           {backupHistory.map((b: any) => (
+                             <div key={b.id} className="flex items-center justify-between text-xs bg-slate-50 px-3 py-2 rounded border border-slate-100">
+                               <span className="text-slate-700 font-medium">{b.backup_type}</span>
+                               <span className="text-slate-400">{new Date(b.backup_date).toLocaleString()}</span>
+                               <span className="text-blue-600">{b.record_count?.toLocaleString()} records</span>
+                             </div>
+                           ))}
+                         </div>
+                       </div>
+                     )}
                   </div>
                   <div className="bg-blue-50 border border-blue-100 p-6 rounded flex items-start space-x-4">
                      <Info size={20} className="text-blue-600 shrink-0" />
