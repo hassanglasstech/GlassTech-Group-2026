@@ -12,6 +12,7 @@ import { FinanceService } from '@/modules/finance/services/financeService';
 import { MaterialLedgerEntry, StoreItem } from '@/modules/procurement/types/inventory';
 import { Search, Truck, Trash2, ChevronDown, ChevronRight, Package, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 const GRNRegister: React.FC = () => {
   const company = useAppStore(s => s.selectedCompany);
@@ -88,8 +89,8 @@ const GRNRegister: React.FC = () => {
     InventoryService.getGRNSheetEntriesByGRN(grnId);
 
   // ── DELETE GRN — full reversal ──────────────────────────────────────
-  const handleDeleteGRN = (grnId: string) => {
-    if (!window.confirm(`Delete GRN ${grnId}?\n\nThis will:\n• Reverse stock quantities\n• Remove sheet entries\n• Delete linked GL entries\n• Remove vendor defect reports\n\nThis cannot be undone.`)) return;
+  const handleDeleteGRN = async (grnId: string) => {
+    if (!await confirmModal(`Delete GRN ${grnId}?\n\nThis will:\n• Reverse stock quantities\n• Remove sheet entries\n• Delete linked GL entries\n• Remove vendor defect reports\n\nThis cannot be undone.`)) return;
 
     const grn = grnList.find(g => g.grnId === grnId);
     if (!grn) return;
@@ -143,7 +144,7 @@ const GRNRegister: React.FC = () => {
       <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl flex justify-between items-center relative overflow-hidden">
         <div className="absolute top-0 right-0 p-6 opacity-10"><Truck size={120}/></div>
         <div className="relative z-10">
-          <h2 className="text-xl font-black uppercase tracking-tight">GRN Register</h2>
+          
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
             {grnList.length} GRN(s) · {grnList.reduce((s, g) => s + g.totalSheets, 0)} sheets · {grnList.reduce((s, g) => s + g.totalSqft, 0).toFixed(0)} sqft
           </p>

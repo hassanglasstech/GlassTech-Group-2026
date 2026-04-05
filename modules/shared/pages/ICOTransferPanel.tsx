@@ -9,6 +9,7 @@ import { IntercompanyService, TransferType, IntercompanyTransfer, postIntercompa
 import { useAuthStore } from '@/modules/auth/authStore';
 import { ArrowRightLeft, Plus, RotateCcw, CheckCircle2, AlertTriangle, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 const COMPANIES: Company[] = ['GTK', 'GTI', 'Glassco', 'Nippon', 'Factory'];
 
@@ -71,7 +72,7 @@ const ICOTransferPanel: React.FC<{ company: Company }> = ({ company }) => {
   };
 
   const handleReverse = async (id: string) => {
-    if (!window.confirm(`Reverse transfer ${id}? This will post reversal GL entries in both companies.`)) return;
+    if (!await confirmModal(`Reverse transfer ${id}? This will post reversal GL entries in both companies.`)) return;
     await reverseIntercompanyTransfer(id, actor);
     load();
   };

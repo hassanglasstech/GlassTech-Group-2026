@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../../shared/store/appStore';
 import { toast } from 'sonner';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 const FinancialRegistry: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
@@ -94,8 +95,8 @@ const FinancialRegistry: React.FC = () => {
       toast.success("Event Posted Successfully.");
   };
 
-  const handleIgnore = (id: string) => {
-      if (!window.confirm("Remove this event from registry? It will not be posted.")) return;
+  const handleIgnore = async (id: string) => {
+      if (!await confirmModal("Remove this event from registry? It will not be posted.")) return;
       const allEvents = FinanceService.getFinancialEvents();
       const updatedEvents = allEvents.map(e => e.id === id ? { ...e, status: 'Ignored' as const } : e);
       FinanceService.saveFinancialEvents(updatedEvents);
@@ -109,7 +110,7 @@ const FinancialRegistry: React.FC = () => {
         <div className="bg-slate-900 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden">
             <div className="absolute top-0 right-0 p-8 opacity-10"><Inbox size={140} /></div>
             <div>
-                <h2 className="text-2xl font-black uppercase tracking-tight">Financial Event Registry</h2>
+                
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Pending Operational Transactions</p>
             </div>
             <div className="bg-white/10 px-6 py-4 rounded-2xl border border-white/10 relative z-10">

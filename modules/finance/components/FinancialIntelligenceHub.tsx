@@ -56,7 +56,7 @@ const FinancialIntelligenceHub: React.FC = () => {
       {/* Header */}
       <div className="bg-gradient-to-r from-slate-800 to-slate-900 text-white p-6 rounded-[2rem] shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 p-8 opacity-10"><TrendingUp size={100}/></div>
-        <h2 className="text-xl font-black uppercase">Financial Intelligence</h2>
+        
         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
           True cost analysis · Job profitability · Delivery KPIs · Vendor claims | {company}
         </p>

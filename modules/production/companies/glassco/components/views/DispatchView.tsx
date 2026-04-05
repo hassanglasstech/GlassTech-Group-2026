@@ -230,7 +230,7 @@ const DispatchView: React.FC = () => {
 
         {activeSubTab === 'qc' && (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
-                {!selectedJobId && <div className="bg-emerald-600 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10"><ShieldAlert size={120} /></div><div><h2 className="text-2xl font-black uppercase">Quality Control Hub</h2><p className="text-[10px] font-bold text-emerald-100 uppercase tracking-widest mt-1">Inspection & Grading</p></div></div>}
+                {!selectedJobId && <div className="bg-emerald-600 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10"><ShieldAlert size={120} /></div></div>}
                 {renderGrid(
                     (p) => p.status === 'QC-Pending',
                     (p) => (
@@ -245,7 +245,7 @@ const DispatchView: React.FC = () => {
 
         {activeSubTab === 'finished_goods' && (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
-                {!selectedJobId && <div className="bg-emerald-800 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10"><PackageCheck size={120} /></div><div><h2 className="text-2xl font-black uppercase">Finished Goods</h2><p className="text-[10px] font-bold text-emerald-200 uppercase tracking-widest mt-1">Ready for Site Delivery</p></div></div>}
+                {!selectedJobId && <div className="bg-emerald-800 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10"><PackageCheck size={120} /></div></div>}
                 {renderGrid(
                     (p) => p.status === 'Ready to Dispatch' && !p.dispatchId,
                     (p) => <div className="text-center text-[10px] font-bold text-emerald-600">Ready for Site</div>
@@ -255,7 +255,7 @@ const DispatchView: React.FC = () => {
 
         {activeSubTab === 'faults' && (
             <div className="space-y-6 animate-in slide-in-from-bottom duration-300">
-                <div className="bg-rose-900 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10"><Ban size={120} /></div><div><h2 className="text-2xl font-black uppercase">Industrial Fault Ledger</h2><p className="text-[10px] font-bold text-rose-300 uppercase tracking-widest mt-1">QC Failed Pieces</p></div></div>
+                <div className="bg-rose-900 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10"><Ban size={120} /></div></div>
                 <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
                     <table className="w-full text-left sap-table">
                         <thead><tr><th>Piece ID</th><th>Specs</th><th>Fault</th><th>Status</th><th>Action</th></tr></thead>

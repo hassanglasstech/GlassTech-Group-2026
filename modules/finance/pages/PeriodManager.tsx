@@ -50,7 +50,7 @@ const PeriodManager: React.FC<{ company: Company }> = ({ company }) => {
         </div>
         <div className="relative z-10 flex justify-between items-start">
           <div>
-            <h2 className="text-2xl font-black uppercase tracking-tight">Fiscal Period Control</h2>
+            
             <p className="text-[10px] font-bold opacity-70 uppercase tracking-widest mt-1">
               {company} — Period Locking & Month-End Close
             </p>

@@ -200,7 +200,7 @@ const RouteVisualizer: React.FC = () => {
         <div>
           <div className="flex items-center space-x-2 mb-1">
             <MapPin size={18} className="text-blue-400" />
-            <h2 className="text-xl font-black uppercase">Route Visualizer</h2>
+            
           </div>
           <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Live vehicle positions · Schematic layout</p>
         </div>

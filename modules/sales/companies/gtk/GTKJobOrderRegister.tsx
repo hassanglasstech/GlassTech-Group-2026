@@ -48,7 +48,7 @@ const GTKJobOrderRegister: React.FC = () => {
         <div className="absolute top-0 right-0 p-8 opacity-10"><Package size={120}/></div>
         <div className="flex justify-between items-start relative z-10">
           <div>
-            <h2 className="text-2xl font-black uppercase tracking-tight">GTK Job Order Register</h2>
+            
             <p className="text-[10px] font-bold text-blue-300 uppercase tracking-widest mt-1">Production — {company}</p>
           </div>
           <div className="flex items-center gap-8">

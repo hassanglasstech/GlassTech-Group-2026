@@ -16,6 +16,7 @@ import Pagination from '@/components/Pagination';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 // ── Status config ───────────────────────────────────────────────────
 const STATUS_OPTIONS: { value: EmployeeStatus; label: string; color: string }[] = [
@@ -189,8 +190,8 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
     toast.success(successMsg);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm("Delete this employee? This cannot be undone.")) {
+  const handleDelete = async (id: string) => {
+    if (await confirmModal("Delete this employee? This cannot be undone.")) {
       const all = HRService.getEmployees();
       HRService.saveEmployees(all.filter(e => e.id !== id));
       TagService.setEmployeeTags(id, []);

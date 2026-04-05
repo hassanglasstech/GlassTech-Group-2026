@@ -5,6 +5,7 @@ import { PrintSummary } from './GlasscoPrintTemplate';
 import { WastageCalculator } from './WastageCalculator';
 import QuotationWastageTab, { useQuotationWastage } from '@/modules/glassco/core/QuotationWastageTab';
 import { useAppStore } from '@/modules/shared/store/appStore';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 interface GlasscoEditorProps {
     formData: Partial<Quotation>;
@@ -187,8 +188,8 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                 {/* Left: Back + Title */}
                 <div className="flex items-center gap-3">
                     <button
-                      onClick={() => {
-                        if (isDirty && !window.confirm('Unsaved changes hain — wapas jayen?')) return;
+                      onClick={async () => {
+                        if (isDirty && !await confirmModal('Unsaved changes hain — wapas jayen?')) return;
                         onClose();
                       }}
                       className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest px-2 py-1.5 rounded-lg hover:bg-slate-800"
@@ -242,8 +243,8 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                     </button>
 
                     <button
-                      onClick={() => {
-                        if (isDirty && !window.confirm('Unsaved changes hain — discard karen?')) return;
+                      onClick={async () => {
+                        if (isDirty && !await confirmModal('Unsaved changes hain — discard karen?')) return;
                         onClose();
                       }}
                       className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-all"

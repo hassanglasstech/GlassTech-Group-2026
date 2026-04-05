@@ -270,7 +270,7 @@ const GlasscoMRP: React.FC = () => {
         <div className="absolute inset-0 opacity-5"><BarChart2 size={160} className="absolute -right-4 -top-4" /></div>
         <div className="relative z-10 flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-black uppercase tracking-tight">Material Requirements Plan</h2>
+            
             <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">
               {company} · Glass stock vs open orders · Backward scheduling
             </p>

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -206,7 +207,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
     setNewAccCode('');
   };
 
-  const handleProcessDelete = () => {
+  const handleProcessDelete = async () => {
     // Allows deletion at ANY level selected (L5 down to L1)
     let targetId = delSelections.l5 || delSelections.l4 || delSelections.l3 || delSelections.l2 || delSelections.l1;
     
@@ -217,7 +218,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
         return alert("Constraint Error: This node has sub-accounts. Please delete all children first.");
     }
     
-    if (!window.confirm(`CRITICAL: Confirm permanent deletion of this account?`)) return;
+    if (!await confirmModal(`CRITICAL: Confirm permanent deletion of this account?`)) return;
     
     FinanceService.saveAccounts(FinanceService.getAccounts().filter(a => a.id !== targetId));
     refreshData();

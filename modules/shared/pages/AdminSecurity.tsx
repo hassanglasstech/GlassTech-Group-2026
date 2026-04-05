@@ -12,6 +12,7 @@ import {
 import { useAppStore } from '../store/appStore';
 
 import GlasscoDataWiper from '@/modules/shared/components/GlasscoDataWiper';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 const AdminSecurity: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
@@ -51,10 +52,10 @@ const AdminSecurity: React.FC = () => {
       setBackupLoading(false);
     }
   };
-  const handleManualRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleManualRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!window.confirm("CRITICAL: Overwrite database with backup file? This will replace all current data.")) return;
+    if (!await confirmModal("CRITICAL: Overwrite database with backup file? This will replace all current data.")) return;
     const reader = new FileReader();
     reader.onload = (evt) => {
       const content = evt.target?.result as string;

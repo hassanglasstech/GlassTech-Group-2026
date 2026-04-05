@@ -5,6 +5,7 @@ import { FinanceService } from '@/modules/finance/services/financeService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { FileText, CheckCircle2, Send } from 'lucide-react';
 import { toast } from 'sonner';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 interface FactoryRequisitionsProps {
     requisitions: Requisition[];
@@ -45,9 +46,9 @@ const FactoryRequisitions: React.FC<FactoryRequisitionsProps> = ({ requisitions,
         toast.success("Requisition Created. Pending Approval.");
     };
 
-    const handleApproveRequisition = (req: Requisition) => {
+    const handleApproveRequisition = async (req: Requisition) => {
         if (!req) return;
-        if (!window.confirm(`Approve ${req.reqType || req.subCategory} for ${req.company}?`)) return;
+        if (!await confirmModal(`Approve ${req.reqType || req.subCategory} for ${req.company}?`)) return;
 
         const allReqs = InventoryService.getRequisitions().filter(Boolean);
         const updatedReqs = allReqs.map(r => r.id === req.id ? { ...r, status: 'Approved' as const } : r);

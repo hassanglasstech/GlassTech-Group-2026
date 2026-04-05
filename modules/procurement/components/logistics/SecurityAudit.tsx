@@ -4,6 +4,7 @@ import { GatePass, ProductionPiece, TemperingDispatch, Quotation, Client } from 
 import { ProductionService } from '@/modules/production/services/productionService';
 import { ShieldCheck, Package, CheckCircle2, ScanLine } from 'lucide-react';
 import { getClientName, isInternal } from '@/modules/procurement/components/logistics/LogisticsUtils';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 interface SecurityAuditProps {
     gatePasses: GatePass[];
@@ -25,8 +26,8 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ gatePasses, pieces
         setVerifiedPieces(next);
     };
 
-    const handleAllowGatePass = (id: string) => {
-        if (!window.confirm("Confirm security check complete? This will allow the vehicle movement.")) return;
+    const handleAllowGatePass = async (id: string) => {
+        if (!await confirmModal("Confirm security check complete? This will allow the vehicle movement.")) return;
         
         const currentPass = gatePasses.find(g => g.id === id);
         if (currentPass && currentPass.type === 'Inward') {
@@ -126,7 +127,7 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ gatePasses, pieces
                             <div className="flex items-center space-x-4">
                                 <div className="p-3 bg-emerald-500 rounded-xl shadow-lg shadow-emerald-500/20"><ShieldCheck size={24}/></div>
                                 <div>
-                                    <h3 className="text-xl font-black uppercase tracking-tight">Security Audit Matrix</h3>
+                                    
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
                                         Ref: {selectedPassForCheck.id} | {selectedPassForCheck.vehicleNo}
                                     </p>

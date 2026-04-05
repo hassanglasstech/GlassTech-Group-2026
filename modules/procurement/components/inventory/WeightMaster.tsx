@@ -11,6 +11,7 @@ import { SalesService } from '@/modules/sales/services/salesService';
 import { WeightMasterEntry } from '@/modules/procurement/types/inventory';
 import { Scale, Plus, Trash2, Search, ChevronDown, ChevronRight, History, AlertTriangle, Users } from 'lucide-react';
 import { toast } from 'sonner';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 function sqftOf(size: string): number {
   const [w, h] = size.split('x').map(Number);
@@ -146,8 +147,8 @@ const WeightMaster: React.FC = () => {
     toast.success(`${entrySource} weight: ${perSheet.toFixed(2)} kg/sheet, ${perSqft.toFixed(4)} kg/sqft`);
   };
 
-  const handleDelete = (id: string) => {
-    if (!window.confirm('Delete this weight entry?')) return;
+  const handleDelete = async (id: string) => {
+    if (!await confirmModal('Delete this weight entry?')) return;
     InventoryService.deleteWeightEntry(id);
     setRefreshKey(k => k + 1);
     toast.success('Deleted');
@@ -161,7 +162,7 @@ const WeightMaster: React.FC = () => {
       <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl flex justify-between items-center relative overflow-hidden">
         <div className="absolute top-0 right-0 p-6 opacity-10"><Scale size={120}/></div>
         <div className="relative z-10">
-          <h2 className="text-xl font-black uppercase tracking-tight">Weight Master</h2>
+          
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
             {productSummary.length} product(s) · {allEntries.length} record(s)
             {alertCount > 0 && <span className="text-amber-400 ml-2">· {alertCount} variance alert(s)</span>}

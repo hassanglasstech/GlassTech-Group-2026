@@ -280,7 +280,7 @@ const FabricationView: React.FC = () => {
                     <div className="bg-blue-600 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-8 opacity-10"><Scissors size={120} /></div>
                         <div>
-                            <h2 className="text-2xl font-black uppercase">Cutting Floor</h2>
+                            
                             <p className="text-[10px] font-bold text-blue-100 uppercase tracking-widest mt-1">
                               {dueDateSortedJobs.length} jobs — sorted by due date
                             </p>

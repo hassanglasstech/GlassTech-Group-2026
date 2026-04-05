@@ -260,7 +260,7 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
         <div className="absolute top-0 right-0 p-8 opacity-10"><FileText size={120} /></div>
         <div className="flex justify-between items-start relative z-10">
           <div>
-            <h2 className="text-2xl font-black uppercase tracking-tight">SD Billing & Collections</h2>
+            
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Invoice → AR → Payment Receipt → GL Auto-Post</p>
           </div>
           <div className="flex space-x-6 text-right">

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import SupplyChainDashboard from '../../../../components/vendors/SupplyChainDashboard';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 interface GlasscoVendorHubProps {
     company: Company;
@@ -63,7 +64,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
     setReturnDates(prev => ({ ...prev, [dispatchId]: date }));
   };
 
-  const handleReconcilePiece = (pieceId: string, action: 'OK' | 'BROKEN' | 'LOST') => {
+  const handleReconcilePiece = async (pieceId: string, action: 'OK' | 'BROKEN' | 'LOST') => {
     const piece = pieces.find(p => p.id === pieceId);
     if (!piece) return;
 
@@ -73,7 +74,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
     if (action === 'OK') {
         newStatus = 'Tempered'; 
     } else {
-        const isVendorFault = window.confirm("Is this a VENDOR FAULT? \n\nClick OK to charge vendor (Debit Note).\nClick Cancel for Internal/Unknown fault.");
+        const isVendorFault = await confirmModal("Is this a VENDOR FAULT? \n\nClick OK to charge vendor (Debit Note).\nClick Cancel for Internal/Unknown fault.");
         const description = isVendorFault ? `[VENDOR FAULT] ${action} at Plant` : `[INTERNAL] ${action} reported during Recv`;
         const estArea = 5; 
         const cost = isVendorFault ? (estArea * 450) : 0; 
@@ -307,7 +308,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
                                               <button onClick={() => openRateModal(v)} className="p-1.5 text-orange-600 bg-orange-50 hover:bg-orange-100 rounded transition-colors" title="Manage Rates"><Receipt size={16}/></button>
                                           )}
                                           <button onClick={() => openAddModal(v)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit size={16} /></button>
-                                          <button onClick={() => { if(window.confirm("Delete?")) { const u = vendors.filter(x => x.id !== v.id); SalesService.saveVendors(u); setVendors(u); }}} className="p-1.5 rounded transition-colors text-slate-400 hover:text-red-600 hover:bg-red-50"><Trash2 size={16} /></button>
+                                          <button onClick={async () => { if(await confirmModal("Delete?")) { const u = vendors.filter(x => x.id !== v.id); SalesService.saveVendors(u); setVendors(u); }}} className="p-1.5 rounded transition-colors text-slate-400 hover:text-red-600 hover:bg-red-50"><Trash2 size={16} /></button>
                                       </div>
                                   </td>
                               </tr>
@@ -600,7 +601,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
           <div className="space-y-5 animate-in fade-in duration-300">
             <div className="bg-purple-700 text-white p-6 rounded-[2rem] shadow-xl relative overflow-hidden">
               <div className="absolute top-0 right-0 p-8 opacity-10"><BarChart3 size={100}/></div>
-              <h2 className="text-xl font-black uppercase">Vendor Performance Dashboard</h2>
+              
               <p className="text-[10px] font-bold text-purple-200 uppercase tracking-widest mt-1">
                 Computed from GRN history, defect reports, and dispatch records
               </p>

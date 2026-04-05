@@ -390,7 +390,7 @@ const TripBatchAdvisor: React.FC = () => {
         <div className="relative z-10">
           <div className="flex items-center space-x-2 mb-1">
             <Zap size={18} className="text-violet-400" />
-            <h2 className="text-xl font-black uppercase">Trip Batch Advisor</h2>
+            
           </div>
           <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">
             Smart batching · QC-Passed → Tempering · Tempered → DG

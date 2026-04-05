@@ -6,6 +6,7 @@ import { useAppStore } from '../../shared/store/appStore';
 import { toast } from 'sonner';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 import ClientStatementModal from '../components/prints/ClientStatementModal';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 const PKR = (n: number) => `PKR ${Math.round(n || 0).toLocaleString('en-PK')}`;
 const ClientMaster: React.FC = () => {
@@ -61,7 +62,7 @@ const ClientMaster: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm("Delete this Business Partner profile?")) {
+    if (await confirmModal("Delete this Business Partner profile?")) {
       const all = await AsyncSalesService.getClients();
       await AsyncSalesService.saveClients(all.filter(c => c.id !== id));
       refreshData();

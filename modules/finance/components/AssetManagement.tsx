@@ -262,7 +262,7 @@ const AssetManagement: React.FC = () => {
       {/* Header */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
         <div>
-          <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Asset Management</h2>
+          
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{company} — Fixed Assets & Tools Register</p>
         </div>
         <div className="flex items-center space-x-2">

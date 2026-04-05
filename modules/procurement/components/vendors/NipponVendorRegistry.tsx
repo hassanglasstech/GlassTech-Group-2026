@@ -89,7 +89,7 @@ const NipponVendorRegistry: React.FC = () => {
                <Building size={24}/>
            </div>
            <div>
-               <h2 className="text-2xl font-black uppercase text-slate-800 tracking-tight">Nippon Vendor Network</h2>
+               
                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">External Partners Registry</p>
            </div>
         </div>

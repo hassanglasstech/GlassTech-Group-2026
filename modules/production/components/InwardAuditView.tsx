@@ -34,7 +34,7 @@ const InwardAuditView: React.FC<InwardAuditViewProps> = ({
            <div className="bg-blue-900 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden">
               <div className="absolute top-0 right-0 p-8 opacity-10"><Truck size={120} /></div>
               <div>
-                 <h2 className="text-2xl font-black uppercase">Inward Receiving Audit</h2>
+                 
                  <p className="text-[10px] font-bold text-blue-300 uppercase tracking-widest mt-1">Reconcile Returned Material</p>
               </div>
               <div className="flex items-center space-x-4 relative z-10">

@@ -22,6 +22,7 @@ import JobOrderPage from './JobOrderPage';
 import { convertQuotationToJobOrder } from '@/modules/sales/services/gtkJobOrderService';
 import GTKJobOrderRegister from './GTKJobOrderRegister';
 import { toast } from 'sonner';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-PK');
 
@@ -96,7 +97,7 @@ const QuotationListView: React.FC<{
   useEffect(() => { load(); }, []);
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm(`Delete quotation ${id}?`)) return;
+    if (!await confirmModal(`Delete quotation ${id}?`)) return;
     await deleteGTKQuotation(id);
     setQuotations(prev => prev.filter(q => q.id !== id));
     toast.success('Quotation deleted');
@@ -610,7 +611,7 @@ const GTKQuotationManager: React.FC = () => {
             disabled={items.length === 0 || converting}
             onClick={async () => {
               if (!header.clientName) { toast.error('Add client name before converting.'); return; }
-              if (!window.confirm(`Convert "${activeOption?.label}" to Job Order?`)) return;
+              if (!await confirmModal(`Convert "${activeOption?.label}" to Job Order?`)) return;
               setConverting(true);
               try {
                 const jo = await convertQuotationToJobOrder(header, activeOption!, 'GTK');

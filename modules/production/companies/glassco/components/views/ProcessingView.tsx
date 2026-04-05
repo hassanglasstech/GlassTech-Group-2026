@@ -164,7 +164,7 @@ const ProcessingView: React.FC = () => {
                <div className="bg-rose-600 text-white p-4 sm:p-6 rounded-[2rem] shadow-xl relative overflow-hidden">
                   <div className="absolute top-0 right-0 p-8 opacity-10 hidden sm:block"><Flame size={120} /></div>
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 relative z-10">
-                  <div><h2 className="text-lg sm:text-xl font-black uppercase">Trip Loading</h2><p className="text-[10px] font-bold text-rose-200 uppercase tracking-widest mt-1">Select trip, load pieces, finalize</p></div>
+                  
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 relative z-10">
                     <div className="space-y-1"><label className="text-[9px] font-black uppercase text-rose-200">Active Trip</label><select value={activeDispatchIdForLoading} onChange={e => setActiveDispatchIdForLoading(e.target.value)} className="bg-white/10 border border-white/20 rounded-xl px-3 py-2.5 text-sm font-black outline-none w-full sm:w-56 text-white min-h-[44px]"><option value="" className="text-slate-900">-- Select --</option>{dispatches.filter(d => d.status === 'Ready to Dispatch' || d.status === 'Scheduled').map(d => (<option key={d.id} value={d.id} className="text-slate-900">{d.serviceType === 'Site Delivery' ? '📦 ' : '🔥 '}{d.plantName} ({d.vehicleNo})</option>))}</select></div>
                     {activeDispatchIdForLoading && (() => {
@@ -403,7 +403,7 @@ const ProcessingView: React.FC = () => {
 
         {activeSubTab === 'wip' && (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
-               {!selectedJobId && <div className="bg-amber-500 text-white p-4 sm:p-8 rounded-[2rem] shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10 hidden sm:block"><Hourglass size={120} /></div><div className="relative z-10"><h2 className="text-lg sm:text-2xl font-black uppercase">WIP (Tempering Stack)</h2><p className="text-[10px] font-bold text-amber-100 uppercase tracking-widest mt-1">QC Passed Material Pending Tempering Trip</p></div></div>}
+               {!selectedJobId && <div className="bg-amber-500 text-white p-4 sm:p-8 rounded-[2rem] shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10 hidden sm:block"><Hourglass size={120} /></div><div className="relative z-10"></div></div>}
                {renderGrid(
                  (p) => {
                     const order = jobOrders.find(j => j.orderNo === p.orderId);
@@ -431,7 +431,7 @@ const ProcessingView: React.FC = () => {
 
         {activeSubTab === 'lamination' && (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
-               {!selectedJobId && <div className="bg-orange-600 text-white p-4 sm:p-8 rounded-[2rem] shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10 hidden sm:block"><Layers size={120} /></div><div className="relative z-10"><h2 className="text-lg sm:text-2xl font-black uppercase">Lamination Queue</h2><p className="text-[10px] font-bold text-orange-200 uppercase tracking-widest mt-1">Staging for Lamination Service</p></div></div>}
+               {!selectedJobId && <div className="bg-orange-600 text-white p-4 sm:p-8 rounded-[2rem] shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10 hidden sm:block"><Layers size={120} /></div><div className="relative z-10"></div></div>}
                {renderGrid(
                  (p) => {
                     const order = jobOrders.find(j => j.orderNo === p.orderId);
@@ -453,7 +453,7 @@ const ProcessingView: React.FC = () => {
 
         {activeSubTab === 'double_glaze' && (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
-               {!selectedJobId && <div className="bg-cyan-600 text-white p-4 sm:p-8 rounded-[2rem] shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10 hidden sm:block"><Layers size={120} /></div><div className="relative z-10"><h2 className="text-lg sm:text-2xl font-black uppercase">Double Glazing Queue</h2><p className="text-[10px] font-bold text-cyan-200 uppercase tracking-widest mt-1">Staging for D/G Service</p></div></div>}
+               {!selectedJobId && <div className="bg-cyan-600 text-white p-4 sm:p-8 rounded-[2rem] shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10 hidden sm:block"><Layers size={120} /></div><div className="relative z-10"></div></div>}
                {renderGrid(
                  (p) => {
                     const order = jobOrders.find(j => j.orderNo === p.orderId);

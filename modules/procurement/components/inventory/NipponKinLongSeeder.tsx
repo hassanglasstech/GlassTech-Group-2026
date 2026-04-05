@@ -6,6 +6,7 @@ import { InventoryService } from '@/modules/procurement/services/inventoryServic
 import { Database, RefreshCw, AlertTriangle, Layers, Info, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 const KINLONG_DATA: Partial<Product>[] = [
     // 1. HANDLES
@@ -72,8 +73,8 @@ const KINLONG_DATA: Partial<Product>[] = [
 ];
 
 const NipponKinLongSeeder: React.FC = () => {
-    const handleResetAndSeed = () => {
-        if (!window.confirm("CRITICAL ACTION: This will DELETE all existing 'Nippon' items from the Product Master and replace them with the 45+ Kin Long items extracted from the documents.\n\nAre you sure you want to proceed?")) return;
+    const handleResetAndSeed = async () => {
+        if (!await confirmModal("CRITICAL ACTION: This will DELETE all existing 'Nippon' items from the Product Master and replace them with the 45+ Kin Long items extracted from the documents.\n\nAre you sure you want to proceed?")) return;
 
         // 1. Get Current Products
         const allProducts = SalesService.getProducts();

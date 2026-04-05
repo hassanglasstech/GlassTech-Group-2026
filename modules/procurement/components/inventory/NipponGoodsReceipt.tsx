@@ -174,7 +174,7 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
                  <div className="flex items-center space-x-4">
                     <div className="p-3 bg-red-800 rounded-2xl shadow-lg"><Truck size={24}/></div>
                     <div>
-                       <h3 className="text-2xl font-black uppercase tracking-tight">Nippon Inbound (GRN)</h3>
+                       
                        <p className="text-[10px] text-red-200 font-bold uppercase tracking-widest mt-1">Movement 101 - Hardware Stock</p>
                     </div>
                  </div>

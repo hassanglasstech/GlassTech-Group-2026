@@ -51,7 +51,7 @@ const GLConfigurationPage: React.FC<{ company: Company }> = ({ company }) => {
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="bg-slate-900 text-white p-8 rounded-[2rem] shadow-xl">
-        <h2 className="text-2xl font-black uppercase tracking-tight">GL Automation Rules</h2>
+        
         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Configure System Event Mappings</p>
       </div>
 

@@ -7,6 +7,7 @@ import { Company } from '@/modules/shared/types/core';
 import { Shield, Plus, Edit2, Trash2, X, Users, Check, ChevronDown, ChevronRight, Search, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 // ── Scope Labels ────────────────────────────────────────────────────
 const SCOPE_LABELS: Record<RBACScope, string> = {
@@ -86,13 +87,13 @@ const RoleManager: React.FC = () => {
     toast.success(`Role "${role.name}" saved`);
   };
 
-  const handleDeleteRole = (roleId: string) => {
+  const handleDeleteRole = async (roleId: string) => {
     const role = roles.find(r => r.id === roleId);
     if (role?.isSystem) {
       toast.error('System roles cannot be deleted');
       return;
     }
-    if (window.confirm(`Delete role "${role?.name}"?`)) {
+    if (await confirmModal(`Delete role "${role?.name}"?`)) {
       RBACService.deleteRole(roleId);
       setRoles(RBACService.getRoles(company));
       if (selectedRoleId === roleId) setSelectedRoleId(null);

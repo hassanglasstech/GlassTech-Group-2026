@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Company, Client } from '@/modules/shared/types';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { toast } from 'sonner';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 export const useClientMaster = (company: Company) => {
     const [clients, setClients] = useState<Client[]>([]);
@@ -51,8 +52,8 @@ export const useClientMaster = (company: Company) => {
         toast.success("Business Partner profile created.");
     };
 
-    const handleDelete = (id: string) => {
-        if (window.confirm("Delete this Business Partner profile?")) {
+    const handleDelete = async (id: string) => {
+        if (await confirmModal("Delete this Business Partner profile?")) {
             const all = SalesService.getClients();
             SalesService.saveClients(all.filter(c => c.id !== id));
             refreshData();

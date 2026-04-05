@@ -140,7 +140,7 @@ const GoodsIssue: React.FC<Omit<GoodsIssueProps, 'company'>> = ({ items, costCen
             <div className="col-span-1 md:col-span-8 bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8 space-y-8">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h2 className="text-2xl font-black uppercase text-slate-900">Internal Goods Issue</h2>
+                        
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Issue stock to production or consumption (Mvmnt 201/261)</p>
                     </div>
                     <div className="p-4 bg-rose-50 rounded-2xl">

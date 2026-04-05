@@ -19,6 +19,7 @@ import {
   Link2, CheckCircle2, Clock, AlertTriangle, RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-PK');
 
@@ -158,8 +159,8 @@ const GTKProjectDetail: React.FC<{
   const profit       = revenue - totalConsumed;
   const margin       = revenue > 0 ? (profit / revenue) * 100 : 0;
 
-  const handleComplete = () => {
-    if (!window.confirm(`Complete project "${project.title}"?`)) return;
+  const handleComplete = async () => {
+    if (!await confirmModal(`Complete project "${project.title}"?`)) return;
     ProjectService.completeProject(project.id, company, parseFloat(finalValue) || revenue);
     onRefresh();
     onClose();
@@ -332,7 +333,7 @@ const GTKProjects: React.FC<{ company: Company }> = ({ company }) => {
       <div className="bg-gradient-to-r from-slate-900 to-blue-900 text-white p-6 rounded-[2rem] shadow-xl">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-black uppercase tracking-tight">Project Tracker — {company}</h2>
+            
             <p className="text-[10px] text-blue-300 font-bold uppercase tracking-widest mt-0.5">
               Aluminium Fabrication · GL Integrated
             </p>

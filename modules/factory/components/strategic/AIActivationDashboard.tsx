@@ -217,7 +217,7 @@ const AIActivationDashboard: React.FC = () => {
         <div className="absolute top-0 right-0 p-8 opacity-10"><Bot size={140}/></div>
         <div className="flex justify-between items-start relative z-10">
           <div>
-            <h2 className="text-2xl font-black uppercase tracking-tight">AI Layer Activation</h2>
+            
             <p className="text-[10px] font-bold text-blue-300 uppercase tracking-widest mt-1">
               Morning Briefing · Predictive Alerts · Telegram · AI Chat · Self-Heal
             </p>

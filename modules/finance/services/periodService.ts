@@ -9,6 +9,7 @@ import { supabase } from '@/src/services/supabaseClient';
 import { Logger } from '@/modules/shared/services/logger';
 import { toast } from 'sonner';
 import { Company } from '../../shared/types/core';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 export interface FiscalPeriod {
   id:         string;   // company-YYYY-MM
@@ -106,7 +107,7 @@ export const PeriodService = {
     // Warn if trying to close current month
     const now = new Date().toISOString().slice(0, 7);
     if (month === now) {
-      if (!window.confirm(`Closing the CURRENT period (${month}) will prevent any new GL entries for this month. Continue?`)) return;
+      if (!await confirmModal(`Closing the CURRENT period (${month}) will prevent any new GL entries for this month. Continue?`)) return;
     }
     all[idx] = { ...all[idx], status: 'Closed', closedBy: actor, closedAt: new Date().toISOString() };
     await _save(all);

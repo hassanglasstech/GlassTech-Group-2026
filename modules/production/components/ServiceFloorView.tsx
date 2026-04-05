@@ -34,7 +34,7 @@ const ServiceFloorView: React.FC<ServiceFloorViewProps> = ({ pieces, onUpdateSta
             <div className="bg-indigo-900 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-8 opacity-10"><Sparkles size={120} /></div>
                 <div>
-                    <h2 className="text-2xl font-black uppercase">Processing Services</h2>
+                    
                     <p className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest mt-1">Value Addition Floor</p>
                 </div>
                 <div className="bg-white/10 px-6 py-4 rounded-2xl border border-white/10 relative z-10 text-center">

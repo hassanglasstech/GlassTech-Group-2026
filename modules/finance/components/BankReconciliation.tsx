@@ -195,7 +195,7 @@ const BankReconciliation: React.FC<{ company: Company }> = ({ company }) => {
         <div className="absolute top-0 right-0 p-8 opacity-10"><Landmark size={120}/></div>
         <div className="flex justify-between items-start relative z-10">
           <div>
-            <h2 className="text-2xl font-black uppercase tracking-tight">Bank Reconciliation</h2>
+            
             <p className="text-[10px] font-bold opacity-70 uppercase tracking-widest mt-1">{company} — {acctName}</p>
           </div>
           {session && (
