@@ -7,10 +7,11 @@ import GTKQuotationManager from '../companies/gtk/GTKQuotationManager';
 import DesignStudio from '../../production/pages/DesignStudio';
 import SalesOrders from '../components/SalesOrders';
 import SalesPipeline from '../components/SalesPipeline';
-import { Users, FileSignature, Layout, ShoppingCart, BarChart3 } from 'lucide-react';
+import BillingHub from '../../finance/components/BillingHub';
+import { Users, FileSignature, Layout, ShoppingCart, BarChart3, Receipt } from 'lucide-react';
 import { useAppStore } from '../../shared/store/appStore';
 
-type ActiveTab = 'orders' | 'quotations' | 'clients' | 'design' | 'pipeline';
+type ActiveTab = 'orders' | 'quotations' | 'clients' | 'design' | 'pipeline' | 'invoices';
 
 const styles = `
   .sd-wrap {
@@ -159,6 +160,15 @@ const SalesCRM: React.FC = () => {
           Pipeline
         </button>
 
+        {/* Invoices */}
+        <button
+          onClick={() => setActiveTab('invoices')}
+          className={`sd-tab${activeTab === 'invoices' ? ' active' : ''}`}
+        >
+          <Receipt size={14}/>
+          Invoices & AR
+        </button>
+
       </nav>
 
       {/* ── Content ── */}
@@ -180,6 +190,8 @@ const SalesCRM: React.FC = () => {
           {activeTab === 'design' && showDesign && <DesignStudio />}
 
           {activeTab === 'pipeline' && <SalesPipeline />}
+
+          {activeTab === 'invoices' && <BillingHub company={company} />}
 
         </div>
       </div>

@@ -7,9 +7,10 @@ import { SalesService } from '../../sales/services/salesService';
 import { AsyncSalesService } from '../../sales/services/asyncSalesService';
 import { ProductionService } from '../../production/services/productionService';
 import { generateDeliveryInvoice } from '@/modules/sales/services/deliveryInvoiceService';
+import SalesInvoicePrint from '@/modules/sales/components/prints/SalesInvoicePrint';
 import { 
   FileText, CheckCircle2, Ban, ArrowRightLeft, DollarSign, Search,
-  Receipt, XCircle, X, Save, Banknote, AlertCircle, Clock, Eye, CreditCard
+  Receipt, XCircle, X, Save, Banknote, AlertCircle, Clock, Eye, CreditCard, Printer
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -25,6 +26,13 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
   // Payment receipt modal
   const [receiptModalInvoice, setReceiptModalInvoice] = useState<Invoice | null>(null);
   const [receiptForm, setReceiptForm] = useState({ amount: 0, method: 'Bank Transfer' as PaymentReceipt['method'], reference: '' });
+
+  // GST modal
+  const [gstModalOrder, setGstModalOrder] = useState<Quotation | null>(null);
+  const [gstPercent, setGstPercent] = useState(0);
+
+  // Print modal
+  const [printInvoice, setPrintInvoice] = useState<any | null>(null);
 
   useEffect(() => {
     refreshData();
@@ -72,38 +80,43 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
     return invoices.some(inv => inv.orderId === orderId);
   };
 
-  // ── GENERATE INVOICE — now delegates to shared deliveryInvoiceService ──
+  // ── GENERATE INVOICE — open GST modal first ──────────────────────
   const handleGenerateInvoice = (order: Quotation) => {
     if (isAlreadyInvoiced(order.id)) return toast.error('Already invoiced — check Receivables tab.');
+    setGstPercent(0);
+    setGstModalOrder(order);
+  };
 
-    const client = clients.find((c: any) => c.id === order.clientId);
+  const confirmGenerateInvoice = () => {
+    if (!gstModalOrder) return;
+    const client = clients.find((c: any) => c.id === gstModalOrder.clientId);
     if (client) {
       const creditLimit = (client as any).creditLimit || 0;
       if (creditLimit > 0) {
         const outstanding = invoices
-          .filter((i: any) => i.clientId === order.clientId && i.status !== 'Paid')
+          .filter((i: any) => i.clientId === gstModalOrder.clientId && i.status !== 'Paid')
           .reduce((s: number, i: any) => s + (i.balance || 0), 0);
-        const orderTotal = (order.items || []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
+        const orderTotal = (gstModalOrder.items || []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
         if (outstanding + orderTotal > creditLimit) {
           toast.error(
-            `Credit limit exceeded for ${client.name}. Outstanding: PKR ${outstanding.toLocaleString()} + This order: PKR ${orderTotal.toLocaleString()} > Limit: PKR ${creditLimit.toLocaleString()}`,
+            `Credit limit exceeded for ${client.name}.`,
             { duration: 8000 }
           );
           return;
         }
       }
     }
-
     try {
-      const result = generateDeliveryInvoice(order, company);
+      const result = generateDeliveryInvoice(gstModalOrder, company, gstPercent);
+      setGstModalOrder(null);
       refreshData();
       toast.success(
-        `Invoice ${result.invoiceId} — PKR ${result.finalAmount.toLocaleString('en-PK')} — Parked in GL. Finance review required. AR: ${result.clientName}`,
+        `Invoice ${result.invoiceId} — PKR ${result.grandTotal.toLocaleString('en-PK')} — Posted to GL. AR: ${result.clientName}`,
         { duration: 6000 }
       );
     } catch (err) {
       console.error('[BillingHub] Invoice generation failed:', err);
-      toast.error('Invoice generation failed — check console.');
+      toast.error('Invoice generation failed.');
     }
   };
 
@@ -143,12 +156,12 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
     const receiptId = `REC-${Date.now().toString().slice(-6)}`;
     const txId = `GL-${receiptId}`;
 
-    // ── GL Entry: PARKED (Finance reviews then posts) ──
+    // ── GL Entry: Posted directly ──
     const glTx: LedgerTransaction = {
       id: txId, company, docType: 'DZ', docDate: new Date().toISOString().split('T')[0],
       date: new Date().toISOString().split('T')[0],
-      description: `[PARKED] RECEIPT ${receiptId}: ${receiptModalInvoice.clientName} — ${receiptModalInvoice.id} via ${receiptForm.method}`,
-      referenceId: receiptId, status: 'Parked',
+      description: `RECEIPT ${receiptId}: ${receiptModalInvoice.clientName} — ${receiptModalInvoice.id} via ${receiptForm.method}`,
+      referenceId: receiptId, status: 'Posted',
       reqId: receiptModalInvoice.orderId,
       details: [
         { accountId: cashAcc.id, debit: receiptForm.amount, credit: 0, text: `${receiptForm.method} received${receiptForm.reference ? ': ' + receiptForm.reference : ''}` },
@@ -273,11 +286,6 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
           <Receipt size={15}/><span>Payment History</span>
         </button>
       </div>
-      {parkedCount > 0 && (
-        <button onClick={handleBulkPostGL} className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-violet-600 text-white hover:bg-violet-700 transition-all">
-          <CheckCircle2 size={14}/> Post {parkedCount} Parked GL
-        </button>
-      )}
       </div>
 
       {/* ═══ TAB: GENERATE INVOICE ═══ */}
@@ -384,12 +392,18 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
                       }`}>{isOverdue && inv.status !== 'Paid' ? 'Overdue' : inv.status}</span>
                     </td>
                     <td className="px-6 py-3 text-right">
-                      {inv.status !== 'Paid' && (
-                        <button onClick={() => { setReceiptModalInvoice(inv); setReceiptForm({ amount: inv.balance, method: 'Bank Transfer', reference: '' }); }}
-                          className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase hover:bg-emerald-700">
-                          Receive Payment
+                      <div className="flex items-center justify-end gap-2">
+                        <button onClick={() => setPrintInvoice(inv)}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
+                          <Printer size={14}/>
                         </button>
-                      )}
+                        {inv.status !== 'Paid' && (
+                          <button onClick={() => { setReceiptModalInvoice(inv); setReceiptForm({ amount: inv.balance, method: 'Bank Transfer', reference: '' }); }}
+                            className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase hover:bg-emerald-700">
+                            Receive Payment
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -483,6 +497,65 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ═══ MODAL: GST CONFIRMATION ═══ */}
+      {gstModalOrder && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
+          <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="px-8 py-6 bg-blue-700 text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-black uppercase">Generate Invoice</h3>
+                <p className="text-[10px] font-bold text-blue-200 uppercase">{gstModalOrder.orderNo || gstModalOrder.id} — {clients.find(c => c.id === gstModalOrder.clientId)?.name || 'Client'}</p>
+              </div>
+              <button onClick={() => setGstModalOrder(null)}><XCircle size={22}/></button>
+            </div>
+            <div className="p-8 space-y-5 bg-slate-50">
+              <div className="bg-white p-4 rounded-xl border text-center">
+                <p className="text-[9px] font-black uppercase text-slate-400">Order Value</p>
+                <p className="text-xl font-black text-slate-900">PKR {(gstModalOrder.items || []).reduce((s: number, i: any) => s + (i.amount || 0), 0).toLocaleString()}</p>
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">GST % (0 = exempt)</label>
+                <select
+                  className="sap-input w-full font-bold text-lg"
+                  value={gstPercent}
+                  onChange={e => setGstPercent(Number(e.target.value))}
+                >
+                  <option value={0}>0% — GST Exempt</option>
+                  <option value={5}>5%</option>
+                  <option value={13}>13%</option>
+                  <option value={17}>17% — Standard Rate</option>
+                  <option value={18}>18%</option>
+                </select>
+              </div>
+              {gstPercent > 0 && (() => {
+                const base = (gstModalOrder.items || []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
+                const gst = Math.round(base * gstPercent / 100);
+                return (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs font-bold text-amber-800 text-center">
+                    GST: PKR {gst.toLocaleString()} → Grand Total: PKR {(base + gst).toLocaleString()}
+                  </div>
+                );
+              })()}
+            </div>
+            <div className="px-8 py-5 bg-white border-t flex justify-end gap-3">
+              <button onClick={() => setGstModalOrder(null)} className="px-6 py-2.5 text-slate-400 font-black uppercase text-xs">Cancel</button>
+              <button onClick={confirmGenerateInvoice} className="bg-blue-700 text-white px-8 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest hover:bg-blue-800 shadow-lg flex items-center gap-2">
+                <FileText size={14}/> Generate & Post
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ INVOICE PRINT ═══ */}
+      {printInvoice && (
+        <SalesInvoicePrint
+          invoice={printInvoice}
+          company={company}
+          onClose={() => setPrintInvoice(null)}
+        />
       )}
     </div>
   );
