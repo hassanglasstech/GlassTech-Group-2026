@@ -1,13 +1,8 @@
-Yeh lijiye bhai, mukammal aur 100% theek kiya hua code! 
-
-Aapko apni purani `SCMDashboard.tsx` file ka sara code delete karna hai aur yeh neechay wala poora code usme copy-paste kar dena ہے۔ Main ne wo extra `</div>` hata diya hai, ab Vercel par koi build error nahi aayega:
-
-```tsx
 /**
  * SCMDashboard.tsx - Phase 2
  * Supply Chain Manager view:
- * - Vendor Scorecard (rating A/B/C/D)
- * - Reorder Alerts (CRITICAL / LOW)
+ *   - Vendor Scorecard (rating A/B/C/D)
+ *   - Reorder Alerts (CRITICAL / LOW)
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -34,7 +29,7 @@ const RatingBadge: React.FC<{ rating: 'A' | 'B' | 'C' | 'D' }> = ({ rating }) =>
 
 const UrgencyBadge: React.FC<{ urgency: ReorderAlert['urgency'] }> = ({ urgency }) => (
   <span style={{
-    background: urgency === 'CRITICAL' ? '#FEE2E2' : '#DC2626',
+    background: urgency === 'CRITICAL' ? '#FEE2E2' : '#FEF3C7',
     color: urgency === 'CRITICAL' ? '#DC2626' : '#D97706',
     padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 800,
   }}>
@@ -222,49 +217,77 @@ const SCMDashboard: React.FC = () => {
             </table>
           )
         )}
-
+      </div>
         {/* DEMAND FORECAST */}
         {activeTab === 'forecast' && orderForecast && (
           <div style={{ padding: 24 }}>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16 }}>
-              <span style={{ background: orderForecast.trend==='UP'?'#DCFCE7':orderForecast.trend==='DOWN'?'#FEE2E2':'#EFF6FF', color: orderForecast.trend==='UP'?'#16A34A':orderForecast.trend==='DOWN'?'#DC2626':'#2563EB', padding:'4px 12px', borderRadius:12, fontWeight:800, fontSize:11 }}>
-                {orderForecast.trend==='UP'?'^ Trending Up':orderForecast.trend==='DOWN'?'v Trending Down':'-> Stable'}
+              <span style={{
+                background: orderForecast.trend === 'UP' ? '#DCFCE7' : orderForecast.trend === 'DOWN' ? '#FEE2E2' : '#EFF6FF',
+                color: orderForecast.trend === 'UP' ? '#16A34A' : orderForecast.trend === 'DOWN' ? '#DC2626' : '#2563EB',
+                padding: '4px 12px', borderRadius: 12, fontWeight: 800, fontSize: 11,
+              }}>
+                {orderForecast.trend === 'UP' ? 'Trending Up' : orderForecast.trend === 'DOWN' ? 'Trending Down' : 'Stable'}
               </span>
-              <span style={{fontSize:12,color:'#64748B'}}>Avg {orderForecast.avgOrdersPerMonth} orders/month | {orderForecast.avgSqftPerMonth} sqft/month</span>
+              <span style={{ fontSize: 12, color: '#64748B' }}>
+                Avg {orderForecast.avgOrdersPerMonth} orders/month | {orderForecast.avgSqftPerMonth} sqft/month
+              </span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
               <div>
-                <div style={{fontSize:11,fontWeight:800,color:'#065F46',textTransform:'uppercase',marginBottom:8}}>Last 6 Months (Actual)</div>
-                <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                  <thead><tr>{['Month','Orders','Sqft','Revenue'].map(h=><th key={h} className="scm-th" style={{background:'#374151'}}>{h}</th>)}</tr></thead>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#065F46', textTransform: 'uppercase' as const, marginBottom: 8 }}>
+                  Last 6 Months (Actual)
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
+                  <thead>
+                    <tr>
+                      {['Month', 'Orders', 'Sqft', 'Revenue'].map(h => (
+                        <th key={h} className="scm-th" style={{ background: '#374151' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
                   <tbody>
-                    {orderForecast.historical.map((m: any)=>(
+                    {orderForecast.historical.map((m: any) => (
                       <tr key={m.month} className="scm-tr">
-                        <td className="scm-td" style={{fontWeight:700}}>{m.month}</td>
-                        <td className="scm-td" style={{textAlign:'center'}}>{m.orderCount}</td>
-                        <td className="scm-td" style={{textAlign:'right'}}>{m.totalSqft}</td>
-                        <td className="scm-td" style={{textAlign:'right',color:'#16A34A',fontWeight:700}}>PKR {m.totalRevenue.toLocaleString()}</td>
+                        <td className="scm-td" style={{ fontWeight: 700 }}>{m.month}</td>
+                        <td className="scm-td" style={{ textAlign: 'center' as const }}>{m.orderCount}</td>
+                        <td className="scm-td" style={{ textAlign: 'right' as const }}>{m.totalSqft}</td>
+                        <td className="scm-td" style={{ textAlign: 'right' as const, color: '#16A34A', fontWeight: 700 }}>
+                          PKR {m.totalRevenue.toLocaleString()}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
               <div>
-                <div style={{fontSize:11,fontWeight:800,color:'#065F46',textTransform:'uppercase',marginBottom:8}}>Next 3 Months (Forecast)</div>
-                <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                  <thead><tr>{['Month','Est. Orders','Est. Sqft','Est. Revenue'].map(h=><th key={h} className="scm-th">{h}</th>)}</tr></thead>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#065F46', textTransform: 'uppercase' as const, marginBottom: 8 }}>
+                  Next 3 Months (Forecast)
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
+                  <thead>
+                    <tr>
+                      {['Month', 'Est. Orders', 'Est. Sqft', 'Est. Revenue'].map(h => (
+                        <th key={h} className="scm-th">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
                   <tbody>
-                    {orderForecast.forecast.map((m: any)=>(
-                      <tr key={m.month} style={{background:'#F0FDF4'}}>
-                        <td className="scm-td" style={{fontWeight:800,color:'#065F46'}}>{m.month} *</td>
-                        <td className="scm-td" style={{textAlign:'center',fontWeight:700}}>{m.orderCount}</td>
-                        <td className="scm-td" style={{textAlign:'right',fontWeight:700}}>{m.totalSqft}</td>
-                        <td className="scm-td" style={{textAlign:'right',color:'#059669',fontWeight:800}}>PKR {m.totalRevenue.toLocaleString()}</td>
+                    {orderForecast.forecast.map((m: any) => (
+                      <tr key={m.month} style={{ background: '#F0FDF4' }}>
+                        <td className="scm-td" style={{ fontWeight: 800, color: '#065F46' }}>{m.month}</td>
+                        <td className="scm-td" style={{ textAlign: 'center' as const, fontWeight: 700 }}>{m.orderCount}</td>
+                        <td className="scm-td" style={{ textAlign: 'right' as const, fontWeight: 700 }}>{m.totalSqft}</td>
+                        <td className="scm-td" style={{ textAlign: 'right' as const, color: '#059669', fontWeight: 800 }}>
+                          PKR {m.totalRevenue.toLocaleString()}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                <div style={{fontSize:10,color:'#94A3B8',marginTop:8}}>* Forecast based on 3-month rolling average + trend factor</div>
+                <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 8 }}>
+                  * Forecast: 3-month rolling average + trend factor
+                </div>
               </div>
             </div>
           </div>
@@ -273,26 +296,49 @@ const SCMDashboard: React.FC = () => {
         {/* EOQ CALCULATOR */}
         {activeTab === 'eoq' && (
           eoqList.length === 0 ? (
-            <div style={{padding:48,textAlign:'center',color:'#94A3B8',fontSize:13}}>No items with demand history found. EOQ requires at least some purchase history.</div>
+            <div style={{ padding: 48, textAlign: 'center' as const, color: '#94A3B8', fontSize: 13 }}>
+              No items with demand history found.
+            </div>
           ) : (
-            <table style={{ width:'100%', borderCollapse:'collapse' }}>
-              <thead><tr>{['Item','Annual Demand','Unit Cost (MAP)','EOQ','Orders/Year','Annual Cost (PKR)'].map(h=><th key={h} className="scm-th">{h}</th>)}</tr></thead>
+            <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
+              <thead>
+                <tr>
+                  {['Item', 'Annual Demand', 'Unit Cost (MAP)', 'EOQ', 'Orders/Year', 'Annual Cost (PKR)'].map(h => (
+                    <th key={h} className="scm-th">{h}</th>
+                  ))}
+                </tr>
+              </thead>
               <tbody>
-                {eoqList.map((e: any)=>(
+                {eoqList.map((e: any) => (
                   <tr key={e.itemId} className="scm-tr">
-                    <td className="scm-td" style={{fontWeight:700}}>{e.itemName}<div style={{fontSize:10,color:'#94A3B8'}}>{e.category}</div></td>
-                    <td className="scm-td" style={{textAlign:'right'}}>{e.annualDemand}</td>
-                    <td className="scm-td" style={{textAlign:'right',color:'#64748B'}}>PKR {e.unitCost.toLocaleString()}</td>
-                    <td className="scm-td" style={{textAlign:'right',fontWeight:800,color:'#2563EB'}}>{e.eoq} units</td>
-                    <td className="scm-td" style={{textAlign:'center',color:'#64748B'}}>{e.ordersPerYear}x</td>
-                    <td className="scm-td" style={{textAlign:'right',color:'#16A34A',fontWeight:700}}>{e.totalAnnualCost.toLocaleString()}</td>
+                    <td className="scm-td" style={{ fontWeight: 700 }}>
+                      {e.itemName}
+                      <div style={{ fontSize: 10, color: '#94A3B8' }}>{e.category}</div>
+                    </td>
+                    <td className="scm-td" style={{ textAlign: 'right' as const }}>{e.annualDemand}</td>
+                    <td className="scm-td" style={{ textAlign: 'right' as const, color: '#64748B' }}>
+                      PKR {e.unitCost.toLocaleString()}
+                    </td>
+                    <td className="scm-td" style={{ textAlign: 'right' as const, fontWeight: 800, color: '#2563EB' }}>
+                      {e.eoq} units
+                    </td>
+                    <td className="scm-td" style={{ textAlign: 'center' as const, color: '#64748B' }}>
+                      {e.ordersPerYear}x/yr
+                    </td>
+                    <td className="scm-td" style={{ textAlign: 'right' as const, color: '#16A34A', fontWeight: 700 }}>
+                      {e.totalAnnualCost.toLocaleString()}
+                    </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr style={{background:'#1E293B'}}>
-                  <td colSpan={3} style={{padding:'10px 14px',color:'#fff',fontWeight:800,fontSize:12}}>EOQ = sqrt(2DS/H) | Ordering Cost: PKR 2,500/order | Holding: 20%/year</td>
-                  <td colSpan={3} style={{padding:'10px 14px',color:'#94A3B8',fontSize:11}}>Optimal order quantities to minimise total inventory cost</td>
+                <tr style={{ background: '#1E293B' }}>
+                  <td colSpan={3} style={{ padding: '10px 14px', color: '#fff', fontWeight: 800, fontSize: 12 }}>
+                    EOQ = sqrt(2DS/H) | Ordering Cost PKR 2,500/order | Holding 20%/yr
+                  </td>
+                  <td colSpan={3} style={{ padding: '10px 14px', color: '#94A3B8', fontSize: 11 }}>
+                    Optimal quantities to minimise total inventory cost
+                  </td>
                 </tr>
               </tfoot>
             </table>
@@ -304,4 +350,3 @@ const SCMDashboard: React.FC = () => {
 };
 
 export default SCMDashboard;
-```
