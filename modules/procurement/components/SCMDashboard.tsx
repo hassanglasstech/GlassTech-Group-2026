@@ -323,7 +323,7 @@ const SCMDashboard: React.FC = () => {
                       {e.eoq} units
                     </td>
                     <td className="scm-td" style={{ textAlign: 'center' as const, color: '#64748B' }}>
-                      {e.ordersPerYear}x/yr
+                      {e.ordersPerYear}x
                     </td>
                     <td className="scm-td" style={{ textAlign: 'right' as const, color: '#16A34A', fontWeight: 700 }}>
                       {e.totalAnnualCost.toLocaleString()}
