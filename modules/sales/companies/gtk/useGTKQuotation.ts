@@ -4,8 +4,11 @@ import {
   autoRefNo, autoSubject, validityDate, STANDARD_TERMS,
   RateCard, WINDOW_TYPES,
 } from './gtkQuotationConstants';
-import { GTKQuoteHeader, GTKQuoteItem, GTKQuoteOption } from './gtkQuotationTypes';
+import { GTKQuoteHeader, GTKQuoteItem, GTKQuoteOption, GTKQuotation } from './gtkQuotationTypes';
 import { WindowTypeId } from './gtkQuotationConstants';
+import { supabase } from '@/src/services/supabaseClient';
+import { Logger } from '@/modules/shared/services/logger';
+import { toast } from 'sonner';
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -20,7 +23,6 @@ export const calcItem = (
   const wt = WINDOW_TYPES.find(w => w.id === item.windowTypeId);
   const isRFT = wt?.pricingUnit === 'rft';
   const qty = parseInt(String(item.qty)) || 1;
-  // RFT items: widthFt = linear feet, height unused
   const sf1 = isRFT
     ? (parseFloat(String(item.widthFt)) || 0)
     : (parseFloat(String(item.widthFt)) || 0) * (parseFloat(String(item.heightFt)) || 0);
@@ -48,6 +50,50 @@ const sumOption = (items: GTKQuoteItem[]) => ({
   totalSqft: items.reduce((s, i) => s + i.totalSqft, 0),
   totalAmount: items.reduce((s, i) => s + i.total, 0),
 });
+
+// ─── COST ESTIMATION (for margin calc) ───────────────────────────────────────
+// Estimated material cost ratios vs sell price (from typical GTK margins)
+const COST_RATIO: Record<string, number> = {
+  'Non-Thermal':    0.58,  // 42% gross margin
+  'Thermal Break':  0.55,  // 45% gross margin
+  'AluWood OAK':    0.52,  // 48% gross margin
+  'AluWood TEAK':   0.52,
+  'uPVC White':     0.60,  // 40% gross margin
+  'uPVC Black Lami':0.60,
+};
+
+export const calcMargin = (
+  items: GTKQuoteItem[],
+  profileType: string,
+  installAmt: number,
+  cartage: number,
+  discountAmt: number
+) => {
+  const sellAlum  = items.reduce((s, i) => s + i.aluminumAmt, 0);
+  const sellGlass = items.reduce((s, i) => s + i.glassAmt,    0);
+  const sellNet   = items.reduce((s, i) => s + i.nettingAmt,  0);
+  const grossSell = sellAlum + sellGlass + sellNet + installAmt + cartage - discountAmt;
+
+  const ratio      = COST_RATIO[profileType] ?? 0.58;
+  const estAlumCost = sellAlum  * ratio;
+  const estGlassCost = sellGlass * 0.70; // glass cost ~70% of sell
+  const estNetCost  = sellNet   * 0.65;
+  const estInstCost = installAmt * 0.55;
+  const totalCost   = estAlumCost + estGlassCost + estNetCost + estInstCost;
+  const grossProfit = grossSell - totalCost;
+  const marginPct   = grossSell > 0 ? (grossProfit / grossSell) * 100 : 0;
+
+  return {
+    grossSell, totalCost, grossProfit, marginPct,
+    sellAlum, sellGlass, estAlumCost, estGlassCost,
+    perSqftSell: items.reduce((s,i)=>s+i.totalSqft,0) > 0
+      ? grossSell / items.reduce((s,i)=>s+i.totalSqft,0)
+      : 0,
+    perSqftCost: items.reduce((s,i)=>s+i.totalSqft,0) > 0
+      ? totalCost / items.reduce((s,i)=>s+i.totalSqft,0)
+      : 0,
+  };
+};
 
 // ─── DEFAULTS ────────────────────────────────────────────────────────────────
 
@@ -86,6 +132,71 @@ const makeOption = (label: string, profileType = 'Non-Thermal', sectionSize = '4
   return { id, label, profileType, sectionSize, items: [makeDefaultItem(sectionSize)], totalSqft: 0, totalAmount: 0, isActive: true };
 };
 
+// ─── SUPABASE PERSISTENCE ────────────────────────────────────────────────────
+
+const LS_KEY = 'gtk_erp_quotations_draft';
+
+const getLocalQuotations = (): GTKQuotation[] => {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; }
+};
+
+const saveLocalQuotations = (list: GTKQuotation[]) => {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(list)); } catch {}
+};
+
+export const listGTKQuotations = async (company = 'GTK'): Promise<GTKQuotation[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('quotations')
+      .select('*')
+      .eq('company', company)
+      .order('updated_at', { ascending: false });
+
+    if (error || !data) return getLocalQuotations();
+
+    const mapped: GTKQuotation[] = data.map((r: any) => ({
+      ...r.data,
+      id: r.id,
+      company: r.company,
+    }));
+    saveLocalQuotations(mapped);
+    return mapped;
+  } catch {
+    return getLocalQuotations();
+  }
+};
+
+export const persistQuotation = async (q: GTKQuotation): Promise<void> => {
+  // Update local cache
+  const local = getLocalQuotations();
+  const idx = local.findIndex(x => x.id === q.id);
+  if (idx >= 0) local[idx] = q; else local.unshift(q);
+  saveLocalQuotations(local);
+
+  // Supabase
+  try {
+    const { error } = await supabase.from('quotations').upsert([{
+      id: q.id,
+      company: q.company,
+      data: q,
+      updated_at: new Date().toISOString(),
+    }], { onConflict: 'id' });
+    if (error) Logger.warn('GTKQuotation', 'Supabase save failed', error);
+  } catch (e) {
+    Logger.warn('GTKQuotation', 'Supabase unavailable', e);
+  }
+};
+
+export const deleteGTKQuotation = async (id: string): Promise<void> => {
+  const local = getLocalQuotations().filter(q => q.id !== id);
+  saveLocalQuotations(local);
+  try {
+    await supabase.from('quotations').delete().eq('id', id);
+  } catch (e) {
+    Logger.warn('GTKQuotation', 'Delete failed', e);
+  }
+};
+
 // ─── HOOK ────────────────────────────────────────────────────────────────────
 
 export const useGTKQuotation = () => {
@@ -98,11 +209,18 @@ export const useGTKQuotation = () => {
   const [showRateCard, setShowRateCard] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
+  // Phase 3: persistence state
+  const [quotationId, setQuotationId]     = useState<string>('');
+  const [quotationStatus, setQuotationStatus] = useState<GTKQuotation['status']>('Draft');
+  const [isDirty, setIsDirty]             = useState(false);
+  const [isSaving, setIsSaving]           = useState(false);
+
   const activeOption = options.find(o => o.id === activeOptionId) ?? options[0];
   const items = activeOption?.items ?? [];
 
   // ── Header ────────────────────────────────────────────────────────────────
   const updateHeader = useCallback(<K extends keyof GTKQuoteHeader>(field: K, value: GTKQuoteHeader[K]) => {
+    setIsDirty(true);
     setHeader(prev => {
       const next = { ...prev, [field]: value };
       if (['profileType', 'sectionSize', 'mode'].includes(field as string))
@@ -121,11 +239,12 @@ export const useGTKQuotation = () => {
 
   // ── Options ───────────────────────────────────────────────────────────────
   const setOptionItems = useCallback((optId: string, newItems: GTKQuoteItem[]) => {
-    setOptions(prev => prev.map(o => {
-      if (o.id !== optId) return o;
-      const upd = { ...o, items: newItems, ...sumOption(newItems) };
-      return upd;
-    }));
+    setIsDirty(true);
+    const sums = sumOption(newItems);
+    setOptions(prev => prev.map(o => o.id === optId
+      ? { ...o, items: newItems, ...sums }
+      : o
+    ));
   }, []);
 
   const addOption = useCallback(() => {
@@ -135,6 +254,7 @@ export const useGTKQuotation = () => {
     const opt = makeOption(label, header.profileType, header.sectionSize);
     setOptions(prev => [...prev, opt]);
     setActiveOptionId(opt.id);
+    setIsDirty(true);
   }, [options, header.profileType, header.sectionSize]);
 
   const removeOption = useCallback((id: string) => {
@@ -144,6 +264,7 @@ export const useGTKQuotation = () => {
       const remaining = options.filter(o => o.id !== id);
       setActiveOptionId(remaining[0]?.id ?? '');
     }
+    setIsDirty(true);
   }, [options, activeOptionId]);
 
   const duplicateOption = useCallback((id: string) => {
@@ -156,10 +277,12 @@ export const useGTKQuotation = () => {
     };
     setOptions(prev => [...prev, dup]);
     setActiveOptionId(dup.id);
+    setIsDirty(true);
   }, [options]);
 
   const updateOptionLabel = useCallback((id: string, label: string) => {
     setOptions(prev => prev.map(o => o.id === id ? { ...o, label } : o));
+    setIsDirty(true);
   }, []);
 
   // ── Items ─────────────────────────────────────────────────────────────────
@@ -207,7 +330,62 @@ export const useGTKQuotation = () => {
       ...o,
       items: o.items.map(i => calcItem(i, newRates, header.mode)),
     })));
+    setIsDirty(true);
   }, [header.mode]);
+
+  // ── Phase 3: Save quotation ───────────────────────────────────────────────
+  const saveQuotation = useCallback(async (status?: GTKQuotation['status']) => {
+    setIsSaving(true);
+    const id = quotationId || `GTK-Q-${Date.now().toString(36).toUpperCase()}`;
+    const finalStatus = status ?? quotationStatus;
+    const q: GTKQuotation = {
+      id,
+      company: 'GTK',
+      status: finalStatus,
+      header,
+      options,
+      activeOptionId,
+      createdAt: quotationId ? '' : new Date().toISOString(), // will be overwritten from DB on load
+      updatedAt: new Date().toISOString(),
+    };
+    await persistQuotation(q);
+    setQuotationId(id);
+    setQuotationStatus(finalStatus);
+    setIsDirty(false);
+    setIsSaving(false);
+    toast.success(`Quotation ${id} saved — ${finalStatus}`);
+    return id;
+  }, [quotationId, quotationStatus, header, options, activeOptionId]);
+
+  // ── Phase 3: Load quotation ───────────────────────────────────────────────
+  const loadQuotation = useCallback((q: GTKQuotation) => {
+    setRates(DEFAULT_RATE_CARD); // reset rates (not stored per-quotation yet)
+    setHeader(q.header);
+    setOptions(q.options);
+    setActiveOptionId(q.activeOptionId || q.options[0]?.id || '');
+    setQuotationId(q.id);
+    setQuotationStatus(q.status);
+    setIsDirty(false);
+    setActiveView('builder');
+  }, []);
+
+  // ── Phase 3: New quotation ────────────────────────────────────────────────
+  const newQuotation = useCallback(() => {
+    const firstOpt = makeOption('Option A');
+    setHeader(makeDefaultHeader());
+    setOptions([firstOpt]);
+    setActiveOptionId(firstOpt.id);
+    setQuotationId('');
+    setQuotationStatus('Draft');
+    setIsDirty(false);
+    setActiveView('builder');
+  }, []);
+
+  // ── Phase 3: Update status ────────────────────────────────────────────────
+  const updateStatus = useCallback(async (status: GTKQuotation['status']) => {
+    setQuotationStatus(status);
+    await saveQuotation(status);
+  }, [saveQuotation]);
 
   // ── Totals (active option) ────────────────────────────────────────────────
   const totalSqft   = items.reduce((s, i) => s + i.totalSqft, 0);
@@ -216,6 +394,9 @@ export const useGTKQuotation = () => {
   const grossTotal  = subTotal + installAmt + (header.cartage || 0);
   const discountAmt = (header.discount / 100) * grossTotal;
   const grandTotal  = grossTotal - discountAmt;
+
+  // ── Phase 3: Margin ───────────────────────────────────────────────────────
+  const margin = calcMargin(items, header.profileType, installAmt, header.cartage || 0, discountAmt);
 
   return {
     rates, header, options, activeOption, activeOptionId, items,
@@ -227,5 +408,9 @@ export const useGTKQuotation = () => {
     addItem, deleteItem, duplicateItem, updateItem, moveItem,
     saveRates,
     totals: { totalSqft, subTotal, installAmt, grossTotal, discountAmt, grandTotal },
+    // Phase 3
+    quotationId, quotationStatus, isDirty, isSaving,
+    saveQuotation, loadQuotation, newQuotation, updateStatus,
+    margin,
   };
 };
