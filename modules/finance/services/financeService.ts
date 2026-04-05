@@ -164,7 +164,7 @@ const _loadCache = async (): Promise<void> => {
 const accountToRow = (a: Account) => ({
   id: a.id, company: a.company, code: a.code, name: a.name,
   level: a.level, parent_id: a.parentId ?? null, type: a.type,
-  data: {}, updated_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
 });
 
 const ledgerToRow = (t: LedgerTransaction) => ({
