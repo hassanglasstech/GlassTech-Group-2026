@@ -22,8 +22,8 @@ import CashFlowDashboard from '@/modules/finance/components/CashFlowDashboard';
 import OverheadDashboard from '@/modules/finance/components/OverheadDashboard';
 import JobPLDashboard from '@/modules/finance/components/JobPLDashboard';
 import InventoryValuationReport from '@/modules/finance/pages/InventoryValuationReport';
-import { 
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
+import { 
   Landmark, CreditCard, ListTree, BookOpen, BarChart4, 
   FilePieChart, Target, Wallet, RefreshCw, FileText, 
   Inbox, Settings, Clock, Briefcase, Users, BarChart3, Package, ShieldCheck, Lock, BarChart2, Activity, Layers, TrendingUp
