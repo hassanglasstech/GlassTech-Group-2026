@@ -38,6 +38,7 @@ import PredictiveAlerts from '../components/strategic/PredictiveAlerts';
 import ReportNarrativeViewer from '../components/strategic/ReportNarrativeViewer';
 import WhatsAppIntegration from '../components/strategic/WhatsAppIntegration';
 import InboxIntelligence from '../components/agent/InboxIntelligence';
+import AIActivationDashboard from '../components/strategic/AIActivationDashboard';
 import { usePWAInstall, useOnlineStatus, usePullToRefresh } from '../hooks/usePWA';
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -138,7 +139,7 @@ type Tab =
   | 'agent' | 'tasks' | 'telegram' | 'vendors' | 'gaps'
   | 'board' | 'flow' | 'floor' | 'vehicle' | 'cut' | 'workers'
   | 'mis' | 'jobpl' | 'cost' | 'vintel' | 'delivery' | 'finance'
-  | 'strategy' | 'ai' | 'briefing' | 'predict' | 'report' | 'whatsapp' | 'inbox'
+  | 'strategy' | 'ai' | 'ai_activate' | 'briefing' | 'predict' | 'report' | 'whatsapp' | 'inbox'
   | 'fmdash';
 
 // ── Group definitions ──────────────────────────────────────────────────
@@ -192,14 +193,15 @@ const GROUPS: {
     label: 'AI & Alerts',
     icon: '🤖',
     tabs: [
-      { tab: 'briefing', label: 'Morning Briefing' },
-      { tab: 'ai',       label: 'AI Chat'          },
-      { tab: 'predict',  label: 'Predictions'      },
-      { tab: 'agent',    label: 'Agent Watchlist'  },
-      { tab: 'inbox',    label: 'Inbox AI'         },
-      { tab: 'gaps',     label: 'Gap Detection'    },
-      { tab: 'report',   label: 'AI Report'        },
-      { tab: 'whatsapp', label: 'WhatsApp'         },
+      { tab: 'ai_activate', label: 'AI Status'       },
+      { tab: 'briefing',    label: 'Morning Briefing' },
+      { tab: 'ai',          label: 'AI Chat'          },
+      { tab: 'predict',     label: 'Predictions'      },
+      { tab: 'agent',       label: 'Agent Watchlist'  },
+      { tab: 'inbox',       label: 'Inbox AI'         },
+      { tab: 'gaps',        label: 'Gap Detection'    },
+      { tab: 'report',      label: 'AI Report'        },
+      { tab: 'whatsapp',    label: 'WhatsApp'         },
     ],
   },
   {
@@ -490,6 +492,7 @@ const FactoryInchargeModule: React.FC = () => {
             {activeTab === 'delivery' && <DeliveryKPIDashboard />}
             {activeTab === 'finance' && <FinancialStatementsMobile />}
             {activeTab === 'strategy' && <StrategicMemoryModule />}
+            {activeTab === 'ai_activate' && <AIActivationDashboard />}
             {activeTab === 'ai' && <AIChatInterface />}
             {activeTab === 'briefing' && <MorningBriefingModule />}
             {activeTab === 'predict' && <PredictiveAlerts />}
