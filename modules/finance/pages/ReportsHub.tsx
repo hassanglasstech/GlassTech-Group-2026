@@ -101,7 +101,14 @@ const calcBalances = (accounts: AccountRow[], ledger: LedgerRow[]) => {
   accounts.forEach(a => { debit[a.id] = 0; credit[a.id] = 0; });
 
   ledger.forEach(tx => {
-    const details = tx.data?.details || tx.data?.lines || [];
+    // details is a native JSONB column on the ledger table (added migration 010).
+    // Fall back to data.details for any rows inserted before the migration.
+    const details: any[] =
+      (tx as any).details ||
+      tx.data?.details   ||
+      tx.data?.lines     ||
+      [];
+
     details.forEach((d: any) => {
       if (d.accountId && debit[d.accountId] !== undefined) {
         debit[d.accountId]  += Number(d.debit  || 0);
@@ -458,7 +465,7 @@ const AgingReport: React.FC<{
 
       // Get last transaction date for this account
       const txDates = ledger
-        .filter(tx => (tx.data?.details || []).some((d: any) => d.accountId === acc.id))
+        .filter(tx => ((tx as any).details || tx.data?.details || tx.data?.lines || []).some((d: any) => d.accountId === acc.id))
         .map(tx => new Date(tx.doc_date || tx.date || asOfDate));
 
       const lastDate = txDates.length ? new Date(Math.max(...txDates.map(d => d.getTime()))) : refDate;
@@ -654,6 +661,21 @@ const ReportsHub: React.FC<{ company: Company }> = ({ company }) => {
             <button onClick={load} disabled={loading}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 text-white border border-white/25 rounded-lg text-xs font-bold hover:bg-white/20">
               <RefreshCw size={13} className={loading ? 'animate-spin' : ''}/> Refresh
+            </button>
+            <button
+              title="Push all GL entries from local storage to Supabase (run once after migration 010)"
+              onClick={async () => {
+                try {
+                  const all = FinanceService.getLedger();
+                  FinanceService.saveLedger(all);
+                  toast.success(`Re-sync started — ${all.length} GL entries queued`);
+                  setTimeout(load, 2000);
+                } catch (e) {
+                  toast.error('Re-sync failed');
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 text-white border border-white/25 rounded-lg text-xs font-bold hover:bg-white/20">
+              <RefreshCw size={13}/> Re-sync GL
             </button>
           </div>
         </div>
