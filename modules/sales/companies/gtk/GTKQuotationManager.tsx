@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Plus, Trash2, Copy, ChevronUp, ChevronDown,
   Printer, Settings, Eye, FileText, Package,
-  X, GitBranch, BarChart2, Edit2, Check,
+  X, GitBranch, BarChart2, Edit2, Check, Send, ListOrdered,
 } from 'lucide-react';
 import { useGTKQuotation } from './useGTKQuotation';
 import {
@@ -13,6 +13,9 @@ import { GTKQuoteItem, GTKQuoteOption } from './gtkQuotationTypes';
 import WindowSVG from './WindowSVG';
 import PrintQuotation from './PrintQuotation';
 import JobOrderPage from './JobOrderPage';
+import { convertQuotationToJobOrder } from '@/modules/sales/services/gtkJobOrderService';
+import GTKJobOrderRegister from './GTKJobOrderRegister';
+import { toast } from 'sonner';
 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-PK');
 
@@ -376,6 +379,9 @@ const GTKQuotationManager: React.FC = () => {
     totals,
   } = useGTKQuotation();
 
+  const [converting, setConverting] = useState(false);
+  const [showJobRegister, setShowJobRegister] = useState(false);
+
   const tabBtn = (view: typeof activeView, label: string, icon: React.ReactNode, badge?: string) => (
     <button onClick={() => setActiveView(view)}
       className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-all
@@ -397,9 +403,37 @@ const GTKQuotationManager: React.FC = () => {
           </div>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => setShowJobRegister(!showJobRegister)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/15 text-white border border-white/25 rounded-lg text-xs font-bold hover:bg-white/25">
+            <ListOrdered size={13}/> Job Register
+          </button>
           <button onClick={() => setShowRateCard(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white/15 text-white border border-white/25 rounded-lg text-xs font-bold hover:bg-white/25">
             <Settings size={13}/> Rate Card
+          </button>
+          <button
+            disabled={items.length === 0 || converting}
+            onClick={async () => {
+              if (!header.clientName) { toast.error('Add client name before converting.'); return; }
+              if (!window.confirm(`Convert "${activeOption?.label}" to Job Order JO-GTK-${new Date().getFullYear()}-XXXX?\n\nThis will create production pieces and a BOM.`)) return;
+              setConverting(true);
+              try {
+                const jo = await convertQuotationToJobOrder(header, activeOption!, 'GTK');
+                toast.success(`Job Order ${jo.id} created — ${jo.items.length} items, ${jo.totalGlassSqft.toFixed(0)} sqft glass, ${jo.totalAlumRFT.toFixed(0)} rft aluminium.`, { duration: 8000 });
+                setShowJobRegister(true);
+              } catch (e: any) {
+                toast.error('Job Order creation failed: ' + e.message);
+              } finally {
+                setConverting(false);
+              }
+            }}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              items.length === 0 || converting
+                ? 'bg-white/10 text-white/40 cursor-not-allowed'
+                : 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg'
+            }`}
+          >
+            <Send size={13}/> {converting ? 'Converting…' : 'Convert to Job Order'}
           </button>
           <button onClick={() => window.print()}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-50">
@@ -424,6 +458,13 @@ const GTKQuotationManager: React.FC = () => {
           Include Installation (₨120/sqft)
         </label>
       </div>
+
+      {/* ═══ JOB ORDER REGISTER (slide-in) ═══ */}
+      {showJobRegister && (
+        <div className="no-print">
+          <GTKJobOrderRegister />
+        </div>
+      )}
 
       {/* View Tabs */}
       <div className="no-print flex gap-2">

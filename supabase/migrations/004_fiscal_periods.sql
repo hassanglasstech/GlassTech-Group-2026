@@ -5,10 +5,10 @@
 
 -- ── Fiscal Periods table ──────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS fiscal_periods (
-  id          TEXT PRIMARY KEY,          -- company-YYYY-MM
+  id          TEXT PRIMARY KEY,
   company     TEXT NOT NULL,
-  month       TEXT NOT NULL,             -- YYYY-MM
-  status      TEXT DEFAULT 'Open',       -- 'Open' | 'Closed'
+  month       TEXT NOT NULL,
+  status      TEXT DEFAULT 'Open',
   opened_by   TEXT,
   opened_at   TIMESTAMPTZ,
   closed_by   TEXT,
@@ -27,8 +27,7 @@ ALTER TABLE ledger ADD COLUMN IF NOT EXISTS created_by TEXT;
 -- ── Add created_by to petty_cash ──────────────────────────────────────
 ALTER TABLE petty_cash ADD COLUMN IF NOT EXISTS created_by TEXT;
 
--- ── Seed current month as Open for all companies (run once) ──────────
--- This prevents the "no periods" edge case on first deploy.
+-- ── Seed current month as Open for all companies ──────────────────────
 INSERT INTO fiscal_periods (id, company, month, status, opened_by, opened_at)
 VALUES
   ('GTK-' || to_char(now(), 'YYYY-MM'),     'GTK',     to_char(now(), 'YYYY-MM'), 'Open', 'System', now()),
@@ -37,3 +36,14 @@ VALUES
   ('Nippon-' || to_char(now(), 'YYYY-MM'),  'Nippon',  to_char(now(), 'YYYY-MM'), 'Open', 'System', now()),
   ('Factory-' || to_char(now(), 'YYYY-MM'), 'Factory', to_char(now(), 'YYYY-MM'), 'Open', 'System', now())
 ON CONFLICT (id) DO NOTHING;
+
+-- ── Phase 5: GTK Job Orders table ────────────────────────────────────
+CREATE TABLE IF NOT EXISTS job_orders (
+  id          TEXT PRIMARY KEY,
+  company     TEXT,
+  data        JSONB DEFAULT '{}',
+  updated_at  TIMESTAMPTZ DEFAULT now(),
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_job_orders_company ON job_orders(company);
