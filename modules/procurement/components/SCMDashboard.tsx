@@ -230,7 +230,7 @@ const SCMDashboard: React.FC = () => {
                 {orderForecast.trend === 'UP' ? 'Trending Up' : orderForecast.trend === 'DOWN' ? 'Trending Down' : 'Stable'}
               </span>
               <span style={{ fontSize: 12, color: '#64748B' }}>
-                Avg {orderForecast.avgOrdersPerMonth} orders/month | {orderForecast.avgSqftPerMonth} sqft/month
+                Avg {orderForecast.avgOrdersPerMonth} orders per month | {orderForecast.avgSqftPerMonth} sqft per month
               </span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
@@ -323,7 +323,7 @@ const SCMDashboard: React.FC = () => {
                       {e.eoq} units
                     </td>
                     <td className="scm-td" style={{ textAlign: 'center' as const, color: '#64748B' }}>
-                      {e.ordersPerYear}x
+                      {e.ordersPerYear}x per year
                     </td>
                     <td className="scm-td" style={{ textAlign: 'right' as const, color: '#16A34A', fontWeight: 700 }}>
                       {e.totalAnnualCost.toLocaleString()}
@@ -334,7 +334,7 @@ const SCMDashboard: React.FC = () => {
               <tfoot>
                 <tr style={{ background: '#1E293B' }}>
                   <td colSpan={3} style={{ padding: '10px 14px', color: '#fff', fontWeight: 800, fontSize: 12 }}>
-                    EOQ = sqrt(2DS/H) | Ordering Cost PKR 2,500/order | Holding 20%/yr
+                    EOQ = sqrt(2DS per H) | Ordering Cost PKR 2500 per order | Holding 20% per year
                   </td>
                   <td colSpan={3} style={{ padding: '10px 14px', color: '#94A3B8', fontSize: 11 }}>
                     Optimal quantities to minimise total inventory cost
