@@ -20,11 +20,12 @@ import ReportsHub from '@/modules/finance/pages/ReportsHub';
 import BudgetMaster from '@/modules/finance/components/BudgetMaster';
 import CashFlowDashboard from '@/modules/finance/components/CashFlowDashboard';
 import OverheadDashboard from '@/modules/finance/components/OverheadDashboard';
+import JobPLDashboard from '@/modules/finance/components/JobPLDashboard';
 import InventoryValuationReport from '@/modules/finance/pages/InventoryValuationReport';
 import { 
   Landmark, CreditCard, ListTree, BookOpen, BarChart4, 
   FilePieChart, Target, Wallet, RefreshCw, FileText, 
-  Inbox, Settings, Clock, Briefcase, Users, BarChart3, Package, ShieldCheck, Lock, BarChart2, Activity, Layers
+  Inbox, Settings, Clock, Briefcase, Users, BarChart3, Package, ShieldCheck, Lock, BarChart2, Activity, Layers, TrendingUp
 } from 'lucide-react';
 
 type CategoryKey = 'ops' | 'reporting' | 'hr' | 'assets' | 'config';
@@ -41,6 +42,7 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
         tabs: [
           { id: 'dashboard', label: 'Finance Dashboard', icon: BarChart3 },
           { id: 'cash_flow', label: 'Cash Flow Forecast', icon: Activity },
+          { id: 'job_pl',    label: 'Job P&L',            icon: TrendingUp },
           { id: 'registry', label: 'Event Registry', icon: Inbox },
           { id: 'cash_journal', label: 'Cash Journal', icon: Wallet },
           { id: 'ledger', label: 'General Ledger', icon: BookOpen },
@@ -154,6 +156,7 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
           {activeTab === 'budget_master'  && <BudgetMaster company={company} />}
           {activeTab === 'cash_flow'       && <CashFlowDashboard company={company} />}
           {activeTab === 'overhead_pool'    && <OverheadDashboard company={company} />}
+          {activeTab === 'job_pl'           && <JobPLDashboard company={company} />}
           
           {/* Reporting */}
           {activeTab === 'reports_hub'   && <ReportsHub company={company} />}
