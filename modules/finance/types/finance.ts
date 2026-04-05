@@ -31,11 +31,7 @@ export interface LedgerTransaction {
     text?: string; 
     costCenterId?: string; 
   }[];
-  reqId?: string;
-  // ── Audit Trail (Phase C) ────────────────────────────────────────────
-  createdBy?: string;   // email of user who created the entry
-  updatedBy?: string;   // email of user who last updated
-  postedAt?:  string;   // ISO timestamp when status changed to Posted
+  reqId?: string; 
 }
 
 export interface CostCenter { 
@@ -47,9 +43,12 @@ export interface CostCenter {
   manager: string; 
   category: 'F' | 'H' | 'W' | 'V' | 'L'; 
   hierarchyArea: string; 
-  budgetMonthly?: number;    // monthly budget limit (PKR)
-  budgetYearly?: number;     // annual budget limit (PKR)
-  alertThreshold?: number;   // % at which to warn (default 80)
+  budgetMonthly?: number;          // monthly budget limit (PKR)
+  budgetYearly?: number;           // annual budget limit (PKR)
+  alertThreshold?: number;         // % at which to warn (default 80)
+  // ── Phase 1: CMA additions ────────────────────────────────────────
+  pettyCashFloat?: number;         // max cash float held at any time (PKR)
+  pettyCashMonthlyBudget?: number; // max petty cash spend per month (PKR)
 }
 
 export interface PettyCashEntry { 

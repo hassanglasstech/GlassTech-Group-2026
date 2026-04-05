@@ -48,4 +48,20 @@ export interface Vendor {
   balance?: number;
   rates?: VendorRate[];
   rateListVersions?: VendorRateListVersion[];
+  // ── Phase 1: SCM additions ─────────────────────────────────────────
+  leadTimeHistory?: {             // recorded each time a GRN arrives against a PO
+    poId: string;
+    poDate: string;
+    grnDate: string;
+    leadDays: number;
+    onTime: boolean;              // arrived within expected lead time?
+  }[];
+  expectedLeadDays?: number;      // agreed lead time in days (set manually)
+  qualityRejectionHistory?: {     // recorded from GRN defect data
+    grnId: string;
+    date: string;
+    totalSheets: number;
+    rejectedSheets: number;
+    rejectionPct: number;
+  }[];
 }
