@@ -1,5 +1,5 @@
 /**
- * SCMDashboard.tsx — Phase 2
+ * SCMDashboard.tsx - Phase 2
  * Supply Chain Manager view:
  *   - Vendor Scorecard (rating A/B/C/D)
  *   - Reorder Alerts (CRITICAL / LOW)
@@ -15,10 +15,10 @@ const fmt = (n: number) => Math.round(n).toLocaleString('en-PK');
 
 const RatingBadge: React.FC<{ rating: 'A' | 'B' | 'C' | 'D' }> = ({ rating }) => {
   const cfg = {
-    A: { bg: '#DCFCE7', color: '#16A34A', label: 'A — Excellent' },
-    B: { bg: '#DBEAFE', color: '#2563EB', label: 'B — Good' },
-    C: { bg: '#FEF3C7', color: '#D97706', label: 'C — Average' },
-    D: { bg: '#FEE2E2', color: '#DC2626', label: 'D — Poor' },
+    A: { bg: '#DCFCE7', color: '#16A34A', label: 'A - Excellent' },
+    B: { bg: '#DBEAFE', color: '#2563EB', label: 'B - Good' },
+    C: { bg: '#FEF3C7', color: '#D97706', label: 'C - Average' },
+    D: { bg: '#FEE2E2', color: '#DC2626', label: 'D - Poor' },
   }[rating];
   return (
     <span style={{ background: cfg.bg, color: cfg.color, padding: '3px 10px', borderRadius: 12, fontSize: 10, fontWeight: 900, letterSpacing: '.05em' }}>
@@ -33,7 +33,7 @@ const UrgencyBadge: React.FC<{ urgency: ReorderAlert['urgency'] }> = ({ urgency 
     color: urgency === 'CRITICAL' ? '#DC2626' : '#D97706',
     padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 800,
   }}>
-    {urgency === 'CRITICAL' ? '🔴 CRITICAL' : '🟡 LOW'}
+    {urgency === 'CRITICAL' ? '[!] CRITICAL' : '[~] LOW'}
   </span>
 );
 
@@ -99,7 +99,7 @@ const SCMDashboard: React.FC = () => {
       <div style={{ background: 'linear-gradient(135deg, #064E3B 0%, #059669 100%)', color: '#fff', padding: '20px 24px', borderRadius: 16, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: '-.02em', textTransform: 'uppercase' }}>SCM Dashboard</div>
-          <div style={{ fontSize: 11, color: '#A7F3D0', marginTop: 4, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase' }}>{company} — Supply Chain Management</div>
+          <div style={{ fontSize: 11, color: '#A7F3D0', marginTop: 4, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase' }}>{company} - Supply Chain Management</div>
         </div>
         <button onClick={load} style={{ background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.3)', color: '#fff', padding: '6px 14px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
           <RefreshCw size={12} /> Refresh
@@ -109,8 +109,8 @@ const SCMDashboard: React.FC = () => {
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
         <KPI label="Total Vendors" value={`${summary.totalVendors}`} sub="with PO history" />
-        <KPI label="A-Rated Vendors" value={`${summary.aRatedVendors}`} color="#16A34A" sub="Score ≥ 85" />
-        <KPI label="Poor Vendors" value={`${summary.dRatedVendors}`} color={summary.dRatedVendors > 0 ? '#DC2626' : '#16A34A'} sub="D-rated — action needed" />
+        <KPI label="A-Rated Vendors" value={`${summary.aRatedVendors}`} color="#16A34A" sub="Score >= 85" />
+        <KPI label="Poor Vendors" value={`${summary.dRatedVendors}`} color={summary.dRatedVendors > 0 ? '#DC2626' : '#16A34A'} sub="D-rated - action needed" />
         <KPI label="Reorder Alerts" value={`${summary.criticalReorders + summary.lowReorders}`} color={summary.criticalReorders > 0 ? '#DC2626' : summary.lowReorders > 0 ? '#D97706' : '#16A34A'} sub={`${summary.criticalReorders} critical, ${summary.lowReorders} low`} />
       </div>
 
@@ -162,7 +162,7 @@ const SCMDashboard: React.FC = () => {
                     <td className="scm-td" style={{ textAlign: 'right', color: '#94A3B8' }}>{fmt(r.minLevel)}</td>
                     <td className="scm-td" style={{ textAlign: 'right', fontWeight: 700, color: '#DC2626' }}>{fmt(r.shortfall)}</td>
                     <td className="scm-td" style={{ textAlign: 'right', color: '#2563EB', fontWeight: 700 }}>{fmt(r.suggestedPOQty)}</td>
-                    <td className="scm-td" style={{ color: '#64748B', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.lastVendor || '—'}</td>
+                    <td className="scm-td" style={{ color: '#64748B', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.lastVendor || '-'}</td>
                     <td className="scm-td"><UrgencyBadge urgency={r.urgency} /></td>
                   </tr>
                 ))}
@@ -201,13 +201,13 @@ const SCMDashboard: React.FC = () => {
                         <span style={{ color: v.expectedLeadDays > 0 && v.avgLeadDays > v.expectedLeadDays ? '#DC2626' : '#16A34A', fontWeight: 700 }}>
                           {v.avgLeadDays}d {v.expectedLeadDays > 0 ? `(target: ${v.expectedLeadDays}d)` : ''}
                         </span>
-                      ) : '—'}
+                      ) : '-'}
                     </td>
                     <td className="scm-td" style={{ textAlign: 'center', fontWeight: 700, color: v.onTimePct >= 90 ? '#16A34A' : v.onTimePct >= 70 ? '#D97706' : '#DC2626' }}>
-                      {v.onTimePct > 0 ? `${v.onTimePct}%` : '—'}
+                      {v.onTimePct > 0 ? `${v.onTimePct}%` : '-'}
                     </td>
                     <td className="scm-td" style={{ textAlign: 'center', color: v.avgRejectionPct > 5 ? '#DC2626' : '#16A34A', fontWeight: 700 }}>
-                      {v.avgRejectionPct > 0 ? `${v.avgRejectionPct}%` : '—'}
+                      {v.avgRejectionPct > 0 ? `${v.avgRejectionPct}%` : '-'}
                     </td>
                     <td className="scm-td" style={{ minWidth: 120 }}><ScoreBar score={v.overallScore} /></td>
                     <td className="scm-td"><RatingBadge rating={v.rating} /></td>
@@ -223,7 +223,7 @@ const SCMDashboard: React.FC = () => {
           <div style={{ padding: 24 }}>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16 }}>
               <span style={{ background: orderForecast.trend==='UP'?'#DCFCE7':orderForecast.trend==='DOWN'?'#FEE2E2':'#EFF6FF', color: orderForecast.trend==='UP'?'#16A34A':orderForecast.trend==='DOWN'?'#DC2626':'#2563EB', padding:'4px 12px', borderRadius:12, fontWeight:800, fontSize:11 }}>
-                {orderForecast.trend==='UP'?'↑ Trending Up':orderForecast.trend==='DOWN'?'↓ Trending Down':'→ Stable'}
+                {orderForecast.trend==='UP'?'^ Trending Up':orderForecast.trend==='DOWN'?'v Trending Down':'-> Stable'}
               </span>
               <span style={{fontSize:12,color:'#64748B'}}>Avg {orderForecast.avgOrdersPerMonth} orders/month | {orderForecast.avgSqftPerMonth} sqft/month</span>
             </div>
@@ -251,7 +251,7 @@ const SCMDashboard: React.FC = () => {
                   <tbody>
                     {orderForecast.forecast.map((m: any)=>(
                       <tr key={m.month} style={{background:'#F0FDF4'}}>
-                        <td className="scm-td" style={{fontWeight:800,color:'#065F46'}}>{m.month} ◆</td>
+                        <td className="scm-td" style={{fontWeight:800,color:'#065F46'}}>{m.month} *</td>
                         <td className="scm-td" style={{textAlign:'center',fontWeight:700}}>{m.orderCount}</td>
                         <td className="scm-td" style={{textAlign:'right',fontWeight:700}}>{m.totalSqft}</td>
                         <td className="scm-td" style={{textAlign:'right',color:'#059669',fontWeight:800}}>PKR {m.totalRevenue.toLocaleString()}</td>
@@ -279,7 +279,7 @@ const SCMDashboard: React.FC = () => {
                     <td className="scm-td" style={{textAlign:'right'}}>{e.annualDemand}</td>
                     <td className="scm-td" style={{textAlign:'right',color:'#64748B'}}>PKR {e.unitCost.toLocaleString()}</td>
                     <td className="scm-td" style={{textAlign:'right',fontWeight:800,color:'#2563EB'}}>{e.eoq} units</td>
-                    <td className="scm-td" style={{textAlign:'center',color:'#64748B'}}>{e.ordersPerYear}×</td>
+                    <td className="scm-td" style={{textAlign:'center',color:'#64748B'}}>{e.ordersPerYear}x</td>
                     <td className="scm-td" style={{textAlign:'right',color:'#16A34A',fontWeight:700}}>{e.totalAnnualCost.toLocaleString()}</td>
                   </tr>
                 ))}
