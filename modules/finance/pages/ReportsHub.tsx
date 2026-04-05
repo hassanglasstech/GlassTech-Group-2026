@@ -16,7 +16,7 @@ import { supabase } from '@/src/services/supabaseClient';
 import {
   BarChart4, Download, Printer, RefreshCw, Globe,
   TrendingUp, TrendingDown, Scale, Clock, AlertCircle,
-  ChevronDown, ChevronRight, CheckCircle2,
+  ChevronDown, ChevronRight, CheckCircle2, Package,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
@@ -57,6 +57,7 @@ const REPORT_TABS: { id: ReportType; label: string; icon: React.ReactNode }[] = 
   { id: 'balance_sheet',label: 'Balance Sheet',    icon: <BarChart4 size={14}/> },
   { id: 'ar_aging',     label: 'AR Aging',         icon: <Clock size={14}/> },
   { id: 'ap_aging',     label: 'AP Aging',         icon: <AlertCircle size={14}/> },
+  { id: 'inventory',   label: 'Inventory Valuation', icon: <Package size={14}/> },
 ];
 
 // ── Data Loader ───────────────────────────────────────────────────────────────
@@ -723,6 +724,9 @@ const ReportsHub: React.FC<{ company: Company }> = ({ company }) => {
           )}
           {(reportType === 'ar_aging' || reportType === 'ap_aging') && (
             <AgingReport accounts={accounts} ledger={ledger} type={reportType} asOfDate={toDate} />
+          )}
+          {reportType === 'inventory' && (
+            <InventoryValuationReport company={company} />
           )}
         </>
       )}

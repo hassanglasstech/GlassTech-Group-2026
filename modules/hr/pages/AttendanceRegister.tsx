@@ -8,6 +8,7 @@ import * as XLSX from 'xlsx';
 
 import { useAppStore } from '../../shared/store/appStore';
 import { toast } from 'sonner';
+import { AttendanceOverrideService, OverrideMap } from '@/modules/hr/services/attendanceOverrideService';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 import IndividualAttendanceModal from '@/modules/hr/components/IndividualAttendanceModal';
 import AttendanceReconciliation from './AttendanceReconciliation';
@@ -241,7 +242,7 @@ const AttendanceRegister: React.FC = () => {
       let sCount = 0; 
       let otSum = 0;
 
-      const summaryOverrides = JSON.parse(localStorage.getItem(`gtk_erp_summary_overrides_${selectedMonth}`) || '{}');
+      const summaryOverrides: OverrideMap = JSON.parse(localStorage.getItem(`gtk_erp_summary_overrides_${selectedMonth}`) || '{}');
       if (summaryOverrides[empId]) {
           const grossAbsent = Number(summaryOverrides[empId].absent || 0);
           const allowed = Number(summaryOverrides[empId].allowedAbsent || 0);
@@ -321,7 +322,7 @@ const AttendanceRegister: React.FC = () => {
   const handleEditSummary = (emp: Employee) => {
       const totals = getCalculatedTotals(emp.id);
       
-      const currentOverrides = JSON.parse(localStorage.getItem(`gtk_erp_summary_overrides_${selectedMonth}`) || '{}');
+      const currentOverrides: OverrideMap = JSON.parse(localStorage.getItem(`gtk_erp_summary_overrides_${selectedMonth}`) || '{}');
       const saved = currentOverrides[emp.id];
 
       // Calculate System Loan Deduction
@@ -391,7 +392,7 @@ const AttendanceRegister: React.FC = () => {
       const latePenalty = Math.floor(editingSummary.lates / 3);
       const totalCalculatedAbsent = editingSummary.manualAbsent + sandwichPenalty + latePenalty;
 
-      const currentOverrides = JSON.parse(localStorage.getItem(`gtk_erp_summary_overrides_${selectedMonth}`) || '{}');
+      const currentOverrides: OverrideMap = JSON.parse(localStorage.getItem(`gtk_erp_summary_overrides_${selectedMonth}`) || '{}');
       
       currentOverrides[editingSummary.employeeId] = {
           absent: totalCalculatedAbsent,
@@ -407,6 +408,10 @@ const AttendanceRegister: React.FC = () => {
       };
       
       localStorage.setItem(`gtk_erp_summary_overrides_${selectedMonth}`, JSON.stringify(currentOverrides));
+      // Phase 8: sync to Supabase
+      if (editingSummary?.employeeId) {
+        AttendanceOverrideService.save(company, selectedMonth, editingSummary.employeeId, currentOverrides[editingSummary.employeeId]).catch(() => {});
+      }
 
       // Phase 3: Mark used requisition as Completed
       if (editingSummary.reqRef) {
@@ -422,6 +427,7 @@ const AttendanceRegister: React.FC = () => {
   const clearSummaryOverrides = () => {
       if (confirm("Reset all manual overrides to system-calculated values for this month?")) {
           localStorage.removeItem(`gtk_erp_summary_overrides_${selectedMonth}`);
+          AttendanceOverrideService.clear(company, selectedMonth).catch(() => {});
           refreshAllData();
       }
   };

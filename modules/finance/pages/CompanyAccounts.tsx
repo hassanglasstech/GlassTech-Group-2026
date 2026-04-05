@@ -20,6 +20,7 @@ import AgingReport from '@/modules/finance/components/AgingReport';
 import FinanceDashboardView from '@/modules/finance/components/FinanceDashboardView';
 import AssetManagement from '@/modules/finance/components/AssetManagement';
 import ReportsHub from '@/modules/finance/pages/ReportsHub';
+import InventoryValuationReport from '@/modules/finance/pages/InventoryValuationReport';
 import { 
   Landmark, CreditCard, ListTree, BookOpen, BarChart4, 
   FilePieChart, Target, Wallet, RefreshCw, FileText, 
@@ -50,8 +51,9 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
         label: 'Financial Reporting',
         icon: BarChart4,
         tabs: [
-          { id: 'reports_hub', label: 'Reports Hub', icon: FilePieChart },
-          { id: 'bank_recon',  label: 'Bank Reconciliation', icon: Landmark },
+          { id: 'reports_hub',  label: 'Reports Hub',           icon: FilePieChart },
+          { id: 'inv_valuation',label: 'Inventory Valuation',   icon: Package },
+          { id: 'bank_recon',   label: 'Bank Reconciliation',   icon: Landmark },
         ]
       },
       hr: {
@@ -150,7 +152,8 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
           {activeTab === 'matching' && <ThreeWayMatching company={company} />}
           
           {/* Reporting */}
-          {activeTab === 'reports_hub' && <ReportsHub company={company} />}
+          {activeTab === 'reports_hub'   && <ReportsHub company={company} />}
+          {activeTab === 'inv_valuation' && <InventoryValuationReport company={company} />}
           {activeTab === 'bank_recon' && <BankReconciliation company={company} />}
           
           {/* HR Finance */}

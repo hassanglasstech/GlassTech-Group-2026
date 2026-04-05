@@ -25,6 +25,21 @@ import {
 } from 'lucide-react';
 
 import { toast } from 'sonner';
+import { supabase } from '@/src/services/supabaseClient';
+
+// ── Config helpers (replaces localStorage for custom_sub_categories) ──
+const loadConfig = async (company: string, key: string) => {
+  try {
+    const { data } = await supabase.from('erp_config').select('value').eq('id', `${company}_${key}`).single();
+    return data?.value ?? null;
+  } catch { return null; }
+};
+const saveConfig = async (company: string, key: string, value: any) => {
+  try {
+    await supabase.from('erp_config').upsert([{ id: `${company}_${key}`, company, key, value, updated_at: new Date().toISOString() }], { onConflict: 'id' });
+  } catch {}
+  localStorage.setItem(`${company}_${key}`, JSON.stringify(value)); // keep LS as cache
+};
 import { SyncService } from '@/src/services/SyncService';
 import { useAppStore } from '../../shared/store/appStore';
 

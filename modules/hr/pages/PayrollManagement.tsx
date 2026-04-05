@@ -5,6 +5,7 @@ import { HRService } from '@/modules/hr/services/hrService';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { CreditCard, Printer, Eye, X, Calculator, Calendar, FileUp, Download, ArrowLeft, CheckCircle2, ShieldCheck, BarChart3, FileText, Info, Check, AlertCircle, Building2, User, Ban, ShieldCheck as Shield, Send, Landmark } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { AttendanceOverrideService } from '@/modules/hr/services/attendanceOverrideService';
 import { toast } from 'sonner';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 import { TagService } from '@/modules/hr/services/tagService';
@@ -30,10 +31,10 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
   useEffect(() => {
     const emps = HRService.getEmployees().filter(e => e.company === company);
     setEmployees(emps);
-    generatePayrolls(emps);
+    generatePayrolls(emps).catch(() => {});
   }, [company, selectedMonth, refreshKey]);
 
-  const generatePayrolls = (emps: Employee[]) => {
+  const generatePayrolls = async (emps: Employee[]) => {
     const attendance = HRService.getAttendance();
     const loans = HRService.getLoans();
     const SALARY_DAYS = 25; // Working days basis per month (Mon-Sat, industry standard Pakistan)
@@ -43,7 +44,8 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
     const actualDaysInMonth = new Date(year, monthNum, 0).getDate();
 
     // Fetch Manual Summary Overrides from Attendance Module (Phase 2 Linkage)
-    const summaryOverrides = JSON.parse(localStorage.getItem(`gtk_erp_summary_overrides_${selectedMonth}`) || '{}');
+    // Phase 8: load from Supabase (falls back to localStorage)
+    const summaryOverrides = await AttendanceOverrideService.load(company, selectedMonth);
 
     const newPayrolls = emps.map(emp => {
       const empAttendance = attendance.filter(a => a?.employeeId === emp.id && a?.date?.startsWith(selectedMonth));
@@ -461,6 +463,7 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
         </div>
         <div className="flex space-x-3">
           <button onClick={handlePrintAll} className="bg-slate-100 text-slate-700 px-4 py-2.5 rounded-xl flex items-center space-x-2 font-bold text-sm hover:bg-slate-200 transition-all"><Printer size={18} /><span>Print Slips</span></button>
+          <button onClick={exportGroupPayrollRegister} className="bg-emerald-100 text-emerald-700 px-4 py-2.5 rounded-xl flex items-center space-x-2 font-bold text-sm hover:bg-emerald-200 transition-all"><Download size={18}/><span>Group Register</span></button>
           <div className="flex items-center gap-2">
               {!isApproved ? (
                 <button onClick={handleApprovePayroll} className="bg-emerald-600 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 font-bold text-sm shadow-xl hover:bg-emerald-700 transition-all"><Check size={18}/><span>Approve Payroll</span></button>
@@ -566,7 +569,78 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
                       if (!phone) return null;
                       const wa = `92${phone.replace(/^0/,'')}`;
                       const msg = encodeURIComponent(`Payslip — ${emp?.personal?.name} — ${selectedSlip?.month}\nNet Salary: PKR ${selectedSlip?.netSalary?.toLocaleString()}\nSent from GlassTech ERP`);
-                      return (
+                    
+  // ── Group Payroll Register — Phase 8 ──────────────────────────────────────
+  const exportGroupPayrollRegister = async () => {
+    const COMPANIES_ALL = ['GTK', 'GTI', 'Glassco', 'Nippon', 'Factory'];
+    const wb = XLSX.utils.book_new();
+    const allRows: any[] = [];
+
+    for (const co of COMPANIES_ALL) {
+      const emps = HRService.getEmployees().filter((e: any) => e.company === co);
+      if (emps.length === 0) continue;
+
+      const overrides = await AttendanceOverrideService.load(co, selectedMonth);
+      const attendance = HRService.getAttendance();
+      const loans = HRService.getLoans();
+      const SALARY_DAYS = 25;
+
+      const rows = emps.map((emp: any) => {
+        const override = overrides[emp.id];
+        const basic = emp?.compensation?.basic || emp?.salary || 0;
+        const allowances = emp?.compensation?.allowances || 0;
+        const gross = basic + allowances;
+        const dayRate = gross / SALARY_DAYS;
+
+        const absentDays = override ? Math.max(0, (override.absent || 0) - (override.allowedAbsent || 0)) : 0;
+        const latePenaltyDays = override ? Math.floor((override.lates || 0) / 3) : 0;
+        const otHours = override ? Number(override.ot || 0) : 0;
+        const otPay = Math.round((dayRate / 8) * 1.5 * otHours);
+        const absentDed = Math.round(absentDays * dayRate);
+        const lateDed = Math.round(latePenaltyDays * dayRate);
+        const loanDed = override?.manualLoanDeduction !== undefined && override.manualLoanDeduction >= 0
+          ? override.manualLoanDeduction
+          : loans.filter((l: any) => l.employeeId === emp.id && l.status === 'Active')
+                 .reduce((s: number, l: any) => s + (l.repaymentAmount || l.amount || 0), 0);
+        const net = Math.max(0, gross + otPay - absentDed - lateDed - loanDed);
+
+        return {
+          Company:           co,
+          Code:              emp?.work?.employeeCode || emp.id,
+          Name:              emp?.personal?.name || '—',
+          Designation:       emp?.work?.designation || '—',
+          Basic:             basic,
+          Allowances:        allowances,
+          Gross:             gross,
+          'Absent Days':     absentDays,
+          'Late Penalty':    latePenaltyDays,
+          'OT Hours':        otHours,
+          'OT Pay':          otPay,
+          'Absent Dedn':     absentDed,
+          'Late Dedn':       lateDed,
+          'Loan Dedn':       loanDed,
+          'Net Payable':     net,
+          Month:             selectedMonth,
+        };
+      });
+
+      // Per-company sheet
+      const ws = XLSX.utils.json_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, co.substring(0, 10));
+      allRows.push(...rows);
+    }
+
+    // Consolidated sheet
+    if (allRows.length > 0) {
+      const wsAll = XLSX.utils.json_to_sheet(allRows);
+      XLSX.utils.book_append_sheet(wb, wsAll, 'All Companies');
+    }
+
+    XLSX.writeFile(wb, `GlassTech_Payroll_Register_${selectedMonth}.xlsx`);
+    toast.success(`Group Payroll Register exported — ${allRows.length} employees`);
+  };
+
+  return (
                         <a href={`https://wa.me/${wa}?text=${msg}`} target="_blank" rel="noreferrer"
                           className="bg-green-600 text-white px-6 py-3 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-2 hover:bg-green-700">
                           <span>💬</span> WhatsApp
