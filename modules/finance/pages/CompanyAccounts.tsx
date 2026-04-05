@@ -23,6 +23,7 @@ import OverheadDashboard from '@/modules/finance/components/OverheadDashboard';
 import JobPLDashboard from '@/modules/finance/components/JobPLDashboard';
 import InventoryValuationReport from '@/modules/finance/pages/InventoryValuationReport';
 import { 
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
   Landmark, CreditCard, ListTree, BookOpen, BarChart4, 
   FilePieChart, Target, Wallet, RefreshCw, FileText, 
   Inbox, Settings, Clock, Briefcase, Users, BarChart3, Package, ShieldCheck, Lock, BarChart2, Activity, Layers, TrendingUp
@@ -181,16 +182,16 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
           {activeTab === 'monthly_actions' && (
             <div className="space-y-6 animate-in fade-in duration-300">
               <div className="bg-indigo-600 text-white p-8 rounded-[2rem] shadow-xl">
-                <h2 className="text-2xl font-black uppercase">Monthly Finance Actions</h2>
+                
                 <p className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest mt-1">Run depreciation and recurring expenses for the current period</p>
               </div>
               <div className="grid grid-cols-2 gap-6">
                 <div className="bg-white p-8 rounded-2xl border shadow-sm space-y-4">
                   <h3 className="text-sm font-black uppercase text-slate-800">Asset Depreciation</h3>
                   <p className="text-xs text-slate-500">Calculates monthly depreciation (Straight Line / Declining Balance) for all active assets and posts a single GL entry.</p>
-                  <button onClick={() => {
+                  <button onClick={async () => {
                     const month = new Date().toISOString().slice(0, 7);
-                    if (!confirm(`Run depreciation for ${month}?`)) return;
+                    if (!await confirmModal(`Run depreciation for ${month}?`)) return;
                     const result = FinanceService.postDepreciation(company, month);
                     if (result.posted > 0) toast.success(`Depreciation posted: ${result.posted} assets, PKR ${result.total.toLocaleString()}`);
                     else toast.error(result.total === 0 ? 'No active assets found' : `Already posted for ${month}`);
@@ -199,8 +200,8 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
                 <div className="bg-white p-8 rounded-2xl border shadow-sm space-y-4">
                   <h3 className="text-sm font-black uppercase text-slate-800">Recurring Expenses</h3>
                   <p className="text-xs text-slate-500">Auto-posts all recurring expense entries (rent, utilities, etc.) that haven't been posted for the current month.</p>
-                  <button onClick={() => {
-                    if (!confirm('Post all due recurring expenses?')) return;
+                  <button onClick={async () => {
+                    if (!await confirmModal('Post all due recurring expenses?')) return;
                     const result = FinanceService.postRecurringExpenses(company);
                     toast.success(`Posted: ${result.posted}, Skipped (already done): ${result.skipped}`);
                   }} className="bg-emerald-600 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-emerald-700">Post Recurring</button>

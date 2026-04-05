@@ -74,6 +74,8 @@ export interface Quotation {
   discountAmount?: number;
   glassDiscountPercent: number;
   status: QuotationStatus;
+  expiryDate?: string;        // YYYY-MM-DD — quotation valid until
+  lostReason?: string;         // why quotation was lost
   attachments?: string[]; 
   revisedFields?: string[];
   manualSerial?: string; 

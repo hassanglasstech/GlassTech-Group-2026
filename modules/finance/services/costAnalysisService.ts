@@ -57,11 +57,16 @@ export interface DeliveryKPI {
 
 // ── Helpers ───────────────────────────────────────────────────────
 function getGeneratorLogs(company: string): any[] {
+  // Read from localStorage cache (populated by GeneratorService.getLogs Supabase fetch)
   try { return JSON.parse(localStorage.getItem('gtk_erp_generator_logs') || '[]').filter((l: any) => l.company === company); } catch { return []; }
 }
 function getLabourLogs(company: string): any[] {
+  // Read from localStorage cache (populated by LabourService.getLogs Supabase fetch)
   try { return JSON.parse(localStorage.getItem('gtk_erp_cutter_daily_logs') || '[]').filter((l: any) => l.company === company); } catch { return []; }
 }
+// NOTE: These caches are populated by GeneratorService.getLogs() and LabourService.getLogs()
+// which fetch from Supabase and write-through to localStorage. Call those services
+// on module mount to ensure fresh data before calling costAnalysis functions.
 
 // ══════════════════════════════════════════════════════════════════
 // 4A: TRUE COST PER SQFT

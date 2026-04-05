@@ -20,10 +20,11 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import InventoryValuationReport from '@/modules/finance/components/InventoryValuationReport';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type ReportType = 'trial_balance' | 'pl' | 'balance_sheet' | 'ar_aging' | 'ap_aging';
+type ReportType = 'trial_balance' | 'pl' | 'balance_sheet' | 'ar_aging' | 'ap_aging' | 'inventory_valuation';
 
 interface LedgerRow {
   id: string;
@@ -56,6 +57,7 @@ const REPORT_TABS: { id: ReportType; label: string; icon: React.ReactNode }[] = 
   { id: 'pl',           label: 'P&L Statement',   icon: <TrendingUp size={14}/> },
   { id: 'balance_sheet',label: 'Balance Sheet',    icon: <BarChart4 size={14}/> },
   { id: 'ar_aging',     label: 'AR Aging',         icon: <Clock size={14}/> },
+  { id: 'inventory_valuation', label: 'Inventory Valuation', icon: <Package size={14}/> },
   { id: 'ap_aging',     label: 'AP Aging',         icon: <AlertCircle size={14}/> },
   { id: 'inventory',   label: 'Inventory Valuation', icon: <Package size={14}/> },
 ];
@@ -744,6 +746,10 @@ const ReportsHub: React.FC<{ company: Company }> = ({ company }) => {
           {reportType === 'balance_sheet' && (
             <BalanceSheetReport accounts={accounts} ledger={ledger} />
           )}
+          {reportType === 'inventory_valuation' && (
+            <InventoryValuationReport company={company} />
+          )}
+
           {(reportType === 'ar_aging' || reportType === 'ap_aging') && (
             <AgingReport accounts={accounts} ledger={ledger} type={reportType} asOfDate={toDate} />
           )}

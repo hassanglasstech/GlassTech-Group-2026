@@ -83,7 +83,21 @@ const BankReconciliation: React.FC<{ company: Company }> = ({ company }) => {
     }, 0);
   }, [glEntries, selectedAccount]);
 
-  const loadSession = () => {
+  const loadSession = async () => {
+    // Supabase primary — load from DB
+    try {
+      const reconId = `RECON-${company}-${selectedAccount}-${selectedMonth}`;
+      const { data, error } = await supabase
+        .from('bank_recon_sessions')
+        .select('data')
+        .eq('id', reconId)
+        .maybeSingle();
+      if (!error && data?.data) {
+        setSession(data.data as ReconSession);
+        return;
+      }
+    } catch {}
+    // Fallback to localStorage cache
     const key = SESSION_KEY(company, selectedMonth, selectedAccount);
     try {
       const saved = localStorage.getItem(key);
@@ -107,7 +121,7 @@ const BankReconciliation: React.FC<{ company: Company }> = ({ company }) => {
     });
   };
 
-  useEffect(() => { loadSession(); }, [company, selectedMonth, selectedAccount]);
+  useEffect(() => { void loadSession(); }, [company, selectedMonth, selectedAccount]);
 
   const startSession = () => {
     if (!bankBalance || isNaN(Number(bankBalance))) {

@@ -33,7 +33,9 @@ export const QuotationStatus = {
   REJECTED: 'Rejected',
   INVOICED: 'Invoiced',
   PARTIAL: 'Partial Payment',
-  PAID: 'Paid'
+  PAID: 'Paid',
+  LOST: 'Lost',
+  EXPIRED: 'Expired',
 } as const;
 export type QuotationStatus = typeof QuotationStatus[keyof typeof QuotationStatus];
 
