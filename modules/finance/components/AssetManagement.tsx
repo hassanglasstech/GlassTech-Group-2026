@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useDebounce } from '@/modules/shared/hooks/useDebounce';
-import { Plus, Search, Wrench, Package, Truck, Monitor, Edit2, Trash2, X, Save, Clock, BarChart3, Download, Upload, FileDown } from 'lucide-react';
+import { Plus, Search, Wrench, Package, Truck, Monitor, Edit2, Trash2, X, Save, Clock, BarChart3, Download, Upload, FileDown, Zap } from 'lucide-react';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { toast } from 'sonner';
+import { FinanceService } from '@/modules/finance/services/financeService';
 import * as XLSX from 'xlsx';
 import { SyncService } from '@/src/services/SyncService';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
@@ -86,6 +87,7 @@ const calculateDepreciation = (asset: Asset) => {
 const AssetManagement: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [depRunning, setDepRunning] = useState(false);
 
 
   const { refreshKey } = useRealtimeRefresh(['assets']);
@@ -280,6 +282,29 @@ const AssetManagement: React.FC = () => {
           <button onClick={() => { setEditingAsset(null); setAssetForm({...emptyAsset, company}); setIsAssetModalOpen(true); }}
             className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-blue-600 transition-all flex items-center space-x-2">
             <Plus size={14}/><span>Add Asset</span>
+          </button>
+          <button
+            disabled={depRunning}
+            onClick={async () => {
+              setDepRunning(true);
+              try {
+                const month = new Date().toISOString().slice(0, 7); // YYYY-MM
+                const result = FinanceService.postDepreciation(company, month);
+                if (result.posted === 0 && result.skipped > 0) {
+                  toast.info(`Depreciation already posted for ${month} — ${result.skipped} assets skipped`);
+                } else if (result.posted === 0) {
+                  toast.warning('No active assets found for depreciation');
+                } else {
+                  toast.success(`Depreciation posted — ${result.posted} assets | ${month}`);
+                }
+              } catch (e) {
+                toast.error('Depreciation posting failed');
+              } finally {
+                setDepRunning(false);
+              }
+            }}
+            className="bg-amber-600 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-amber-700 transition-all flex items-center space-x-2 disabled:opacity-50">
+            <Zap size={14}/><span>{depRunning ? 'Posting…' : 'Run Depreciation'}</span>
           </button>
         </div>
       </div>

@@ -50,6 +50,8 @@ const GlasscoProjects: React.FC<{ company: Company }> = ({ company }) => {
                 purchaseOrders={purchaseOrders.filter(po => po.projectId === activeProject.id)}
                 onClose={() => setActiveProject(null)}
                 onUpdateValue={updateProjectValue}
+                company={company}
+                onRefresh={refreshData}
             />
         )}
     </div>
