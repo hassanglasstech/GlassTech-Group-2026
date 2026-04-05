@@ -35,7 +35,10 @@ const ICOTransferPanel: React.FC<{ company: Company }> = ({ company }) => {
     referenceDoc: '',
   });
 
-  const load = () => setTransfers(IntercompanyService.listTransfers(company));
+  const load = async () => {
+    const data = await IntercompanyService.listTransfers(company);
+    setTransfers(Array.isArray(data) ? data : []);
+  };
   useEffect(() => { load(); }, [company]);
 
   const handlePost = async () => {

@@ -177,7 +177,7 @@ const AgingReport: React.FC<{ company: Company }> = ({ company }) => {
       </div>
 
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-         <table className="w-full text-left sap-table">
+         <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0"><table className="w-full text-left sap-table min-w-[700px]">
             <thead className="bg-slate-50 border-b text-[10px] font-black uppercase tracking-widest text-slate-500">
                <tr>
                   <th className="px-6 py-4">Account Profile</th>
@@ -228,7 +228,7 @@ const AgingReport: React.FC<{ company: Company }> = ({ company }) => {
                   <td></td>
                </tr>
             </tfoot>
-         </table>
+         </table></div>
       </div>
     </div>
   );

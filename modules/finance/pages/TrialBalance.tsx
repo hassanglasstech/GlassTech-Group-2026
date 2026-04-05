@@ -65,7 +65,7 @@ const TrialBalance: React.FC<{ company: Company }> = ({ company }) => {
       </div>
 
       <div className="p-8">
-        <table className="w-full text-left border-collapse">
+        <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0"><table className="w-full text-left border-collapse min-w-[500px]">
           <thead className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest">
             <tr>
               <th className="px-6 py-4 rounded-tl-xl">G/L Account</th>
@@ -93,6 +93,7 @@ const TrialBalance: React.FC<{ company: Company }> = ({ company }) => {
           </tfoot>
         </table>
         
+        </div>
         {totals.debit !== totals.credit && (
           <div className="mt-6 p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center space-x-3 text-rose-700 font-bold text-sm">
             <div className="w-2 h-2 bg-rose-500 rounded-full animate-pulse"></div>

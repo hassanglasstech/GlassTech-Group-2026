@@ -4,8 +4,6 @@ import LoanManagement from '@/modules/hr/pages/LoanManagement';
 import PayrollManagement from '@/modules/hr/pages/PayrollManagement';
 import ChartOfAccounts from '@/modules/finance/pages/ChartOfAccounts';
 import GeneralLedger from '@/modules/finance/pages/GeneralLedger';
-import TrialBalance from '@/modules/finance/pages/TrialBalance';
-import FinancialStatements from '@/modules/finance/pages/FinancialStatements';
 import CostCenterMaster from '@/modules/finance/pages/CostCenterMaster';
 import PettyCashBook from '@/modules/finance/pages/PettyCashBook';
 import RecurringExpenses from '@/modules/finance/pages/RecurringExpenses';
@@ -16,7 +14,6 @@ import BankReconciliation from '@/modules/finance/components/BankReconciliation'
 import ThreeWayMatching from '@/modules/finance/components/ThreeWayMatching';
 import { toast } from 'sonner';
 import GLConfiguration from '@/modules/finance/components/GLConfiguration';
-import AgingReport from '@/modules/finance/components/AgingReport';
 import FinanceDashboardView from '@/modules/finance/components/FinanceDashboardView';
 import AssetManagement from '@/modules/finance/components/AssetManagement';
 import ReportsHub from '@/modules/finance/pages/ReportsHub';
@@ -24,7 +21,7 @@ import InventoryValuationReport from '@/modules/finance/pages/InventoryValuation
 import { 
   Landmark, CreditCard, ListTree, BookOpen, BarChart4, 
   FilePieChart, Target, Wallet, RefreshCw, FileText, 
-  Inbox, Settings, Clock, Briefcase, LayoutGrid, Users, BarChart3, Package, ShieldCheck, Lock
+  Inbox, Settings, Clock, Briefcase, Users, BarChart3, Package, ShieldCheck, Lock
 } from 'lucide-react';
 
 type CategoryKey = 'ops' | 'reporting' | 'hr' | 'assets' | 'config';
