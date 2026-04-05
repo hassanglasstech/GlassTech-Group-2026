@@ -1,3 +1,4 @@
+import { Logger } from '@/modules/shared/services/logger';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/src/services/supabaseClient';
 import {
@@ -36,7 +37,7 @@ const fetchProfile = async (userId: string, email?: string): Promise<UserProfile
     }
 
     // Log for debugging
-    console.log('[Auth] fetchProfile:', { userId, data, error });
+    Logger.info('Auth', JSON.stringify({ userId, data, error }));
 
     if (error) {
       console.error('[Auth] Profile fetch error:', error);
@@ -169,7 +170,7 @@ const LoginPage: React.FC = () => {
     if (!profile) {
       // Check if table exists and profile issue
       const { data: check } = await supabase.from('user_profiles').select('count').single();
-      console.log('[Auth] Profile table check:', check);
+      Logger.info('Auth', 'Profile table check: ' + JSON.stringify(check));
       setError('Access not configured yet. Please contact Hassan (Admin) to get access.');
       await supabase.auth.signOut();
       setBusy(false);

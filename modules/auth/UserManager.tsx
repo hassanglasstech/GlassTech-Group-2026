@@ -1,3 +1,4 @@
+import { Logger } from '@/modules/shared/services/logger';
 import { toast } from 'sonner';
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/src/services/supabaseClient';
@@ -159,7 +160,7 @@ export default function UserManager() {
       is_active:          form.is_active,
     };
 
-    console.log('[UserManager] Updating', form.id, payload);
+    Logger.info('Auth', 'Updating ' + form.id);
 
     const { data, error } = await supabase
       .from('user_profiles')
@@ -167,7 +168,7 @@ export default function UserManager() {
       .eq('id', form.id)
       .select();
 
-    console.log('[UserManager] Update result:', data, error);
+    Logger.info('Auth', 'Update result: ' + JSON.stringify({ data, error }));
 
     if (error) {
       flash('err', `Save failed: ${error.message}`);

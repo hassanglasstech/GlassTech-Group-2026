@@ -19,6 +19,12 @@ export default defineConfig(({ mode }) => {
           '@': path.resolve(__dirname, '.'),
         }
       },
+      test: {
+        globals: true,
+        environment: 'jsdom',
+        setupFiles: [],
+        include: ['modules/__tests__/**/*.test.ts', 'modules/__tests__/**/*.spec.ts'],
+      },
       build: {
         chunkSizeWarningLimit: 5000,
         rollupOptions: {
