@@ -241,7 +241,7 @@ const AttendanceRegister: React.FC = () => {
       let sCount = 0; 
       let otSum = 0;
 
-      const summaryOverrides = JSON.parse(localStorage.getItem(`gtk_summary_overrides_${selectedMonth}`) || '{}');
+      const summaryOverrides = JSON.parse(localStorage.getItem(`gtk_erp_summary_overrides_${selectedMonth}`) || '{}');
       if (summaryOverrides[empId]) {
           const grossAbsent = Number(summaryOverrides[empId].absent || 0);
           const allowed = Number(summaryOverrides[empId].allowedAbsent || 0);
@@ -321,7 +321,7 @@ const AttendanceRegister: React.FC = () => {
   const handleEditSummary = (emp: Employee) => {
       const totals = getCalculatedTotals(emp.id);
       
-      const currentOverrides = JSON.parse(localStorage.getItem(`gtk_summary_overrides_${selectedMonth}`) || '{}');
+      const currentOverrides = JSON.parse(localStorage.getItem(`gtk_erp_summary_overrides_${selectedMonth}`) || '{}');
       const saved = currentOverrides[emp.id];
 
       // Calculate System Loan Deduction
@@ -391,7 +391,7 @@ const AttendanceRegister: React.FC = () => {
       const latePenalty = Math.floor(editingSummary.lates / 3);
       const totalCalculatedAbsent = editingSummary.manualAbsent + sandwichPenalty + latePenalty;
 
-      const currentOverrides = JSON.parse(localStorage.getItem(`gtk_summary_overrides_${selectedMonth}`) || '{}');
+      const currentOverrides = JSON.parse(localStorage.getItem(`gtk_erp_summary_overrides_${selectedMonth}`) || '{}');
       
       currentOverrides[editingSummary.employeeId] = {
           absent: totalCalculatedAbsent,
@@ -406,7 +406,7 @@ const AttendanceRegister: React.FC = () => {
           reqRef: editingSummary.reqRef
       };
       
-      localStorage.setItem(`gtk_summary_overrides_${selectedMonth}`, JSON.stringify(currentOverrides));
+      localStorage.setItem(`gtk_erp_summary_overrides_${selectedMonth}`, JSON.stringify(currentOverrides));
 
       // Phase 3: Mark used requisition as Completed
       if (editingSummary.reqRef) {
@@ -421,7 +421,7 @@ const AttendanceRegister: React.FC = () => {
 
   const clearSummaryOverrides = () => {
       if (confirm("Reset all manual overrides to system-calculated values for this month?")) {
-          localStorage.removeItem(`gtk_summary_overrides_${selectedMonth}`);
+          localStorage.removeItem(`gtk_erp_summary_overrides_${selectedMonth}`);
           refreshAllData();
       }
   };

@@ -43,7 +43,7 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
     const actualDaysInMonth = new Date(year, monthNum, 0).getDate();
 
     // Fetch Manual Summary Overrides from Attendance Module (Phase 2 Linkage)
-    const summaryOverrides = JSON.parse(localStorage.getItem(`gtk_summary_overrides_${selectedMonth}`) || '{}');
+    const summaryOverrides = JSON.parse(localStorage.getItem(`gtk_erp_summary_overrides_${selectedMonth}`) || '{}');
 
     const newPayrolls = emps.map(emp => {
       const empAttendance = attendance.filter(a => a?.employeeId === emp.id && a?.date?.startsWith(selectedMonth));
@@ -191,19 +191,21 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
       const amount    = type === 'salary' ? salaryAmt : otAmt;
       const label     = type === 'salary' ? 'Salary' : 'Overtime';
 
-      const existingLedger = FinanceService.getLedger();
       const transaction = {
         id: `PAY-DISB-${pay.id}-${type}-${Date.now()}`,
+        company,
+        docType: 'PV' as any,
+        docDate: new Date().toISOString().split('T')[0],
         date: new Date().toISOString().split('T')[0],
         description: `${label} Disbursement — ${emp.personal.name} — ${selectedMonth}`,
-        company,
+        referenceId: pay.id,
+        status: 'Posted' as any,
         details: [
           { accountId: payableAcc.id, debit: amount, credit: 0, text: `${label} paid — ${emp.personal.name}` },
           { accountId: cashAcc.id,    debit: 0, credit: amount, text: `Cash out — ${label}` },
         ],
-        postedBy: 'HR',
       };
-      await Promise.resolve(FinanceService.recordTransaction(transaction));
+      FinanceService.recordTransaction(transaction);
     } catch (e) { console.warn('GL disbursement entry failed', e); }
 
     // Update flag
@@ -243,13 +245,16 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
     setIsApproved(true);
     setApprovedBy(approverInput.trim());
     setShowApproveModal(false);
-    toast.success(`Payroll approved by ${approverInput.trim()}`);
+    toast.success(`Payroll approved by ${approverInput.trim()} — posting to GL...`);
+    // Auto-post GL immediately on approval
+    handlePostPayrollToLedger(approverInput.trim());
   };
 
-  const handlePostPayrollToLedger = async () => {
-      if (!isApproved) { toast.error('Payroll must be approved before posting. Click Approve first.'); return; }
+  const handlePostPayrollToLedger = async (approverOverride?: string) => {
+      const poster = approverOverride || approvedBy;
+      if (!approverOverride && !isApproved) { toast.error('Payroll must be approved before posting. Click Approve first.'); return; }
       const monthName = new Date(selectedMonth).toLocaleString('default', { month: 'long', year: 'numeric' });
-      if (!confirm(`Post ${monthName} Payroll to Ledger?\n\nApproved by: ${approvedBy}\nTotal Payable: PKR ${summary.totalNetDisbursable.toLocaleString()}`)) return;
+      if (!approverOverride && !confirm(`Post ${monthName} Payroll to Ledger?\n\nApproved by: ${poster}\nTotal Payable: PKR ${summary.totalNetDisbursable.toLocaleString()}`)) return;
 
       const txId = `PAY-JV-${selectedMonth.replace('-','')}`;
       
