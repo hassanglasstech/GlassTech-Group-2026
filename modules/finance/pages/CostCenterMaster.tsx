@@ -10,7 +10,12 @@ const CostCenterMaster: React.FC<{ company: Company }> = ({ company }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
-  const initialForm: Partial<CostCenter> = { code: '', name: '', department: 'Operations', manager: '', category: 'F', hierarchyArea: `${company}-PROD` };
+  const initialForm: Partial<CostCenter> = {
+    code: '', name: '', department: 'Operations', manager: '', category: 'F',
+    hierarchyArea: `${company}-PROD`,
+    budgetMonthly: 0, budgetYearly: 0, alertThreshold: 80,
+    pettyCashFloat: 0, pettyCashMonthlyBudget: 0,
+  };
   const [formData, setFormData] = useState<Partial<CostCenter>>(initialForm);
 
   useEffect(() => { refreshData(); }, [company]);
@@ -141,6 +146,57 @@ const CostCenterMaster: React.FC<{ company: Company }> = ({ company }) => {
                   <div className="space-y-1">
                      <label className="text-[10px] font-bold uppercase text-slate-400">Person Responsible</label>
                      <input type="text" value={formData.manager} onChange={e => setFormData({...formData, manager: e.target.value})} className="sap-input w-full font-bold uppercase"/>
+                  </div>
+               </div>
+
+               {/* ── Budget Controls (Phase 1 CMA) ── */}
+               <div className="border-t border-slate-100 pt-4">
+                  <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest mb-3">Budget Controls (CMA)</p>
+                  <div className="grid grid-cols-3 gap-4">
+                     <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-slate-400">Monthly Budget (PKR)</label>
+                        <input type="number" min="0" placeholder="0"
+                           value={formData.budgetMonthly || ''}
+                           onChange={e => setFormData({...formData, budgetMonthly: Number(e.target.value)})}
+                           className="sap-input w-full font-bold"/>
+                     </div>
+                     <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-slate-400">Annual Budget (PKR)</label>
+                        <input type="number" min="0" placeholder="0"
+                           value={formData.budgetYearly || ''}
+                           onChange={e => setFormData({...formData, budgetYearly: Number(e.target.value)})}
+                           className="sap-input w-full font-bold"/>
+                     </div>
+                     <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-slate-400">Alert at % Used</label>
+                        <input type="number" min="1" max="100" placeholder="80"
+                           value={formData.alertThreshold || 80}
+                           onChange={e => setFormData({...formData, alertThreshold: Number(e.target.value)})}
+                           className="sap-input w-full font-bold"/>
+                     </div>
+                  </div>
+               </div>
+
+               {/* ── Petty Cash Controls (Phase 1 CMA) ── */}
+               <div className="border-t border-slate-100 pt-4">
+                  <p className="text-[10px] font-black uppercase text-orange-600 tracking-widest mb-3">Petty Cash Controls (CMA)</p>
+                  <div className="grid grid-cols-2 gap-4">
+                     <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-slate-400">Cash Float Limit (PKR)</label>
+                        <input type="number" min="0" placeholder="e.g. 15000"
+                           value={formData.pettyCashFloat || ''}
+                           onChange={e => setFormData({...formData, pettyCashFloat: Number(e.target.value)})}
+                           className="sap-input w-full font-bold"/>
+                        <p className="text-[9px] text-slate-400">Max cash held at any time by this cost center</p>
+                     </div>
+                     <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-slate-400">Monthly Petty Cash Budget (PKR)</label>
+                        <input type="number" min="0" placeholder="e.g. 60000"
+                           value={formData.pettyCashMonthlyBudget || ''}
+                           onChange={e => setFormData({...formData, pettyCashMonthlyBudget: Number(e.target.value)})}
+                           className="sap-input w-full font-bold"/>
+                        <p className="text-[9px] text-slate-400">Max petty cash spend allowed per month</p>
+                     </div>
                   </div>
                </div>
             </div>

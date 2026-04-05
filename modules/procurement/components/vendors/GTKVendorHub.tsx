@@ -184,7 +184,7 @@ const GTKVendorHub: React.FC<{ company: string }> = ({ company }) => {
   // ═══════════════════════════════════════════════════════════════════
   const [vendorForm, setVendorForm] = useState({
     name: '', type: 'Hardware' as string, contactPerson: '', phone: '',
-    address: '', paymentTerms: 'Cash on Delivery',
+    address: '', paymentTerms: 'Cash on Delivery', expectedLeadDays: 0,
   });
 
   const handleAddVendor = () => {
@@ -198,12 +198,13 @@ const GTKVendorHub: React.FC<{ company: string }> = ({ company }) => {
       contactPerson: vendorForm.contactPerson,
       phone: vendorForm.phone,
       address: vendorForm.address,
+      expectedLeadDays: vendorForm.expectedLeadDays || undefined,
     };
     SalesService.saveVendors([...all, newVendor]);
     SyncService.markDirty('vendors');
     toast.success(`Vendor ${newVendor.name} added`);
     setShowAddVendor(false);
-    setVendorForm({ name: '', type: 'Hardware', contactPerson: '', phone: '', address: '', paymentTerms: 'Cash on Delivery' });
+    setVendorForm({ name: '', type: 'Hardware', contactPerson: '', phone: '', address: '', paymentTerms: 'Cash on Delivery', expectedLeadDays: 0 });
     refresh();
   };
 
@@ -465,6 +466,13 @@ const GTKVendorHub: React.FC<{ company: string }> = ({ company }) => {
                   <input type="text" className="sap-input w-full font-bold" value={vendorForm.phone}
                     onChange={e => setVendorForm({...vendorForm, phone: e.target.value})} />
                 </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Expected Lead Time (days)</label>
+                <input type="number" min="0" placeholder="e.g. 7" className="sap-input w-full font-bold"
+                  value={vendorForm.expectedLeadDays || ''}
+                  onChange={e => setVendorForm({...vendorForm, expectedLeadDays: Number(e.target.value)})} />
+                <p className="text-[9px] text-slate-400">Days from PO to GRN — used for SCM scorecard on-time tracking</p>
               </div>
               <button onClick={handleAddVendor}
                 className="w-full py-3 bg-slate-900 text-white rounded-xl font-black uppercase text-xs tracking-widest hover:bg-blue-600 flex items-center justify-center space-x-2">

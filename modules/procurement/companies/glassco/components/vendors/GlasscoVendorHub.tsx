@@ -31,7 +31,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
   
   const [isAddVendorOpen, setIsAddVendorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [newVendorForm, setNewVendorForm] = useState<any>({ name: '', type: 'Tempering', contactPerson: '', phone: '', vehicles: [], acceptsDefectivePieces: true });
+  const [newVendorForm, setNewVendorForm] = useState<any>({ name: '', type: 'Tempering', contactPerson: '', phone: '', vehicles: [], acceptsDefectivePieces: true, expectedLeadDays: 0 });
   const [newVehicleInput, setNewVehicleInput] = useState('');
   
   // Rate Card State
@@ -135,7 +135,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
       SalesService.saveVendors(updatedVendors);
       setVendors(updatedVendors);
       setIsAddVendorOpen(false);
-      setNewVendorForm({ name: '', type: 'Tempering', contactPerson: '', phone: '', vehicles: [] });
+      setNewVendorForm({ name: '', type: 'Tempering', contactPerson: '', phone: '', vehicles: [], expectedLeadDays: 0 });
       setNewVehicleInput('');
       setEditingId(null);
   };
@@ -153,7 +153,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
           });
       } else {
           setEditingId(null);
-          setNewVendorForm({ name: '', type: 'Tempering', contactPerson: '', phone: '', vehicles: [] });
+          setNewVendorForm({ name: '', type: 'Tempering', contactPerson: '', phone: '', vehicles: [], expectedLeadDays: 0 });
       }
       setIsAddVendorOpen(true);
   };
@@ -339,6 +339,11 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
           )}
           </div>
           <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Contact Person</label><input type="text" value={newVendorForm.contactPerson} onChange={e => setNewVendorForm({...newVendorForm, contactPerson: e.target.value})} className="sap-input w-full font-bold uppercase" /></div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold uppercase text-slate-500">Expected Lead Time (days)</label>
+            <input type="number" min="0" placeholder="e.g. 7" value={newVendorForm.expectedLeadDays || ''} onChange={e => setNewVendorForm({...newVendorForm, expectedLeadDays: Number(e.target.value)})} className="sap-input w-full font-bold" />
+            <p className="text-[9px] text-slate-400">PO to GRN days — used for SCM on-time tracking</p>
+          </div>
           {newVendorForm.type === 'Transport' && (
             <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
               <label className="text-[10px] font-black uppercase text-blue-700 ml-1 mb-2 block">Register Vehicles</label>
