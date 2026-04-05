@@ -31,7 +31,11 @@ export interface LedgerTransaction {
     text?: string; 
     costCenterId?: string; 
   }[];
-  reqId?: string; 
+  reqId?: string;
+  // ── Audit Trail (Phase C) ────────────────────────────────────────────
+  createdBy?: string;   // email of user who created the entry
+  updatedBy?: string;   // email of user who last updated
+  postedAt?:  string;   // ISO timestamp when status changed to Posted
 }
 
 export interface CostCenter { 

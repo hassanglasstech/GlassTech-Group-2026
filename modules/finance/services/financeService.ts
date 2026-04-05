@@ -175,7 +175,9 @@ const ledgerToRow = (t: LedgerTransaction) => ({
   reference_id: t.referenceId ?? null, status: t.status,
   details: t.details ?? [],
   data: { reqId: t.reqId },
-  created_by: (t as any).createdBy ?? useAuthStore.getState().user?.email ?? null,
+  created_by: t.createdBy ?? useAuthStore.getState().user?.email ?? null,
+  updated_by: t.updatedBy ?? useAuthStore.getState().user?.email ?? null,
+  posted_at:  t.postedAt ?? null,
   updated_at: new Date().toISOString(),
 });
 
@@ -433,8 +435,15 @@ export const FinanceService = {
       throw new Error(`Period ${month} is closed for company ${tx.company}`);
     }
     const currentUser = useAuthStore.getState().user?.email ?? 'system';
+    const now = new Date().toISOString();
     const all = FinanceService.getLedger();
-    all.push({ ...tx, status: tx.status || 'Parked', createdBy: currentUser } as any);
+    all.push({
+      ...tx,
+      status:    tx.status || 'Parked',
+      createdBy: tx.createdBy ?? currentUser,
+      updatedBy: currentUser,
+      postedAt:  tx.status === 'Posted' ? now : tx.postedAt,
+    });
     FinanceService.saveLedger(all);
   },
 
@@ -661,6 +670,8 @@ export const FinanceService = {
           docDate: `${month}-28`, date: `${month}-28`,
           description: `DEPRECIATION — ${asset.description || asset.name} — ${month}`.toUpperCase(),
           referenceId: asset.id, status: 'Posted',
+          createdBy: 'system-auto', updatedBy: 'system-auto',
+          postedAt: new Date().toISOString(),
           details: [
             { accountId: `${company}-53911`, debit: Math.round(depAmount), credit: 0, text: `Dep: ${asset.name}` },
             { accountId: `${company}-12121`, debit: 0, credit: Math.round(depAmount), text: `Accum Dep: ${asset.name}` },
@@ -690,6 +701,8 @@ export const FinanceService = {
           date: `${currentMonth}-${String(template.dayOfMonth).padStart(2,'0')}`,
           description: `[AUTO] RECURRING: ${template.name}`.toUpperCase(),
           referenceId: template.id, status: 'Posted',
+          createdBy: 'system-auto', updatedBy: 'system-auto',
+          postedAt: new Date().toISOString(),
           details: [
             { accountId: template.debitAccountId, debit: template.amount, credit: 0, text: 'AUTO POST', costCenterId: template.costCenterId },
             { accountId: template.creditAccountId, debit: 0, credit: template.amount, text: 'AUTO OFFSET' }

@@ -7,6 +7,7 @@ import { Plus, Search, ArrowUpRight, ArrowDownLeft, X, Save, Wallet, Check, Aler
 import Pagination from '@/components/Pagination';
 import { UnifiedPaymentPrint } from '@/modules/finance/components/prints/UnifiedPaymentPrint';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
+import { useAuthStore } from '@/modules/auth/authStore';
 
 const BUSINESS_TRANSACTIONS = [
     // RECEIPTS
@@ -28,6 +29,8 @@ const BUSINESS_TRANSACTIONS = [
 ];
 
 const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
+  const { profile } = useAuthStore();
+  const currentUser = profile?.email ?? profile?.fullName ?? 'unknown';
   const [entries, setEntries] = useState<PettyCashEntry[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -140,7 +143,7 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
         const newEntry: PettyCashEntry = {
             ...(entryOrForm as PettyCashEntry),
             id: txId, company, date: selectedDate, balance: currentBalance + (entryOrForm.type==='Receipt' ? entryOrForm.amount! : -entryOrForm.amount!),
-            status: 'Posted', recordedBy: 'LOCAL_USER'
+            status: 'Posted', recordedBy: currentUser
         };
         FinanceService.savePettyCashEntries([...FinanceService.getPettyCashEntries(), newEntry]);
 

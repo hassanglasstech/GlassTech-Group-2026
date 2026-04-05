@@ -5,6 +5,10 @@ import { safeParse, safeSave } from '../../shared/services/utils';
 import { toast } from 'sonner';
 import { Logger } from '@/modules/shared/services/logger';
 import { supabase } from '../../../src/services/supabaseClient';
+import { useAuthStore } from '@/modules/auth/authStore';
+
+// Helper — gets current user email at call time (outside React, so we use getState)
+const _currentUser = () => useAuthStore.getState().profile?.email ?? useAuthStore.getState().user?.email ?? 'unknown';
 
 const KEYS = {
   CLIENTS: 'gtk_erp_clients',
@@ -258,6 +262,8 @@ export const AsyncSalesService = {
         client_id: i.clientId, client_name: i.clientName, date: i.date, due_date: i.dueDate,
         total_amount: i.totalAmount, received_amount: i.receivedAmount, balance: i.balance,
         status: i.status, gl_tx_id: i.glTxId, payments: i.payments || [],
+        created_by: i.createdBy ?? i.created_by ?? null,
+        updated_by: _currentUser(),
         updated_at: new Date().toISOString(),
       }));
       const { error } = await supabase.from('invoices').upsert(rows);
@@ -287,6 +293,9 @@ export const AsyncSalesService = {
       const rows = data.map((r: any) => ({
         id: r.id, invoice_id: r.invoiceId, date: r.date, amount: r.amount,
         method: r.method, reference: r.reference, gl_tx_id: r.glTxId,
+        created_by: r.createdBy ?? r.created_by ?? null,
+        updated_by: _currentUser(),
+        updated_at: new Date().toISOString(),
       }));
       const { error } = await supabase.from('payment_receipts').upsert(rows);
       if (error) Logger.error('Sales', 'savePaymentReceipts failed', error);
