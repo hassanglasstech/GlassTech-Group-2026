@@ -10,6 +10,7 @@ import CostCenterMaster from '@/modules/finance/pages/CostCenterMaster';
 import PettyCashBook from '@/modules/finance/pages/PettyCashBook';
 import RecurringExpenses from '@/modules/finance/pages/RecurringExpenses';
 import FinancialRegistry from '@/modules/finance/pages/FinancialRegistry';
+import PeriodManager from '@/modules/finance/pages/PeriodManager';
 import BillingHub from '@/modules/finance/components/BillingHub';
 import ThreeWayMatching from '@/modules/finance/components/ThreeWayMatching';
 import { toast } from 'sonner';
@@ -20,7 +21,7 @@ import AssetManagement from '@/modules/finance/components/AssetManagement';
 import { 
   Landmark, CreditCard, ListTree, BookOpen, BarChart4, 
   FilePieChart, Target, Wallet, RefreshCw, FileText, 
-  Inbox, Settings, Clock, Briefcase, LayoutGrid, Users, BarChart3, Package, ShieldCheck
+  Inbox, Settings, Clock, Briefcase, LayoutGrid, Users, BarChart3, Package, ShieldCheck, Lock
 } from 'lucide-react';
 
 type CategoryKey = 'ops' | 'reporting' | 'hr' | 'assets' | 'config';
@@ -75,6 +76,7 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
           { id: 'cost_centers', label: 'Cost Centers', icon: Target },
           { id: 'gl_config', label: 'GL Configuration', icon: Settings },
           { id: 'recurring', label: 'Recurring Entries', icon: RefreshCw },
+          { id: 'period_manager', label: 'Period Manager', icon: Lock },
           { id: 'monthly_actions', label: 'Monthly Actions', icon: Clock },
         ]
       }
@@ -163,6 +165,7 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
           {activeTab === 'cost_centers' && <CostCenterMaster company={company} />}
           {activeTab === 'gl_config' && <GLConfiguration company={company} />}
           {activeTab === 'recurring' && <RecurringExpenses company={company} />}
+          {activeTab === 'period_manager' && <PeriodManager company={company} />}
           
           {/* Monthly Actions */}
           {activeTab === 'monthly_actions' && (

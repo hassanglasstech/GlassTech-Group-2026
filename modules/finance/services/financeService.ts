@@ -16,6 +16,8 @@ import {
   FinancialMappingRule, GLConfiguration
 } from '../types/finance';
 import { COMPANY_COA, COAAccount } from '../constants/coa.index';
+import { PeriodService } from './periodService';
+import { useAuthStore } from '@/modules/auth/authStore';
 
 // ── localStorage Keys (offline buffer only) ───────────────────────────
 const KEYS = {
@@ -173,6 +175,7 @@ const ledgerToRow = (t: LedgerTransaction) => ({
   reference_id: t.referenceId ?? null, status: t.status,
   details: t.details ?? [],
   data: { reqId: t.reqId },
+  created_by: (t as any).createdBy ?? useAuthStore.getState().user?.email ?? null,
   updated_at: new Date().toISOString(),
 });
 
@@ -423,8 +426,15 @@ export const FinanceService = {
 
   // ── Record a single transaction ─────────────────────────────────────
   recordTransaction: (tx: LedgerTransaction): void => {
+    const txDate = tx.date || tx.docDate || new Date().toISOString().split('T')[0];
+    if (!PeriodService.isPeriodOpen(tx.company, txDate)) {
+      const month = txDate.slice(0, 7);
+      toast.error(`Period ${month} is CLOSED — GL entry blocked. Re-open the period in Finance → Configuration → Period Manager.`, { duration: 8000 });
+      throw new Error(`Period ${month} is closed for company ${tx.company}`);
+    }
+    const currentUser = useAuthStore.getState().user?.email ?? 'system';
     const all = FinanceService.getLedger();
-    all.push({ ...tx, status: tx.status || 'Parked' });
+    all.push({ ...tx, status: tx.status || 'Parked', createdBy: currentUser } as any);
     FinanceService.saveLedger(all);
   },
 
