@@ -223,7 +223,7 @@ const GTKVendorHub: React.FC<{ company: string }> = ({ company }) => {
     setRates(fresh);
   };
 
-  const handleAddRate = () => {
+  const handleAddRate = async () => {
     if (!rateForm.itemName || !rateForm.agreedRate) return toast.error('Item name and rate required');
     const newRate: GTKVendorRate = {
       id: `RATE-${Date.now()}`,
@@ -242,7 +242,7 @@ const GTKVendorHub: React.FC<{ company: string }> = ({ company }) => {
       effectiveDate: new Date().toISOString().split('T')[0], notes: '' });
   };
 
-  const handleDeleteRate = (rateId: string) => {
+  const handleDeleteRate = async (rateId: string) => {
     const updated = rates.filter(r => r.id !== rateId);
     setRates(updated);
     if (showRateCard) await saveVendorRates(showRateCard.id, updated);
