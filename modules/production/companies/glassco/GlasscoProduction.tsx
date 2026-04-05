@@ -3,7 +3,7 @@ import { ProductionProvider } from '@/modules/production/components/ProductionCo
 import { 
   Scissors, Truck, ShieldCheck, Flame, BarChart3, AlertTriangle, 
   Zap, Users, Upload, Award, TrendingUp, LayoutGrid, Brain,
-  Building2, ChevronDown
+  Building2, ChevronDown, User
 } from 'lucide-react';
 import NCRModule from './components/ncr/NCRModule';
 import GeneratorLogModule from '@/modules/production/components/GeneratorLog';
@@ -19,13 +19,44 @@ import FabricationView from './components/views/FabricationView';
 import ProcessingView from './components/views/ProcessingView';
 import DispatchView from './components/views/DispatchView';
 import DashboardView from './components/views/DashboardView';
+import { useAuthStore, UserRole } from '@/modules/auth/authStore';
 
 type ActiveView = 
   'dashboard' | 'floorplan' | 'cutting' | 'ai_plan' | 'cross_company' |
   'fabrication' | 'processing' | 'dispatch' | 'ncr' | 'energy' | 
   'labour' | 'import' | 'performance' | 'finance';
 
-// ── Primary tabs — daily workflow ─────────────────────────────────────
+// ── Role → which tabs are visible ─────────────────────────────────────
+//
+//  glassco_cutter   → NO tabs — directly FabricationView (one-window)
+//  dispatch_staff   → NO tabs — directly DispatchView (one-window)
+//  glassco_supervisor → 4 tabs (daily workflow only)
+//  everyone else    → all tabs (full access — current behavior)
+//
+
+const CUTTER_ROLES:   UserRole[] = ['glassco_cutter'];
+const DISPATCH_ROLES: UserRole[] = ['dispatch_staff'];
+const SUPERVISOR_ROLES: UserRole[] = ['glassco_supervisor'];
+
+const getRoleMode = (role: UserRole | undefined): 'cutter' | 'dispatch' | 'supervisor' | 'full' => {
+  if (!role) return 'full';
+  if (CUTTER_ROLES.includes(role))    return 'cutter';
+  if (DISPATCH_ROLES.includes(role))  return 'dispatch';
+  if (SUPERVISOR_ROLES.includes(role)) return 'supervisor';
+  return 'full';
+};
+
+// ── Tab definitions ────────────────────────────────────────────────────
+
+// Supervisor sees these 4 only
+const SUPERVISOR_TABS: { id: ActiveView; label: string; icon: React.ReactNode }[] = [
+  { id: 'fabrication', label: 'Fabrication',   icon: <Scissors size={14}/> },
+  { id: 'processing',  label: 'Processing',    icon: <Flame size={14}/> },
+  { id: 'dispatch',    label: 'QC & Dispatch', icon: <ShieldCheck size={14}/> },
+  { id: 'ncr',         label: 'NCR',           icon: <AlertTriangle size={14}/> },
+];
+
+// Full access — primary tabs (daily)
 const PRIMARY_TABS: { id: ActiveView; label: string; icon: React.ReactNode }[] = [
   { id: 'fabrication', label: 'Fabrication',   icon: <Scissors size={14}/> },
   { id: 'processing',  label: 'Processing',    icon: <Flame size={14}/> },
@@ -34,7 +65,7 @@ const PRIMARY_TABS: { id: ActiveView; label: string; icon: React.ReactNode }[] =
   { id: 'dashboard',   label: 'Dashboard',     icon: <BarChart3 size={14}/> },
 ];
 
-// ── More tabs — management / planning ────────────────────────────────
+// Full access — More dropdown tabs (management/planning)
 const MORE_TABS: { id: ActiveView; label: string; icon: React.ReactNode; group: string }[] = [
   { id: 'floorplan',     label: 'Floor Planner',    icon: <LayoutGrid size={14}/>,  group: 'Planning' },
   { id: 'ai_plan',       label: 'AI Plan',           icon: <Zap size={14}/>,         group: 'Planning' },
@@ -47,6 +78,17 @@ const MORE_TABS: { id: ActiveView; label: string; icon: React.ReactNode; group: 
   { id: 'import',        label: 'Data Import',       icon: <Upload size={14}/>,      group: 'Management' },
 ];
 
+// ── Role labels (shown in one-window header) ───────────────────────────
+const ROLE_LABELS: Partial<Record<UserRole, string>> = {
+  glassco_cutter:     'Cutter',
+  dispatch_staff:     'Dispatch / QC',
+  glassco_supervisor: 'Supervisor',
+  factory_manager:    'Factory Manager',
+  glassco_production: 'Production',
+  glassco_admin:      'GlassCo Admin',
+};
+
+// ── Styles ─────────────────────────────────────────────────────────────
 const styles = `
   .pp-nav {
     background: #ffffff;
@@ -82,20 +124,9 @@ const styles = `
     transition: color .15s, border-color .15s, background .15s;
     font-family: inherit;
   }
-  .pp-tab:hover {
-    color: #1e293b;
-    background: #f8fafc;
-  }
-  .pp-tab.active {
-    color: #1e40af;
-    border-bottom-color: #2563eb;
-    background: #eff6ff;
-  }
-  .pp-tab.active-more {
-    color: #6d28d9;
-    border-bottom-color: #7c3aed;
-    background: #f5f3ff;
-  }
+  .pp-tab:hover  { color: #1e293b; background: #f8fafc; }
+  .pp-tab.active { color: #1e40af; border-bottom-color: #2563eb; background: #eff6ff; }
+  .pp-tab.active-more { color: #6d28d9; border-bottom-color: #7c3aed; background: #f5f3ff; }
 
   /* More dropdown */
   .pp-more-wrap {
@@ -125,7 +156,7 @@ const styles = `
     font-family: inherit;
   }
   .pp-more-btn:hover { color: #475569; background: #f8fafc; }
-  .pp-more-btn.open { color: #6d28d9; background: #f5f3ff; border-bottom-color: #7c3aed; }
+  .pp-more-btn.open  { color: #6d28d9; background: #f5f3ff; border-bottom-color: #7c3aed; }
 
   .pp-dropdown {
     position: absolute;
@@ -145,12 +176,8 @@ const styles = `
     to   { opacity:1; transform: translateY(0); }
   }
 
-  .pp-dd-group {
-    padding: 6px 0;
-    border-bottom: 1px solid #f1f5f9;
-  }
+  .pp-dd-group { padding: 6px 0; border-bottom: 1px solid #f1f5f9; }
   .pp-dd-group:last-child { border-bottom: none; }
-
   .pp-dd-group-label {
     padding: 6px 14px 4px;
     font-size: 9px;
@@ -159,7 +186,6 @@ const styles = `
     text-transform: uppercase;
     color: #94a3b8;
   }
-
   .pp-dd-item {
     display: flex;
     align-items: center;
@@ -176,23 +202,102 @@ const styles = `
     transition: background .12s, color .12s;
     font-family: inherit;
   }
-  .pp-dd-item:hover { background: #f8fafc; color: #111827; }
-  .pp-dd-item.active { background: #f5f3ff; color: #6d28d9; }
-  .pp-dd-item svg { opacity: .6; flex-shrink: 0; }
-  .pp-dd-item.active svg { opacity: 1; }
+  .pp-dd-item:hover       { background: #f8fafc; color: #111827; }
+  .pp-dd-item.active      { background: #f5f3ff; color: #6d28d9; }
+  .pp-dd-item svg         { opacity: .6; flex-shrink: 0; }
+  .pp-dd-item.active svg  { opacity: 1; }
 
-  .pp-body {
-    flex: 1;
-    overflow-y: auto;
-    padding: 24px;
-    background: #f8fafc;
-  }
+  .pp-body { flex: 1; overflow-y: auto; padding: 24px; background: #f8fafc; }
   .pp-body-inner { max-width: 1600px; margin: 0 auto; }
+
+  /* ── One-window role header ── */
+  .pp-role-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    background: #1e3a5f;
+    color: #e0f0ff;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .pp-role-header .role-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,255,255,.12);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 10px;
+  }
+  .pp-role-header .company-label {
+    color: #7ec8f0;
+    font-size: 10px;
+    font-weight: 600;
+  }
 `;
 
+// ── Content renderer ────────────────────────────────────────────────────
+const ViewRenderer: React.FC<{ view: ActiveView }> = ({ view }) => (
+  <>
+    {view === 'fabrication'   && <FabricationView />}
+    {view === 'processing'    && <ProcessingView />}
+    {view === 'dispatch'      && <DispatchView />}
+    {view === 'ncr'           && <NCRModule />}
+    {view === 'dashboard'     && <DashboardView />}
+    {view === 'floorplan'     && <ProductionFloorPlanner />}
+    {view === 'ai_plan'       && <AIFloorPlanAdvisor />}
+    {view === 'cutting'       && <CuttingIntelligenceHub />}
+    {view === 'cross_company' && <CrossCompanyStatusBoard />}
+    {view === 'performance'   && <CutterDashboard />}
+    {view === 'energy'        && <GeneratorLogModule />}
+    {view === 'labour'        && <LabourLogModule />}
+    {view === 'finance'       && <FinancialIntelligenceHub />}
+    {view === 'import'        && <DataImportTool />}
+  </>
+);
+
+// ── One-window: no tabs, just the view + role header ───────────────────
+const OneWindowView: React.FC<{
+  view: ActiveView;
+  role: UserRole;
+  userName: string;
+}> = ({ view, role, userName }) => {
+  const roleLabel = ROLE_LABELS[role] || role;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', margin: '-24px' }}>
+      <style>{styles}</style>
+
+      {/* Role header — shows who is logged in and their role */}
+      <div className="pp-role-header">
+        <span className="company-label">GlassCo Production</span>
+        <span className="role-pill">
+          <User size={10} />
+          {userName || 'User'} — {roleLabel}
+        </span>
+      </div>
+
+      <div className="pp-body">
+        <div className="pp-body-inner">
+          <ViewRenderer view={view} />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── Main content component ─────────────────────────────────────────────
 const GlasscoProductionContent: React.FC = () => {
+  const { profile } = useAuthStore();
+  const userRole   = profile?.role;
+  const userName   = profile?.fullName || profile?.email || '';
+  const mode       = getRoleMode(userRole);
+
   const [activeView, setActiveView] = useState<ActiveView>('fabrication');
-  const [moreOpen, setMoreOpen] = useState(false);
+  const [moreOpen,   setMoreOpen]   = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -206,24 +311,68 @@ const GlasscoProductionContent: React.FC = () => {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // ── Cutter: one-window — only FabricationView, no tabs ──────────────
+  if (mode === 'cutter') {
+    return (
+      <OneWindowView
+        view="fabrication"
+        role={userRole!}
+        userName={userName}
+      />
+    );
+  }
+
+  // ── Dispatch: one-window — only DispatchView, no tabs ───────────────
+  if (mode === 'dispatch') {
+    return (
+      <OneWindowView
+        view="dispatch"
+        role={userRole!}
+        userName={userName}
+      />
+    );
+  }
+
+  // ── Supervisor: 4 tabs only ──────────────────────────────────────────
+  if (mode === 'supervisor') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', margin: '-24px' }}>
+        <style>{styles}</style>
+        <nav className="pp-nav">
+          {SUPERVISOR_TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveView(tab.id)}
+              className={`pp-tab${activeView === tab.id ? ' active' : ''}`}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+        <div className="pp-body">
+          <div className="pp-body-inner">
+            <ViewRenderer view={activeView} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Full access: all tabs + More dropdown (owner/manager/admin) ──────
   const isMoreActive = MORE_TABS.some(t => t.id === activeView);
+  const groups = Array.from(new Set(MORE_TABS.map(t => t.group)));
 
   const selectView = (id: ActiveView) => {
     setActiveView(id);
     setMoreOpen(false);
   };
 
-  // Group more tabs
-  const groups = Array.from(new Set(MORE_TABS.map(t => t.group)));
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', margin: '-24px' }}>
       <style>{styles}</style>
 
-      {/* ── Navigation ── */}
       <nav className="pp-nav">
-
-        {/* Primary tabs */}
         {PRIMARY_TABS.map(tab => (
           <button
             key={tab.id}
@@ -269,29 +418,16 @@ const GlasscoProductionContent: React.FC = () => {
         </div>
       </nav>
 
-      {/* ── Content ── */}
       <div className="pp-body">
         <div className="pp-body-inner">
-          {activeView === 'fabrication'   && <FabricationView />}
-          {activeView === 'processing'    && <ProcessingView />}
-          {activeView === 'dispatch'      && <DispatchView />}
-          {activeView === 'ncr'           && <NCRModule />}
-          {activeView === 'dashboard'     && <DashboardView />}
-          {activeView === 'floorplan'     && <ProductionFloorPlanner />}
-          {activeView === 'ai_plan'       && <AIFloorPlanAdvisor />}
-          {activeView === 'cutting'       && <CuttingIntelligenceHub />}
-          {activeView === 'cross_company' && <CrossCompanyStatusBoard />}
-          {activeView === 'performance'   && <CutterDashboard />}
-          {activeView === 'energy'        && <GeneratorLogModule />}
-          {activeView === 'labour'        && <LabourLogModule />}
-          {activeView === 'finance'       && <FinancialIntelligenceHub />}
-          {activeView === 'import'        && <DataImportTool />}
+          <ViewRenderer view={activeView} />
         </div>
       </div>
     </div>
   );
 };
 
+// ── Export ─────────────────────────────────────────────────────────────
 const GlasscoProduction: React.FC = () => (
   <ProductionProvider company="Glassco">
     <GlasscoProductionContent />
