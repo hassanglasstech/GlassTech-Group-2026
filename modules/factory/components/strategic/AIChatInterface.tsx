@@ -271,14 +271,32 @@ ${erpCtx}`;
       const PROXY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/claude-proxy`;
       const ANON_KEY  = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-      const res = await fetch(PROXY_URL, {
+      // ── Retry with exponential backoff (3 attempts) ──────────────
+      const fetchWithRetry = async (url: string, opts: RequestInit, maxRetries = 3): Promise<Response> => {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            const response = await fetch(url, opts);
+            if ((response.status === 429 || response.status === 529) && attempt < maxRetries) {
+              await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 1000));
+              continue;
+            }
+            return response;
+          } catch (netErr) {
+            if (attempt === maxRetries) throw netErr;
+            await new Promise(r => setTimeout(r, attempt * 1500));
+          }
+        }
+        throw new Error('Max retries reached');
+      };
+
+      const res = await fetchWithRetry(PROXY_URL, {
         method: 'POST',
         headers: {
           'Content-Type':  'application/json',
           'Authorization': `Bearer ${ANON_KEY}`,
         },
         body: JSON.stringify({
-          model:      'claude-sonnet-4-5',
+          model:      'claude-haiku-4-5-20251001',
           max_tokens: 1000,
           system:     systemPrompt,
           tools:      TOOL_DEFINITIONS.map(t => ({ type: 'custom' as const, ...t })),
