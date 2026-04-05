@@ -5,98 +5,9 @@ import { UserPlus, Search, Edit2, Trash2, X, Building, Phone, Save, Briefcase, F
 import { useAppStore } from '../../shared/store/appStore';
 import { toast } from 'sonner';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
+import ClientStatementModal from '../components/prints/ClientStatementModal';
 
 const PKR = (n: number) => `PKR ${Math.round(n || 0).toLocaleString('en-PK')}`;
-
-const ClientStatement: React.FC<{ client: Client; company: string; onClose: () => void }> = ({ client, company, onClose }) => {
-  const [invoices, setInvoices] = useState<any[]>([]);
-  const [receipts, setReceipts] = useState<any[]>([]);
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState(new Date().toISOString().split('T')[0]);
-
-  useEffect(() => {
-    AsyncSalesService.getInvoices().then(all =>
-      setInvoices(all.filter(i => (i as any).clientId === client.id && (i as any).company === company))
-    );
-    AsyncSalesService.getPaymentReceipts().then(all => setReceipts(all));
-  }, [client.id, company]);
-
-  const filtered = invoices.filter(i => {
-    if (from && i.date < from) return false;
-    if (to && i.date > to) return false;
-    return true;
-  });
-
-  type Row = { date: string; ref: string; description: string; debit: number; credit: number; balance: number };
-  const rows: Row[] = [];
-  let running = 0;
-  const sorted = [...filtered].sort((a, b) => a.date.localeCompare(b.date));
-  sorted.forEach(inv => {
-    running += inv.totalAmount;
-    rows.push({ date: inv.date, ref: inv.id, description: `Invoice — ${inv.orderNo || inv.orderId}`, debit: inv.totalAmount, credit: 0, balance: running });
-    const invReceipts = receipts.filter(r => r.invoiceId === inv.id).sort((a: any, b: any) => a.date.localeCompare(b.date));
-    invReceipts.forEach((r: any) => {
-      running -= r.amount;
-      rows.push({ date: r.date, ref: r.id, description: `Payment — ${r.method}${r.reference ? ' (' + r.reference + ')' : ''}`, debit: 0, credit: r.amount, balance: running });
-    });
-  });
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 600, padding: '16px' }}>
-      <div style={{ background: '#fff', borderRadius: '12px', width: '100%', maxWidth: '800px', maxHeight: '90vh', overflow: 'auto', padding: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-          <div>
-            <div style={{ fontWeight: 'bold', fontSize: '16px' }}>{client.name}</div>
-            <div style={{ fontSize: '12px', color: '#888' }}>Account Statement — {company}</div>
-          </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={{ fontSize: '12px', padding: '4px 8px', border: '1px solid #ddd', borderRadius: '6px' }} placeholder="From" />
-            <input type="date" value={to} onChange={e => setTo(e.target.value)} style={{ fontSize: '12px', padding: '4px 8px', border: '1px solid #ddd', borderRadius: '6px' }} />
-            <button onClick={() => window.print()} style={{ fontSize: '12px', padding: '6px 12px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Print</button>
-            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px' }}>×</button>
-          </div>
-        </div>
-
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-          <thead>
-            <tr style={{ background: '#f0f0f0' }}>
-              <th style={{ padding: '8px', textAlign: 'left' }}>Date</th>
-              <th style={{ padding: '8px', textAlign: 'left' }}>Reference</th>
-              <th style={{ padding: '8px', textAlign: 'left' }}>Description</th>
-              <th style={{ padding: '8px', textAlign: 'right' }}>Debit</th>
-              <th style={{ padding: '8px', textAlign: 'right' }}>Credit</th>
-              <th style={{ padding: '8px', textAlign: 'right' }}>Balance</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: '#aaa' }}>No transactions found.</td></tr>
-            )}
-            {rows.map((r, i) => (
-              <tr key={i} style={{ borderBottom: '0.5px solid #eee', background: r.credit > 0 ? '#f0fff4' : '#fff' }}>
-                <td style={{ padding: '7px 8px' }}>{r.date}</td>
-                <td style={{ padding: '7px 8px', fontFamily: 'monospace', fontSize: '11px' }}>{r.ref}</td>
-                <td style={{ padding: '7px 8px' }}>{r.description}</td>
-                <td style={{ padding: '7px 8px', textAlign: 'right', color: r.debit > 0 ? '#c00' : '#aaa' }}>{r.debit > 0 ? PKR(r.debit) : '—'}</td>
-                <td style={{ padding: '7px 8px', textAlign: 'right', color: r.credit > 0 ? '#090' : '#aaa' }}>{r.credit > 0 ? PKR(r.credit) : '—'}</td>
-                <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 'bold', color: r.balance > 0 ? '#c00' : '#090' }}>{PKR(r.balance)}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr style={{ background: '#1a1a1a', color: '#fff' }}>
-              <td colSpan={3} style={{ padding: '8px', fontWeight: 'bold' }}>Closing Balance</td>
-              <td style={{ padding: '8px', textAlign: 'right' }}>{PKR(rows.reduce((s, r) => s + r.debit, 0))}</td>
-              <td style={{ padding: '8px', textAlign: 'right' }}>{PKR(rows.reduce((s, r) => s + r.credit, 0))}</td>
-              <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>{PKR(rows[rows.length - 1]?.balance || 0)}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </div>
-  );
-};
-
 const ClientMaster: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
   const [clients, setClients] = useState<Client[]>([]);
@@ -243,7 +154,12 @@ const ClientMaster: React.FC = () => {
       </div>
 
       {statementClient && (
-        <ClientStatement client={statementClient} company={company} onClose={() => setStatementClient(null)} />
+        <ClientStatementModal
+          clientId={statementClient.id}
+          clientName={statementClient.name}
+          company={company}
+          onClose={() => setStatementClient(null)}
+        />
       )}
 
       {isModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">

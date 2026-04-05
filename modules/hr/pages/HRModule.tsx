@@ -4,19 +4,21 @@ import EmployeeManagement from './EmployeeManagement';
 import AttendanceRegister from './AttendanceRegister';
 import LoanManagement from './LoanManagement';
 import PayrollManagement from './PayrollManagement';
+import LeaveManagement from './LeaveManagement';
 import TagManager from './TagManager';
 import ShiftMaster from './ShiftMaster';
-import { Users, ClipboardCheck, Landmark, CreditCard, Settings } from 'lucide-react';
+import { Users, ClipboardCheck, Landmark, CreditCard, Settings, CalendarDays } from 'lucide-react';
 
 const HRModule: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'registry' | 'attendance' | 'loans' | 'payroll' | 'settings'>('registry');
+  const [activeTab, setActiveTab] = useState<'registry' | 'attendance' | 'loans' | 'payroll' | 'leave' | 'settings'>('registry');
 
   const tabs = [
-    { id: 'registry', label: 'Registry', icon: Users },
-    { id: 'attendance', label: 'Attendance', icon: ClipboardCheck },
-    { id: 'loans', label: 'Loans', icon: Landmark },
-    { id: 'payroll', label: 'Payroll', icon: CreditCard },
+    { id: 'registry',    label: 'Registry',    icon: Users },
+    { id: 'attendance',  label: 'Attendance',  icon: ClipboardCheck },
+    { id: 'leave',       label: 'Leave',        icon: CalendarDays },
+    { id: 'loans',       label: 'Loans',        icon: Landmark },
+    { id: 'payroll',     label: 'Payroll',      icon: CreditCard },
   ];
 
   return (
@@ -44,11 +46,12 @@ const HRModule: React.FC = () => {
           <Settings size={18} />
         </button>
       </div>
-      {activeTab === 'registry' && <EmployeeManagement company={company} />}
+      {activeTab === 'registry'   && <EmployeeManagement company={company} />}
       {activeTab === 'attendance' && <AttendanceRegister company={company} />}
-      {activeTab === 'loans' && <LoanManagement company={company} />}
-      {activeTab === 'payroll' && <PayrollManagement company={company} />}
-      {activeTab === 'settings' && (
+      {activeTab === 'leave'      && <LeaveManagement company={company} />}
+      {activeTab === 'loans'      && <LoanManagement company={company} />}
+      {activeTab === 'payroll'    && <PayrollManagement company={company} />}
+      {activeTab === 'settings'   && (
         <div className="space-y-8">
           <TagManager />
           <hr className="border-slate-200"/>
