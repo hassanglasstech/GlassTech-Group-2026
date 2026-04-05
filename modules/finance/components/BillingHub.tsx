@@ -1,5 +1,13 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import 
+          <button
+            onClick={() => setActiveView('credit_notes')}
+            className={`flex items-center gap-2 px-5 py-3 text-xs font-bold uppercase tracking-widest border-b-2 transition-all whitespace-nowrap ${
+              activeView === 'credit_notes' ? 'border-purple-500 text-purple-600 bg-purple-50' : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <FileMinus size={14}/> Credit Notes
+          </button>React, { useState, useEffect, useMemo } from 'react';
 import { useDebounce } from '@/modules/shared/hooks/useDebounce';
 import { Company, Quotation, ProductionPiece, LedgerTransaction, Invoice, PaymentReceipt } from '../../shared/types';
 import { FinanceService } from '../services/financeService';
@@ -7,15 +15,20 @@ import { SalesService } from '../../sales/services/salesService';
 import { AsyncSalesService } from '../../sales/services/asyncSalesService';
 import { ProductionService } from '../../production/services/productionService';
 import { generateDeliveryInvoice } from '@/modules/sales/services/deliveryInvoiceService';
+import { voidInvoice } from '@/modules/sales/services/creditNoteService';
+import CreditNoteModule from '@/modules/finance/components/CreditNoteModule';
 import SalesInvoicePrint from '@/modules/sales/components/prints/SalesInvoicePrint';
 import { 
   FileText, CheckCircle2, Ban, ArrowRightLeft, DollarSign, Search,
-  Receipt, XCircle, X, Save, Banknote, AlertCircle, Clock, Eye, CreditCard, Printer
+  Receipt, XCircle, X, Save, Banknote, AlertCircle, Clock, Eye, CreditCard, Printer, FileMinus, Slash
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
-  const [activeView, setActiveView] = useState<'billing' | 'receivables' | 'receipts'>('billing');
+  const { user } = useAuthStore();
+  const actor = user?.fullName || user?.email || 'System';
+  const [activeView, setActiveView] = useState<'billing' | 'receivables' | 'receipts' | 'credit_notes'>('billing');
   const [orders, setOrders] = useState<Quotation[]>([]);
   const [pieces, setPieces] = useState<ProductionPiece[]>([]);
   const [clients, setClients] = useState<any[]>([]);
@@ -33,6 +46,7 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
 
   // Print modal
   const [printInvoice, setPrintInvoice] = useState<any | null>(null);
+  const [voidingId, setVoidingId] = useState<string | null>(null);
 
   useEffect(() => {
     refreshData();
@@ -117,6 +131,21 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
     } catch (err) {
       console.error('[BillingHub] Invoice generation failed:', err);
       toast.error('Invoice generation failed.');
+    }
+  };
+
+
+  // ── VOID INVOICE (BA-01) ─────────────────────────────────────────
+  const handleVoidInvoice = async (invoice: Invoice) => {
+    setVoidingId(invoice.id);
+    try {
+      await voidInvoice({ invoice, company, voidedBy: actor });
+      toast.success(`Invoice ${invoice.id} voided — GL reversal posted.`);
+      refreshData();
+    } catch (e: any) {
+      toast.error(e.message || 'Void failed.');
+    } finally {
+      setVoidingId(null);
     }
   };
 
@@ -393,6 +422,19 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
                     </td>
                     <td className="px-6 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        <button
+                          title="Void Invoice"
+                          disabled={voidingId === inv.id || (inv.receivedAmount || 0) > 0}
+                          onClick={async () => {
+                            const ok = await confirmModal(
+                              `Void invoice ${inv.id}?\n\nThis will reverse the GL entry and allow re-invoicing. Cannot be undone.`
+                            );
+                            if (ok) handleVoidInvoice(inv);
+                          }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-30"
+                        >
+                          <Slash size={14}/>
+                        </button>
                         <button onClick={() => setPrintInvoice(inv)}
                           className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
                           <Printer size={14}/>
@@ -547,6 +589,12 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
             </div>
           </div>
         </div>
+      )}
+
+
+      {/* Credit Notes Tab */}
+      {activeView === 'credit_notes' && (
+        <CreditNoteModule company={company} />
       )}
 
       {/* ═══ INVOICE PRINT ═══ */}

@@ -19,6 +19,7 @@ import AdvanceTracker from '@/modules/procurement/components/inventory/AdvanceTr
 import OpeningBalance from '@/modules/procurement/components/inventory/OpeningBalance';
 import GRNRegister from '@/modules/procurement/components/inventory/GRNRegister';
 import WeightMaster from '@/modules/procurement/components/inventory/WeightMaster';
+import PurchaseReturnModule from '@/modules/procurement/components/inventory/PurchaseReturnModule';
 import GlasscoMRP from '@/modules/procurement/components/inventory/GlasscoMRP';
 import { 
   LayoutGrid, ArrowUpRight, ShieldCheck, Truck, Database, Loader2, Layers, BarChart3, Wrench, Banknote, PackageOpen, ClipboardList, Scale, TrendingDown
@@ -26,7 +27,7 @@ import {
 
 const InventoryModule: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'overview' | 'master' | 'issuance' | 'migo' | 'quality' | 'remnants' | 'consumption' | 'tools' | 'advances' | 'opening' | 'grnRegister' | 'weightMaster' | 'mrp'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'master' | 'issuance' | 'migo' | 'quality' | 'remnants' | 'consumption' | 'tools' | 'advances' | 'opening' | 'grnRegister' | 'weightMaster' | 'mrp' | 'purchase_return'>('overview');
   const [isLoading, setIsLoading] = useState(true);
   
   const [items, setItems] = useState<StoreItem[]>([]);
@@ -175,6 +176,10 @@ const InventoryModule: React.FC = () => {
         <div className="animate-in fade-in duration-300">
           <GRNRegister />
         </div>
+      )}
+
+      {activeTab === 'purchase_return' && (
+        <PurchaseReturnModule company={company} />
       )}
 
       {activeTab === 'mrp' && (

@@ -130,7 +130,9 @@ export interface Invoice {
   totalAmount: number;
   receivedAmount: number;
   balance: number;
-  status: 'Outstanding' | 'Partial' | 'Paid' | 'Overdue';
+  status: 'Outstanding' | 'Partial' | 'Paid' | 'Overdue' | 'Voided';
+  voidedBy?:  string;
+  voidedAt?:  string;
   glTxId: string;
   payments: PaymentReceipt[];
 }
