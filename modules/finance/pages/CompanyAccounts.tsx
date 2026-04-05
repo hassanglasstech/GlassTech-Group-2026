@@ -17,13 +17,13 @@ import GLConfiguration from '@/modules/finance/components/GLConfiguration';
 import FinanceDashboardView from '@/modules/finance/components/FinanceDashboardView';
 import AssetManagement from '@/modules/finance/components/AssetManagement';
 import ReportsHub from '@/modules/finance/pages/ReportsHub';
+import BudgetMaster from '@/modules/finance/components/BudgetMaster';
+import CashFlowDashboard from '@/modules/finance/components/CashFlowDashboard';
 import InventoryValuationReport from '@/modules/finance/pages/InventoryValuationReport';
-import CMADashboard from '@/modules/finance/components/CMADashboard';
-import CAIntegrityDashboard from '@/modules/finance/components/CAIntegrityDashboard';
 import { 
   Landmark, CreditCard, ListTree, BookOpen, BarChart4, 
   FilePieChart, Target, Wallet, RefreshCw, FileText, 
-  Inbox, Settings, Clock, Briefcase, Users, BarChart3, Package, ShieldCheck, Lock, PieChart, AlertCircle
+  Inbox, Settings, Clock, Briefcase, Users, BarChart3, Package, ShieldCheck, Lock, BarChart2, Activity
 } from 'lucide-react';
 
 type CategoryKey = 'ops' | 'reporting' | 'hr' | 'assets' | 'config';
@@ -39,6 +39,7 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
         icon: Briefcase,
         tabs: [
           { id: 'dashboard', label: 'Finance Dashboard', icon: BarChart3 },
+          { id: 'cash_flow', label: 'Cash Flow Forecast', icon: Activity },
           { id: 'registry', label: 'Event Registry', icon: Inbox },
           { id: 'cash_journal', label: 'Cash Journal', icon: Wallet },
           { id: 'ledger', label: 'General Ledger', icon: BookOpen },
@@ -53,8 +54,6 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
           { id: 'reports_hub',  label: 'Reports Hub',           icon: FilePieChart },
           { id: 'inv_valuation',label: 'Inventory Valuation',   icon: Package },
           { id: 'bank_recon',   label: 'Bank Reconciliation',   icon: Landmark },
-          { id: 'cma_dashboard', label: 'CMA Dashboard',          icon: PieChart },
-          { id: 'ca_integrity',  label: 'CA Integrity',            icon: AlertCircle },
         ]
       },
       hr: {
@@ -150,14 +149,14 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
           {activeTab === 'cash_journal' && <PettyCashBook company={company} />}
           {activeTab === 'ledger' && <GeneralLedger company={company} />}
           {activeTab === 'billing' && <BillingHub company={company} />}
-          {activeTab === 'matching' && <ThreeWayMatching company={company} />}
+          {activeTab === 'matching'      && <ThreeWayMatching company={company} />}
+          {activeTab === 'budget_master'  && <BudgetMaster company={company} />}
+          {activeTab === 'cash_flow'      && <CashFlowDashboard company={company} />}
           
           {/* Reporting */}
           {activeTab === 'reports_hub'   && <ReportsHub company={company} />}
           {activeTab === 'inv_valuation' && <InventoryValuationReport company={company} />}
-          {activeTab === 'bank_recon'    && <BankReconciliation company={company} />}
-          {activeTab === 'cma_dashboard' && <CMADashboard company={company} />}
-          {activeTab === 'ca_integrity'  && <CAIntegrityDashboard company={company} />}
+          {activeTab === 'bank_recon' && <BankReconciliation company={company} />}
           
           {/* HR Finance */}
           {activeTab === 'loans' && <LoanManagement company={company} />}
