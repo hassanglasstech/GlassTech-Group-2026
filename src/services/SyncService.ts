@@ -163,7 +163,7 @@ const LOCAL_ONLY_TABLES = new Set(['activity_logs']);
 // ── Known columns per table (only send what DB expects) ──────────────
 const TABLE_COLUMNS: Record<string, string[]> = {
   ledger:    ['id', 'company', 'doc_type', 'doc_date', 'date', 'description', 'reference_id', 'status', 'details', 'updated_at'],
-  petty_cash: ['id', 'company', 'date', 'type', 'amount', 'description', 'reference_doc', 'created_at'],
+  petty_cash: ['id', 'company', 'date', 'type', 'amount', 'description', 'reference_doc', 'updated_at'],
   employees: ['id', 'company', 'name', 'personal', 'work', 'salary', 'basic', 'house_rent', 'conveyance', 'special_allowance', 'department', 'department_id', 'designation', 'grade', 'join_date', 'employee_code', 'status', 'address', 'phone', 'cnic', 'updated_at'],
   assets:    ['id', 'company', 'name', 'category', 'serial_no', 'purchase_date', 'purchase_cost', 'useful_life', 'status', 'location', 'assigned_to', 'depreciation_method', 'maintenance_logs', 'notes', 'updated_at'],
 };
