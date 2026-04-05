@@ -42,20 +42,78 @@ interface GTKVendor extends Vendor {
   lastPODate?: string;
 }
 
-// ── Storage ───────────────────────────────────────────────────────────
+// ── Storage — Supabase primary, localStorage cache ────────────────────
+import { supabase } from '@/src/services/supabaseClient';
+
 const VENDOR_RATES_KEY = 'gtk_erp_vendor_rates';
+
 const getVendorRates = (vendorId: string): GTKVendorRate[] => {
   try {
     const all: Record<string, GTKVendorRate[]> = JSON.parse(localStorage.getItem(VENDOR_RATES_KEY) || '{}');
     return all[vendorId] || [];
   } catch { return []; }
 };
-const saveVendorRates = (vendorId: string, rates: GTKVendorRate[]) => {
+
+const loadVendorRatesFromSupabase = async (vendorId: string): Promise<GTKVendorRate[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('vendor_rates')
+      .select('*')
+      .eq('vendor_id', vendorId)
+      .order('effective_date', { ascending: false });
+
+    if (error || !data) return getVendorRates(vendorId);
+
+    const mapped: GTKVendorRate[] = data.map((r: any) => ({
+      id:            r.id,
+      itemName:      r.data?.itemName  || r.notes || '',
+      category:      r.data?.category  || 'General',
+      unit:          r.data?.unit      || 'PCS',
+      agreedRate:    Number(r.rate     || r.data?.agreedRate || 0),
+      effectiveDate: r.effective_date  || '',
+      expiryDate:    r.data?.expiryDate,
+      notes:         r.notes,
+    }));
+
+    // Update local cache
+    const all: Record<string, GTKVendorRate[]> = JSON.parse(localStorage.getItem(VENDOR_RATES_KEY) || '{}');
+    all[vendorId] = mapped;
+    localStorage.setItem(VENDOR_RATES_KEY, JSON.stringify(all));
+    return mapped;
+  } catch {
+    return getVendorRates(vendorId);
+  }
+};
+
+const saveVendorRates = async (vendorId: string, rates: GTKVendorRate[]): Promise<void> => {
+  // Update local cache immediately
   try {
     const all: Record<string, GTKVendorRate[]> = JSON.parse(localStorage.getItem(VENDOR_RATES_KEY) || '{}');
     all[vendorId] = rates;
     localStorage.setItem(VENDOR_RATES_KEY, JSON.stringify(all));
   } catch {}
+
+  // Persist to Supabase
+  try {
+    // Delete existing rates for this vendor, then upsert new ones
+    await supabase.from('vendor_rates').delete().eq('vendor_id', vendorId);
+    if (rates.length > 0) {
+      const rows = rates.map(r => ({
+        id:             r.id,
+        company:        'GTK',
+        vendor_id:      vendorId,
+        product_id:     null,
+        rate:           r.agreedRate,
+        effective_date: r.effectiveDate,
+        notes:          r.notes || null,
+        data:           r,
+        updated_at:     new Date().toISOString(),
+      }));
+      await supabase.from('vendor_rates').insert(rows);
+    }
+  } catch (e) {
+    console.warn('GTKVendorHub: Supabase rate save failed', e);
+  }
 };
 
 // ── Constants ─────────────────────────────────────────────────────────
@@ -158,9 +216,11 @@ const GTKVendorHub: React.FC<{ company: string }> = ({ company }) => {
     effectiveDate: new Date().toISOString().split('T')[0], notes: '',
   });
 
-  const openRateCard = (vendor: Vendor) => {
+  const openRateCard = async (vendor: Vendor) => {
     setShowRateCard(vendor);
-    setRates(getVendorRates(vendor.id));
+    setRates(getVendorRates(vendor.id)); // show cache immediately
+    const fresh = await loadVendorRatesFromSupabase(vendor.id);
+    setRates(fresh);
   };
 
   const handleAddRate = () => {
@@ -176,7 +236,7 @@ const GTKVendorHub: React.FC<{ company: string }> = ({ company }) => {
     };
     const updated = [...rates, newRate];
     setRates(updated);
-    saveVendorRates(showRateCard!.id, updated);
+    await saveVendorRates(showRateCard!.id, updated);
     toast.success(`Rate added: ${newRate.itemName} @ PKR ${newRate.agreedRate}/${newRate.unit}`);
     setRateForm({ itemName: '', category: 'Hardware', unit: 'PCS', agreedRate: 0,
       effectiveDate: new Date().toISOString().split('T')[0], notes: '' });
@@ -185,7 +245,7 @@ const GTKVendorHub: React.FC<{ company: string }> = ({ company }) => {
   const handleDeleteRate = (rateId: string) => {
     const updated = rates.filter(r => r.id !== rateId);
     setRates(updated);
-    if (showRateCard) saveVendorRates(showRateCard.id, updated);
+    if (showRateCard) await saveVendorRates(showRateCard.id, updated);
   };
 
   // ═══════════════════════════════════════════════════════════════════

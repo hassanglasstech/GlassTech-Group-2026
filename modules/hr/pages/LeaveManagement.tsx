@@ -57,8 +57,40 @@ const ENTITLEMENTS: Record<LeaveType, number> = {
 // ── Storage key ───────────────────────────────────────────────────────
 const KEY = (company: Company) => `gtk_erp_leave_applications_${company}`;
 
-const _load = (company: Company): LeaveApplication[] => {
-  try { return JSON.parse(localStorage.getItem(KEY(company)) || '[]'); } catch { return []; }
+const _load = async (company: Company): Promise<LeaveApplication[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('leave_applications')
+      .select('*')
+      .eq('company', company)
+      .order('applied_at', { ascending: false });
+
+    if (error || !data) throw error;
+
+    const mapped: LeaveApplication[] = data.map((r: any) => ({
+      id:           r.id,
+      company:      r.company,
+      employeeId:   r.employee_id,
+      employeeName: r.employee_name,
+      type:         r.type,
+      from:         r.from_date,
+      to:           r.to_date,
+      days:         r.days,
+      reason:       r.reason,
+      status:       r.status,
+      appliedAt:    r.applied_at,
+      reviewedBy:   r.reviewed_by  ?? undefined,
+      reviewedAt:   r.reviewed_at  ?? undefined,
+      reviewNote:   r.review_note  ?? undefined,
+    }));
+
+    // Keep local cache in sync
+    localStorage.setItem(KEY(company), JSON.stringify(mapped));
+    return mapped;
+  } catch {
+    // Fallback to localStorage cache
+    try { return JSON.parse(localStorage.getItem(KEY(company)) || '[]'); } catch { return []; }
+  }
 };
 
 const _save = async (company: Company, data: LeaveApplication[]): Promise<void> => {
@@ -144,8 +176,9 @@ const LeaveManagement: React.FC<{ company: Company }> = ({ company }) => {
     reason: '',
   });
 
-  const load = () => {
-    setApplications(_load(company));
+  const load = async () => {
+    const apps = await _load(company);
+    setApplications(apps);
     setEmployees(HRService.getEmployees().filter(e => e.company === company));
   };
   useEffect(() => { load(); }, [company]);

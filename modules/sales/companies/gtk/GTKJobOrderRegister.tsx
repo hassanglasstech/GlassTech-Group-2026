@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { GTKJobOrder, getGTKJobOrders } from '@/modules/sales/services/gtkJobOrderService';
-import { Package, Layers, ChevronDown, ChevronRight, Printer, CheckCircle2, Clock, XCircle, PlayCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { GTKJobOrder, getGTKJobOrders, updateJobOrderStatus } from '@/modules/sales/services/gtkJobOrderService';
+import { Package, Layers, ChevronDown, ChevronRight, Printer, RefreshCw } from 'lucide-react';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { Company } from '@/modules/shared/types/core';
-import { supabase } from '@/src/services/supabaseClient';
 import { toast } from 'sonner';
 
 const STATUS_STYLES: Record<string, string> = {
@@ -15,28 +14,31 @@ const STATUS_STYLES: Record<string, string> = {
 
 const GTKJobOrderRegister: React.FC = () => {
   const company = useAppStore(s => s.selectedCompany) as Company;
-  const [orders, setOrders] = useState<GTKJobOrder[]>([]);
+  const [orders,   setOrders]   = useState<GTKJobOrder[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [view, setView] = useState<'list' | 'bom'>('list');
+  const [view,     setView]     = useState<'list' | 'bom'>('list');
+  const [loading,  setLoading]  = useState(false);
 
-  const load = () => setOrders(getGTKJobOrders(company));
-  useEffect(() => { load(); }, [company]);
-
-  const updateStatus = (id: string, status: GTKJobOrder['status']) => {
-    const all: GTKJobOrder[] = JSON.parse(localStorage.getItem('gtk_erp_gtk_job_orders') || '[]');
-    const idx = all.findIndex(j => j.id === id);
-    if (idx !== -1) {
-      all[idx].status = status;
-      localStorage.setItem('gtk_erp_gtk_job_orders', JSON.stringify(all));
-      supabase.from('job_orders').update({ data: all[idx], updated_at: new Date().toISOString() }).eq('id', id)
-        .then(({ error }) => { if (error) toast.error('Supabase sync failed.'); });
-      load();
-      toast.success(`Job ${id} → ${status}`);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getGTKJobOrders(company);
+      setOrders(data);
+    } finally {
+      setLoading(false);
     }
+  }, [company]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleStatusUpdate = async (id: string, status: GTKJobOrder['status']) => {
+    await updateJobOrderStatus(id, status);
+    setOrders(prev => prev.map(jo => jo.id === id ? { ...jo, status } : jo));
+    toast.success(`Job ${id} → ${status}`);
   };
 
-  const openCount = orders.filter(o => o.status === 'Open').length;
-  const inProgCount = orders.filter(o => o.status === 'In Progress').length;
+  const openCount    = orders.filter(o => o.status === 'Open').length;
+  const inProgCount  = orders.filter(o => o.status === 'In Progress').length;
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
@@ -49,9 +51,14 @@ const GTKJobOrderRegister: React.FC = () => {
             <h2 className="text-2xl font-black uppercase tracking-tight">GTK Job Order Register</h2>
             <p className="text-[10px] font-bold text-blue-300 uppercase tracking-widest mt-1">Production — {company}</p>
           </div>
-          <div className="flex gap-8 text-right">
-            <div><p className="text-[9px] font-bold text-blue-300 uppercase">Open</p><p className="text-3xl font-black text-blue-200">{openCount}</p></div>
-            <div><p className="text-[9px] font-bold text-amber-300 uppercase">In Progress</p><p className="text-3xl font-black text-amber-200">{inProgCount}</p></div>
+          <div className="flex items-center gap-8">
+            <div className="flex gap-8 text-right">
+              <div><p className="text-[9px] font-bold text-blue-300 uppercase">Open</p><p className="text-3xl font-black text-blue-200">{openCount}</p></div>
+              <div><p className="text-[9px] font-bold text-amber-300 uppercase">In Progress</p><p className="text-3xl font-black text-amber-200">{inProgCount}</p></div>
+            </div>
+            <button onClick={load} disabled={loading} className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors">
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''}/>
+            </button>
           </div>
         </div>
       </div>
@@ -66,8 +73,15 @@ const GTKJobOrderRegister: React.FC = () => {
         </button>
       </div>
 
+      {/* Loading */}
+      {loading && (
+        <div className="bg-white rounded-2xl border p-8 text-center text-slate-400 text-xs font-bold uppercase animate-pulse">
+          Loading from Supabase…
+        </div>
+      )}
+
       {/* ── JOB ORDER LIST ── */}
-      {view === 'list' && (
+      {!loading && view === 'list' && (
         <div className="space-y-3">
           {orders.length === 0 && (
             <div className="bg-white rounded-2xl border p-16 text-center text-slate-300 font-bold uppercase text-xs italic">
@@ -76,7 +90,6 @@ const GTKJobOrderRegister: React.FC = () => {
           )}
           {orders.map(jo => (
             <div key={jo.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              {/* Row header */}
               <div
                 className="flex items-center gap-4 px-6 py-4 cursor-pointer hover:bg-slate-50"
                 onClick={() => setExpanded(expanded === jo.id ? null : jo.id)}
@@ -114,16 +127,14 @@ const GTKJobOrderRegister: React.FC = () => {
                 </div>
               </div>
 
-              {/* Expanded detail */}
               {expanded === jo.id && (
                 <div className="border-t border-slate-100 bg-slate-50">
-                  {/* Status actions */}
                   <div className="px-6 py-3 flex items-center gap-2 border-b border-slate-200 bg-white">
                     <span className="text-[10px] font-black uppercase text-slate-400 mr-2">Update Status:</span>
                     {(['Open', 'In Progress', 'Completed', 'Cancelled'] as GTKJobOrder['status'][]).map(s => (
                       <button
                         key={s}
-                        onClick={() => updateStatus(jo.id, s)}
+                        onClick={() => handleStatusUpdate(jo.id, s)}
                         disabled={jo.status === s}
                         className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border transition-all ${
                           jo.status === s
@@ -135,8 +146,6 @@ const GTKJobOrderRegister: React.FC = () => {
                       </button>
                     ))}
                   </div>
-
-                  {/* Items table */}
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead className="bg-slate-100 border-b border-slate-200">
@@ -180,7 +189,7 @@ const GTKJobOrderRegister: React.FC = () => {
       )}
 
       {/* ── BOM SUMMARY ── */}
-      {view === 'bom' && (
+      {!loading && view === 'bom' && (
         <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b bg-slate-50">
             <h3 className="font-black uppercase text-slate-700 text-sm">Consolidated BOM — All Open Job Orders</h3>
@@ -201,25 +210,15 @@ const GTKJobOrderRegister: React.FC = () => {
                 const merged: Record<string, { qty: number; unit: string; jobs: string[] }> = {};
                 for (const jo of active) {
                   for (const line of jo.bom) {
-                    if (!merged[line.description]) {
-                      merged[line.description] = { qty: 0, unit: line.unit, jobs: [] };
-                    }
+                    if (!merged[line.description]) merged[line.description] = { qty: 0, unit: line.unit, jobs: [] };
                     merged[line.description].qty += line.qty;
-                    if (!merged[line.description].jobs.includes(jo.id)) {
-                      merged[line.description].jobs.push(jo.id);
-                    }
+                    if (!merged[line.description].jobs.includes(jo.id)) merged[line.description].jobs.push(jo.id);
                   }
                 }
                 const rows = Object.entries(merged);
-                if (rows.length === 0) {
-                  return (
-                    <tr>
-                      <td colSpan={4} className="text-center py-12 text-slate-300 font-bold uppercase text-xs italic">
-                        No active job orders.
-                      </td>
-                    </tr>
-                  );
-                }
+                if (rows.length === 0) return (
+                  <tr><td colSpan={4} className="text-center py-12 text-slate-300 font-bold uppercase text-xs italic">No active job orders.</td></tr>
+                );
                 return rows.map(([desc, data]) => (
                   <tr key={desc} className="hover:bg-slate-50">
                     <td className="px-6 py-3 font-bold text-slate-800">{desc}</td>

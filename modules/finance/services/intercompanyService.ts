@@ -1,12 +1,7 @@
 /**
- * intercompanyService.ts — Phase 6
- *
- * Automated dual-company GL posting for intercompany transfers.
- * When GlassCo sells glass to GTK:
- *   GlassCo: Dr Intercompany Receivable / Cr Revenue (or Inventory)
- *   GTK:     Dr Raw Material Inventory / Cr Intercompany Payable
- *
- * All transfers are logged in localStorage + Supabase.
+ * intercompanyService.ts — Phase 2 Migration
+ * SUPABASE-PRIMARY. localStorage = offline fallback only.
+ * intercompany_transfers table added in migration 005.
  */
 
 import { Company } from '@/modules/shared/types/core';
@@ -42,12 +37,27 @@ export interface IntercompanyTransfer {
 
 const ICO_KEY = 'gtk_erp_intercompany_transfers';
 
-const _load = (): IntercompanyTransfer[] => {
-  try { return JSON.parse(localStorage.getItem(ICO_KEY) || '[]'); } catch { return []; }
-};
-const _save = (data: IntercompanyTransfer[]) => localStorage.setItem(ICO_KEY, JSON.stringify(data));
+// ── Local fallback helpers ────────────────────────────────────────────
+const getLocal  = (): IntercompanyTransfer[] => { try { return JSON.parse(localStorage.getItem(ICO_KEY) || '[]'); } catch { return []; } };
+const saveLocal = (d: IntercompanyTransfer[]) => { try { localStorage.setItem(ICO_KEY, JSON.stringify(d)); } catch {} };
 
-// ── GL account codes per transfer type (from company side) ────────────
+const rowToTransfer = (r: any): IntercompanyTransfer => ({
+  id:           r.id,
+  fromCompany:  r.from_company,
+  toCompany:    r.to_company,
+  type:         r.type,
+  amount:       Number(r.amount || 0),
+  description:  r.description || '',
+  date:         r.date || '',
+  fromGLTxId:   r.from_gl_tx_id || '',
+  toGLTxId:     r.to_gl_tx_id   || '',
+  status:       r.status || 'Posted',
+  postedBy:     r.posted_by || '',
+  createdAt:    r.created_at || new Date().toISOString(),
+  referenceDoc: r.reference_doc ?? undefined,
+});
+
+// ── GL account maps (unchanged) ───────────────────────────────────────
 const FROM_ACCOUNTS: Record<TransferType, { debit: [string,string]; credit: [string,string] }> = {
   'Glass Supply':       { debit: ['122', 'Intercompany Receivable'],    credit: ['41110', 'Service Income'] },
   'Aluminium Supply':   { debit: ['122', 'Intercompany Receivable'],    credit: ['41110', 'Service Income'] },
@@ -70,41 +80,34 @@ const ensureIcoAccounts = (company: Company, side: 'from' | 'to', type: Transfer
   const map = side === 'from' ? FROM_ACCOUNTS[type] : TO_ACCOUNTS[type];
   const [dCode, dName] = map.debit;
   const [cCode, cName] = map.credit;
-
-  // Ensure parent hierarchy for intercompany accounts
   if (side === 'from') {
-    const arParent  = FinanceService.ensureAccount(company, 'CURRENT ASSETS',          2, null, 'Asset', '11');
-    const arCtrl    = FinanceService.ensureAccount(company, 'TRADE RECEIVABLES',        3, arParent.id, 'Asset', '12');
+    const arParent = FinanceService.ensureAccount(company, 'CURRENT ASSETS',   2, null, 'Asset', '11');
+    const arCtrl   = FinanceService.ensureAccount(company, 'TRADE RECEIVABLES', 3, arParent.id, 'Asset', '12');
     FinanceService.ensureAccount(company, 'INTERCOMPANY RECEIVABLE', 4, arCtrl.id, 'Asset', '1220');
   } else {
-    const liabParent = FinanceService.ensureAccount(company, 'CURRENT LIABILITIES',    2, null, 'Liability', '22');
+    const liabParent = FinanceService.ensureAccount(company, 'CURRENT LIABILITIES', 2, null, 'Liability', '22');
     FinanceService.ensureAccount(company, 'INTERCOMPANY PAYABLE', 3, liabParent.id, 'Liability', '2210');
   }
-
   const debitAcc  = FinanceService.ensureAccount(company, dName, 5, null, side === 'from' ? 'Asset' : 'Asset',   dCode);
   const creditAcc = FinanceService.ensureAccount(company, cName, 5, null, side === 'from' ? 'Revenue' : 'Liability', cCode);
   return { debitAcc, creditAcc };
 };
 
-// ── Post transfer — both companies simultaneously ─────────────────────
+// ── Post transfer ─────────────────────────────────────────────────────
 export async function postIntercompanyTransfer(params: {
-  fromCompany: Company;
-  toCompany:   Company;
-  type:        TransferType;
-  amount:      number;
-  description: string;
-  date:        string;
-  postedBy:    string;
-  referenceDoc?: string;
+  fromCompany: Company; toCompany: Company; type: TransferType;
+  amount: number; description: string; date: string;
+  postedBy: string; referenceDoc?: string;
 }): Promise<IntercompanyTransfer> {
   const { fromCompany, toCompany, type, amount, description, date, postedBy, referenceDoc } = params;
 
-  const id = `ICO-${Date.now().toString().slice(-8)}`;
+  const id        = `ICO-${Date.now().toString().slice(-8)}`;
   const fromGLTxId = `GL-${id}-FROM`;
   const toGLTxId   = `GL-${id}-TO`;
 
-  // ── FROM company GL entry ─────────────────────────────────────────
   const fromAccs = ensureIcoAccounts(fromCompany, 'from', type);
+  const toAccs   = ensureIcoAccounts(toCompany,   'to',   type);
+
   const fromTx: LedgerTransaction = {
     id: fromGLTxId, company: fromCompany, docType: 'JV' as LedgerDocType,
     docDate: date, date,
@@ -115,9 +118,6 @@ export async function postIntercompanyTransfer(params: {
       { accountId: fromAccs.creditAcc.id, debit: 0,      credit: amount, text: `${type} supplied to ${toCompany}` },
     ],
   };
-
-  // ── TO company GL entry ───────────────────────────────────────────
-  const toAccs = ensureIcoAccounts(toCompany, 'to', type);
   const toTx: LedgerTransaction = {
     id: toGLTxId, company: toCompany, docType: 'JV' as LedgerDocType,
     docDate: date, date,
@@ -129,91 +129,117 @@ export async function postIntercompanyTransfer(params: {
     ],
   };
 
-  // Post both in sequence — get current ledger, append both, save once
   const ledger = FinanceService.getLedger();
   ledger.push(fromTx, toTx);
   FinanceService.saveLedger(ledger);
 
-  // ── Log transfer ──────────────────────────────────────────────────
   const transfer: IntercompanyTransfer = {
     id, fromCompany, toCompany, type, amount, description, date,
     fromGLTxId, toGLTxId, status: 'Posted', postedBy,
     createdAt: new Date().toISOString(), referenceDoc,
   };
-  const all = _load();
-  all.push(transfer);
-  _save(all);
 
-  // Supabase persist
+  // ── Supabase PRIMARY write ────────────────────────────────────────
   try {
-    await supabase.from('intercompany_transfers').upsert([{
-      id, from_company: fromCompany, to_company: toCompany, type, amount,
-      description, date, from_gl_tx_id: fromGLTxId, to_gl_tx_id: toGLTxId,
-      status: 'Posted', posted_by: postedBy, reference_doc: referenceDoc || null,
-      updated_at: new Date().toISOString(),
+    const { error } = await supabase.from('intercompany_transfers').upsert([{
+      id,
+      from_company:   fromCompany,
+      to_company:     toCompany,
+      type,
+      amount,
+      description,
+      date,
+      from_gl_tx_id:  fromGLTxId,
+      to_gl_tx_id:    toGLTxId,
+      status:         'Posted',
+      posted_by:      postedBy,
+      reference_doc:  referenceDoc || null,
+      updated_at:     new Date().toISOString(),
     }]);
+    if (error) Logger.warn('IntercompanyService', 'Supabase write failed', error);
   } catch (e) {
-    Logger.warn('IntercompanyService', 'Supabase persist failed', e);
+    Logger.warn('IntercompanyService', 'Supabase unavailable — saved locally', e);
   }
 
+  // Local cache update
+  const local = getLocal();
+  local.push(transfer);
+  saveLocal(local);
+
   toast.success(
-    `ICO Transfer ${id} posted. ${fromCompany} Dr Receivable / ${toCompany} Dr ${type}. PKR ${amount.toLocaleString()}`,
+    `ICO Transfer ${id} posted. ${fromCompany} → ${toCompany}. PKR ${amount.toLocaleString()}`,
     { duration: 6000 }
   );
-
   return transfer;
 }
 
-// ── Reverse a transfer ────────────────────────────────────────────────
+// ── Reverse transfer ──────────────────────────────────────────────────
 export async function reverseIntercompanyTransfer(transferId: string, actor: string): Promise<void> {
-  const all = _load();
+  const all = getLocal();
   const t = all.find(x => x.id === transferId);
   if (!t) { toast.error('Transfer not found.'); return; }
   if (t.status === 'Reversed') { toast.error('Already reversed.'); return; }
 
-  // Post reversal entries (swap debit/credit)
-  const revId = `REV-${transferId}`;
+  const revId  = `REV-${transferId}`;
   const ledger = FinanceService.getLedger();
 
   const fromOriginal = ledger.find(l => l.id === t.fromGLTxId);
   const toOriginal   = ledger.find(l => l.id === t.toGLTxId);
+  const today = new Date().toISOString().split('T')[0];
 
-  if (fromOriginal) {
-    ledger.push({
-      ...fromOriginal,
-      id: `${revId}-FROM`, docDate: new Date().toISOString().split('T')[0],
-      date: new Date().toISOString().split('T')[0],
-      description: `[REVERSAL] ${fromOriginal.description}`,
-      details: fromOriginal.details.map(d => ({ ...d, debit: d.credit, credit: d.debit })),
-    });
-  }
-  if (toOriginal) {
-    ledger.push({
-      ...toOriginal,
-      id: `${revId}-TO`, docDate: new Date().toISOString().split('T')[0],
-      date: new Date().toISOString().split('T')[0],
-      description: `[REVERSAL] ${toOriginal.description}`,
-      details: toOriginal.details.map(d => ({ ...d, debit: d.credit, credit: d.debit })),
-    });
-  }
-
+  if (fromOriginal) ledger.push({
+    ...fromOriginal, id: `${revId}-FROM`, docDate: today, date: today,
+    description: `[REVERSAL] ${fromOriginal.description}`,
+    details: fromOriginal.details.map(d => ({ ...d, debit: d.credit, credit: d.debit })),
+  });
+  if (toOriginal) ledger.push({
+    ...toOriginal, id: `${revId}-TO`, docDate: today, date: today,
+    description: `[REVERSAL] ${toOriginal.description}`,
+    details: toOriginal.details.map(d => ({ ...d, debit: d.credit, credit: d.debit })),
+  });
   FinanceService.saveLedger(ledger);
 
   const idx = all.findIndex(x => x.id === transferId);
   all[idx].status = 'Reversed';
-  _save(all);
+  saveLocal(all);
+
+  try {
+    await supabase.from('intercompany_transfers')
+      .update({ status: 'Reversed', updated_at: new Date().toISOString() })
+      .eq('id', transferId);
+  } catch (e) {
+    Logger.warn('IntercompanyService', 'Supabase reverse failed', e);
+  }
 
   toast.success(`Transfer ${transferId} reversed by ${actor}.`);
 }
 
+// ── List transfers — SUPABASE FIRST ──────────────────────────────────
 export const IntercompanyService = {
-  listTransfers: (company?: Company): IntercompanyTransfer[] => {
-    const all = _load();
-    return company
-      ? all.filter(t => t.fromCompany === company || t.toCompany === company)
-           .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      : all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  listTransfers: async (company?: Company): Promise<IntercompanyTransfer[]> => {
+    try {
+      let q = supabase
+        .from('intercompany_transfers')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      const { data, error } = await q;
+      if (error || !data) return getLocal().filter(t =>
+        !company || t.fromCompany === company || t.toCompany === company
+      );
+
+      const mapped = data.map(rowToTransfer).filter(t =>
+        !company || t.fromCompany === company || t.toCompany === company
+      );
+      saveLocal(mapped);
+      return mapped;
+    } catch {
+      const local = getLocal();
+      return company
+        ? local.filter(t => t.fromCompany === company || t.toCompany === company)
+        : local;
+    }
   },
-  postTransfer: postIntercompanyTransfer,
+  postTransfer:    postIntercompanyTransfer,
   reverseTransfer: reverseIntercompanyTransfer,
 };
