@@ -1,7 +1,15 @@
+// ═══════════════════════════════════════════════════════════════════════
+//  salesService.ts — Sales Service
+//  PHASE 1 FIX: Replace silent bgRefresh with visible error handling
+//  Pattern: Write localStorage immediately → push Supabase with toast on error
+// ═══════════════════════════════════════════════════════════════════════
+
 import { Client, Vendor } from '../types/crm';
 import { Product, Quotation, Project } from '../../shared/types';
 import { safeParse, safeSave } from '../../shared/services/utils';
 import { AsyncSalesService } from './asyncSalesService';
+import { Logger } from '@/modules/shared/services/logger';
+import { toast } from 'sonner';
 
 const KEYS = {
   CLIENTS:          'gtk_erp_clients',
@@ -13,30 +21,69 @@ const KEYS = {
   PAYMENT_RECEIPTS: 'gtk_erp_payment_receipts',
 };
 
-const bgRefresh = (fn: () => Promise<void>) => { fn().catch(() => {}); };
+// ── Supabase push with visible error — never silent ───────────────────
+const _push = async (label: string, fn: () => Promise<void>): Promise<void> => {
+  try {
+    await fn();
+  } catch (err: any) {
+    Logger.error('Sales', `${label} sync failed`, err);
+    toast.error(`Cloud sync failed (${label}) — data saved locally.`, {
+      id: `sales-sync-${label}`, duration: 5000,
+    });
+  }
+};
 
 export const SalesService = {
+  // ── Clients ────────────────────────────────────────────────────────
   getClients: (): Client[] => safeParse(KEYS.CLIENTS),
-  saveClients: (data: Client[]) => { safeSave(KEYS.CLIENTS, data); bgRefresh(() => AsyncSalesService.saveClients(data)); },
+  saveClients: (data: Client[]): void => {
+    safeSave(KEYS.CLIENTS, data);
+    _push('clients', () => AsyncSalesService.saveClients(data));
+  },
 
+  // ── Products ───────────────────────────────────────────────────────
   getProducts: (): Product[] => safeParse(KEYS.PRODUCTS),
-  saveProducts: (data: Product[]) => { safeSave(KEYS.PRODUCTS, data); bgRefresh(() => AsyncSalesService.saveProducts(data)); },
+  saveProducts: (data: Product[]): void => {
+    safeSave(KEYS.PRODUCTS, data);
+    _push('products', () => AsyncSalesService.saveProducts(data));
+  },
 
+  // ── Quotations ─────────────────────────────────────────────────────
   getQuotations: (): Quotation[] => safeParse(KEYS.QUOTATIONS),
-  saveQuotations: (data: Quotation[]) => { safeSave(KEYS.QUOTATIONS, data); bgRefresh(() => AsyncSalesService.saveQuotations(data)); },
+  saveQuotations: (data: Quotation[]): void => {
+    safeSave(KEYS.QUOTATIONS, data);
+    _push('quotations', () => AsyncSalesService.saveQuotations(data));
+  },
 
+  // ── Projects ───────────────────────────────────────────────────────
   getProjects: (): Project[] => safeParse(KEYS.PROJECTS),
-  saveProjects: (data: Project[]) => { safeSave(KEYS.PROJECTS, data); bgRefresh(() => AsyncSalesService.saveProjects(data)); },
+  saveProjects: (data: Project[]): void => {
+    safeSave(KEYS.PROJECTS, data);
+    _push('projects', () => AsyncSalesService.saveProjects(data));
+  },
 
+  // ── Vendors ────────────────────────────────────────────────────────
   getVendors: (): Vendor[] => safeParse(KEYS.VENDORS),
-  saveVendors: (data: Vendor[]) => { safeSave(KEYS.VENDORS, data); bgRefresh(() => AsyncSalesService.saveVendors(data)); },
+  saveVendors: (data: Vendor[]): void => {
+    safeSave(KEYS.VENDORS, data);
+    _push('vendors', () => AsyncSalesService.saveVendors(data));
+  },
 
+  // ── Invoices ───────────────────────────────────────────────────────
   getInvoices: (): any[] => safeParse(KEYS.INVOICES),
-  saveInvoices: (data: any[]) => { safeSave(KEYS.INVOICES, data); bgRefresh(() => AsyncSalesService.saveInvoices(data)); },
+  saveInvoices: (data: any[]): void => {
+    safeSave(KEYS.INVOICES, data);
+    _push('invoices', () => AsyncSalesService.saveInvoices(data));
+  },
 
+  // ── Payment Receipts ───────────────────────────────────────────────
   getPaymentReceipts: (): any[] => safeParse(KEYS.PAYMENT_RECEIPTS),
-  savePaymentReceipts: (data: any[]) => { safeSave(KEYS.PAYMENT_RECEIPTS, data); bgRefresh(() => AsyncSalesService.savePaymentReceipts(data)); },
+  savePaymentReceipts: (data: any[]): void => {
+    safeSave(KEYS.PAYMENT_RECEIPTS, data);
+    _push('payment_receipts', () => AsyncSalesService.savePaymentReceipts(data));
+  },
 
+  // ── Warm Cache (app start — pull latest from Supabase) ─────────────
   warmCache: async (): Promise<void> => {
     try {
       const [clients, products, quotations, vendors, invoices, receipts] = await Promise.all([
@@ -53,6 +100,8 @@ export const SalesService = {
       safeSave(KEYS.VENDORS,          vendors);
       safeSave(KEYS.INVOICES,         invoices);
       safeSave(KEYS.PAYMENT_RECEIPTS, receipts);
-    } catch { /* offline */ }
+    } catch (err: any) {
+      Logger.warn('Sales', 'warmCache failed — using local data', err);
+    }
   },
 };

@@ -22,6 +22,8 @@ import { Toaster, toast } from 'sonner';
 import { useAuthStore, isOfficeHours, ROLE_DEFAULT_COMPANY, ROLE_MODULES, ROLE_LABELS } from '@/modules/auth/authStore';
 import { HRService } from '@/modules/hr/services/hrService';
 import { loadShiftRules } from '@/modules/hr/pages/ShiftMaster';
+import { FinanceService } from '@/modules/finance/services/financeService';
+import { SalesService } from '@/modules/sales/services/salesService';
 import LoginPage from '@/modules/auth/LoginPage';
 
 import NotificationCenter from './modules/shared/components/NotificationCenter';
@@ -297,8 +299,10 @@ const App: React.FC = () => {
       await prefetchCriticalTables();   // prime Supabase cache on login
       await flushOfflineQueue();         // push any offline writes
       await AppService.seedInitialData();
-      await HRService.loadCache();   // prime HR in-memory cache
-      await loadShiftRules();         // prime shift rules cache
+      await HRService.loadCache();        // prime HR in-memory cache
+      await loadShiftRules();            // prime shift rules cache
+      await FinanceService.init();       // prime Finance GL cache (Supabase-primary)
+      await SalesService.warmCache();    // prime Sales cache from Supabase
       AppService.checkAndTriggerAutoBackup();
       // Start Realtime AFTER initial fetch — live cross-device sync
       RealtimeService.start();
