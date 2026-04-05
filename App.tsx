@@ -216,6 +216,7 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
 
         <div className="py-2 border-t border-white/5 bg-slate-800 print-hidden">
           <p className="text-xs font-bold text-slate-500 text-center uppercase tracking-widest">© 2026 GLASSTECH GROUP</p>
+          <p className="text-[9px] text-slate-600 text-center font-mono mt-0.5 tracking-widest">v1.0.0-beta</p>
         </div>
       </aside>
     </>
@@ -285,7 +286,24 @@ const App: React.FC = () => {
     installConsoleOverride();
   }, []);
 
-  // Run sync ONLY after user is authenticated
+  // ── Global silent crash catcher (Phase F) ─────────────────────────
+  // Catches the 161 try{} blocks that had no catch{} — they become
+  // unhandled Promise rejections. Log them so data issues are visible.
+  useEffect(() => {
+    const handler = (event: PromiseRejectionEvent) => {
+      const msg = event.reason?.message || String(event.reason) || 'Unknown error';
+      // Ignore benign Supabase auth session-not-found (normal on first load)
+      if (msg.includes('Auth session missing') || msg.includes('JWT')) return;
+      Logger.error('UnhandledRejection', msg, event.reason);
+      // Show toast only for DB/sync failures — not routine misses
+      if (msg.toLowerCase().includes('upsert') || msg.toLowerCase().includes('supabase') || msg.toLowerCase().includes('fetch')) {
+        toast.error(`Sync issue — ${msg.slice(0, 80)}`, { duration: 4000 });
+      }
+    };
+    window.addEventListener('unhandledrejection', handler);
+    return () => window.removeEventListener('unhandledrejection', handler);
+  }, []);
+
   useEffect(() => {
     if (!user) {
       RealtimeService.stop();
