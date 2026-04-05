@@ -19,11 +19,12 @@ import AssetManagement from '@/modules/finance/components/AssetManagement';
 import ReportsHub from '@/modules/finance/pages/ReportsHub';
 import BudgetMaster from '@/modules/finance/components/BudgetMaster';
 import CashFlowDashboard from '@/modules/finance/components/CashFlowDashboard';
+import OverheadDashboard from '@/modules/finance/components/OverheadDashboard';
 import InventoryValuationReport from '@/modules/finance/pages/InventoryValuationReport';
 import { 
   Landmark, CreditCard, ListTree, BookOpen, BarChart4, 
   FilePieChart, Target, Wallet, RefreshCw, FileText, 
-  Inbox, Settings, Clock, Briefcase, Users, BarChart3, Package, ShieldCheck, Lock, BarChart2, Activity
+  Inbox, Settings, Clock, Briefcase, Users, BarChart3, Package, ShieldCheck, Lock, BarChart2, Activity, Layers
 } from 'lucide-react';
 
 type CategoryKey = 'ops' | 'reporting' | 'hr' | 'assets' | 'config';
@@ -151,7 +152,8 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
           {activeTab === 'billing' && <BillingHub company={company} />}
           {activeTab === 'matching'      && <ThreeWayMatching company={company} />}
           {activeTab === 'budget_master'  && <BudgetMaster company={company} />}
-          {activeTab === 'cash_flow'      && <CashFlowDashboard company={company} />}
+          {activeTab === 'cash_flow'       && <CashFlowDashboard company={company} />}
+          {activeTab === 'overhead_pool'    && <OverheadDashboard company={company} />}
           
           {/* Reporting */}
           {activeTab === 'reports_hub'   && <ReportsHub company={company} />}
