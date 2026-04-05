@@ -8,6 +8,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { SCMService, VendorScorecard, ReorderAlert } from '../services/scmService';
+import { DemandService } from '../services/demandService';
 import { AlertTriangle, CheckCircle2, Package, Star, RefreshCw, TrendingUp } from 'lucide-react';
 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-PK');
@@ -67,16 +68,20 @@ const styles = `
 
 const SCMDashboard: React.FC = () => {
   const company = useAppStore(s => s.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'scorecard' | 'reorder'>('reorder');
+  const [activeTab, setActiveTab] = useState<'scorecard' | 'reorder' | 'forecast' | 'eoq'>('reorder');
   const [scorecard, setScorecard] = useState<VendorScorecard[]>([]);
   const [reorders, setReorders]   = useState<ReorderAlert[]>([]);
   const [loading, setLoading]     = useState(false);
+  const [orderForecast, setOrderForecast] = useState<any>(null);
+  const [eoqList, setEOQList]             = useState<any[]>([]);
 
   const load = () => {
     setLoading(true);
     try {
       setScorecard(SCMService.getVendorScorecard(company));
       setReorders(SCMService.getReorderAlerts(company));
+      setOrderForecast(DemandService.getOrderForecast(company));
+      setEOQList(DemandService.getEOQSuggestions(company));
     } finally {
       setLoading(false);
     }
@@ -121,6 +126,12 @@ const SCMDashboard: React.FC = () => {
           </button>
           <button onClick={() => setActiveTab('scorecard')} className={`scm-tab${activeTab === 'scorecard' ? ' active' : ''}`}>
             Vendor Scorecard
+          </button>
+          <button onClick={() => setActiveTab('forecast')} className={`scm-tab${activeTab === 'forecast' ? ' active' : ''}`}>
+            Demand Forecast
+          </button>
+          <button onClick={() => setActiveTab('eoq')} className={`scm-tab${activeTab === 'eoq' ? ' active' : ''}`}>
+            EOQ Calculator
           </button>
         </nav>
 
@@ -203,6 +214,82 @@ const SCMDashboard: React.FC = () => {
                   </tr>
                 ))}
               </tbody>
+            </table>
+          )
+        )}
+      </div>
+        {/* DEMAND FORECAST */}
+        {activeTab === 'forecast' && orderForecast && (
+          <div style={{ padding: 24 }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16 }}>
+              <span style={{ background: orderForecast.trend==='UP'?'#DCFCE7':orderForecast.trend==='DOWN'?'#FEE2E2':'#EFF6FF', color: orderForecast.trend==='UP'?'#16A34A':orderForecast.trend==='DOWN'?'#DC2626':'#2563EB', padding:'4px 12px', borderRadius:12, fontWeight:800, fontSize:11 }}>
+                {orderForecast.trend==='UP'?'↑ Trending Up':orderForecast.trend==='DOWN'?'↓ Trending Down':'→ Stable'}
+              </span>
+              <span style={{fontSize:12,color:'#64748B'}}>Avg {orderForecast.avgOrdersPerMonth} orders/month | {orderForecast.avgSqftPerMonth} sqft/month</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+              <div>
+                <div style={{fontSize:11,fontWeight:800,color:'#065F46',textTransform:'uppercase',marginBottom:8}}>Last 6 Months (Actual)</div>
+                <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                  <thead><tr>{['Month','Orders','Sqft','Revenue'].map(h=><th key={h} className="scm-th" style={{background:'#374151'}}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {orderForecast.historical.map((m: any)=>(
+                      <tr key={m.month} className="scm-tr">
+                        <td className="scm-td" style={{fontWeight:700}}>{m.month}</td>
+                        <td className="scm-td" style={{textAlign:'center'}}>{m.orderCount}</td>
+                        <td className="scm-td" style={{textAlign:'right'}}>{m.totalSqft}</td>
+                        <td className="scm-td" style={{textAlign:'right',color:'#16A34A',fontWeight:700}}>PKR {m.totalRevenue.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <div style={{fontSize:11,fontWeight:800,color:'#065F46',textTransform:'uppercase',marginBottom:8}}>Next 3 Months (Forecast)</div>
+                <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                  <thead><tr>{['Month','Est. Orders','Est. Sqft','Est. Revenue'].map(h=><th key={h} className="scm-th">{h}</th>)}</tr></thead>
+                  <tbody>
+                    {orderForecast.forecast.map((m: any)=>(
+                      <tr key={m.month} style={{background:'#F0FDF4'}}>
+                        <td className="scm-td" style={{fontWeight:800,color:'#065F46'}}>{m.month} ◆</td>
+                        <td className="scm-td" style={{textAlign:'center',fontWeight:700}}>{m.orderCount}</td>
+                        <td className="scm-td" style={{textAlign:'right',fontWeight:700}}>{m.totalSqft}</td>
+                        <td className="scm-td" style={{textAlign:'right',color:'#059669',fontWeight:800}}>PKR {m.totalRevenue.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{fontSize:10,color:'#94A3B8',marginTop:8}}>* Forecast based on 3-month rolling average + trend factor</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* EOQ CALCULATOR */}
+        {activeTab === 'eoq' && (
+          eoqList.length === 0 ? (
+            <div style={{padding:48,textAlign:'center',color:'#94A3B8',fontSize:13}}>No items with demand history found. EOQ requires at least some purchase history.</div>
+          ) : (
+            <table style={{ width:'100%', borderCollapse:'collapse' }}>
+              <thead><tr>{['Item','Annual Demand','Unit Cost (MAP)','EOQ','Orders/Year','Annual Cost (PKR)'].map(h=><th key={h} className="scm-th">{h}</th>)}</tr></thead>
+              <tbody>
+                {eoqList.map((e: any)=>(
+                  <tr key={e.itemId} className="scm-tr">
+                    <td className="scm-td" style={{fontWeight:700}}>{e.itemName}<div style={{fontSize:10,color:'#94A3B8'}}>{e.category}</div></td>
+                    <td className="scm-td" style={{textAlign:'right'}}>{e.annualDemand}</td>
+                    <td className="scm-td" style={{textAlign:'right',color:'#64748B'}}>PKR {e.unitCost.toLocaleString()}</td>
+                    <td className="scm-td" style={{textAlign:'right',fontWeight:800,color:'#2563EB'}}>{e.eoq} units</td>
+                    <td className="scm-td" style={{textAlign:'center',color:'#64748B'}}>{e.ordersPerYear}×</td>
+                    <td className="scm-td" style={{textAlign:'right',color:'#16A34A',fontWeight:700}}>{e.totalAnnualCost.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{background:'#1E293B'}}>
+                  <td colSpan={3} style={{padding:'10px 14px',color:'#fff',fontWeight:800,fontSize:12}}>EOQ = √(2DS/H) | Ordering Cost: PKR 2,500/order | Holding: 20%/year</td>
+                  <td colSpan={3} style={{padding:'10px 14px',color:'#94A3B8',fontSize:11}}>Optimal order quantities to minimise total inventory cost</td>
+                </tr>
+              </tfoot>
             </table>
           )
         )}

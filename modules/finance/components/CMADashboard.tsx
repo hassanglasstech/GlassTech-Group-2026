@@ -9,6 +9,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Company } from '@/modules/shared/types';
 import { BudgetService, BudgetLine, PettyCashStatus, SalaryByCostCenter } from '../services/budgetService';
+import { IntelligenceService, ClientProfitability, CostPerSqftBreakdown, OverheadRate } from '../services/intelligenceService';
 import { FinanceService } from '../services/financeService';
 import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Wallet, Users, Target, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -55,11 +56,14 @@ const KPICard: React.FC<{ label: string; value: string; sub?: string; color?: st
 // ── Main ──────────────────────────────────────────────────────────────────
 const CMADashboard: React.FC<{ company: Company }> = ({ company }) => {
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
-  const [activeTab, setActiveTab] = useState<'budget' | 'petty' | 'salary'>('budget');
+  const [activeTab, setActiveTab] = useState<'budget' | 'petty' | 'salary' | 'profitability' | 'costpsqft'>('budget');
   const [loading, setLoading] = useState(false);
   const [budgetLines, setBudgetLines]  = useState<BudgetLine[]>([]);
   const [pettyCash, setPettyCash]      = useState<PettyCashStatus[]>([]);
   const [salary, setSalary]            = useState<SalaryByCostCenter[]>([]);
+  const [clients, setClients]          = useState<ClientProfitability[]>([]);
+  const [costBreak, setCostBreak]      = useState<CostPerSqftBreakdown | null>(null);
+  const [overhead, setOverhead]        = useState<OverheadRate | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -67,6 +71,9 @@ const CMADashboard: React.FC<{ company: Company }> = ({ company }) => {
       setBudgetLines(BudgetService.getBudgetVsActual(company, month));
       setPettyCash(BudgetService.getPettyCashStatus(company));
       setSalary(BudgetService.getSalaryByCostCenter(company, month));
+      setClients(IntelligenceService.getClientProfitability(company, 6));
+      setCostBreak(IntelligenceService.getCostPerSqft(company, 'month'));
+      setOverhead(IntelligenceService.getOverheadAbsorptionRate(company, month));
     } finally {
       setLoading(false);
     }
@@ -77,9 +84,11 @@ const CMADashboard: React.FC<{ company: Company }> = ({ company }) => {
   const summary = useMemo(() => BudgetService.getSummary(company, month), [company, month, budgetLines]);
 
   const tabs = [
-    { id: 'budget' as const, label: 'Budget vs Actual' },
-    { id: 'petty'  as const, label: 'Petty Cash' },
-    { id: 'salary' as const, label: 'Salary by Department' },
+    { id: 'budget'       as const, label: 'Budget vs Actual' },
+    { id: 'petty'        as const, label: 'Petty Cash' },
+    { id: 'salary'       as const, label: 'Salary by Department' },
+    { id: 'profitability'as const, label: 'Client Profitability' },
+    { id: 'costpsqft'    as const, label: 'Cost per Sqft' },
   ];
 
   const styles = `
@@ -259,6 +268,74 @@ const CMADashboard: React.FC<{ company: Company }> = ({ company }) => {
                 </tfoot>
               </table>
             )}
+          </div>
+        )}
+        {/* CLIENT PROFITABILITY */}
+        {activeTab === 'profitability' && (
+          clients.length === 0 ? (
+            <div style={{ padding: 40, textAlign: 'center', color: '#94A3B8', fontSize: 13 }}>No client data found. Ensure orders with clients exist for {company}.</div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr>{['Client','Orders','Revenue','Est. Cost','Gross Profit','Margin %','Rating'].map(h=><th key={h} className="cma-th">{h}</th>)}</tr></thead>
+              <tbody>
+                {clients.map(c => (
+                  <tr key={c.clientId} className="cma-tr">
+                    <td className="cma-td" style={{ fontWeight: 700 }}>{c.clientName}</td>
+                    <td className="cma-td" style={{ textAlign: 'center' }}>{c.orderCount}</td>
+                    <td className="cma-td" style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(c.totalRevenue)}</td>
+                    <td className="cma-td" style={{ textAlign: 'right', color: '#64748B' }}>{fmt(c.estGlassCost + c.estServiceCost + c.estOverhead)}</td>
+                    <td className="cma-td" style={{ textAlign: 'right', fontWeight: 800, color: c.grossProfit >= 0 ? '#16A34A' : '#DC2626' }}>{fmt(c.grossProfit)}</td>
+                    <td className="cma-td" style={{ textAlign: 'right', fontWeight: 800, color: c.marginPct >= 20 ? '#16A34A' : c.marginPct >= 10 ? '#D97706' : '#DC2626' }}>{c.marginPct}%</td>
+                    <td className="cma-td"><span style={{ background: c.rating==='A'?'#DCFCE7':c.rating==='B'?'#DBEAFE':c.rating==='C'?'#FEF3C7':'#FEE2E2', color: c.rating==='A'?'#16A34A':c.rating==='B'?'#2563EB':c.rating==='C'?'#D97706':'#DC2626', padding:'2px 8px', borderRadius:12, fontSize:10, fontWeight:800 }}>{c.rating}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )
+        )}
+
+        {/* COST PER SQFT */}
+        {activeTab === 'costpsqft' && costBreak && (
+          <div style={{ padding: 24 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+              <KPICard label="Cost / Sqft" value={`PKR ${costBreak.costPerSqft}`} color="#DC2626" icon={<TrendingUp size={18} color="#DC2626" />} />
+              <KPICard label="Revenue / Sqft" value={`PKR ${costBreak.revenuePerSqft}`} color="#16A34A" icon={<TrendingUp size={18} color="#16A34A" />} />
+              <KPICard label="Margin / Sqft" value={`PKR ${costBreak.marginPerSqft}`} sub={`${costBreak.marginPct}% overall`} color={costBreak.marginPct >= 20 ? '#16A34A' : '#D97706'} icon={<TrendingDown size={18} color={costBreak.marginPct >= 20 ? '#16A34A' : '#D97706'} />} />
+            </div>
+            {overhead && (
+              <div style={{ background: overhead.status === 'ON_TARGET' ? '#F0FDF4' : '#FFF7ED', border: `1px solid ${overhead.status === 'ON_TARGET' ? '#BBF7D0' : '#FED7AA'}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#64748B', textTransform: 'uppercase', marginBottom: 8 }}>Overhead Absorption — {overhead.period}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                  {[{l:'Actual Overhead',v:`PKR ${fmt(overhead.totalOverhead)}`},{l:'Standard Rate',v:`PKR ${overhead.standardRate}/sqft`},{l:'Absorbed',v:`PKR ${fmt(overhead.absorbedOverhead)}`},{l:'Variance',v:`${overhead.variance >= 0 ? '+' : ''}${fmt(overhead.variance)}`}].map(item=>(
+                    <div key={item.l}><div style={{fontSize:10,fontWeight:800,color:'#64748B',textTransform:'uppercase'}}>{item.l}</div><div style={{fontSize:16,fontWeight:800,color:'#1E293B',marginTop:2}}>{item.v}</div></div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr>{['Cost Component','Amount (PKR)','Per Sqft (PKR)','% of Total'].map(h=><th key={h} className="cma-th">{h}</th>)}</tr></thead>
+              <tbody>
+                {costBreak.components.map(c=>(
+                  <tr key={c.label} className="cma-tr">
+                    <td className="cma-td" style={{fontWeight:700}}>{c.label}</td>
+                    <td className="cma-td" style={{textAlign:'right',fontWeight:700}}>{fmt(c.amount)}</td>
+                    <td className="cma-td" style={{textAlign:'right',color:'#2563EB',fontWeight:700}}>{c.perSqft}</td>
+                    <td className="cma-td" style={{textAlign:'right'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8}}>
+                        <div style={{flex:1,background:'#F1F5F9',borderRadius:4,height:6,overflow:'hidden'}}><div style={{width:`${c.pct}%`,height:'100%',background:'#2563EB',borderRadius:4}} /></div>
+                        <span style={{fontSize:11,fontWeight:800,color:'#64748B',minWidth:32}}>{c.pct}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                <tr style={{background:'#1E293B'}}>
+                  <td style={{padding:'10px 14px',color:'#fff',fontWeight:800,fontSize:12}}>TOTAL</td>
+                  <td style={{padding:'10px 14px',textAlign:'right',color:'#fff',fontWeight:800,fontSize:12}}>{fmt(costBreak.totalCost)}</td>
+                  <td style={{padding:'10px 14px',textAlign:'right',color:'#93C5FD',fontWeight:800,fontSize:12}}>PKR {costBreak.costPerSqft}</td>
+                  <td style={{padding:'10px 14px',textAlign:'right',color:'#94A3B8',fontSize:11}}>Margin: {costBreak.marginPct}%</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         )}
       </div>

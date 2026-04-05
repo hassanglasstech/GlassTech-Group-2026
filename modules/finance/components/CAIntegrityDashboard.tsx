@@ -8,6 +8,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Company } from '@/modules/shared/types';
 import { CAIntegrityService, UnbilledItem, ThreeWayMatchResult } from '../services/caIntegrityService';
+import { ECLService, ECLSummary, ICOReconciliation } from '../services/eclService';
 import { AlertTriangle, CheckCircle2, FileText, RefreshCw, AlertCircle } from 'lucide-react';
 
 const fmt  = (n: number) => Math.abs(Math.round(n)).toLocaleString('en-PK');
@@ -60,9 +61,11 @@ const styles = `
 `;
 
 const CAIntegrityDashboard: React.FC<{ company: Company }> = ({ company }) => {
-  const [activeTab, setActiveTab] = useState<'unbilled' | 'matching'>('unbilled');
+  const [activeTab, setActiveTab] = useState<'unbilled' | 'matching' | 'ecl' | 'ico'>('unbilled');
   const [unbilled, setUnbilled] = useState<UnbilledItem[]>([]);
   const [matching, setMatching] = useState<ThreeWayMatchResult[]>([]);
+  const [ecl, setECL]           = useState<ECLSummary | null>(null);
+  const [ico, setICO]           = useState<ICOReconciliation | null>(null);
   const [loading, setLoading] = useState(false);
 
   const load = () => {
@@ -70,6 +73,8 @@ const CAIntegrityDashboard: React.FC<{ company: Company }> = ({ company }) => {
     try {
       setUnbilled(CAIntegrityService.getUnbilledRevenue(company));
       setMatching(CAIntegrityService.getThreeWayMatchStatus(company));
+      setECL(ECLService.getECLProvision(company));
+      setICO(ECLService.getICOReconciliation());
     } finally {
       setLoading(false);
     }
@@ -111,6 +116,8 @@ const CAIntegrityDashboard: React.FC<{ company: Company }> = ({ company }) => {
           <button onClick={() => setActiveTab('matching')} className={`ca-tab${activeTab === 'matching' ? ' active' : ''}`}>
             3-Way Matching {(summary.overBilledPOs + summary.noInvoicePOs) > 0 && <span style={{ background: '#FEF3C7', color: '#D97706', borderRadius: 10, padding: '1px 7px', fontSize: 10, fontWeight: 900 }}>{summary.overBilledPOs + summary.noInvoicePOs}</span>}
           </button>
+          <button onClick={() => setActiveTab('ecl')} className={`ca-tab${activeTab === 'ecl' ? ' active' : ''}`}>ECL Provision</button>
+          <button onClick={() => setActiveTab('ico')} className={`ca-tab${activeTab === 'ico' ? ' active' : ''}`}>ICO Reconciliation</button>
         </nav>
 
         {/* UNBILLED REVENUE */}
@@ -191,6 +198,78 @@ const CAIntegrityDashboard: React.FC<{ company: Company }> = ({ company }) => {
               </tbody>
             </table>
           )
+        )}
+      </div>
+        {/* ECL */}
+        {activeTab === 'ecl' && ecl && (
+          <div style={{ padding: 24 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+              {[{l:'Total AR',v:`PKR ${ecl.totalAR.toLocaleString()}`},{l:'Overdue AR',v:`PKR ${ecl.overdueAR.toLocaleString()}`,c:'#D97706'},{l:'ECL Provision',v:`PKR ${ecl.totalProvision.toLocaleString()}`,c:'#DC2626'},{l:'Net AR',v:`PKR ${ecl.netAR.toLocaleString()}`,c:'#16A34A'}].map(k=>(
+                <div key={k.l} style={{background:'#fff',border:'1px solid #E2E8F0',borderRadius:12,padding:'14px 18px'}}>
+                  <div style={{fontSize:10,fontWeight:800,color:'#64748B',textTransform:'uppercase',letterSpacing:'.06em'}}>{k.l}</div>
+                  <div style={{fontSize:18,fontWeight:900,color:k.c||'#1B3A6B',marginTop:4}}>{k.v}</div>
+                </div>
+              ))}
+            </div>
+            <table style={{ width:'100%', borderCollapse:'collapse' }}>
+              <thead><tr>{['Aging Bucket','Gross AR (PKR)','Loss Rate','ECL Provision (PKR)','Clients'].map(h=><th key={h} className="ca-th">{h}</th>)}</tr></thead>
+              <tbody>
+                {ecl.buckets.map(b=>(
+                  <tr key={b.bucket} className="ca-tr">
+                    <td className="ca-td" style={{fontWeight:700}}>{b.daysRange}</td>
+                    <td className="ca-td" style={{textAlign:'right',fontWeight:700}}>{b.grossAmount.toLocaleString()}</td>
+                    <td className="ca-td" style={{textAlign:'right',color:b.lossRate>10?'#DC2626':'#D97706',fontWeight:700}}>{b.lossRate}%</td>
+                    <td className="ca-td" style={{textAlign:'right',fontWeight:800,color:'#DC2626'}}>{b.provision.toLocaleString()}</td>
+                    <td className="ca-td" style={{textAlign:'center',color:'#64748B'}}>{b.clientCount}</td>
+                  </tr>
+                ))}
+                <tr style={{background:'#1E293B'}}>
+                  <td colSpan={2} style={{padding:'10px 14px',color:'#fff',fontWeight:800,fontSize:12}}>TOTAL PROVISION REQUIRED</td>
+                  <td style={{padding:'10px 14px',textAlign:'right',color:'#94A3B8',fontSize:12}}>{ecl.effectiveLossRate}% effective</td>
+                  <td style={{padding:'10px 14px',textAlign:'right',color:'#FCA5A5',fontWeight:800,fontSize:12}}>{ecl.totalProvision.toLocaleString()}</td>
+                  <td style={{padding:'10px 14px',color:'#94A3B8',fontSize:11}}>Dr Bad Debt Exp / Cr Allowance 11231</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* ICO RECONCILIATION */}
+        {activeTab === 'ico' && ico && (
+          <div style={{ padding: 24 }}>
+            {ico.totalMismatch > 0 && (
+              <div style={{background:'#FEF3C7',border:'1px solid #FDE68A',borderRadius:12,padding:'12px 16px',marginBottom:16,display:'flex',gap:10,alignItems:'center'}}>
+                <span style={{fontSize:13,fontWeight:800,color:'#D97706'}}>⚠ Total ICO Mismatch: PKR {ico.totalMismatch.toLocaleString()}</span>
+              </div>
+            )}
+            <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:20 }}>
+              <thead><tr>{['From','To','Receivable (From)','Payable (To)','Net Diff','Status'].map(h=><th key={h} className="ca-th">{h}</th>)}</tr></thead>
+              <tbody>
+                {ico.balances.map((b,i)=>(
+                  <tr key={i} className="ca-tr">
+                    <td className="ca-td" style={{fontWeight:700}}>{b.fromCompany}</td>
+                    <td className="ca-td" style={{fontWeight:700}}>{b.toCompany}</td>
+                    <td className="ca-td" style={{textAlign:'right'}}>{b.receivable.toLocaleString()}</td>
+                    <td className="ca-td" style={{textAlign:'right'}}>{b.payable.toLocaleString()}</td>
+                    <td className="ca-td" style={{textAlign:'right',fontWeight:800,color:b.netDiff>0?'#DC2626':'#16A34A'}}>{b.netDiff > 0 ? b.netDiff.toLocaleString() : '✓ 0'}</td>
+                    <td className="ca-td"><span style={{background:b.status==='MATCHED'?'#DCFCE7':b.status==='MISMATCH'?'#FEE2E2':'#FEF3C7',color:b.status==='MATCHED'?'#16A34A':b.status==='MISMATCH'?'#DC2626':'#D97706',padding:'2px 8px',borderRadius:12,fontSize:10,fontWeight:800}}>{b.status}{b.missingEntry?` — ${b.missingEntry}`:''}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {ico.eliminationEntries.length > 0 && (
+              <>
+                <div style={{fontSize:12,fontWeight:800,color:'#1B3A6B',marginBottom:8,textTransform:'uppercase'}}>Suggested Elimination Entries</div>
+                {ico.eliminationEntries.map((e,i)=>(
+                  <div key={i} style={{background:'#EFF6FF',border:'1px solid #BFDBFE',borderRadius:10,padding:'12px 16px',marginBottom:8,fontSize:12}}>
+                    <div style={{fontWeight:800,marginBottom:6,color:'#1E40AF'}}>{e.description}</div>
+                    <div style={{color:'#16A34A'}}>Dr [{e.debit.company}] {e.debit.account} — PKR {e.debit.amount.toLocaleString()}</div>
+                    <div style={{color:'#DC2626'}}>Cr [{e.credit.company}] {e.credit.account} — PKR {e.credit.amount.toLocaleString()}</div>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
         )}
       </div>
     </div>
