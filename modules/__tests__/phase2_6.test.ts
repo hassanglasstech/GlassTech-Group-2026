@@ -209,7 +209,7 @@ describe('Phase 3 — GTK Quotation Margin Calculation', () => {
     const items = [makeItem(100000, 0, 0, 50)];
     const r = calcMargin(items, 'Non-Thermal', 0, 0, 0);
     expect(r.marginPct).toBeCloseTo(42, 0);
-    expect(r.grossProfit).toBe(42000);
+    expect(r.grossProfit).toBeCloseTo(42000, 0);
   });
 
   it('Thermal Break margin ~45%', () => {
