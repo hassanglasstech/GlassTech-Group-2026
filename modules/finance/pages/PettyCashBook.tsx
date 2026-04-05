@@ -7,7 +7,6 @@ import { Plus, Search, ArrowUpRight, ArrowDownLeft, X, Save, Wallet, Check, Aler
 import Pagination from '@/components/Pagination';
 import { UnifiedPaymentPrint } from '@/modules/finance/components/prints/UnifiedPaymentPrint';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
-import { useAuthStore } from '@/modules/auth/authStore';
 
 const BUSINESS_TRANSACTIONS = [
     // RECEIPTS
@@ -29,8 +28,6 @@ const BUSINESS_TRANSACTIONS = [
 ];
 
 const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
-  const { profile } = useAuthStore();
-  const currentUser = profile?.email ?? profile?.fullName ?? 'unknown';
   const [entries, setEntries] = useState<PettyCashEntry[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -143,7 +140,7 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
         const newEntry: PettyCashEntry = {
             ...(entryOrForm as PettyCashEntry),
             id: txId, company, date: selectedDate, balance: currentBalance + (entryOrForm.type==='Receipt' ? entryOrForm.amount! : -entryOrForm.amount!),
-            status: 'Posted', recordedBy: currentUser
+            status: 'Posted', recordedBy: 'LOCAL_USER'
         };
         FinanceService.savePettyCashEntries([...FinanceService.getPettyCashEntries(), newEntry]);
 
@@ -311,6 +308,15 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
                   ))}
                 </select>
               </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase text-slate-500">Cost Center</label>
+              <select className="sap-input w-full font-bold" value={formData.costCenterId} onChange={e => setFormData({...formData, costCenterId: e.target.value})}>
+                <option value="">-- No Cost Center --</option>
+                {costCenters.map(cc => (
+                  <option key={cc.id} value={cc.id}>[{cc.code}] {cc.name}</option>
+                ))}
+              </select>
             </div>
             <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Amount</label><input type="number" disabled={!!formData.id} value={formData.amount} onChange={e => setFormData({...formData, amount: Number(e.target.value)})} className="sap-input w-full font-black text-lg" /></div>
             <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Description</label><input type="text" disabled={!!formData.id} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="sap-input w-full font-bold uppercase" /></div>

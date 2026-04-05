@@ -15,6 +15,7 @@ import { NCRService } from '@/modules/production/services/ncrService';
 import { GRNPrint } from '@/modules/glassco/core/prints/GRNPrint';
 import { orchestrateGRNGL } from '@/modules/procurement/services/grnGLService';
 import { FinanceService } from '@/modules/finance/services/financeService';
+import { SCMService } from '@/modules/procurement/services/scmService';
 import {
   StoreItem, MaterialLedgerEntry, GRNSheetEntry, VendorDefectReport,
   PurchaseOrder, PalletRateEntry
@@ -778,6 +779,17 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
     ].filter(Boolean).join(' | ');
 
     toast.success(summary, { duration: 6000 });
+
+    // SCM: record lead time for vendor scorecard
+    if (poId && vendorId && selectedPO?.date) {
+      const rejected = allInspections.filter((s: any) => s.status !== 'OK').length;
+      SCMService.recordLeadTime(
+        company, vendorId, poId,
+        selectedPO.date, grnDate,
+        totalSheets, rejected
+      );
+    }
+
     refreshData();
     // Prepare print data — modal stays open for print option
     setPrintData({
