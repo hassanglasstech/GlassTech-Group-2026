@@ -12,6 +12,7 @@ import RecurringExpenses from '@/modules/finance/pages/RecurringExpenses';
 import FinancialRegistry from '@/modules/finance/pages/FinancialRegistry';
 import PeriodManager from '@/modules/finance/pages/PeriodManager';
 import BillingHub from '@/modules/finance/components/BillingHub';
+import BankReconciliation from '@/modules/finance/components/BankReconciliation';
 import ThreeWayMatching from '@/modules/finance/components/ThreeWayMatching';
 import { toast } from 'sonner';
 import GLConfiguration from '@/modules/finance/components/GLConfiguration';
@@ -51,6 +52,7 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
           { id: 'trial', label: 'Trial Balance', icon: LayoutGrid },
           { id: 'aging', label: 'Aging Report', icon: Clock },
           { id: 'reports', label: 'Financial Statements', icon: FilePieChart },
+          { id: 'bank_recon', label: 'Bank Reconciliation', icon: Landmark },
         ]
       },
       hr: {
@@ -152,6 +154,7 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
           {activeTab === 'trial' && <TrialBalance company={company} />}
           {activeTab === 'aging' && <AgingReport company={company} />}
           {activeTab === 'reports' && <FinancialStatements company={company} />}
+          {activeTab === 'bank_recon' && <BankReconciliation company={company} />}
           
           {/* HR Finance */}
           {activeTab === 'loans' && <LoanManagement company={company} />}

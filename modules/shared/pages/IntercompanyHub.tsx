@@ -5,15 +5,15 @@ import { Company, PurchaseOrder, Project, Client } from '../types';
 import { InventoryService } from '../../procurement/services/inventoryService';
 import { SalesService } from '../../sales/services/salesService';
 import { ProjectService } from '../../projects/services/projectService';
-import { Globe, Inbox, CheckCircle2, Clock, Truck, ShieldAlert, Package, MessageCircle, FolderPlus, Folder, ArrowRight, X, RefreshCw, History, FilePlus, AlertTriangle, Search, ArrowUpRight, Info } from 'lucide-react';
+import { Globe, Inbox, CheckCircle2, Clock, Truck, ShieldAlert, Package, MessageCircle, FolderPlus, Folder, ArrowRight, X, RefreshCw, History, FilePlus, AlertTriangle, Search, ArrowUpRight, Info, ArrowRightLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
 import { useAppStore } from '../store/appStore';
+import ICOTransferPanel from './ICOTransferPanel';
 
 const IntercompanyHub: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'inbox' | 'history'>('inbox');
+  const [activeTab, setActiveTab] = useState<'inbox' | 'history' | 'transfers'>('transfers');
   const [inbox, setInbox] = useState<PurchaseOrder[]>([]);
   const [history, setHistory] = useState<PurchaseOrder[]>([]);
   
@@ -152,6 +152,12 @@ const IntercompanyHub: React.FC = () => {
 
       <div className="flex space-x-1 bg-white p-1 rounded-2xl border border-slate-200 w-fit no-print shadow-sm">
           <button 
+            onClick={() => setActiveTab('transfers')} 
+            className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'transfers' ? 'bg-indigo-600 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <ArrowRightLeft size={16}/> <span>ICO Transfers</span>
+          </button>
+          <button 
             onClick={() => setActiveTab('inbox')} 
             className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'inbox' ? 'bg-indigo-600 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}
           >
@@ -164,6 +170,9 @@ const IntercompanyHub: React.FC = () => {
             <History size={16}/> <span>Order History</span>
           </button>
       </div>
+
+      {/* ICO Transfer Panel */}
+      {activeTab === 'transfers' && <ICOTransferPanel company={company} />}
 
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
          <div className={`px-8 py-6 border-b flex items-center space-x-3 ${activeTab === 'inbox' ? 'bg-indigo-50' : 'bg-slate-50'}`}>
