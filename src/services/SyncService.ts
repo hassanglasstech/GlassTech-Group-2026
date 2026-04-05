@@ -672,7 +672,7 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     date: p.date||'', type: p.type||p.entryType||'Payment',
     amount: p.amount||0, description: p.description||'',
     reference_doc: p.referenceDoc||p.reference_doc||'',
-    created_at: p._createdAt||p.createdAt||new Date().toISOString(),
+    updated_at: p._updatedAt||p.updatedAt||new Date().toISOString(),
   }),
   recurring_expenses: (r: any) => ({
     id: r.id, company: r.company||'',
