@@ -7,8 +7,9 @@ const InventoryModule = React.lazy(() => import('./InventoryModule'));
 const LogisticsModule = React.lazy(() => import('./LogisticsModule'));
 const VendorHub       = React.lazy(() => import('./VendorHub'));
 const IntercompanyHub = React.lazy(() => import('@/modules/shared/pages/IntercompanyHub'));
+import SCMDashboard from '@/modules/procurement/components/SCMDashboard';
 
-type ProcTab = 'requisitions' | 'stock' | 'logistics' | 'vendors' | 'supplychain';
+type ProcTab = 'requisitions' | 'stock' | 'logistics' | 'vendors' | 'supplychain' | 'scm';
 
 const css = `
   .ph-wrap {
@@ -66,6 +67,7 @@ const TABS: { id: ProcTab; label: string; icon: React.ReactNode }[] = [
   { id: 'logistics',    label: 'Logistics',       icon: <Truck size={14}/> },
   { id: 'vendors',      label: 'Vendors',         icon: <Handshake size={14}/> },
   { id: 'supplychain',  label: 'Supply Chain',    icon: <Globe size={14}/> },
+  { id: 'scm',          label: 'SCM Dashboard',   icon: <Package size={14}/> },
 ];
 
 const ProcurementHub: React.FC = () => {
@@ -99,6 +101,7 @@ const ProcurementHub: React.FC = () => {
           {active === 'logistics'    && <LogisticsModule />}
           {active === 'vendors'      && <VendorHub />}
           {active === 'supplychain'  && <IntercompanyHub />}
+          {active === 'scm'          && <SCMDashboard />}
         </React.Suspense>
       </div>
     </div>
