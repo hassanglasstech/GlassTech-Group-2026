@@ -279,14 +279,39 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
       // Build detailed GL lines
       const details: { accountId: string; debit: number; credit: number; text: string; costCenterId?: string }[] = [];
 
-      // DEBIT SIDE: Expense breakdowns
-      const totalBasic      = payrolls.reduce((s, p) => s + p.basicPay, 0);
-      const totalAllowances = payrolls.reduce((s, p) => s + p.allowances, 0);
-      const totalOvertime   = payrolls.reduce((s, p) => s + p.overtimePay, 0);
+      // DEBIT SIDE: Expense breakdowns split by department → costCenterId
+      // Group employees by department, find matching cost center, tag GL lines
+      const costCenters = FinanceService.getCostCenters().filter((cc: any) => cc.company === company);
 
-      if (totalBasic > 0)      details.push({ accountId: salaryExpAcc.id, debit: totalBasic, credit: 0, text: `Basic Salary — ${monthName}` });
-      if (totalAllowances > 0) details.push({ accountId: allowanceAcc.id, debit: totalAllowances, credit: 0, text: `Allowances — ${monthName}` });
-      if (totalOvertime > 0)   details.push({ accountId: overtimeAcc.id, debit: totalOvertime, credit: 0, text: `Overtime — ${monthName}` });
+      const findCCId = (dept: string): string | undefined => {
+        const cc = costCenters.find((c: any) =>
+          c.department?.toLowerCase() === dept?.toLowerCase() ||
+          c.name?.toLowerCase().includes(dept?.toLowerCase().slice(0, 6))
+        );
+        return cc?.id;
+      };
+
+      // Group payrolls by employee department
+      const deptGroups: Record<string, { basic: number; allowances: number; overtime: number }> = {};
+      payrolls.forEach(p => {
+        const emp  = employees.find(e => e.id === p.employeeId);
+        const dept = emp?.work?.department || 'General';
+        if (!deptGroups[dept]) deptGroups[dept] = { basic: 0, allowances: 0, overtime: 0 };
+        deptGroups[dept].basic      += p.basicPay;
+        deptGroups[dept].allowances += p.allowances;
+        deptGroups[dept].overtime   += p.overtimePay;
+      });
+
+      // Push one GL line per dept per expense type — with costCenterId
+      Object.entries(deptGroups).forEach(([dept, amounts]) => {
+        const ccId = findCCId(dept);
+        if (amounts.basic > 0)
+          details.push({ accountId: salaryExpAcc.id, debit: amounts.basic, credit: 0, text: `Basic Salary — ${dept} — ${monthName}`, costCenterId: ccId });
+        if (amounts.allowances > 0)
+          details.push({ accountId: allowanceAcc.id, debit: amounts.allowances, credit: 0, text: `Allowances — ${dept} — ${monthName}`, costCenterId: ccId });
+        if (amounts.overtime > 0)
+          details.push({ accountId: overtimeAcc.id, debit: amounts.overtime, credit: 0, text: `Overtime — ${dept} — ${monthName}`, costCenterId: ccId });
+      });
 
       // CREDIT SIDE: Net payable + deductions recovered
       const totalAbsentDed = payrolls.reduce((s, p) => s + p.absentDeduction, 0);

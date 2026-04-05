@@ -18,6 +18,14 @@ import { FinanceService } from '@/modules/finance/services/financeService';
 import { LedgerTransaction, LedgerDocType } from '@/modules/finance/types/finance';
 import { toast } from 'sonner';
 
+// ── Get primary production cost center for a company (category F) ──────────
+function getProductionCCId(company: string): string | undefined {
+  const ccs = FinanceService.getCostCenters().filter(
+    (cc: any) => cc.company === company && cc.category === 'F'
+  );
+  return ccs.length > 0 ? ccs[0].id : undefined;
+}
+
 // ── Account code constants (GlassCo COA) ─────────────────────────────────
 const ACC = {
   INVENTORY_GLASS:   '11512',   // Float Glass — Raw Sheets (GlassCo inventory)
@@ -258,7 +266,7 @@ export function postFreightOwnExpenseGL(params: {
     referenceId: grnId,
     status: 'Posted',
     details: [
-      { accountId: frtAcc.id, debit: freightAmount, credit: 0, text: `Inward freight — GRN ${grnId}` },
+      { accountId: frtAcc.id, debit: freightAmount, credit: 0, text: `Inward freight — GRN ${grnId}`, costCenterId: getProductionCCId(company) },
       { accountId: crAcc.id, debit: 0, credit: freightAmount, text: paidBy === 'Cash' ? 'Cash paid' : 'Payable accrued' },
     ],
   };
@@ -434,7 +442,7 @@ export function postOtherChargesGL(params: {
     referenceId: grnId,
     status: 'Posted',
     details: [
-      { accountId: expAcc.id, debit: amount, credit: 0, text: description },
+      { accountId: expAcc.id, debit: amount, credit: 0, text: description, costCenterId: getProductionCCId(company) },
       { accountId: cashAcc.id, debit: 0, credit: amount, text: `Cash paid — GRN ${grnId}` },
     ],
   };
@@ -476,7 +484,7 @@ export function postCranePV(params: {
     referenceId: grnId,
     status: 'Parked',
     details: [
-      { accountId: craneAcc.id, debit: craneAmount, credit: 0, text: `Unloading Expense — Crane (${craneVendorName})` },
+      { accountId: craneAcc.id, debit: craneAmount, credit: 0, text: `Unloading Expense — Crane (${craneVendorName})`, costCenterId: getProductionCCId(company) },
       { accountId: cashAcc.id, debit: 0, credit: craneAmount, text: `Cash paid — Crane ${craneVendorName} — GRN ${grnId}` },
     ],
   };
@@ -516,7 +524,7 @@ export function postLabourPackingPV(params: {
   }
 
   const details: LedgerTransaction['details'] = [
-    { accountId: labourAcc.id, debit: labourGross, credit: 0, text: `Unloading Expense — Labour (${labourVendorName}) — GRN ${grnId}` },
+    { accountId: labourAcc.id, debit: labourGross, credit: 0, text: `Unloading Expense — Labour (${labourVendorName}) — GRN ${grnId}`, costCenterId: getProductionCCId(company) },
   ];
 
   // Packing buyback as Other Income

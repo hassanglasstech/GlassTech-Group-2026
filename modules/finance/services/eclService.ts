@@ -196,12 +196,13 @@ export const ECLService = {
     ];
 
     icoPairs.forEach(([from, to]) => {
-      // From company should have a Receivable from To company
-      // 113xx = Intercompany Receivables
-      const receivable = getBalance(from, '113');
-      // To company should have a Payable to From company
-      // 221xx or 23xx = Intercompany Payables
-      const payable    = getBalance(to, '221');
+      // Use GL transaction descriptions (ICO-OUT / ICO-IN tags from intercompanyService)
+      // Primary: match by description keywords; fallback: account code 1220/2210
+      let receivable = getICOBalanceByRef(from, to, 'receivable');
+      if (receivable === 0) receivable = getBalance(from, '1220');
+
+      let payable = getICOBalanceByRef(to, from, 'payable');
+      if (payable === 0) payable = getBalance(to, '2210');
 
       const netDiff = Math.abs(Math.round(receivable - payable));
       const status: ICOBalance['status'] =
