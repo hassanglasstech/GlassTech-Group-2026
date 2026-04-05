@@ -286,7 +286,7 @@ const SCMDashboard: React.FC = () => {
               </tbody>
               <tfoot>
                 <tr style={{background:'#1E293B'}}>
-                  <td colSpan={3} style={{padding:'10px 14px',color:'#fff',fontWeight:800,fontSize:12}}>EOQ = √(2DS/H) | Ordering Cost: PKR 2,500/order | Holding: 20%/year</td>
+                  <td colSpan={3} style={{padding:'10px 14px',color:'#fff',fontWeight:800,fontSize:12}}>EOQ = sqrt(2DS/H) | Ordering Cost: PKR 2,500/order | Holding: 20%/year</td>
                   <td colSpan={3} style={{padding:'10px 14px',color:'#94A3B8',fontSize:11}}>Optimal order quantities to minimise total inventory cost</td>
                 </tr>
               </tfoot>
