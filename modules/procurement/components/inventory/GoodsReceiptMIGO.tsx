@@ -692,7 +692,7 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
       // Total landed charges (freight+crane+labour net+other) — these capitalize into inventory
       const totalLandedForGL = freightPKR + craneAmount + Math.max(0, labourNetPayable) + otherCharges;
 
-      orchestrateGRNGL({
+      const glResult = orchestrateGRNGL({
         company, grnId, grnDate,
         vendorName: selectedVendor?.name || vendorId,
         totalOKValue: materialOKValue, totalDefectiveValue: materialDefVal,
@@ -707,6 +707,16 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
         // IAS 2 — total landed charges to capitalize into inventory
         landedChargesTotal: totalLandedForGL,
       });
+      if (glResult === 0) {
+        // GL posting completely failed — rollback and abort
+        InventoryService.saveStore(snapshotStore);
+        InventoryService.saveStockLedger(snapshotLedger);
+        InventoryService.saveGRNSheetEntries(snapshotSheets);
+        FinanceService.saveLedger(snapshotGL);
+        InventoryService.saveVendorDefectReports(snapshotReports);
+        toast.error(`GRN ${grnId} ABORTED: GL posting failed — all changes rolled back. Check COA and GL Code Verifier.`, { duration: 10000 });
+        return;
+      }
 
       // Step 4: Pallet Rate History
       if (palletCount > 0 && palletRate > 0) {

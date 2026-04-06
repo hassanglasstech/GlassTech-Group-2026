@@ -64,7 +64,8 @@ export function postGRNMaterialGL(params: {
   const grirAcc = findAcc(accounts, ACC.GRIR_MATERIAL);
 
   if (!invAcc || !grirAcc) {
-    console.warn('[GRN GL] Accounts not found — 11511 or 21151');
+    const missing = [!invAcc && ACC.INVENTORY_GLASS, !grirAcc && ACC.GRIR_MATERIAL].filter(Boolean).join(', ');
+    toast.error(`GL FAILED: Account(s) ${missing} not found in COA for ${company}. GRN inventory not posted to GL. Create these accounts or verify GL Code Verifier.`, { duration: 10000 });
     return false;
   }
 
@@ -432,6 +433,8 @@ export function orchestrateGRNGL(params: {
 
   if (glCount > 0) {
     toast.success(`${glCount} GL entr${glCount > 1 ? 'ies' : 'y'} posted for GRN ${params.grnId}`, { duration: 4000 });
+  } else {
+    toast.error(`GL FAILED: No GL entries posted for GRN ${params.grnId}. Check Chart of Accounts and GL Code Verifier in Finance → Config.`, { duration: 10000 });
   }
 
   return glCount;

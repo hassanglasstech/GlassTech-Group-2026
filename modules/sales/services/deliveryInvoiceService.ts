@@ -7,6 +7,7 @@
  *  - Sequential invoice numbering via localStorage counter
  */
 
+import { toast } from 'sonner';
 import { Company, Quotation, LedgerTransaction, Invoice } from '@/modules/shared/types';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { SalesService } from '@/modules/sales/services/salesService';
@@ -146,7 +147,12 @@ export function generateDeliveryInvoice(
     reqId: order.id,
     details,
   };
-  FinanceService.saveLedger([...FinanceService.getLedger(), glTx]);
+  try {
+    FinanceService.saveLedger([...FinanceService.getLedger(), glTx]);
+  } catch (e: any) {
+    console.error('[Invoice GL] GL posting failed:', e.message);
+    toast.error(`Invoice GL failed for ${invoiceId}: ${e.message}. Invoice created but GL entry missing — check Finance.`, { duration: 10000 });
+  }
 
   // ── Financial Event Registry ──────────────────────────────────────
   FinanceService.saveFinancialEvents([

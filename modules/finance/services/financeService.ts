@@ -578,7 +578,9 @@ export const FinanceService = {
           const reqs = safeParse('gtk_erp_requisitions') as any[];
           const req = reqs.find(r => r.id === pv.reqId);
           purchaser = req?.requisitioner || req?.employeeName || 'Unknown';
-        } catch {}
+        } catch (e: any) {
+          Logger.warn('Finance', 'Requisition lookup failed in advance tracker', e);
+        }
         return {
           reqId: pv.reqId || pv.referenceId, pvId: pv.id, amount: advanceAmt,
           date: pv.date, description: pv.description?.replace('[PARKED] ', '').replace('ADVANCE — ', '') || '',
