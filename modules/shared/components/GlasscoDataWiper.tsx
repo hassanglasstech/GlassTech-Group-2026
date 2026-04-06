@@ -65,7 +65,7 @@ const MASTER_GROUPS: { id: string; label: string; keys: string[] }[] = [
 
 const FULL_WIPE_KEYS = ['glassco_floor_planner_teams', 'glassco_daily_plan', 'glassco_cutter_daily_targets'];
 const NOTIF_KEYS = ['gtk_notifications', 'gtk_notifications_v2'];
-const SUPABASE_TRANSACTIONAL = ['quotations', 'projects', 'cutter_daily_logs', 'generator_logs', 'payroll', 'loans'];
+const SUPABASE_TRANSACTIONAL = ['quotations', 'projects', 'cutter_daily_logs', 'generator_logs', 'payroll', 'loans', 'store_items', 'stock_ledger', 'grn_sheet_entries', 'ledger', 'petty_cash', 'financial_events', 'requisitions', 'invoices', 'tempering_dispatches'];
 const SUPABASE_MASTER_EMPLOYEES = { id: 'hr_master', tables: ['employees'] };
 const SUPABASE_MASTER_CLIENTS = { id: 'clients_vendors', tables: ['clients', 'products'] };
 
@@ -181,21 +181,16 @@ const GlasscoDataWiper: React.FC = () => {
     TRANSACTIONAL_KEYS.forEach(k => { n += filterKey(k); });
     add('Transactional records (orders, GL, NCR, logs…)', n);
 
-    // 1b. Zero out stock quantities in store (keep item definitions, reset qty to 0)
-    // This keeps material master intact but removes GRN-posted stock
+    // 1b. Remove GlassCo store items from localStorage entirely
     try {
       const store = JSON.parse(localStorage.getItem('gtk_erp_store') || '[]');
       if (Array.isArray(store)) {
-        const zeroed = store.map((item: any) => {
-          if (item.company !== COMPANY) return item;
-          return { ...item, quantity: 0, unrestrictedQty: 0, qiQty: 0, blockedQty: 0,
-            reservedQty: 0, consignmentQty: 0, totalValue: 0, lastMovementDate: '' };
-        });
-        localStorage.setItem('gtk_erp_store', JSON.stringify(zeroed));
-        const count = zeroed.filter((i: any) => i.company === COMPANY).length;
-        add('Stock quantities zeroed (item definitions kept)', count);
+        const count = store.filter((i: any) => i.company === COMPANY).length;
+        const kept = store.filter((i: any) => i.company !== COMPANY);
+        localStorage.setItem('gtk_erp_store', JSON.stringify(kept));
+        add('Stock items removed from localStorage', count);
       }
-    } catch { add('Stock quantity reset', 0, 'skip'); }
+    } catch { add('Stock localStorage clear', 0, 'skip'); }
 
     // 2. Phase-specific keys
     FULL_WIPE_KEYS.forEach(removeKey);
