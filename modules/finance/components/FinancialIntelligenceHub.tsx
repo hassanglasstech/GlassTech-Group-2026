@@ -8,13 +8,15 @@
  *  - Improvement Summary (4F)
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useState, useMemo } from 'react';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import TrueCostCalculator from '@/modules/finance/components/TrueCostCalculator';
 import JobProfitabilityReport from '@/modules/finance/components/JobProfitability';
 import DeliveryKPIDashboard from '@/modules/finance/components/DeliveryKPI';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { SalesService } from '@/modules/sales/services/salesService';
+import { GeneratorService } from '@/modules/production/services/generatorService';
+import { LabourService } from '@/modules/production/services/labourService';
 import { calculateTrueCostPerSqft, calculateJobProfitability, calculateDeliveryKPIs } from '@/modules/finance/services/costAnalysisService';
 import {
   Calculator, DollarSign, Truck, FileText, TrendingUp,
@@ -33,6 +35,14 @@ const FinancialIntelligenceHub: React.FC = () => {
     `flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === id ? `${activeColor} ${bgColor} shadow-sm` : 'text-slate-500 hover:bg-slate-50'}`;
 
   // ── 4F: Summary data ───────────────────────────────────────────
+  // A-02: Trigger async cache refresh on mount/company change
+  useEffect(() => {
+    Promise.all([
+      GeneratorService.getLogs(company),
+      LabourService.getLogs(company),
+    ]).catch(() => {});
+  }, [company]);
+
   const summaryData = useMemo(() => {
     const costs = calculateTrueCostPerSqft(company);
     const jobs = calculateJobProfitability(company);

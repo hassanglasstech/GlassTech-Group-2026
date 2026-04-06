@@ -15,6 +15,7 @@ import ThreeWayMatching from '@/modules/finance/components/ThreeWayMatching';
 import { toast } from 'sonner';
 import GLConfiguration from '@/modules/finance/components/GLConfiguration';
 import GLPostingRules from '@/modules/finance/components/GLPostingRules';
+import GLCodeVerifier from '@/modules/finance/components/GLCodeVerifier';
 import FinanceDashboardView from '@/modules/finance/components/FinanceDashboardView';
 import AssetManagement from '@/modules/finance/components/AssetManagement';
 import ReportsHub from '@/modules/finance/pages/ReportsHub';
@@ -179,6 +180,7 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
             <div className="space-y-8">
               <GLConfiguration company={company} />
               <GLPostingRules company={company} />
+              <GLCodeVerifier company={company} />
             </div>
           )}
           {activeTab === 'recurring' && <RecurringExpenses company={company} />}

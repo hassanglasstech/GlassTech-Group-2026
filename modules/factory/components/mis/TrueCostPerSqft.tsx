@@ -4,6 +4,8 @@ import {
   TrendingDown, AlertTriangle, Info
 } from 'lucide-react';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
+import { GeneratorService } from '@/modules/production/services/generatorService';
+import { LabourService } from '@/modules/production/services/labourService';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { FinanceService } from '@/modules/finance/services/financeService';
@@ -52,6 +54,11 @@ const TrueCostPerSqft: React.FC = () => {
   const load = async () => {
     setLoading(true);
     try {
+      // A-02: Refresh generator + labour caches from Supabase before computing
+      await Promise.all([
+        GeneratorService.getLogs('Glassco').catch(() => []),
+        LabourService.getLogs('Glassco').catch(() => []),
+      ]);
       const month = thisMonthStr();
 
       // ── Revenue & Sqft from quotations ────────────────────────────

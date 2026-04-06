@@ -349,7 +349,7 @@ const Requisitions: React.FC = () => {
     }));
   };
 
-  const handlePostPR = () => {
+  const handlePostPR = async () => {
     if (formHeader.category !== 'HR') {
         if (!formHeader.requisitioner || !formHeader.headerText) return toast.error("SAP Protocol: Requisitioner and Header Text are mandatory.", { duration: 4000 });
     }
