@@ -1,6 +1,7 @@
 import { Client, Vendor } from '../types/crm';
 import { Product, Quotation, Project } from '../../shared/types';
 import { Invoice, PaymentReceipt } from '../../finance/types/finance';
+import { guardedSave, withTimestamp } from '@/modules/shared/services/concurrencyService';
 import { safeParse, safeSave } from '../../shared/services/utils';
 import { toast } from 'sonner';
 import { Logger } from '@/modules/shared/services/logger';

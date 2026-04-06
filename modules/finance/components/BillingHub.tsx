@@ -1,13 +1,5 @@
 
-import 
-          <button
-            onClick={() => setActiveView('credit_notes')}
-            className={`flex items-center gap-2 px-5 py-3 text-xs font-bold uppercase tracking-widest border-b-2 transition-all whitespace-nowrap ${
-              activeView === 'credit_notes' ? 'border-purple-500 text-purple-600 bg-purple-50' : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <FileMinus size={14}/> Credit Notes
-          </button>React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useDebounce } from '@/modules/shared/hooks/useDebounce';
 import { Company, Quotation, ProductionPiece, LedgerTransaction, Invoice, PaymentReceipt } from '../../shared/types';
 import { FinanceService } from '../services/financeService';
@@ -313,6 +305,12 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
         </button>
         <button onClick={() => setActiveView('receipts')} className={`flex items-center space-x-2 px-5 py-2 rounded-lg text-xs font-bold transition-all ${activeView === 'receipts' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
           <Receipt size={15}/><span>Payment History</span>
+        </button>
+        <button
+          onClick={() => setActiveView('credit_notes')}
+          className={`flex items-center space-x-2 px-5 py-2 rounded-lg text-xs font-bold transition-all ${activeView === 'credit_notes' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+        >
+          <FileMinus size={14}/><span>Credit Notes</span>
         </button>
       </div>
       </div>
