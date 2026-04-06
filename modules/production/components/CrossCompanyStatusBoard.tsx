@@ -285,47 +285,10 @@ const CrossCompanyStatusBoard: React.FC = () => {
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
       {/* Header */}
-      <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-7 rounded-3xl shadow-xl relative overflow-hidden">
-        <div className="absolute inset-0 opacity-5"><Building2 size={160} className="absolute -right-4 -top-4" /></div>
-        <div className="relative z-10 flex items-start justify-between">
-          <div>
-            <div className="flex items-center space-x-2 mb-1">
-              <Building2 size={18} className="text-blue-400" />
-              <h2 className="text-xl font-black uppercase">Cross-Company Status</h2>
-            </div>
-            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">
-              GTK & GTI orders at GlassCo · Live pipeline · Read-only
-            </p>
-          </div>
-          <div className="flex items-center space-x-3">
-            <div className="bg-emerald-500/20 px-4 py-2.5 rounded-2xl text-center border border-emerald-500/20">
-              <p className="text-[9px] font-black uppercase text-emerald-400">Ready</p>
-              <p className="text-xl font-black text-emerald-400">{stageCounts['Ready'] || 0}</p>
-            </div>
-            <div className="bg-white/10 px-4 py-2.5 rounded-2xl text-center border border-white/10">
-              <p className="text-[9px] font-black uppercase text-slate-400">Total</p>
-              <p className="text-xl font-black">{orders.length}</p>
-            </div>
-            <button onClick={() => setRefreshKey(p => p + 1)}
-              className="p-2.5 bg-white/10 hover:bg-white/20 rounded-xl transition-colors border border-white/10">
-              <RefreshCw size={16} className="text-slate-300" />
-            </button>
-          </div>
-        </div>
-
-        {/* Pipeline summary */}
-        <div className="flex space-x-2 mt-4 relative z-10 overflow-x-auto">
-          {STAGES.map(stage => {
-            const count = stageCounts[stage] || 0;
-            const cfg = STAGE_CONFIG[stage];
-            return (
-              <div key={stage} className="flex-shrink-0 bg-white/10 rounded-xl px-3 py-2 text-center border border-white/10 min-w-[60px]">
-                <div className={`text-[8px] font-black uppercase mb-1 ${count > 0 ? 'text-white' : 'text-slate-500'}`}>{stage}</div>
-                <div className={`text-lg font-black ${count > 0 ? 'text-white' : 'text-slate-600'}`}>{count}</div>
-              </div>
-            );
-          })}
-        </div>
+      <div className="flex items-center gap-3 px-4 py-2 bg-slate-100 border border-slate-200 rounded-xl">
+        <Building2 size={14} className="text-slate-600 shrink-0"/>
+        <span className="text-xs font-black uppercase tracking-widest text-slate-700">Cross-Company Orders</span>
+        <span className="text-[10px] text-slate-400 font-bold">GTK · GTI · GlassCo</span>
       </div>
 
       {/* Filters */}

@@ -403,7 +403,7 @@ const ProcessingView: React.FC = () => {
 
         {activeSubTab === 'wip' && (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
-               {!selectedJobId && <div className="bg-amber-500 text-white p-4 sm:p-8 rounded-[2rem] shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10 hidden sm:block"><Hourglass size={120} /></div><div className="relative z-10"></div></div>}
+               
                {renderGrid(
                  (p) => {
                     const order = jobOrders.find(j => j.orderNo === p.orderId);
@@ -431,7 +431,7 @@ const ProcessingView: React.FC = () => {
 
         {activeSubTab === 'lamination' && (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
-               {!selectedJobId && <div className="bg-orange-600 text-white p-4 sm:p-8 rounded-[2rem] shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10 hidden sm:block"><Layers size={120} /></div><div className="relative z-10"></div></div>}
+               
                {renderGrid(
                  (p) => {
                     const order = jobOrders.find(j => j.orderNo === p.orderId);
@@ -453,7 +453,7 @@ const ProcessingView: React.FC = () => {
 
         {activeSubTab === 'double_glaze' && (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
-               {!selectedJobId && <div className="bg-cyan-600 text-white p-4 sm:p-8 rounded-[2rem] shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-8 opacity-10 hidden sm:block"><Layers size={120} /></div><div className="relative z-10"></div></div>}
+               
                {renderGrid(
                  (p) => {
                     const order = jobOrders.find(j => j.orderNo === p.orderId);

@@ -683,17 +683,10 @@ const AIFloorPlanAdvisor: React.FC = () => {
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
       {/* Header */}
-      <div className="bg-gradient-to-br from-slate-900 to-violet-900 text-white p-7 rounded-3xl shadow-xl relative overflow-hidden">
-        <div className="absolute inset-0 opacity-5"><Zap size={160} className="absolute -right-4 -top-4" /></div>
-        <div className="relative z-10">
-          <div className="flex items-center space-x-2 mb-1">
-            <Zap size={20} className="text-violet-400" />
-            <h2 className="text-xl font-black uppercase">AI Floor Plan Advisor</h2>
-          </div>
-          <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">
-            EDF Scheduler · Urgent Insert Analyzer · Impact Assessment
-          </p>
-        </div>
+      <div className="flex items-center gap-3 px-4 py-2 bg-violet-50 border border-violet-200 rounded-xl">
+        <Zap size={14} className="text-violet-600 shrink-0"/>
+        <span className="text-xs font-black uppercase tracking-widest text-violet-700">AI Floor Plan Advisor</span>
+        <span className="text-[10px] text-slate-400 font-bold">EDF Scheduler · Smart assignment</span>
       </div>
 
       {/* Tabs */}

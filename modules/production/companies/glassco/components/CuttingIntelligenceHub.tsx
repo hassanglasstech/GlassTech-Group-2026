@@ -814,19 +814,10 @@ const CuttingIntelligenceHub: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
       {/* Page Header */}
-      <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-8 rounded-3xl shadow-xl relative overflow-hidden">
-        <div className="absolute inset-0 opacity-5">
-          <div className="absolute top-3 right-8"><BarChart2 size={120} /></div>
-        </div>
-        <div className="relative z-10">
-          <div className="flex items-center space-x-3 mb-1">
-            <Scissors size={20} className="text-blue-400" />
-            <h1 className="text-2xl font-black uppercase tracking-tight">Cutting Intelligence</h1>
-          </div>
-          <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">
-            GlassCo · Session tracking · Batch optimization · Target management
-          </p>
-        </div>
+      <div className="flex items-center gap-3 px-4 py-2 bg-slate-100 border border-slate-200 rounded-xl">
+        <Scissors size={14} className="text-blue-600 shrink-0"/>
+        <span className="text-xs font-black uppercase tracking-widest text-slate-700">Cutting Intelligence</span>
+        <span className="text-[10px] text-slate-400 font-bold">Session tracking · Batch optimization · Targets</span>
       </div>
 
       {/* Tab Nav */}

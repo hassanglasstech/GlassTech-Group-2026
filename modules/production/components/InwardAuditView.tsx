@@ -31,13 +31,9 @@ const InwardAuditView: React.FC<InwardAuditViewProps> = ({
 
     return (
         <div className="space-y-6 animate-in zoom-in duration-300">
-           <div className="bg-blue-900 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-8 opacity-10"><Truck size={120} /></div>
-              <div>
-                 
-                 <p className="text-[10px] font-bold text-blue-300 uppercase tracking-widest mt-1">Reconcile Returned Material</p>
-              </div>
-              <div className="flex items-center space-x-4 relative z-10">
+           <div className="flex flex-wrap items-center gap-3 px-4 py-2 bg-blue-50 border border-blue-200 rounded-xl">
+              <div className="flex items-center gap-2 shrink-0"><Truck size={14} className="text-blue-600"/><span className="text-xs font-black uppercase tracking-widest text-blue-700">Inward / Return</span><span className="text-[10px] text-slate-400 font-bold">Reconcile returned material</span></div>
+              <div className="flex items-center space-x-4 ml-auto">
                  <div className="space-y-2">
                     <label className="text-[9px] font-black uppercase text-blue-200 ml-1">Current Inward Dispatch</label>
                     <select value={activeInwardDispatchId} onChange={e => setActiveInwardDispatchId(e.target.value)} className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm font-black outline-none w-64 text-white">

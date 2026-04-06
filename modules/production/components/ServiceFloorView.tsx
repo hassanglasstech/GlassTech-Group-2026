@@ -31,16 +31,11 @@ const ServiceFloorView: React.FC<ServiceFloorViewProps> = ({ pieces, onUpdateSta
 
     return (
         <div className="space-y-6 animate-in slide-in-from-right duration-300">
-            <div className="bg-indigo-900 text-white p-8 rounded-[2rem] shadow-xl flex justify-between items-center relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-8 opacity-10"><Sparkles size={120} /></div>
-                <div>
-                    
-                    <p className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest mt-1">Value Addition Floor</p>
-                </div>
-                <div className="bg-white/10 px-6 py-4 rounded-2xl border border-white/10 relative z-10 text-center">
-                    <p className="text-[10px] font-black uppercase text-indigo-200 mb-1">Queue Load</p>
-                    <p className="text-3xl font-black">{filteredPieces.length}</p>
-                </div>
+            <div className="flex items-center gap-3 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-xl">
+                <Sparkles size={14} className="text-indigo-600 shrink-0"/>
+                <span className="text-xs font-black uppercase tracking-widest text-indigo-700">Services Floor</span>
+                <span className="text-[10px] text-slate-500 font-bold">Value Addition · Polish · Grind · Notch</span>
+                <span className="ml-auto text-xs font-black text-indigo-700 bg-indigo-100 px-3 py-0.5 rounded-full">{filteredPieces.length} in queue</span>
             </div>
 
             <div className="flex bg-white p-1 rounded-2xl border w-fit shadow-sm overflow-x-auto">
