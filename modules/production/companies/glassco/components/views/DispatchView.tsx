@@ -108,6 +108,8 @@ const DispatchView: React.FC = () => {
     openBinModal
   } = useProductionContext();
 
+  const [activeSubTab, setActiveSubTab] = React.useState<'qc' | 'finished_goods' | 'faults' | 'analytics'>('qc');
+
   // ── BA-03: Delivery Acknowledgment ─────────────────────────────────────
   const [ackingDispatchId, setAckingDispatchId] = React.useState<string | null>(null);
   const [ackSignatory,     setAckSignatory]     = React.useState('');

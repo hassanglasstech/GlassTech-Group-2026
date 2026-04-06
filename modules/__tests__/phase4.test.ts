@@ -246,6 +246,21 @@ describe('Purchase Return — EC-02', () => {
 describe('Bank CSV Parser — EC-03', () => {
 
   // Replicate the CSV parsing logic from BankReconciliation.tsx
+  // RFC 4180 compliant CSV field splitter — handles "1,00,000" quoted fields
+  function splitCSVLine(line: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { inQuotes = !inQuotes; continue; }
+      if (ch === ',' && !inQuotes) { result.push(current.trim()); current = ''; continue; }
+      current += ch;
+    }
+    result.push(current.trim());
+    return result;
+  }
+
   function parseCSV(csvText: string) {
     const lines = csvText.split('\n').map(l => l.trim()).filter(Boolean);
     if (lines.length < 2) return [];
@@ -257,7 +272,7 @@ describe('Bank CSV Parser — EC-03', () => {
         headerIdx = i; break;
       }
     }
-    const headers = lines[headerIdx].split(',').map(h => h.replace(/"/g, '').trim().toLowerCase());
+    const headers = splitCSVLine(lines[headerIdx]).map(h => h.replace(/"/g, '').trim().toLowerCase());
 
     const colIdx = (keywords: string[]) => {
       for (const kw of keywords) {
@@ -274,7 +289,7 @@ describe('Bank CSV Parser — EC-03', () => {
 
     const rows: any[] = [];
     for (let i = headerIdx + 1; i < lines.length; i++) {
-      const cols = lines[i].split(',').map(c => c.replace(/"/g, '').trim());
+      const cols = splitCSVLine(lines[i]).map(c => c.replace(/"/g, '').trim());
       const rawDate = dateCol >= 0 ? cols[dateCol] : '';
       if (!rawDate) continue;
 
@@ -606,8 +621,8 @@ describe('GL Posting Rules — FC-04', () => {
 
   it('rule key is company-scoped — same key different company = different rules', () => {
     const rules = [
-      makeRule({ rule_key: 'SALES_INVOICE', company: 'GTK',     debit_code: '12210' }),
-      makeRule({ rule_key: 'SALES_INVOICE', company: 'Glassco', debit_code: '12210' }),
+      makeRule({ id: 'PR-SALES_INVOICE-GTK',     rule_key: 'SALES_INVOICE', company: 'GTK',     debit_code: '12210' }),
+      makeRule({ id: 'PR-SALES_INVOICE-GLASSCO', rule_key: 'SALES_INVOICE', company: 'Glassco', debit_code: '12210' }),
     ];
     const gtkRule     = rules.find(r => r.company === 'GTK'     && r.rule_key === 'SALES_INVOICE');
     const glasscoRule = rules.find(r => r.company === 'Glassco' && r.rule_key === 'SALES_INVOICE');
