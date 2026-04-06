@@ -11,7 +11,7 @@ import BillingHub from '../../finance/components/BillingHub';
 import { Users, FileSignature, Layout, ShoppingCart, BarChart3, Receipt } from 'lucide-react';
 import { useAppStore } from '../../shared/store/appStore';
 
-type ActiveTab = 'orders' | 'quotations' | 'clients' | 'design' | 'pipeline' | 'invoices';
+type ActiveTab = 'orders' | 'quotations' | 'clients' | 'design' | 'pipeline' | 'invoices' | 'complaints';
 
 const styles = `
   .sd-wrap {
@@ -168,6 +168,12 @@ const SalesCRM: React.FC = () => {
           <Receipt size={14}/>
           Invoices & AR
         </button>
+          <button
+            onClick={() => setActiveTab('complaints')}
+            className={`sd-tab${activeTab === 'complaints' ? ' active' : ''}`}
+          >
+            Complaints
+          </button>
 
       </nav>
 
@@ -192,6 +198,7 @@ const SalesCRM: React.FC = () => {
           {activeTab === 'pipeline' && <SalesPipeline />}
 
           {activeTab === 'invoices' && <BillingHub company={company} />}
+          {activeTab === 'complaints' && <CustomerComplaintModule company={company} />}
 
         </div>
       </div>

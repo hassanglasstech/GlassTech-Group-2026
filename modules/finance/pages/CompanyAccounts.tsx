@@ -14,6 +14,7 @@ import BankReconciliation from '@/modules/finance/components/BankReconciliation'
 import ThreeWayMatching from '@/modules/finance/components/ThreeWayMatching';
 import { toast } from 'sonner';
 import GLConfiguration from '@/modules/finance/components/GLConfiguration';
+import GLPostingRules from '@/modules/finance/components/GLPostingRules';
 import FinanceDashboardView from '@/modules/finance/components/FinanceDashboardView';
 import AssetManagement from '@/modules/finance/components/AssetManagement';
 import ReportsHub from '@/modules/finance/pages/ReportsHub';
@@ -174,7 +175,12 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
           {/* Config */}
           {activeTab === 'coa' && <ChartOfAccounts company={company} />}
           {activeTab === 'cost_centers' && <CostCenterMaster company={company} />}
-          {activeTab === 'gl_config' && <GLConfiguration company={company} />}
+          {activeTab === 'gl_config' && (
+            <div className="space-y-8">
+              <GLConfiguration company={company} />
+              <GLPostingRules company={company} />
+            </div>
+          )}
           {activeTab === 'recurring' && <RecurringExpenses company={company} />}
           {activeTab === 'period_manager' && <PeriodManager company={company} />}
           

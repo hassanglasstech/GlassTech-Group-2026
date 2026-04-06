@@ -5,13 +5,13 @@
  * Unmatched statement = bank errors or recording gaps.
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Company } from '@/modules/shared/types/core';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { LedgerTransaction } from '@/modules/finance/types/finance';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { supabase } from '@/src/services/supabaseClient';
-import { CheckCircle2, AlertTriangle, Plus, X, Landmark, RefreshCw, FileText } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Plus, X, Landmark, RefreshCw, FileText, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface StatementLine {
@@ -140,6 +140,81 @@ const BankReconciliation: React.FC<{ company: Company }> = ({ company }) => {
       createdAt: new Date().toISOString(),
     };
     saveSession(s);
+  };
+
+
+  // ── EC-03: Bank Statement CSV Import ─────────────────────────────────────
+  // CSV import handled via file input onChange
+
+  const handleCSVImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !session) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      if (lines.length < 2) { toast.error('CSV appears empty.'); return; }
+
+      // Auto-detect header row — find line with Date/Debit/Credit keywords
+      let headerIdx = 0;
+      for (let i = 0; i < Math.min(5, lines.length); i++) {
+        const lower = lines[i].toLowerCase();
+        if (lower.includes('date') || lower.includes('debit') || lower.includes('credit')) {
+          headerIdx = i; break;
+        }
+      }
+      const headers = lines[headerIdx].split(',').map(h => h.replace(/"/g,'').trim().toLowerCase());
+
+      // Map columns — try common Pakistani bank CSV column names
+      const colIdx = (keywords: string[]) => {
+        for (const kw of keywords) {
+          const idx = headers.findIndex(h => h.includes(kw));
+          if (idx >= 0) return idx;
+        }
+        return -1;
+      };
+      const dateCol  = colIdx(['date', 'value date', 'txn date', 'tran date']);
+      const descCol  = colIdx(['description', 'narration', 'particulars', 'detail', 'remarks']);
+      const debitCol = colIdx(['debit', 'dr', 'withdrawal', 'payment']);
+      const creditCol= colIdx(['credit', 'cr', 'deposit', 'receipt']);
+
+      if (dateCol < 0) { toast.error('Could not find Date column in CSV.'); return; }
+
+      const imported: any[] = [];
+      for (let i = headerIdx + 1; i < lines.length; i++) {
+        const cols = lines[i].split(',').map(c => c.replace(/"/g,'').trim());
+        if (cols.length < 2) continue;
+        const rawDate = dateCol >= 0 ? cols[dateCol] : '';
+        if (!rawDate) continue;
+
+        // Parse date — support DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD
+        let date = rawDate;
+        const dmY = rawDate.match(/^(\d{2})[/\-](\d{2})[/\-](\d{4})$/);
+        if (dmY) date = `${dmY[3]}-${dmY[2]}-${dmY[1]}`;
+        const Ymd = rawDate.match(/^(\d{4})[/\-](\d{2})[/\-](\d{2})$/);
+        if (Ymd) date = rawDate.replace(/\//g, '-');
+
+        const description = descCol >= 0 ? cols[descCol] : `Row ${i}`;
+        const debit  = debitCol  >= 0 ? parseFloat(cols[debitCol]?.replace(/,/g,''))  || 0 : 0;
+        const credit = creditCol >= 0 ? parseFloat(cols[creditCol]?.replace(/,/g,'')) || 0 : 0;
+        if (debit === 0 && credit === 0) continue;
+
+        const lastBal = imported.length > 0 ? imported[imported.length - 1].balance : 0;
+        imported.push({
+          id: `CSV-${Date.now()}-${i}`,
+          date, description, debit, credit,
+          balance: lastBal + debit - credit,
+          matched: false,
+        });
+      }
+
+      if (imported.length === 0) { toast.error('No valid rows found in CSV.'); return; }
+      const updated = { ...session, lines: [...session.lines, ...imported] };
+      saveSession(updated);
+      toast.success(`${imported.length} statement lines imported from CSV.`);
+      if (e.target) e.target.value = '';
+    };
+    reader.readAsText(file);
   };
 
   const addStatementLine = () => {
@@ -322,10 +397,16 @@ const BankReconciliation: React.FC<{ company: Company }> = ({ company }) => {
                 <h3 className="font-black uppercase text-slate-700 text-xs tracking-widest">Bank Statement Lines</h3>
                 <p className="text-[9px] text-slate-400 mt-0.5">{session.lines.length} lines · {unmatchedSt} unmatched</p>
               </div>
-              <button onClick={() => setShowAddLine(!showAddLine)}
-                className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-blue-700">
-                <Plus size={12}/> Add Line
-              </button>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-emerald-700 cursor-pointer">
+                  <Upload size={12}/> Import CSV
+                  <input type="file" accept=".csv,.txt" className="hidden" onChange={handleCSVImport}/>
+                </label>
+                <button onClick={() => setShowAddLine(!showAddLine)}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-blue-700">
+                  <Plus size={12}/> Add Line
+                </button>
+              </div>
             </div>
 
             {showAddLine && (

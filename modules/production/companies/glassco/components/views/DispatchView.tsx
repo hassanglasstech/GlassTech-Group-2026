@@ -108,7 +108,32 @@ const DispatchView: React.FC = () => {
     openBinModal
   } = useProductionContext();
 
-  const [activeSubTab, setActiveSubTab] = useState<'qc' | 'finished_goods' | 'faults' | 'analytics'>('qc');
+  // ── BA-03: Delivery Acknowledgment ─────────────────────────────────────
+  const [ackingDispatchId, setAckingDispatchId] = React.useState<string | null>(null);
+  const [ackSignatory,     setAckSignatory]     = React.useState('');
+  const [ackNotes,         setAckNotes]         = React.useState('');
+
+  const handleDeliveryAck = (dispatchId: string) => {
+    if (!ackSignatory.trim()) { toast.error('Enter client signatory name.'); return; }
+    const all = ProductionService.getTemperingDispatches();
+    const updated = all.map((d: any) =>
+      d.id === dispatchId
+        ? {
+            ...d,
+            deliveryAcknowledgedAt: new Date().toISOString(),
+            deliveryAcknowledgedBy: 'Staff',
+            deliverySignatory:      ackSignatory,
+            deliveryAckNotes:       ackNotes,
+          }
+        : d
+    );
+    ProductionService.saveTemperingDispatches(updated);
+    toast.success(`Delivery acknowledged by ${ackSignatory}.`);
+    setAckingDispatchId(null);
+    setAckSignatory(''); setAckNotes('');
+  };
+
+  useState<'qc' | 'finished_goods' | 'faults' | 'analytics'>('qc');
   const [failingPiece, setFailingPiece] = useState<any>(null);
 
   const handleQCFail = (piece: any) => setFailingPiece(piece);
@@ -286,6 +311,52 @@ const DispatchView: React.FC = () => {
           />
         )}
     </div>
+
+      {/* ── BA-03: Delivery Acknowledgment Modal ── */}
+      {ackingDispatchId && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[500] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2rem] w-full max-w-sm shadow-2xl overflow-hidden">
+            <div className="bg-emerald-700 text-white px-6 py-4 font-black uppercase text-sm tracking-widest">
+              Confirm Delivery Acknowledgment
+            </div>
+            <div className="p-6 space-y-4 bg-slate-50">
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Client Signatory Name *</label>
+                <input
+                  value={ackSignatory}
+                  onChange={e => setAckSignatory(e.target.value)}
+                  placeholder="Person who received the delivery"
+                  className="sap-input w-full font-bold"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Notes (optional)</label>
+                <input
+                  value={ackNotes}
+                  onChange={e => setAckNotes(e.target.value)}
+                  placeholder="Any delivery remarks"
+                  className="sap-input w-full"
+                />
+              </div>
+              <p className="text-xs text-slate-400">
+                Dispatch: <span className="font-mono font-black">{ackingDispatchId}</span>
+              </p>
+            </div>
+            <div className="px-6 py-4 bg-white border-t flex gap-3">
+              <button onClick={() => { setAckingDispatchId(null); setAckSignatory(''); setAckNotes(''); }}
+                className="flex-1 py-2 border rounded-xl font-black uppercase text-xs text-slate-500">
+                Cancel
+              </button>
+              <button onClick={() => handleDeliveryAck(ackingDispatchId)}
+                className="flex-1 py-2 bg-emerald-600 text-white rounded-xl font-black uppercase text-xs hover:bg-emerald-700">
+                Confirm Ack
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
   );
 };
 
