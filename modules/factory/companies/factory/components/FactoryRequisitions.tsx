@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Company, Requisition, LedgerTransaction } from '@/modules/shared/types';
 import { FinanceService } from '@/modules/finance/services/financeService';
+import { pushCrossCompanyNotif } from '@/modules/shared/services/crossCompanyNotifService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { FileText, CheckCircle2, Send } from 'lucide-react';
 import { toast } from 'sonner';
@@ -64,8 +65,15 @@ const FactoryRequisitions: React.FC<FactoryRequisitionsProps> = ({ requisitions,
                 isRead: false,
                 date: new Date().toISOString()
             };
-            const existingNotifs = JSON.parse(localStorage.getItem('gtk_notifications') || '[]');
-            localStorage.setItem('gtk_notifications', JSON.stringify([...existingNotifs, notification]));
+            await pushCrossCompanyNotif({
+              targetCompany: req.company,
+              fromCompany:   'Factory',
+              title:         notification.title,
+              message:       notification.message,
+              type:          'requisition_approved',
+              referenceId:   req.id,
+              link:          notification.link,
+            });
         }
 
         refreshData();

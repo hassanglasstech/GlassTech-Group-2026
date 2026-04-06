@@ -1,7 +1,9 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Quotation, ProductionPiece, TemperingDispatch, Client } from '@/modules/shared/types';
-import { Filter, CheckCircle2, Truck, AlertTriangle, CalendarDays, Search } from 'lucide-react';
+import { Filter, CheckCircle2, Truck, AlertTriangle, CalendarDays, Search, Zap, Loader2 } from 'lucide-react';
+import { ProductionService } from '@/modules/production/services/productionService';
+import { toast } from 'sonner';
 import { getGlassSize, isInternal, isDispatchOverdue } from './ProductionUtils';
 import Pagination from '@/components/Pagination';
 
@@ -26,12 +28,64 @@ interface JobRegistryViewProps {
     setSelectedClientFilter: (val: string) => void;
     filterDate: string;
     setFilterDate: (val: string) => void;
+    onPiecesGenerated?: () => void;
 }
 
 const JobRegistryView: React.FC<JobRegistryViewProps> = ({ 
     jobOrders, pieces, dispatches, clients, 
     selectedClientFilter, setSelectedClientFilter, filterDate, setFilterDate 
 }) => {
+
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+
+  const handleGeneratePieces = useCallback(async (job: Quotation) => {
+    const existingPieces = pieces.filter(p => p.orderId === job.orderNo || p.orderId === job.id);
+    if (existingPieces.length > 0) {
+      toast.error(`${existingPieces.length} pieces already exist for this job.`);
+      return;
+    }
+    if (!job.items?.length) {
+      toast.error('Job has no line items — cannot generate pieces.');
+      return;
+    }
+    setGeneratingId(job.id);
+    try {
+      const now = new Date().toISOString();
+      const newPieces: ProductionPiece[] = [];
+      job.items.forEach((item, itemIdx) => {
+        const qty = Math.max(1, Math.round(item.qty || 1));
+        // Build spec string from item data
+        const sizePart  = item.width && item.height
+          ? `${item.width}×${item.height}`
+          : item.glassSize || '';
+        const typePart  = item.glazingSpecs || item.glassType || item.description || '';
+        const specs     = [sizePart, typePart, item.locationCode].filter(Boolean).join(' | ');
+
+        for (let i = 0; i < qty; i++) {
+          newPieces.push({
+            id:          `PC-${job.orderNo || job.id}-${itemIdx + 1}-${i + 1}-${Date.now().toString().slice(-4)}`,
+            orderId:     job.orderNo || job.id,
+            itemIndex:   itemIdx,
+            specs:       specs || `Item ${itemIdx + 1} / Piece ${i + 1}`,
+            status:      'Cut',
+            lastUpdated: now,
+          } as ProductionPiece);
+        }
+      });
+
+      const allPieces = ProductionService.getProductionPieces();
+      ProductionService.saveProductionPieces([...allPieces, ...newPieces]);
+      toast.success(`${newPieces.length} pieces generated for ${job.projectName || job.orderNo || job.id}.`, { duration: 5000 });
+      if (typeof (window as any).__jobRegistryRefresh === 'function') {
+        (window as any).__jobRegistryRefresh();
+      }
+    } catch (e: any) {
+      toast.error('Piece generation failed: ' + (e.message || 'unknown error'));
+    } finally {
+      setGeneratingId(null);
+    }
+  }, [pieces]);
+
     const [currentPage, setCurrentPage] = useState(1);
     const [statusFilter, setStatusFilter] = useState('Active');
     const [searchTerm, setSearchTerm] = useState('');
@@ -161,6 +215,7 @@ const JobRegistryView: React.FC<JobRegistryViewProps> = ({
                         <th className="px-6 py-4">External Processing (Detailed)</th>
                         <th className="px-6 py-4">Site Delivery (Final)</th>
                         <th className="px-6 py-4 w-56">Order SLA Timeline</th>
+                        <th className="px-4 py-4 w-28">Pieces</th>
                      </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -357,11 +412,31 @@ const JobRegistryView: React.FC<JobRegistryViewProps> = ({
                                     <span className="text-[10px] text-slate-300 font-bold italic">No Deadline</span>
                                 )}
                              </td>
+                             <td className="px-4 py-4 align-middle">
+                               {jobPieces.length === 0 ? (
+                                 <button
+                                   onClick={() => handleGeneratePieces(j)}
+                                   disabled={generatingId === j.id}
+                                   title="Generate production pieces from quotation items"
+                                   className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-indigo-700 transition-colors shadow disabled:opacity-50"
+                                 >
+                                   {generatingId === j.id
+                                     ? <Loader2 size={12} className="animate-spin"/>
+                                     : <Zap size={12}/>
+                                   }
+                                   Generate
+                                 </button>
+                               ) : (
+                                 <span className="text-[9px] font-black text-emerald-600 uppercase flex items-center gap-1">
+                                   <CheckCircle2 size={10}/> {jobPieces.length} Pieces
+                                 </span>
+                               )}
+                             </td>
                           </tr>
                         );
                      })}
                      {filteredJobs.length === 0 && (
-                         <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-300 font-black uppercase italic text-xs">No matching workloads found</td></tr>
+                         <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-300 font-black uppercase italic text-xs">No matching workloads found</td></tr>
                      )}
                   </tbody>
                </table>

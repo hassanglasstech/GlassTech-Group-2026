@@ -40,6 +40,7 @@ const saveConfig = async (company: string, key: string, value: any) => {
   } catch {}
   localStorage.setItem(`${company}_${key}`, JSON.stringify(value)); // keep LS as cache
 };
+import { pushCrossCompanyNotif } from '@/modules/shared/services/crossCompanyNotifService';
 import { SyncService } from '@/src/services/SyncService';
 import { useAppStore } from '../../shared/store/appStore';
 
@@ -435,8 +436,15 @@ const Requisitions: React.FC = () => {
           date: new Date().toISOString(),
           link: `/requisitions?id=${newPR.id}`
       };
-      const existingNotifs = JSON.parse(localStorage.getItem('gtk_notifications') || '[]');
-      localStorage.setItem('gtk_notifications', JSON.stringify([...existingNotifs, notification]));
+      await pushCrossCompanyNotif({
+          targetCompany: 'Factory',
+          fromCompany:   company,
+          title:         notification.title,
+          message:       notification.message,
+          type:          'requisition_submitted',
+          referenceId:   newPR.id,
+          link:          notification.link,
+        });
     }
 
     refreshData();
@@ -468,7 +476,7 @@ const Requisitions: React.FC = () => {
   };
 
   // ─── APPROVE: Single Parked PV → Finance reviews & posts ─────────────
-  const handleApprove = (id: string) => {
+  const handleApprove = async (id: string) => {
     const pr = requisitions.find(r => r.id === id);
     if (!pr) return;
 
@@ -503,8 +511,15 @@ const Requisitions: React.FC = () => {
             date: new Date().toISOString(),
             link: `/requisitions?id=${pr.id}`
         };
-        const existingNotifs = JSON.parse(localStorage.getItem('gtk_notifications') || '[]');
-        localStorage.setItem('gtk_notifications', JSON.stringify([...existingNotifs, notification]));
+        await pushCrossCompanyNotif({
+          targetCompany: pr.company,
+          fromCompany:   'Factory',
+          title:         notification.title,
+          message:       notification.message,
+          type:          'requisition_approved',
+          referenceId:   pr.id,
+          link:          notification.link,
+        });
     }
 
     refreshData();
