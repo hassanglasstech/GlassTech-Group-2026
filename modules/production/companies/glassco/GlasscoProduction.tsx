@@ -93,18 +93,26 @@ const styles = `
   .pp-nav {
     background: #ffffff;
     border-bottom: 1px solid #e2e8f0;
-    padding: 0 16px;
+    padding: 0 0 0 16px;
     display: flex;
     align-items: stretch;
     gap: 2px;
     position: sticky;
     top: 0;
-    z-index: 20;
+    z-index: 200;
     box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    overflow: visible;
+  }
+  .pp-nav-scroll {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
     overflow-x: auto;
     scrollbar-width: none;
+    flex: 1;
+    min-width: 0;
   }
-  .pp-nav::-webkit-scrollbar { display: none; }
+  .pp-nav-scroll::-webkit-scrollbar { display: none; }
 
   .pp-tab {
     display: flex;
@@ -133,23 +141,25 @@ const styles = `
     position: relative;
     display: flex;
     align-items: stretch;
-    margin-left: auto;
     flex-shrink: 0;
+    background: #ffffff;
+    box-shadow: -4px 0 8px rgba(255,255,255,0.9);
+    z-index: 201;
   }
   .pp-more-btn {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 12px 16px;
+    padding: 12px 18px;
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 800;
     letter-spacing: .06em;
     text-transform: uppercase;
-    color: #94a3b8;
-    background: none;
+    color: #7c3aed;
+    background: #f5f3ff;
     border: none;
-    border-bottom: 3px solid transparent;
-    border-left: 1px solid #e2e8f0;
+    border-bottom: 3px solid #7c3aed;
+    border-left: 1px solid #ddd6fe;
     cursor: pointer;
     white-space: nowrap;
     transition: all .15s;
@@ -160,14 +170,14 @@ const styles = `
 
   .pp-dropdown {
     position: absolute;
-    top: calc(100% + 4px);
+    top: calc(100% + 2px);
     right: 0;
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0,0,0,.12);
+    box-shadow: 0 8px 32px rgba(0,0,0,.18);
     min-width: 220px;
-    z-index: 100;
+    z-index: 9999;
     overflow: hidden;
     animation: ddFadeIn .12s ease;
   }
@@ -373,6 +383,7 @@ const GlasscoProductionContent: React.FC = () => {
       <style>{styles}</style>
 
       <nav className="pp-nav">
+        <div className="pp-nav-scroll">
         {PRIMARY_TABS.map(tab => (
           <button
             key={tab.id}
@@ -383,6 +394,7 @@ const GlasscoProductionContent: React.FC = () => {
             {tab.label}
           </button>
         ))}
+        </div>
 
         {/* More dropdown */}
         <div className="pp-more-wrap" ref={moreRef}>
