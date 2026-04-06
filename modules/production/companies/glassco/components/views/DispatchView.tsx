@@ -310,9 +310,8 @@ const DispatchView: React.FC = () => {
             onCancel={() => setFailingPiece(null)}
           />
         )}
-    </div>
 
-      {/* ── BA-03: Delivery Acknowledgment Modal ── */}
+      {/* BA-03: Delivery Acknowledgment Modal */}
       {ackingDispatchId && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[500] flex items-center justify-center p-4">
           <div className="bg-white rounded-[2rem] w-full max-w-sm shadow-2xl overflow-hidden">
@@ -356,6 +355,8 @@ const DispatchView: React.FC = () => {
           </div>
         </div>
       )}
+    </div>
+
 
   );
 };
