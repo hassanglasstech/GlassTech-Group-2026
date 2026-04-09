@@ -159,7 +159,15 @@ const rowToFinancialEvent = (r: any): FinancialEvent => ({
 });
 
 // ── Load all finance data from Supabase into cache ────────────────────
+// SEC-1: company is resolved from the authenticated user's profile so the
+// DB-level RLS policy and the application filter are both in effect.
+// Neither can be bypassed independently.
 const _loadCache = async (): Promise<void> => {
+  const company = useAuthStore.getState().profile?.company ?? '';
+  if (!company) {
+    Logger.warn('Finance', '_loadCache called with no company — skipping Supabase load');
+    return;
+  }
   try {
     const [
       { data: accounts },
@@ -169,12 +177,12 @@ const _loadCache = async (): Promise<void> => {
       { data: recurring },
       { data: events },
     ] = await Promise.all([
-      supabase.from('accounts').select('*'),
-      supabase.from('ledger').select('*'),
-      supabase.from('cost_centers').select('*'),
-      supabase.from('petty_cash').select('*'),
-      supabase.from('recurring_expenses').select('*'),
-      supabase.from('financial_events').select('*'),
+      supabase.from('accounts').select('*').eq('company', company),
+      supabase.from('ledger').select('*').eq('company', company),
+      supabase.from('cost_centers').select('*').eq('company', company),
+      supabase.from('petty_cash').select('*').eq('company', company),
+      supabase.from('recurring_expenses').select('*').eq('company', company),
+      supabase.from('financial_events').select('*').eq('company', company),
     ]);
 
     if (accounts?.length)    { _cache.accounts          = accounts.map(rowToAccount);          safeSave(KEYS.ACCOUNTS,           _cache.accounts); }

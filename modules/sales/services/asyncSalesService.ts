@@ -24,8 +24,10 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const AsyncSalesService = {
   getClients: async (): Promise<Client[]> => {
+    // SEC-3: scope to caller's company — defence-in-depth over DB-level RLS.
+    const company = useAuthStore.getState().profile?.company ?? '';
     try {
-      const { data, error } = await supabase.from('clients').select('*');
+      const { data, error } = await supabase.from('clients').select('*').eq('company', company);
       if (error) {
         console.error('[AsyncSalesService] getClients:', error.message);
         return safeParse(KEYS.CLIENTS);
@@ -75,8 +77,9 @@ export const AsyncSalesService = {
   },
   
   getProducts: async (): Promise<Product[]> => {
+    const company = useAuthStore.getState().profile?.company ?? '';
     try {
-      const { data, error } = await supabase.from('products').select('*');
+      const { data, error } = await supabase.from('products').select('*').eq('company', company);
       if (error) {
         console.error('[AsyncSalesService] getProducts:', error.message);
         toast.error('Cloud sync failed — using local products.', { id: 'get-products', duration: 3000 });
@@ -133,8 +136,9 @@ export const AsyncSalesService = {
   },
   
   getQuotations: async (): Promise<Quotation[]> => {
+    const company = useAuthStore.getState().profile?.company ?? '';
     try {
-      const { data, error } = await supabase.from('quotations').select('*');
+      const { data, error } = await supabase.from('quotations').select('*').eq('company', company);
       if (error) {
         console.error('[AsyncSalesService] getQuotations:', error.message);
         return safeParse(KEYS.QUOTATIONS);
@@ -201,8 +205,9 @@ export const AsyncSalesService = {
   },
   
   getProjects: async (): Promise<Project[]> => {
+    const company = useAuthStore.getState().profile?.company ?? '';
     try {
-      const { data, error } = await supabase.from('projects').select('*');
+      const { data, error } = await supabase.from('projects').select('*').eq('company', company);
       if (error) {
         console.error('[AsyncSalesService] getProjects:', error.message);
         return safeParse(KEYS.PROJECTS);
@@ -219,8 +224,9 @@ export const AsyncSalesService = {
 
 
   getVendors: async (): Promise<Vendor[]> => {
+    const company = useAuthStore.getState().profile?.company ?? '';
     try {
-      const { data, error } = await supabase.from('vendor_contracts').select('*');
+      const { data, error } = await supabase.from('vendor_contracts').select('*').eq('company', company);
       if (error || !data || data.length === 0) return safeParse(KEYS.VENDORS);
       const mapped = data.map((r: any) => ({ ...r }));
       safeSave(KEYS.VENDORS, mapped);
@@ -240,8 +246,9 @@ export const AsyncSalesService = {
   },
 
   getInvoices: async (): Promise<Invoice[]> => {
+    const company = useAuthStore.getState().profile?.company ?? '';
     try {
-      const { data, error } = await supabase.from('invoices').select('*');
+      const { data, error } = await supabase.from('invoices').select('*').eq('company', company);
       if (error || !data || data.length === 0) return safeParse('gtk_erp_invoices');
       const mapped = data.map((r: any) => ({
         id: r.id, company: r.company, orderId: r.order_id, orderNo: r.order_no,
@@ -275,8 +282,9 @@ export const AsyncSalesService = {
   },
 
   getPaymentReceipts: async (): Promise<PaymentReceipt[]> => {
+    const company = useAuthStore.getState().profile?.company ?? '';
     try {
-      const { data, error } = await supabase.from('payment_receipts').select('*');
+      const { data, error } = await supabase.from('payment_receipts').select('*').eq('company', company);
       if (error || !data || data.length === 0) return safeParse('gtk_erp_payment_receipts');
       const mapped = data.map((r: any) => ({
         id: r.id, invoiceId: r.invoice_id, date: r.date, amount: r.amount,

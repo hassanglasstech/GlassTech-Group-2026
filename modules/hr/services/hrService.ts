@@ -14,6 +14,7 @@ import { supabase } from '@/src/services/supabaseClient';
 import { SyncService } from '@/src/services/SyncService';
 import { Logger } from '@/modules/shared/services/logger';
 import { toast } from 'sonner';
+import { useAuthStore } from '@/modules/auth/authStore';
 
 // ── Local cache keys (fallback + offline buffer) ────────────────────
 const KEYS = {
@@ -170,30 +171,40 @@ const payrollToRow = (p: Payroll & { company?: string }) => ({
 });
 
 // ── Cache Loader ────────────────────────────────────────────────────
+// SEC-2: all four HR queries are scoped to the authenticated user's company.
+// RLS on the DB enforces the same constraint; this is a defence-in-depth
+// application-layer guard so no cross-tenant rows ever enter the cache.
 const refreshCache = async (): Promise<void> => {
+  const company = useAuthStore.getState().profile?.company ?? '';
+  if (!company) {
+    console.warn('[HRService] refreshCache called with no company — skipping Supabase load');
+    _cache.loaded = true;
+    return;
+  }
+
   try {
-    const empRes = await supabase.from('employees').select('*');
+    const empRes = await supabase.from('employees').select('*').eq('company', company);
     if (empRes.data) {
       _cache.employees = empRes.data.map(rowToEmployee);
     }
   } catch (e: any) { console.warn('[HRService] employees pull failed:', e.message); }
 
   try {
-    const attRes = await supabase.from('attendance').select('*');
+    const attRes = await supabase.from('attendance').select('*').eq('company', company);
     if (attRes.data) {
       _cache.attendance = attRes.data.map(rowToAttendance);
     }
   } catch (e: any) { console.warn('[HRService] attendance pull failed:', e.message); }
 
   try {
-    const loanRes = await supabase.from('loans').select('*');
+    const loanRes = await supabase.from('loans').select('*').eq('company', company);
     if (loanRes.data) {
       _cache.loans = loanRes.data.map(rowToLoan);
     }
   } catch (e: any) { console.warn('[HRService] loans pull failed:', e.message); }
 
   try {
-    const payRes = await supabase.from('payroll').select('*');
+    const payRes = await supabase.from('payroll').select('*').eq('company', company);
     if (payRes.data) {
       _cache.payroll = payRes.data.map(rowToPayroll);
     }

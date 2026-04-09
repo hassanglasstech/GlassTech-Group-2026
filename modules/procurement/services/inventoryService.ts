@@ -7,6 +7,7 @@ import {
 import { initDB } from '@/modules/shared/services/db';
 import { bgSaveToIDB, safeParse, safeSave } from '@/modules/shared/services/utils';
 import { supabase } from '../../../src/services/supabaseClient';
+import { useAuthStore } from '@/modules/auth/authStore';
 
 const KEYS = {
   STORE:              'gtk_erp_store',
@@ -35,8 +36,10 @@ export const InventoryService = {
   // ── Store ──────────────────────────────────────────────────────────
   getStore: (): StoreItem[] => safeParse(KEYS.STORE),
   getStoreAsync: async (): Promise<StoreItem[]> => {
+    // SEC-4: scope to authenticated user's company — defence-in-depth over DB RLS.
+    const company = useAuthStore.getState().profile?.company ?? '';
     try {
-      const { data, error } = await supabase.from('store_items').select('*');
+      const { data, error } = await supabase.from('store_items').select('*').eq('company', company);
       if (!error && data && data.length > 0) {
         const mapped: StoreItem[] = data.map((r: any) => ({
           ...r,
@@ -80,8 +83,9 @@ export const InventoryService = {
   // ── Stock Ledger ───────────────────────────────────────────────────
   getStockLedger: (): MaterialLedgerEntry[] => safeParse(KEYS.STOCK_LEDGER),
   getStockLedgerAsync: async (): Promise<MaterialLedgerEntry[]> => {
+    const company = useAuthStore.getState().profile?.company ?? '';
     try {
-      const { data, error } = await supabase.from('stock_ledger').select('*');
+      const { data, error } = await supabase.from('stock_ledger').select('*').eq('company', company);
       if (!error && data && data.length > 0) {
         const mapped: MaterialLedgerEntry[] = data.map((r: any) => ({
           id: r.id, company: r.company, materialId: r.material_id,
