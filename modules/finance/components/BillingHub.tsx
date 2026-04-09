@@ -2,7 +2,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useDebounce } from '@/modules/shared/hooks/useDebounce';
 import { Company, Quotation, ProductionPiece, LedgerTransaction, Invoice, PaymentReceipt } from '../../shared/types';
-import { FinanceService } from '../services/financeService';
+import { FinanceService, LedgerImbalanceError } from '../services/financeService';
+import { useAuthStore } from '@/modules/auth/authStore';
+import { Logger } from '@/modules/shared/services/logger';
 import { SalesService } from '../../sales/services/salesService';
 import { AsyncSalesService } from '../../sales/services/asyncSalesService';
 import { ProductionService } from '../../production/services/productionService';
@@ -261,15 +263,55 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
   const totalAR = outstandingInvoices.reduce((s, i) => s + i.balance, 0);
   const overdueInvoices = outstandingInvoices.filter(i => getAgingDays(i.dueDate) > 0);
 
+  // M-5: Batch-post with per-entry GL balance validation.
+  // Balanced entries are posted; imbalanced entries are REJECTED with a
+  // LedgerImbalanceError and reported individually — the batch is never
+  // silently failed or partially corrupted.
   const handleBulkPostGL = () => {
     const ledger = FinanceService.getLedger();
     const parked = ledger.filter((t: any) => t.company === company && t.status === 'Parked');
     if (parked.length === 0) return toast.error('No parked GL entries to post.');
-    const posted = ledger.map((t: any) =>
-      t.company === company && t.status === 'Parked' ? { ...t, status: 'Posted' } : t
+
+    const imbalanceErrors: LedgerImbalanceError[] = [];
+    const balancedIds = new Set<string>();
+
+    for (const tx of parked) {
+      try {
+        FinanceService.assertGLBalance(tx);
+        balancedIds.add(tx.id);
+      } catch (err) {
+        if (err instanceof LedgerImbalanceError) {
+          imbalanceErrors.push(err);
+          Logger.warn?.('BillingHub', `Batch rejected: ${err.message}`);
+        }
+      }
+    }
+
+    if (balancedIds.size === 0) {
+      toast.error(
+        `Batch rejected — all ${imbalanceErrors.length} parked entries are imbalanced. Nothing posted. Check GL entries.`,
+        { duration: 10000 }
+      );
+      return;
+    }
+
+    // Only write balanced entries — never touch the imbalanced ones
+    const updated = ledger.map((t: any) =>
+      balancedIds.has(t.id) ? { ...t, status: 'Posted' } : t
     );
-    FinanceService.saveLedger(posted);
-    toast.success(`${parked.length} GL entries posted.`);
+    FinanceService.saveLedger(updated);
+
+    if (imbalanceErrors.length > 0) {
+      toast.warning(
+        `${balancedIds.size} of ${parked.length} entries posted. ` +
+        `${imbalanceErrors.length} REJECTED (imbalanced):\n` +
+        imbalanceErrors.map(e => `• ${e.txId}: Δ ${e.delta >= 0 ? '+' : ''}${e.delta.toFixed(2)}`).join('\n'),
+        { duration: 12000 }
+      );
+    } else {
+      toast.success(`${balancedIds.size} GL entries posted — all balanced. ✓`);
+    }
+
     refreshData();
   };
   const parkedCount = FinanceService.getLedger().filter((t: any) => t.company === company && t.status === 'Parked').length;

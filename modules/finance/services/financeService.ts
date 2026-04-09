@@ -5,6 +5,25 @@
 //  All GL data now lives in Supabase. localStorage = offline buffer only.
 // ═══════════════════════════════════════════════════════════════════════
 
+// ── Custom Error: GL Double-Entry Imbalance ────────────────────────────
+// Thrown before ANY status flip to 'Posted'. React UI should catch this
+// and surface the txId + amounts to the user — never swallow silently.
+export class LedgerImbalanceError extends Error {
+  constructor(
+    public readonly txId:       string,
+    public readonly sumDebits:  number,
+    public readonly sumCredits: number,
+    public readonly delta:      number,
+  ) {
+    super(
+      `GL Imbalance in "${txId}": Σdebit ${sumDebits.toFixed(2)} ≠ Σcredit ${sumCredits.toFixed(2)} (delta ${delta >= 0 ? '+' : ''}${delta.toFixed(2)})`
+    );
+    this.name = 'LedgerImbalanceError';
+    // Maintain proper prototype chain for instanceof checks across transpile targets
+    Object.setPrototypeOf(this, LedgerImbalanceError.prototype);
+  }
+}
+
 import { safeParse, safeSave } from '../../shared/services/utils';
 import { supabase } from '@/src/services/supabaseClient';
 import { Logger } from '@/modules/shared/services/logger';
@@ -18,6 +37,23 @@ import {
 import { COMPANY_COA, COAAccount } from '../constants/coa.index';
 import { PeriodService } from './periodService';
 import { useAuthStore } from '@/modules/auth/authStore';
+
+// ── GL Balance Assertion (private) ────────────────────────────────────
+// Integer-cent arithmetic eliminates IEEE-754 rounding drift.
+// Must be called before EVERY status transition to 'Posted'. Zero-tolerance.
+const _assertGLBalance = (tx: { id?: string; details?: Array<{ debit?: number; credit?: number }> }): void => {
+  const lines      = tx.details ?? [];
+  const centsDebit  = Math.round(lines.reduce((s, d) => s + (d.debit  ?? 0), 0) * 100);
+  const centsCredit = Math.round(lines.reduce((s, d) => s + (d.credit ?? 0), 0) * 100);
+  if (centsDebit !== centsCredit) {
+    throw new LedgerImbalanceError(
+      tx.id ?? 'UNKNOWN',
+      centsDebit  / 100,
+      centsCredit / 100,
+      (centsDebit - centsCredit) / 100,
+    );
+  }
+};
 
 // ── localStorage Keys (offline buffer only) ───────────────────────────
 const KEYS = {
@@ -90,7 +126,7 @@ const rowToPettyCash = (r: any): PettyCashEntry => ({
   amount:              Number(r.amount       || 0),
   balance:             Number(r.data?.balance || 0),
   recordedBy:          r.data?.recordedBy    || '',
-  status:              (r.status             || 'Posted') as 'Posted'|'Parked'|'Ignored',
+  status:              (r.status             || 'Parked') as 'Posted'|'Parked'|'Ignored', // M-7: unified default — no entry auto-goes live
   glAccountId:         r.data?.glAccountId   ?? undefined,
   businessTransaction: r.data?.businessTransaction ?? undefined,
   referenceDoc:        r.reference_doc       || r.data?.referenceDoc || undefined,
@@ -275,6 +311,13 @@ const PAYMENT_CREDIT_MAP: Record<string, { code: string; name: string }> = {
 
 export const FinanceService = {
 
+  // ── GL Balance Assertion (public proxy) ────────────────────────────
+  // Exposed so batch-posting UIs (e.g. BillingHub) can validate entries
+  // before calling saveLedger. Throws LedgerImbalanceError on imbalance.
+  assertGLBalance: (tx: { id?: string; details?: Array<{ debit?: number; credit?: number }> }): void => {
+    _assertGLBalance(tx);
+  },
+
   // ── Init / Refresh ─────────────────────────────────────────────────
   init: async (): Promise<void> => {
     if (!_cache.loaded) await _loadCache();
@@ -434,6 +477,8 @@ export const FinanceService = {
       toast.error(`Period ${month} is CLOSED — GL entry blocked. Re-open the period in Finance → Configuration → Period Manager.`, { duration: 8000 });
       throw new Error(`Period ${month} is closed for company ${tx.company}`);
     }
+    // C-4: Assert balance before allowing any directly-Posted transaction through
+    if ((tx.status || 'Parked') === 'Posted') _assertGLBalance(tx);
     const currentUser = useAuthStore.getState().user?.email ?? 'system';
     const now = new Date().toISOString();
     const all = FinanceService.getLedger();
@@ -537,16 +582,29 @@ export const FinanceService = {
     }
 
     const advanceClearAmount = Math.min(advanceAmount, actualAmount);
-    if (advanceClearAmount > 0) {
-      details.push({ accountId: `${company}-11421`, debit: 0, credit: Math.round(advanceClearAmount),
-        text: `11421 Employee Advances — Settled vs ${reqId}` });
-    }
+
+    // Named reference — NEVER use positional index (array order mutation = silent GL corruption).
+    // Since JS objects are passed by reference, mutating advanceClearDetail also mutates the
+    // object already held inside the details[] array — intentional and safe.
+    const advanceClearDetail: { accountId: string; debit: number; credit: number; text: string } | null =
+      advanceClearAmount > 0
+        ? { accountId: `${company}-11421`, debit: 0, credit: Math.round(advanceClearAmount),
+            text: `11421 Employee Advances — Settled vs ${reqId}` }
+        : null;
+    if (advanceClearDetail) details.push(advanceClearDetail);
 
     if (variance < 0) {
+      // Under-spend: purchaser returns unspent portion.
+      // Gross the advance-clear credit up to the full advance so GL balances:
+      //   Σdebit  = Σcategory actuals + cash refund = actualAmount + (advanceAmount - actualAmount) = advanceAmount
+      //   Σcredit = advanceAmount ✓
+      if (advanceClearDetail) advanceClearDetail.credit = Math.round(advanceAmount);
       details.push({ accountId: `${company}-11112`, debit: Math.round(Math.abs(variance)), credit: 0,
         text: `11112 Cash — Refund from ${purchaserName || 'purchaser'}` });
-      details[details.length - 2].credit = Math.round(advanceAmount);
     } else if (variance > 0) {
+      // Over-spend: company pays extra out of cash.
+      //   Σdebit  = Σcategory actuals = actualAmount
+      //   Σcredit = advanceClearAmount (= advanceAmount) + extra cash = actualAmount ✓
       details.push({ accountId: `${company}-11112`, debit: 0, credit: Math.round(variance),
         text: `11112 Cash — Extra payment to ${purchaserName || 'purchaser'}` });
     }
@@ -597,6 +655,8 @@ export const FinanceService = {
     if (idx === -1) return null;
     const pv = all[idx];
     if (pv.status !== 'Parked') return pv;
+    // C-5: Atomic GL balance assertion — throws LedgerImbalanceError before any write
+    _assertGLBalance(pv);
     all[idx] = { ...pv, status: 'Posted' };
     FinanceService.saveLedger(all);
     if (pv.reqId) {
@@ -667,18 +727,21 @@ export const FinanceService = {
         if (depAmount <= 0) { skipped++; continue; }
         const existingId = `DEP-${asset.id}-${month}`;
         if (all.some(t => t.id === existingId)) { skipped++; continue; }
-        all.push({
-          id: existingId, company, docType: 'JV',
+        const depEntry = {
+          id: existingId, company, docType: 'JV' as LedgerDocType,
           docDate: `${month}-28`, date: `${month}-28`,
           description: `DEPRECIATION — ${asset.description || asset.name} — ${month}`.toUpperCase(),
-          referenceId: asset.id, status: 'Posted',
+          referenceId: asset.id, status: 'Posted' as const,
           createdBy: 'system-auto', updatedBy: 'system-auto',
           postedAt: new Date().toISOString(),
           details: [
             { accountId: `${company}-53911`, debit: Math.round(depAmount), credit: 0, text: `Dep: ${asset.name}` },
             { accountId: `${company}-12121`, debit: 0, credit: Math.round(depAmount), text: `Accum Dep: ${asset.name}` },
-          ]
-        });
+          ],
+        };
+        // C-5: Atomic balance assertion before committing any Posted entry
+        _assertGLBalance(depEntry);
+        all.push(depEntry);
         posted++;
       }
       FinanceService.saveLedger(all);
@@ -697,19 +760,22 @@ export const FinanceService = {
         if (template.lastPostedMonth === currentMonth) { skipped++; continue; }
         const txId = `RE-${template.id}-${currentMonth}`;
         if (all.some(t => t.id === txId)) { skipped++; continue; }
-        all.push({
-          id: txId, company, docType: 'SA',
+        const recurringEntry = {
+          id: txId, company, docType: 'SA' as LedgerDocType,
           docDate: `${currentMonth}-${String(template.dayOfMonth).padStart(2,'0')}`,
           date: `${currentMonth}-${String(template.dayOfMonth).padStart(2,'0')}`,
           description: `[AUTO] RECURRING: ${template.name}`.toUpperCase(),
-          referenceId: template.id, status: 'Posted',
+          referenceId: template.id, status: 'Posted' as const,
           createdBy: 'system-auto', updatedBy: 'system-auto',
           postedAt: new Date().toISOString(),
           details: [
             { accountId: template.debitAccountId, debit: template.amount, credit: 0, text: 'AUTO POST', costCenterId: template.costCenterId },
-            { accountId: template.creditAccountId, debit: 0, credit: template.amount, text: 'AUTO OFFSET' }
-          ]
-        });
+            { accountId: template.creditAccountId, debit: 0, credit: template.amount, text: 'AUTO OFFSET' },
+          ],
+        };
+        // C-5: Atomic balance assertion before committing any Posted entry
+        _assertGLBalance(recurringEntry);
+        all.push(recurringEntry);
         const tIdx = updatedTemplates.findIndex(t => t.id === template.id);
         if (tIdx !== -1) updatedTemplates[tIdx] = { ...updatedTemplates[tIdx], lastPostedMonth: currentMonth };
         posted++;

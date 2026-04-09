@@ -10,7 +10,10 @@ const AgingReport: React.FC<{ company: Company }> = ({ company }) => {
   const [agingDate, setAgingDate] = useState(new Date().toISOString().split('T')[0]);
 
   const accounts = FinanceService.getAccounts().filter(a => a.company === company);
-  const ledger = FinanceService.getLedger().filter(t => t.company === company && (t.status === 'Posted' || t.status === 'Parked'));
+  // H-7: Aging reports are management-facing — only 'Posted' entries represent
+  // irrevocable economic reality. 'Parked' entries are unreviewed drafts and
+  // must never inflate AR/AP exposure shown to management.
+  const ledger = FinanceService.getLedger().filter(t => t.company === company && t.status === 'Posted');
 
   // 1. Identify Parent Control Accounts (Level 4/3) to filter children
   const controlAccounts = useMemo(() => {
