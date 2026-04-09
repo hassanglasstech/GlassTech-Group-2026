@@ -11,7 +11,16 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import * as pdfjsLib from 'pdfjs-dist';
-import { GoogleGenAI, Type } from "@google/genai";
+import { supabase } from '@/src/services/supabaseClient';
+
+// Calls the server-side gemini-proxy edge function (keeps API key off the browser)
+async function callGeminiProxy(prompt: string, model = 'gemini-2.0-flash'): Promise<string> {
+  const { data, error } = await supabase.functions.invoke('gemini-proxy', {
+    body: { prompt, model, jsonMode: true },
+  });
+  if (error) throw error;
+  return data.text as string;
+}
 
 // Set worker for pdfjs
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
@@ -160,19 +169,16 @@ const NipponSmartImporter: React.FC<{ onComplete: () => void }> = ({ onComplete 
     }
 
     setLoadingMessage('Analyzing PDF structure with AI...');
-    
-    // Use Gemini to structure the PDF text
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Extract product data from this PDF text. Identify columns and rows. 
+
+    // Use Gemini proxy to structure the PDF text (API key stays server-side)
+    const pdfResponseText = await callGeminiProxy(
+      `Extract product data from this PDF text. Identify columns and rows.
       Return a JSON object with "headers" (array of strings) and "rows" (array of objects).
-      Text: ${fullText.substring(0, 10000)}`, // Limit text for safety
-      config: { responseMimeType: "application/json" }
-    });
+      Text: ${fullText.substring(0, 10000)}`
+    );
 
     try {
-      const result = JSON.parse(response.text);
+      const result = JSON.parse(pdfResponseText);
       const extractedRows = (result.rows || []).map((row: any, idx: number) => ({
         ...row,
         _image: images[idx] || images[0] || undefined // Try to match or fallback
@@ -198,29 +204,26 @@ const NipponSmartImporter: React.FC<{ onComplete: () => void }> = ({ onComplete 
       'material', 'direction', 'tongueLength', 'spindleLength'
     ];
 
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Map these file columns to our internal product fields.
+    const mappingResponseText = await callGeminiProxy(
+      `Map these file columns to our internal product fields.
       File Columns: ${JSON.stringify(fileHeaders)}
       Sample Data: ${JSON.stringify(sampleData)}
       Internal Fields: ${JSON.stringify(targetFields)}
-      
-      IMPORTANT: If a column (like "Description") contains mixed data (e.g., "Hinge 4x4 Stainless Steel"), 
-      suggest splitting it. 
-      
+
+      IMPORTANT: If a column (like "Description") contains mixed data (e.g., "Hinge 4x4 Stainless Steel"),
+      suggest splitting it.
+
       Return a JSON object:
       {
         "mappings": [{ "fileColumn": "string", "targetField": "string" }],
         "virtualColumns": [{ "name": "string", "originalColumn": "string", "targetField": "string", "reason": "string" }]
       }
-      
-      If a column doesn't match any internal field, suggest a new field name starting with "technicalSpecs." (e.g., "technicalSpecs.Weight").`,
-      config: { responseMimeType: "application/json" }
-    });
+
+      If a column doesn't match any internal field, suggest a new field name starting with "technicalSpecs." (e.g., "technicalSpecs.Weight").`
+    );
 
     try {
-      const result = JSON.parse(response.text);
+      const result = JSON.parse(mappingResponseText);
       const initialMappings: ColumnMapping[] = result.mappings || [];
       
       // Add virtual columns to headers and mappings
@@ -288,30 +291,23 @@ const NipponSmartImporter: React.FC<{ onComplete: () => void }> = ({ onComplete 
     let processedRows = [...allRows];
 
     if (virtualMappings.length > 0) {
-      // Use AI to split data for all rows in bulk if possible, or in chunks
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      
-      // Process in chunks of 10 to avoid token limits
+      // Use Gemini proxy to split data in chunks of 10 to avoid token limits
       const chunkSize = 10;
       for (let i = 0; i < processedRows.length; i += chunkSize) {
         const chunk = processedRows.slice(i, i + chunkSize);
         setLoadingMessage(`Processing chunk ${Math.floor(i/chunkSize) + 1}...`);
-        
-        const prompt = `Clean and split the following product data. 
+
+        const prompt = `Clean and split the following product data.
         For each row, extract specific fields from the original columns as requested.
-        
+
         Virtual Columns to fill: ${JSON.stringify(virtualMappings.map(m => ({ name: m.fileColumn, source: m.originalColumn, target: m.targetField })))}
         Data: ${JSON.stringify(chunk.map((r, idx) => ({ id: idx, ...r })))}
-        
+
         Return a JSON array of objects: [{ "id": number, "updates": { "columnName": "value" }, "cleanedDescription": "string" }]`;
 
         try {
-          const response = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
-            contents: prompt,
-            config: { responseMimeType: "application/json" }
-          });
-          const updates = JSON.parse(response.text);
+          const chunkResponseText = await callGeminiProxy(prompt);
+          const updates = JSON.parse(chunkResponseText);
           updates.forEach((update: any) => {
             const rowIndex = i + update.id;
             if (processedRows[rowIndex]) {

@@ -1,16 +1,15 @@
 // supabase functions deploy claude-proxy
 // Proxies Claude API calls server-side — avoids CORS + keeps API key secure
+// Requires JWT auth (user session or service role key).
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+import { requireAuth, corsHeaders } from '../_shared/auth.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  // ── Auth gate ─────────────────────────────────────────────────────
+  const auth = await requireAuth(req);
+  if (!auth.ok) return auth.response;
 
   const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
   if (!anthropicKey) {

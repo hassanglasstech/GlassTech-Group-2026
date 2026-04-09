@@ -18,11 +18,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders } from '../_shared/auth.ts';
 
 const BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!;
 const CHAT_ID   = Deno.env.get('TELEGRAM_CHAT_ID')!;
@@ -195,10 +191,23 @@ Deno.serve(async (req) => {
   );
 
   try {
-    // Cron trigger (GET or POST with no body / x-cron header)
+    // Cron trigger (GET or POST with x-cron header)
     const isCron = req.method === 'GET' || req.headers.get('x-cron') === '1';
 
     if (isCron) {
+      // Cron must present service role key or CRON_SECRET
+      const authHeader  = req.headers.get('Authorization') ?? '';
+      const token       = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+      const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+      const cronSecret  = Deno.env.get('CRON_SECRET') ?? '';
+      const cronAllowed = (serviceKey && token === serviceKey) || (cronSecret && token === cronSecret);
+
+      if (!cronAllowed) {
+        return new Response(JSON.stringify({ error: 'Unauthorized cron request' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       const briefing = await buildMorningBriefing(supabase);
       await sendTelegram(briefing);
       return new Response(JSON.stringify({ sent: true }), {
@@ -206,7 +215,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Telegram webhook (POST from Telegram)
+    // Telegram webhook (POST from Telegram) — verify secret token
+    const telegramSecret = Deno.env.get('TELEGRAM_WEBHOOK_SECRET');
+    if (telegramSecret) {
+      const incomingSecret = req.headers.get('X-Telegram-Bot-Api-Secret-Token');
+      if (incomingSecret !== telegramSecret) {
+        return new Response(JSON.stringify({ error: 'Invalid webhook secret' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     const body = await req.json();
     const message = body?.message;
     if (!message?.text) {

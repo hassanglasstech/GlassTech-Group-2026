@@ -7,20 +7,46 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { corsHeaders } from '../_shared/auth.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// ── HMAC-SHA256 helper ────────────────────────────────────────────
+async function verifyWhatsAppSignature(rawBody: string, signatureHeader: string | null, secret: string): Promise<boolean> {
+  if (!signatureHeader?.startsWith('sha256=')) return false;
+  const expected = signatureHeader.slice(7);
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody));
+  const hex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return hex === expected;
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  // ── Webhook signature verification (Meta WhatsApp) ───────────────
+  const waSecret = Deno.env.get('WA_WEBHOOK_SECRET');
+  const rawBody  = await req.text();
+
+  if (waSecret) {
+    const sigHeader = req.headers.get('x-hub-signature-256');
+    const valid = await verifyWhatsAppSignature(rawBody, sigHeader, waSecret);
+    if (!valid) {
+      return new Response(JSON.stringify({ error: 'Invalid webhook signature' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+  }
 
   const supabase       = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   const anthropicKey   = Deno.env.get('ANTHROPIC_API_KEY')!;
 
   try {
-    const body = await req.json();
+    const body = JSON.parse(rawBody);
     const { sender, sender_name, group_name, message_type, raw_message, media_base64, media_type } = body;
 
     let transcription = raw_message;
