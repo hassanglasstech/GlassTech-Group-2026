@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     )
 
-    // Verify caller is super_admin
+    // Verify caller is authenticated
     const { data: { user: caller } } = await supabaseUser.auth.getUser()
     if (!caller) {
       return new Response(JSON.stringify({ error: 'Not authenticated' }), {
@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
 
     const { data: callerProfile } = await supabaseAdmin
       .from('user_profiles')
-      .select('role')
+      .select('role, company')
       .eq('id', caller.id)
       .single()
 
@@ -61,6 +61,25 @@ Deno.serve(async (req) => {
 
     // Parse request
     const { action, ...params } = await req.json()
+
+    // ── M-1: Audit log helper — writes to audit_log table via service role ──
+    // Called AFTER every successful action. Failures are logged to console only
+    // (audit write failures must never block the primary user-management operation).
+    const writeAuditLog = async (targetId: string | null, details: Record<string, unknown>) => {
+      try {
+        await supabaseAdmin.from('audit_log').insert({
+          id:        crypto.randomUUID(),
+          company:   callerProfile?.company ?? 'system',
+          user_id:   caller.id,
+          action,
+          target_id: targetId,
+          details,
+          timestamp: new Date().toISOString(),
+        })
+      } catch (auditErr) {
+        console.error('[manage-users] audit_log write failed:', auditErr)
+      }
+    }
 
     let result: any
 
@@ -75,6 +94,7 @@ Deno.serve(async (req) => {
         })
         if (error) throw error
         result = { user: { id: data.user.id, email: data.user.email } }
+        await writeAuditLog(data.user.id, { email: data.user.email, metadata_keys: Object.keys(user_metadata || {}) })
         break
       }
 
@@ -83,6 +103,7 @@ Deno.serve(async (req) => {
         const { data, error } = await supabaseAdmin.auth.admin.updateUserById(user_id, updates)
         if (error) throw error
         result = { user: { id: data.user.id } }
+        await writeAuditLog(user_id, { updated_fields: Object.keys(updates || {}) })
         break
       }
 
@@ -93,6 +114,7 @@ Deno.serve(async (req) => {
         })
         if (error) throw error
         result = { banned: true }
+        await writeAuditLog(user_id, { ban_duration: duration || '876000h' })
         break
       }
 
@@ -103,16 +125,18 @@ Deno.serve(async (req) => {
         })
         if (error) throw error
         result = { unbanned: true }
+        await writeAuditLog(user_id, {})
         break
       }
 
       case 'reset_password': {
-        const { user_id, new_password } = params
+        const { user_id, new_password: _pw } = params   // never log the password itself
         const { data, error } = await supabaseAdmin.auth.admin.updateUserById(user_id, {
-          password: new_password,
+          password: _pw,
         })
         if (error) throw error
         result = { reset: true }
+        await writeAuditLog(user_id, { note: 'password reset — value not logged' })
         break
       }
 
@@ -120,6 +144,7 @@ Deno.serve(async (req) => {
         const { data, error } = await supabaseAdmin.auth.admin.listUsers()
         if (error) throw error
         result = { users: data.users.map(u => ({ id: u.id, email: u.email, created_at: u.created_at })) }
+        await writeAuditLog(null, { count: data.users.length })
         break
       }
 

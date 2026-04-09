@@ -120,7 +120,11 @@ export const GlasscoPrintTemplate: React.FC<GlasscoPrintTemplateProps> = ({
 
     return (
         <>
-            <style dangerouslySetInnerHTML={{ __html: PRINT_STYLES }} />
+            {/* M-3: dangerouslySetInnerHTML eradicated. React's <style> element
+                accepts a text child directly — no raw HTML injection required.
+                PRINT_STYLES is a module-level constant defined in this file,
+                so there is zero risk of XSS from external input. */}
+            <style>{PRINT_STYLES}</style>
             <div id="glassco-print-root">{content}</div>
         </>
     );

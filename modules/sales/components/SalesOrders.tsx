@@ -514,7 +514,8 @@ const SalesOrders: React.FC = () => {
                                     onChange={e => setSortType(e.target.value)}
                                 >
                                     <option value="date_desc">Latest First (Default)</option>
-                                    <option value="client">Client Name</option>
+                                    <option value="date_asc">Oldest First</option>
+                                    <option value="client">Client Name (A–Z)</option>
                                     <option value="status_pending">Pending First</option>
                                     <option value="status_completed">Completed First</option>
                                 </select>

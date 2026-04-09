@@ -23,14 +23,13 @@ const COMPANY_COLORS: Record<string, string> = { GTK: '#2563eb', GTI: '#7c3aed',
 const PIE_COLORS = ['#2563eb', '#7c3aed', '#059669', '#d97706', '#64748b'];
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-type AnalyticsView = 'overview' | 'expenses' | 'hr' | 'sales' | 'procurement' | 'production';
+type AnalyticsView = 'overview' | 'expenses' | 'hr' | 'sales' | 'procurement';
 const ANALYTICS_OPTIONS: { id: AnalyticsView; label: string }[] = [
   { id: 'overview', label: 'Executive Overview' },
   { id: 'sales', label: 'Sales & Revenue' },
   { id: 'expenses', label: 'Expenses & P&L' },
   { id: 'hr', label: 'Human Resources' },
   { id: 'procurement', label: 'Procurement' },
-  { id: 'production', label: 'Production' },
 ];
 
 const getMonthKey = (d: string) => { if (!d) return ''; const dt = new Date(d); return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`; };
@@ -380,7 +379,6 @@ const MDDashboard: React.FC = () => {
           </ChartCard>
         </>}
 
-        {analyticsView==='production' && <div className="text-center py-20"><Factory size={48} className="text-slate-300 mx-auto mb-4"/><h3 className="text-lg font-bold text-slate-600">Production Analytics</h3><p className="text-sm text-slate-400 mt-2">Coming soon</p></div>}
       </>}
 
       {effectiveView==='factory' && <>
