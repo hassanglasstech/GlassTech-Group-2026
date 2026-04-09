@@ -167,6 +167,27 @@ export const ECLService = {
     const allAccounts = FinanceService.getAccounts();
     const allLedger   = FinanceService.getLedger().filter(t => t.status === 'Posted');
 
+    // H-6: getICOBalanceByRef was referenced but never defined, causing a runtime
+    // ReferenceError that crashed the entire ECL engine. Defined here as a nested
+    // closure so it has access to the already-fetched allLedger dataset.
+    // Scans Posted ledger entries whose description contains 'ICO' and the
+    // counterparty company name to derive intercompany AR/AP balances from GL.
+    const getICOBalanceByRef = (fromCo: Company, toCo: Company, type: 'receivable' | 'payable'): number => {
+      const company = type === 'receivable' ? fromCo : toCo;
+      const counterparty = type === 'receivable' ? toCo : fromCo;
+      return allLedger
+        .filter(t =>
+          t.company === company &&
+          (t.description || '').toUpperCase().includes('ICO') &&
+          (t.description || '').toUpperCase().includes(counterparty.toUpperCase())
+        )
+        .reduce((sum, t) => {
+          const lines: any[] = (t as any).details ?? [];
+          return sum + lines.reduce((s: number, d: any) =>
+            s + (type === 'receivable' ? (d.debit ?? 0) : (d.credit ?? 0)), 0);
+        }, 0);
+    };
+
     // Helper: get balance of an account
     const getBalance = (company: Company, codePrefix: string): number => {
       const accs = allAccounts.filter(a =>

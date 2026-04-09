@@ -1,6 +1,19 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { requireAuth, corsHeaders } from '../_shared/auth.ts';
 
+// ── M-2: Prompt injection sanitizer ──────────────────────────────────────────
+// Applied to ALL free-text fields (event_type, sector, alert titles) before
+// they are interpolated into the LLM prompt string. Strips structural chars,
+// control characters, markdown markers, and common injection trigger words.
+const sanitizeName = (s: unknown): string =>
+  String(s ?? '')
+    .replace(/[<>{}\[\]`\\]/g, '')
+    .replace(/[\x00-\x1F\x7F]/g, '')
+    .replace(/\*{2,}|_{2,}/g, '')
+    .replace(/\bignore\b|\bforget\b|\bsystem\b|\bprompt\b/gi, '[filtered]')
+    .trim()
+    .slice(0, 120);
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -21,7 +34,8 @@ Deno.serve(async (req) => {
       supabase.from('predictive_alerts').select('title,severity').eq('actioned', false).eq('dismissed', false).limit(3),
     ]);
     const ev = events || []; const urgent = ev.filter((e: any) => e.priority === 'Urgent'); const resolved = ev.filter((e: any) => e.status === 'Resolved' || e.status === 'Closed');
-    const summary = `Date: ${now.toLocaleDateString('en-PK',{weekday:'long',day:'numeric',month:'long'})}\nEvents: ${ev.length} total, ${urgent.length} urgent, ${resolved.length} resolved\nUrgent: ${urgent.map((e: any) => `${e.event_type}(${e.sector})`).join(', ') || 'none'}\nEscalations: ${(escl||[]).length}\nHSE: ${(hse||[]).length}\nTasks due: ${(tasks||[]).length}\nAI alerts: ${(preds||[]).map((p: any) => p.title).join(', ') || 'none'}`;
+    // M-2: Sanitize all user/factory-sourced strings before LLM prompt interpolation
+    const summary = `Date: ${now.toLocaleDateString('en-PK',{weekday:'long',day:'numeric',month:'long'})}\nEvents: ${ev.length} total, ${urgent.length} urgent, ${resolved.length} resolved\nUrgent: ${urgent.map((e: any) => `${sanitizeName(e.event_type)}(${sanitizeName(e.sector)})`).join(', ') || 'none'}\nEscalations: ${(escl||[]).length}\nHSE: ${(hse||[]).length}\nTasks due: ${(tasks||[]).length}\nAI alerts: ${(preds||[]).map((p: any) => sanitizeName(p.title)).join(', ') || 'none'}`;
     const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 450, system: 'You are GlassTech factory report writer. Write 2-3 paragraph professional narrative in English/Roman-Urdu. Plain paragraphs only, no markdown.', messages: [{ role: 'user', content: `Write today narrative:\n${summary}` }] }) });
     const d = await r.json(); const narrative = d.content?.[0]?.text || 'Generation failed.';
     const html = `<div style="background:#f0f9ff;border-left:4px solid #2563eb;padding:18px 22px;margin:16px 0;border-radius:0 8px 8px 0"><div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#64748b;margin-bottom:10px">AI Narrative Summary</div><div style="font-size:13px;color:#1e293b;line-height:1.75">${narrative.replace(/\n\n/g,'</div><div style="font-size:13px;color:#1e293b;line-height:1.75;margin-top:10px">').replace(/\n/g,'<br>')}</div></div>`;

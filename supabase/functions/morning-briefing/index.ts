@@ -23,6 +23,19 @@ import { requireAuth, corsHeaders } from '../_shared/auth.ts';
 
 const PKR = (n: number) => `PKR ${Math.round(n).toLocaleString('en-PK')}`;
 
+// ── M-2: Prompt injection sanitizer ──────────────────────────────────────────
+// Strips characters that could be used to inject instructions into LLM prompts:
+// angle brackets, braces, backticks, control characters, and markdown emphasis.
+// Applied to ALL vendor/client names and free-text fields before interpolation.
+const sanitizeName = (s: unknown): string =>
+  String(s ?? '')
+    .replace(/[<>{}\[\]`\\]/g, '')          // remove structural/template chars
+    .replace(/[\x00-\x1F\x7F]/g, '')        // strip control characters
+    .replace(/\*{2,}|_{2,}/g, '')           // strip markdown bold/italic markers
+    .replace(/\bignore\b|\bforget\b|\bsystem\b|\bprompt\b/gi, '[filtered]') // common injection keywords
+    .trim()
+    .slice(0, 120);                          // hard cap: no token-stuffing via names
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -82,20 +95,20 @@ Deno.serve(async (req) => {
         total_billed_month: PKR(totalBilled),
         today_new_quotations: todayQuotations.length,
         overdue_orders: overdueOrders.length,
-        overdue_details: overdueOrders.slice(0, 5).map(q => `${q.client_name} — ${PKR(q.total_amount || 0)}`),
+        overdue_details: overdueOrders.slice(0, 5).map(q => `${sanitizeName(q.client_name)} — ${PKR(q.total_amount || 0)}`),
       },
       production: {
         active_job_orders: jobOrders.length,
         stuck_3plus_days: stuckJobs.length,
-        stuck_details: stuckJobs.slice(0, 5).map(j => `${j.client_name} / ${j.project_name}`),
+        stuck_details: stuckJobs.slice(0, 5).map(j => `${sanitizeName(j.client_name)} / ${sanitizeName(j.project_name)}`),
       },
       operations: {
         pending_requisitions: requisitions.length,
         urgent_requisitions: urgentReqs.length,
-        urgent_req_details: urgentReqs.slice(0, 3).map(r => r.header_text?.replace('[AGENT] ', '') || r.category),
+        urgent_req_details: urgentReqs.slice(0, 3).map(r => sanitizeName(r.header_text?.replace('[AGENT] ', '') || r.category)),
         open_factory_events: factoryEvents.length,
         urgent_events: urgentEvents.length,
-        urgent_event_details: urgentEvents.slice(0, 3).map(e => `${e.sector}: ${e.event_type}`),
+        urgent_event_details: urgentEvents.slice(0, 3).map(e => `${sanitizeName(e.sector)}: ${sanitizeName(e.event_type)}`),
       },
       agent_activity: {
         actions_this_week: agentActions.length,

@@ -727,6 +727,10 @@ export const FinanceService = {
         if (depAmount <= 0) { skipped++; continue; }
         const existingId = `DEP-${asset.id}-${month}`;
         if (all.some(t => t.id === existingId)) { skipped++; continue; }
+        // H-2: Compute rounded integer ONCE and assign the exact same variable to
+        // both legs. Independent Math.round() calls on a float can theoretically
+        // diverge; a single variable guarantees debit === credit before _assertGLBalance.
+        const depCents = Math.round(depAmount);
         const depEntry = {
           id: existingId, company, docType: 'JV' as LedgerDocType,
           docDate: `${month}-28`, date: `${month}-28`,
@@ -735,8 +739,8 @@ export const FinanceService = {
           createdBy: 'system-auto', updatedBy: 'system-auto',
           postedAt: new Date().toISOString(),
           details: [
-            { accountId: `${company}-53911`, debit: Math.round(depAmount), credit: 0, text: `Dep: ${asset.name}` },
-            { accountId: `${company}-12121`, debit: 0, credit: Math.round(depAmount), text: `Accum Dep: ${asset.name}` },
+            { accountId: `${company}-53911`, debit: depCents, credit: 0,        text: `Dep: ${asset.name}` },
+            { accountId: `${company}-12121`, debit: 0,        credit: depCents, text: `Accum Dep: ${asset.name}` },
           ],
         };
         // C-5: Atomic balance assertion before committing any Posted entry

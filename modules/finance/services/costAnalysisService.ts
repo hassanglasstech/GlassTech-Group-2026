@@ -192,23 +192,26 @@ export function calculateJobProfitability(company: string): JobProfitability[] {
     const jobDispatches = dispatches.filter(d => d.pieceIds?.some(pid => pid.includes(q.orderNo || q.id)));
     const outsourcingCost = jobDispatches.reduce((s, d) => s + (d.totalCharges || 0), 0);
 
-    const totalCost = materialCost + labourCost + energyCost + outsourcingCost;
-    const profit = revenue - totalCost;
+    // Sum raw floating-point values first — no intermediate rounding.
+    // Math.round() applied ONCE at the final P&L level only to avoid
+    // double-rounding drift where rounded(a) + rounded(b) ≠ rounded(a+b).
+    const totalCostRaw = materialCost + labourCost + energyCost + outsourcingCost;
+    const profitRaw    = revenue - totalCostRaw;
 
     return {
       orderId: q.id, orderNo: q.orderNo || q.id,
       clientName: client?.name || q.clientId,
       projectName: q.projectName || '',
       date: q.date, revenue,
-      materialCost: Number(materialCost.toFixed(0)),
-      labourCost: Number(labourCost.toFixed(0)),
-      energyCost: Number(energyCost.toFixed(0)),
-      outsourcingCost: Number(outsourcingCost.toFixed(0)),
+      materialCost,    // raw float — display layer formats as needed
+      labourCost,      // raw float
+      energyCost,      // raw float
+      outsourcingCost, // raw float
       freightCost: 0,
-      totalCost: Number(totalCost.toFixed(0)),
-      profit: Number(profit.toFixed(0)),
-      profitPct: revenue > 0 ? Number((profit / revenue * 100).toFixed(1)) : 0,
-      isLossMaking: profit < 0 && revenue > 0,
+      totalCost: Math.round(totalCostRaw),   // single round at P&L boundary
+      profit:    Math.round(profitRaw),       // single round at P&L boundary
+      profitPct: revenue > 0 ? Number((profitRaw / revenue * 100).toFixed(1)) : 0,
+      isLossMaking: profitRaw < 0 && revenue > 0,
       status: q.status,
     };
   }).sort((a, b) => a.profitPct - b.profitPct);

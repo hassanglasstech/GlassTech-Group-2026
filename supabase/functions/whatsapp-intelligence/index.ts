@@ -28,18 +28,28 @@ async function verifyWhatsAppSignature(rawBody: string, signatureHeader: string 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-  // ── Webhook signature verification (Meta WhatsApp) ───────────────
-  const waSecret = Deno.env.get('WA_WEBHOOK_SECRET');
-  const rawBody  = await req.text();
+  // ── H-3: Strict HMAC-SHA256 verification using Meta App Secret ──────
+  // WHATSAPP_APP_SECRET is the App Secret from Meta App Dashboard → Settings.
+  // This is NOT the webhook verification token — it is the secret used by Meta
+  // to sign every webhook payload with HMAC-SHA256 in the x-hub-signature-256 header.
+  // We read the raw body BEFORE parsing JSON so the signature covers the exact bytes.
+  const rawBody   = await req.text();
+  const appSecret = Deno.env.get('WHATSAPP_APP_SECRET');
 
-  if (waSecret) {
-    const sigHeader = req.headers.get('x-hub-signature-256');
-    const valid = await verifyWhatsAppSignature(rawBody, sigHeader, waSecret);
-    if (!valid) {
-      return new Response(JSON.stringify({ error: 'Invalid webhook signature' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+  if (!appSecret) {
+    // Fail closed: refuse ALL requests if the secret is not configured.
+    // A missing secret is a deployment configuration error, not a client error.
+    return new Response(JSON.stringify({ error: 'WHATSAPP_APP_SECRET is not configured' }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const sigHeader = req.headers.get('x-hub-signature-256');
+  const valid = await verifyWhatsAppSignature(rawBody, sigHeader, appSecret);
+  if (!valid) {
+    return new Response(JSON.stringify({ error: 'Invalid HMAC-SHA256 signature — request rejected' }), {
+      status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   const supabase       = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);

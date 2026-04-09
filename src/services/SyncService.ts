@@ -46,10 +46,33 @@ const getPending = (): PendingChange[] => {
   catch { return []; }
 };
 
+// ── M-6: Server-side timestamp for deterministic conflict resolution ─────────
+// Reads the HTTP Date header from the PostgREST root endpoint — zero data
+// transferred, always present on any Supabase response. Eliminates client
+// machine clock drift from last-write-wins conflict resolution.
+// Falls back to client clock ONLY when the server is genuinely unreachable
+// (in which case the sync push will also fail, making drift moot).
+const getServerTimestamp = async (): Promise<string> => {
+  try {
+    const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL  as string;
+    const supabaseKey  = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+    if (!supabaseUrl || !supabaseKey) throw new Error('Supabase env vars missing');
+    const res = await fetch(`${supabaseUrl}/rest/v1/`, {
+      method: 'HEAD',
+      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+    });
+    const dateHeader = res.headers.get('date');
+    if (dateHeader) return new Date(dateHeader).toISOString();
+  } catch { /* network unreachable — fallback below */ }
+  return new Date().toISOString(); // graceful degradation only
+};
+
 const addPending = (table: string, localKey: string) => {
   const pending = getPending();
   // Replace if already queued for same table
   const filtered = pending.filter(p => p.table !== table);
+  // changedAt here is a LOCAL queue marker only — not sent to Supabase.
+  // The authoritative server timestamp is obtained in pushTable via getServerTimestamp().
   filtered.push({ table, localKey, changedAt: new Date().toISOString() });
   localStorage.setItem(PENDING_KEY, JSON.stringify(filtered));
 };
@@ -1173,7 +1196,17 @@ const pushTable = async (table: string, localKey: string): Promise<boolean> => {
     data = rawData.map(mapToSupabase).filter((r: any) => r.id);
     if (data.length === 0) return true;
   }
-  
+
+  // ── M-6: Stamp every outgoing record with the Supabase server clock ──────
+  // Replaces any client-generated new Date().toISOString() fallbacks in push
+  // mappers with a server-authoritative timestamp. One HEAD request amortised
+  // across the entire batch eliminates machine clock drift from last-write-wins
+  // conflict resolution without adding per-record network overhead.
+  const serverNow = await getServerTimestamp();
+  data = data.map((row: any) =>
+    'updated_at' in row ? { ...row, updated_at: serverNow } : row
+  );
+
   try {
     await withRetry(
       async () => {
