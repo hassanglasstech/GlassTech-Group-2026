@@ -39,9 +39,6 @@ interface ReconSession {
   createdAt:    string;
 }
 
-const SESSION_KEY = (company: Company, month: string, account: string) =>
-  `gtk_erp_bank_recon_${company}_${account}_${month}`;
-
 const BANK_ACCOUNTS = [
   { code: '11121', name: 'MCB Current Account' },
   { code: '11122', name: 'HBL Current Account' },
@@ -84,7 +81,7 @@ const BankReconciliation: React.FC<{ company: Company }> = ({ company }) => {
   }, [glEntries, selectedAccount]);
 
   const loadSession = async () => {
-    // Supabase primary — load from DB
+    // DB-primary: Supabase is the single source of truth — no localStorage fallback
     try {
       const reconId = `RECON-${company}-${selectedAccount}-${selectedMonth}`;
       const { data, error } = await supabase
@@ -92,38 +89,40 @@ const BankReconciliation: React.FC<{ company: Company }> = ({ company }) => {
         .select('data')
         .eq('id', reconId)
         .maybeSingle();
-      if (!error && data?.data) {
-        setSession(data.data as ReconSession);
+      if (error) {
+        console.warn('[BankRecon] Supabase load failed', error);
+        setSession(null);
         return;
       }
-    } catch {}
-    // Fallback to localStorage cache
-    const key = SESSION_KEY(company, selectedMonth, selectedAccount);
-    try {
-      const saved = localStorage.getItem(key);
-      if (saved) setSession(JSON.parse(saved));
-      else setSession(null);
-    } catch { setSession(null); }
+      setSession(data?.data ? (data.data as ReconSession) : null);
+    } catch (err) {
+      console.warn('[BankRecon] loadSession exception', err);
+      setSession(null);
+    }
   };
 
-  const saveSession = (s: ReconSession) => {
-    const key = SESSION_KEY(company, selectedMonth, selectedAccount);
-    localStorage.setItem(key, JSON.stringify(s));
-    setSession(s);
-    // Async Supabase persist
-    supabase.from('bank_recon_sessions').upsert([{
+  /**
+   * Atomic DB-primary save: Supabase write FIRST → update React state only on success.
+   * On failure: abort completely, keep previous state, surface error to user.
+   */
+  const saveSession = async (s: ReconSession): Promise<void> => {
+    const { error } = await supabase.from('bank_recon_sessions').upsert([{
       id: s.id, company: s.company, bank_account: s.bankAccount,
       month: s.month, status: s.status,
       bank_balance: s.bankBalance, gl_balance: s.glBalance, difference: s.difference,
       data: s, updated_at: new Date().toISOString(),
-    }]).then(({ error }) => {
-      if (error) console.warn('[BankRecon] Supabase persist failed', error);
-    });
+    }]);
+    if (error) {
+      toast.error(`Save failed — reconciliation not persisted. (${error.message})`);
+      throw new Error(`[BankRecon] Supabase upsert failed: ${error.message}`);
+    }
+    // Only update React state once DB write succeeds
+    setSession(s);
   };
 
   useEffect(() => { void loadSession(); }, [company, selectedMonth, selectedAccount]);
 
-  const startSession = () => {
+  const startSession = async () => {
     if (!bankBalance || isNaN(Number(bankBalance))) {
       toast.error('Enter bank statement closing balance.');
       return;
@@ -139,7 +138,7 @@ const BankReconciliation: React.FC<{ company: Company }> = ({ company }) => {
       lines: [], matchedGLIds: [],
       createdAt: new Date().toISOString(),
     };
-    saveSession(s);
+    await saveSession(s);
   };
 
 
@@ -150,7 +149,7 @@ const BankReconciliation: React.FC<{ company: Company }> = ({ company }) => {
     const file = e.target.files?.[0];
     if (!file || !session) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       const text = ev.target?.result as string;
       const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
       if (lines.length < 2) { toast.error('CSV appears empty.'); return; }
@@ -210,14 +209,14 @@ const BankReconciliation: React.FC<{ company: Company }> = ({ company }) => {
 
       if (imported.length === 0) { toast.error('No valid rows found in CSV.'); return; }
       const updated = { ...session, lines: [...session.lines, ...imported] };
-      saveSession(updated);
+      await saveSession(updated);
       toast.success(`${imported.length} statement lines imported from CSV.`);
       if (e.target) e.target.value = '';
     };
     reader.readAsText(file);
   };
 
-  const addStatementLine = () => {
+  const addStatementLine = async () => {
     if (!session) return;
     if (!newLine.description) { toast.error('Enter description'); return; }
     const debit  = Number(newLine.debit)  || 0;
@@ -231,12 +230,12 @@ const BankReconciliation: React.FC<{ company: Company }> = ({ company }) => {
       balance: lastBalance + debit - credit, matched: false,
     };
     const updated = { ...session, lines: [...session.lines, line] };
-    saveSession(updated);
+    await saveSession(updated);
     setNewLine({ date: new Date().toISOString().split('T')[0], description: '', debit: '', credit: '' });
     setShowAddLine(false);
   };
 
-  const toggleMatchGL = (glTx: LedgerTransaction) => {
+  const toggleMatchGL = async (glTx: LedgerTransaction) => {
     if (!session) return;
     const isMatched = session.matchedGLIds.includes(glTx.id);
     const updated = {
@@ -245,25 +244,25 @@ const BankReconciliation: React.FC<{ company: Company }> = ({ company }) => {
         ? session.matchedGLIds.filter(id => id !== glTx.id)
         : [...session.matchedGLIds, glTx.id],
     };
-    saveSession(updated);
+    await saveSession(updated);
   };
 
-  const toggleMatchStatement = (lineId: string, glTxId?: string) => {
+  const toggleMatchStatement = async (lineId: string, glTxId?: string) => {
     if (!session) return;
     const lines = session.lines.map(l =>
       l.id === lineId ? { ...l, matched: !l.matched, matchedGLId: !l.matched ? glTxId : undefined } : l
     );
-    saveSession({ ...session, lines });
+    await saveSession({ ...session, lines });
   };
 
-  const finalise = () => {
+  const finalise = async () => {
     if (!session) return;
     const unmatchedGL  = glEntries.filter(t => !session.matchedGLIds.includes(t.id)).length;
     const unmatchedSt  = session.lines.filter(l => !l.matched).length;
     const diff = session.bankBalance - glNetMovement;
     const status: ReconSession['status'] = Math.abs(diff) < 1 ? 'Balanced' : 'Unbalanced';
     const updated = { ...session, difference: diff, glBalance: glNetMovement, status };
-    saveSession(updated);
+    await saveSession(updated);
     if (status === 'Balanced') {
       toast.success(`Reconciliation BALANCED ✓ — ${unmatchedGL} outstanding GL, ${unmatchedSt} unmatched statement lines.`);
     } else {

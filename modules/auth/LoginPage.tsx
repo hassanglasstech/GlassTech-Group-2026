@@ -191,10 +191,8 @@ const LoginPage: React.FC = () => {
     // Go directly to device setup
     if (!hasDeviceRegistered() && !hasRememberToken()) {
       setStep('device_choice');
-      sessionStorage.setItem('_pending_profile', JSON.stringify(profile));
     } else {
       setStep('biometric');
-      sessionStorage.setItem('_pending_profile', JSON.stringify(profile));
     }
     setBusy(false);
   };
@@ -234,24 +232,27 @@ const LoginPage: React.FC = () => {
     // If device not registered yet → ask for device setup
     if (!hasDeviceRegistered() && !hasRememberToken()) {
       setStep('device_choice');
-      // Store profile temporarily for after device setup
-      sessionStorage.setItem('_pending_profile', JSON.stringify(profile));
     } else {
       // Already registered → go to biometric
       setStep('biometric');
-      sessionStorage.setItem('_pending_profile', JSON.stringify(profile));
     }
 
     setBusy(false);
   };
 
+  // ── Resolve profile from live Supabase session (no sessionStorage) ──
+  const resolveSessionProfile = async (): Promise<UserProfile | null> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return null;
+    return fetchProfile(session.user.id, session.user.email || '');
+  };
+
   // ── STEP: Device choice ──────────────────────────────────────────────
   const handleSetupBiometric = async () => {
     setBusy(true);
-    const profileStr = sessionStorage.getItem('_pending_profile');
-    if (!profileStr) { setBusy(false); setError('Session lost. Please sign in again.'); setStep('google'); return; }
     try {
-      const profile: UserProfile = JSON.parse(profileStr);
+      const profile = await resolveSessionProfile();
+      if (!profile) { setError('Session expired. Please sign in again.'); setStep('google'); setBusy(false); return; }
       const ok = await registerDevice(profile.id, profile.email);
       if (!ok) saveRememberToken(profile.id);
       await completeLogin(profile);
@@ -264,10 +265,9 @@ const LoginPage: React.FC = () => {
   };
 
   const handleRememberDevice = async () => {
-    const profileStr = sessionStorage.getItem('_pending_profile');
-    if (!profileStr) { setError('Session lost. Please sign in again.'); setStep('google'); return; }
     try {
-      const profile: UserProfile = JSON.parse(profileStr);
+      const profile = await resolveSessionProfile();
+      if (!profile) { setError('Session expired. Please sign in again.'); setStep('google'); return; }
       saveRememberToken(profile.id);
       await completeLogin(profile);
     } catch (err) {
@@ -278,10 +278,10 @@ const LoginPage: React.FC = () => {
   };
 
   const handleSkipDevice = async () => {
-    const profileStr = sessionStorage.getItem('_pending_profile');
-    if (!profileStr) { setError('Session lost. Please sign in again.'); setStep('google'); return; }
     try {
-      await completeLogin(JSON.parse(profileStr));
+      const profile = await resolveSessionProfile();
+      if (!profile) { setError('Session expired. Please sign in again.'); setStep('google'); return; }
+      await completeLogin(profile);
     } catch (err) {
       setError('Something went wrong. Please sign in again.');
       setStep('google');
@@ -358,7 +358,6 @@ const LoginPage: React.FC = () => {
 
   const completeLogin = async (profile: UserProfile) => {
     try {
-      sessionStorage.removeItem('_pending_profile');
       await supabase.from('user_profiles')
         .update({ last_login: new Date().toISOString() })
         .eq('id', profile.id)
