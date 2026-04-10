@@ -48,14 +48,18 @@ const fetchProfile = async (userId: string, email?: string): Promise<UserProfile
         .maybeSingle();
       if (err2 || !data2) return null;
       if (!data2.is_active) return null;
+      // BUG-1 Fix: populate company from DB row; fall back to role default
+      // so getActiveCompany() never resolves to an empty string.
+      const role2 = data2.role as UserRole;
       return {
         id:               data2.id,
         email:            data2.email,
         fullName:         data2.full_name,
-        role:             data2.role as UserRole,
+        role:             role2,
         allowedCompanies: data2.allowed_companies || [],
         allowedModules:   data2.allowed_modules   || [],
         timeRestricted:   data2.time_restricted   || false,
+        company:          data2.company || ROLE_DEFAULT_COMPANY[role2] || '',
       };
     }
 
@@ -68,14 +72,18 @@ const fetchProfile = async (userId: string, email?: string): Promise<UserProfile
       return null;
     }
 
+    // BUG-1 Fix: populate company from DB row; fall back to role default
+    // so getActiveCompany() never resolves to an empty string.
+    const role = data.role as UserRole;
     return {
       id:               data.id,
       email:            data.email,
       fullName:         data.full_name,
-      role:             data.role as UserRole,
+      role:             role,
       allowedCompanies: data.allowed_companies || [],
       allowedModules:   data.allowed_modules   || [],
       timeRestricted:   data.time_restricted   || false,
+      company:          data.company || ROLE_DEFAULT_COMPANY[role] || '',
     };
   } catch (err) {
     console.error('[Auth] fetchProfile exception:', err);

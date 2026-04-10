@@ -83,6 +83,12 @@ export interface EmployeeRole {
 }
 
 // ── Employee (Enhanced) ─────────────────────────────────────────────
+// BUG-2 Fix (Phase 7): The interface previously contained two `personal: { ... }`
+// blocks. TypeScript silently uses the LAST definition of a duplicate key, so the
+// first block (name/cnic/phone/address) was shadowed and its fields could not be
+// reliably accessed at runtime. The two blocks have been merged into one.
+// emergencyContact and emergencyPhone are now a properly nested object so they are
+// type-safe and unreachable from the old shadowed path is eliminated.
 export interface Employee {
   id: string;
   company: Company;
@@ -91,7 +97,11 @@ export interface Employee {
     cnic: string;
     phone: string;
     address: string;
-    photoUrl?: string;   // NEW: quick-access photo path
+    photoUrl?: string;          // Quick-access photo path
+    emergencyContact?: {        // BUG-2 Fix: was two separate `?:string` fields
+      name: string;             //   on a shadowed duplicate key block. Now a
+      phone: string;            //   first-class nested object on the canonical key.
+    };
   };
   work: {
     designation: string;     // LEGACY: kept for backward compat, display-only
@@ -112,15 +122,6 @@ export interface Employee {
     medicalAllowance?: number;
     fuelAllowance?: number;
     eobi?: boolean;          // EOBI registered (PKR 370/month deduction)
-  };
-  personal: {
-    name: string;
-    cnic: string;
-    phone: string;
-    address: string;
-    photoUrl?: string;
-    emergencyContact?: string;
-    emergencyPhone?: string;
   };
   transferHistory?: {
     date: string;

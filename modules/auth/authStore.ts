@@ -26,8 +26,38 @@ export interface UserProfile {
   allowedCompanies: string[];
   allowedModules: string[];
   timeRestricted: boolean;
-  employeeId?: string;     // NEW: linked employee record (Phase 4)
-  employeeCode?: string;   // NEW: e.g. "GTK-007" for display
+  /**
+   * BUG-1 Fix (Phase 7): Primary active company for this user session.
+   * Populated from user_profiles.company on login.
+   * All service-layer .eq('company', ...) calls resolve through getActiveCompany().
+   */
+  company: string;
+  employeeId?: string;     // linked employee record
+  employeeCode?: string;   // e.g. "GTK-007" for display
+}
+
+/**
+ * BUG-1 Fix: Safe, deterministic company resolver.
+ *
+ * Resolution priority:
+ *   1. profile.company            — direct DB column (most authoritative)
+ *   2. profile.allowedCompanies[0] — first entry in allowed list
+ *   3. ROLE_DEFAULT_COMPANY[role]  — role-based fallback (always defined)
+ *
+ * Never returns an empty string for a logged-in user; callers no longer
+ * silently fall back to localStorage with an empty .eq('company', '').
+ *
+ * @example
+ *   const company = getActiveCompany(useAuthStore.getState().profile);
+ */
+export function getActiveCompany(profile: UserProfile | null): string {
+  if (!profile) return '';
+  return (
+    profile.company ||
+    profile.allowedCompanies?.[0] ||
+    ROLE_DEFAULT_COMPANY[profile.role] ||
+    ''
+  );
 }
 
 export const ROLE_DEFAULT_COMPANY: Record<UserRole, string> = {
@@ -121,11 +151,18 @@ export type AuthStep =
   | 'done';          // fully authenticated
 
 interface AuthState {
-  user:        UserProfile | null;
-  authStep:    AuthStep;
+  user:         UserProfile | null;
+  /**
+   * BUG-1 Fix: `profile` is a mirror of `user`, kept in sync by setUser().
+   * All 14+ service files call `useAuthStore.getState().profile?.company`.
+   * This field was previously absent from the store definition, causing
+   * every such access to silently return `undefined`.
+   */
+  profile:      UserProfile | null;
+  authStep:     AuthStep;
   pendingEmail: string;     // email during OTP flow
-  loading:     boolean;
-  error:       string | null;
+  loading:      boolean;
+  error:        string | null;
 
   setUser:         (u: UserProfile | null)  => void;
   setAuthStep:     (s: AuthStep)            => void;
@@ -139,12 +176,15 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       user:         null,
+      profile:      null,   // BUG-1 Fix: initialise alongside user
       authStep:     'idle',
       pendingEmail: '',
       loading:      false,
       error:        null,
 
-      setUser:         (user)         => set({ user }),
+      // BUG-1 Fix: setUser now keeps `profile` in perfect sync with `user`.
+      // Both fields always point to the same object reference.
+      setUser:         (user)         => set({ user, profile: user }),
       setAuthStep:     (authStep)     => set({ authStep }),
       setPendingEmail: (pendingEmail) => set({ pendingEmail }),
       setLoading:      (loading)      => set({ loading }),
@@ -152,12 +192,14 @@ export const useAuthStore = create<AuthState>()(
 
       signOut: async () => {
         await supabase.auth.signOut();
-        set({ user: null, authStep: 'idle', pendingEmail: '' });
+        set({ user: null, profile: null, authStep: 'idle', pendingEmail: '' });
       },
     }),
     {
       name:        'glasstech-auth',
-      partialize:  (s) => ({ user: s.user }),
+      // BUG-1 Fix: persist profile alongside user so the company field
+      // survives a page refresh without requiring a fresh DB fetch.
+      partialize:  (s) => ({ user: s.user, profile: s.profile }),
     }
   )
 );
