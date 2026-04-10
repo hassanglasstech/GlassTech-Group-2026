@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Employee, AttendanceRecord, LoanAdvance, Payroll, LedgerTransaction, Company } from '@/modules/shared/types';
 import { HRService } from '@/modules/hr/services/hrService';
 import { FinanceService } from '@/modules/finance/services/financeService';
-import { CreditCard, Printer, Eye, X, Calculator, Calendar, FileUp, Download, ArrowLeft, CheckCircle2, ShieldCheck, BarChart3, FileText, Info, Check, AlertCircle, Building2, User, Ban, ShieldCheck as Shield, Send, Landmark } from 'lucide-react';
+import { CreditCard, Printer, Eye, X, Calculator, Calendar, FileUp, Download, ArrowLeft, CheckCircle2, ShieldCheck, BarChart3, FileText, Info, Check, AlertCircle, Building2, User, Ban, ShieldCheck as Shield, Send, Landmark, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { AttendanceOverrideService } from '@/modules/hr/services/attendanceOverrideService';
 import { toast } from 'sonner';
@@ -12,6 +12,8 @@ import { TagService } from '@/modules/hr/services/tagService';
 import CompensationJustice from '@/modules/hr/components/CompensationJustice';
 import { supabase } from '@/src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
+import { CompactPageHeader } from '@/modules/shared/components/CompactPageHeader';
+import { DataGridCard, GridColumn } from '@/modules/shared/components/DataGridCard';
 
 const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -541,111 +543,116 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
     setTimeout(() => { window.print(); setShowAllSlipsPrint(false); }, 500);
   };
 
+  // ── Wire Alt+R global shortcut ────────────────────────────────────
+  useEffect(() => {
+    const handler = () => generatePayrolls(employees).catch(() => {});
+    window.addEventListener('erp:refresh', handler);
+    return () => window.removeEventListener('erp:refresh', handler);
+  }, [employees]);
+
+  const payrollColumns: GridColumn[] = viewTab === 'cumulative'
+    ? [{ key: 'emp', header: 'Employee' }, { key: 'gross', header: 'Gross Salary', align: 'right' }, { key: 'salDeds', header: 'Salary Deds', align: 'right' }, { key: 'finDeds', header: 'Financial Deds', align: 'right' }, { key: 'ot', header: 'OT Amount', align: 'right' }, { key: 'total', header: 'Total Payable', align: 'right' }, { key: 'slip', header: 'Slip', align: 'center' }]
+    : viewTab === 'salary'
+    ? [{ key: 'emp', header: 'Employee' }, { key: 'basic', header: 'Basic Pay', align: 'right' }, { key: 'allow', header: 'Allowances', align: 'right' }, { key: 'gross', header: 'Gross Salary', align: 'right' }, { key: 'slip', header: 'Slip', align: 'center' }]
+    : [{ key: 'emp', header: 'Employee' }, { key: 'otHrs', header: 'OT Hours', align: 'center' }, { key: 'rate', header: 'Hourly Rate (x1.5)', align: 'right' }, { key: 'otWage', header: 'Total OT Wage', align: 'right' }, { key: 'slip', header: 'Slip', align: 'center' }];
+
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 no-print">
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden ring-2 ring-blue-50"><div className="absolute top-0 right-0 w-1 bg-blue-500 h-full"></div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Total Package</span><span className="text-2xl font-black text-slate-900 leading-none">PKR {summary.totalNetDisbursable.toLocaleString()}</span><div className="flex justify-between mt-2 pt-2 border-t border-slate-50"><div className="text-[9px] font-black"><span className="text-emerald-500">PAID:</span> {summary.totalPaidDisbursement.toLocaleString()}</div><div className="text-[9px] font-black"><span className="text-rose-500">BAL:</span> {(summary.totalNetDisbursable - summary.totalPaidDisbursement).toLocaleString()}</div></div></div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm"><span className="text-[10px] font-black text-blue-400 uppercase tracking-widest block mb-1">Pure Salary</span><span className="text-2xl font-black text-slate-900 leading-none">PKR {summary.totalPureSalary.toLocaleString()}</span><div className="text-[9px] font-bold text-emerald-600 mt-1 uppercase">Paid: {summary.totalPaidSalary.toLocaleString()}</div></div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm"><span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest block mb-1">Total OT Wages</span><span className="text-2xl font-black text-indigo-600 leading-none">PKR {summary.totalOTAmount.toLocaleString()}</span><div className="text-[9px] font-bold text-indigo-600 mt-1 uppercase">Paid: {summary.totalPaidOT.toLocaleString()}</div></div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm"><span className="text-[10px] font-black text-rose-400 uppercase tracking-widest block mb-1">Total Recoveries</span><span className="text-2xl font-black text-rose-600 leading-none">PKR {summary.totalDeductionsCombined.toLocaleString()}</span></div>
-      </div>
-
-      <div className="flex justify-between items-center bg-white p-5 rounded-2xl border border-slate-200 shadow-sm no-print">
-        <div className="flex items-center space-x-6">
-           <div className="flex items-center space-x-4"><Calendar className="text-blue-600" /><input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="border-none font-black text-xl p-0 focus:ring-0 text-slate-800 bg-transparent outline-none" /></div>
-           <div className="h-8 w-px bg-slate-200"></div>
-           <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl">
-             <button onClick={() => setViewTab('cumulative')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${viewTab === 'cumulative' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}>Cumulative View</button>
-             <button onClick={() => setViewTab('salary')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${viewTab === 'salary' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Salary Breakdown</button>
-             <button onClick={() => setViewTab('overtime')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${viewTab === 'overtime' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>Overtime Detail</button>
-           </div>
-        </div>
-        <div className="flex space-x-3">
-          <button onClick={handlePrintAll} className="bg-slate-100 text-slate-700 px-4 py-2.5 rounded-xl flex items-center space-x-2 font-bold text-sm hover:bg-slate-200 transition-all"><Printer size={18} /><span>Print Slips</span></button>
-          <button onClick={exportGroupPayrollRegister} className="bg-emerald-100 text-emerald-700 px-4 py-2.5 rounded-xl flex items-center space-x-2 font-bold text-sm hover:bg-emerald-200 transition-all"><Download size={18}/><span>Group Register</span></button>
+    <div className="flex flex-col h-full min-h-0">
+      <CompactPageHeader
+        title="Payroll Management"
+        subtitle={selectedMonth}
+        breadcrumbs={[{ label: 'HCM' }, { label: 'Payroll' }]}
+        actions={[
+          { label: 'Run Engine', icon: <Calculator size={12} />, onClick: () => generatePayrolls(employees), variant: 'primary' },
+          ...(!isApproved ? [{ label: 'Approve', icon: <Check size={12} />, onClick: handleApprovePayroll, variant: 'secondary' as const }] : []),
+          { label: 'Post to GL', icon: <Landmark size={12} />, onClick: handlePostPayrollToLedger, variant: 'secondary', disabled: !isApproved },
+          { label: 'Print Slips', icon: <Printer size={12} />, onClick: handlePrintAll, variant: 'ghost' },
+          { label: 'Refresh', icon: <RefreshCw size={12} />, onClick: () => window.dispatchEvent(new CustomEvent('erp:refresh')), variant: 'ghost', shortcut: 'Alt+R' },
+        ]}
+        meta={
           <div className="flex items-center gap-2">
-              {!isApproved ? (
-                <button onClick={handleApprovePayroll} className="bg-emerald-600 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 font-bold text-sm shadow-xl hover:bg-emerald-700 transition-all"><Check size={18}/><span>Approve Payroll</span></button>
-              ) : (
-                <span className="text-xs font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-xl">✓ Approved by {approvedBy}</span>
-              )}
-              <button onClick={handlePostPayrollToLedger} disabled={!isApproved} className={`px-4 py-2.5 rounded-xl flex items-center space-x-2 font-bold text-sm shadow-xl transition-all ${isApproved ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}><Landmark size={18}/><span>Post to Ledger</span></button>
-            </div>
-          <button onClick={() => generatePayrolls(employees)} className="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold flex items-center space-x-2 shadow-lg hover:bg-blue-700 transition-all"><Calculator size={18} /><span>Run Engine</span></button>
-        </div>
-      </div>
+            <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="text-[10px] font-black border border-slate-200 rounded px-2 py-1 bg-white" />
+            {isApproved && <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">Approved: {approvedBy}</span>}
+          </div>
+        }
+      />
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden no-print">
-        <table className="w-full text-left">
-          <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase text-slate-500 tracking-widest">
-            {viewTab === 'cumulative' ? (
-              <tr><th className="px-6 py-5">Employee Registry</th><th className="px-6 py-5 text-right">Gross Salary</th><th className="px-6 py-5 text-right">Salary Deds (Abs/Lat)</th><th className="px-6 py-5 text-right">Financial Deds (Loan/Adv)</th><th className="px-6 py-5 text-right">OT Amount</th><th className="px-6 py-5 text-right">Total Payable</th><th className="px-6 py-5 text-center">Slip</th></tr>
-            ) : viewTab === 'salary' ? (
-              <tr><th className="px-6 py-5">Employee Registry</th><th className="px-6 py-5 text-right">Basic Pay</th><th className="px-6 py-5 text-right">Allowances</th><th className="px-6 py-5 text-right">Gross Salary</th><th className="px-6 py-5 text-center">Slip</th></tr>
-            ) : (
-              <tr><th className="px-6 py-5">Employee Registry</th><th className="px-6 py-5 text-center">OT Hours</th><th className="px-6 py-5 text-right">Hourly Rate (x1.5)</th><th className="px-6 py-5 text-right">Total OT Wage</th><th className="px-6 py-5 text-center">Slip</th></tr>
-            )}
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {payrolls.map(pay => {
-              const emp = employees.find(e => e.id === pay.employeeId);
-              const grossSalary = pay.basicPay + pay.allowances;
-              const salaryDeds = pay.absentDeduction + pay.lateDeduction;
-              const financialDeds = pay.loanDeduction + pay.advanceDeduction;
-              const hourlyRate = Math.round((grossSalary / 25) / 8);
-              
-              return (
-                <tr key={pay.id} className="hover:bg-slate-50/50 transition-colors text-sm">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 font-black text-xs">{emp?.personal.name.charAt(0)}</div>
-                        <div>
-                            <p className="font-bold text-slate-900 leading-tight">{emp?.personal.name}</p>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">{emp?.work.employeeCode}</p>
-                        </div>
+      <div className="flex-1 flex flex-col min-h-0 p-4 gap-3">
+        {/* Compact KPI Row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0 no-print">
+          <div className="bg-white p-3 rounded-lg border border-slate-200"><span className="text-[9px] font-black text-slate-400 uppercase block">Total Package</span><span className="text-lg font-black text-slate-900">PKR {summary.totalNetDisbursable.toLocaleString()}</span><div className="flex gap-2 mt-0.5"><span className="text-[8px] font-black text-emerald-500">PAID: {summary.totalPaidDisbursement.toLocaleString()}</span><span className="text-[8px] font-black text-rose-500">BAL: {(summary.totalNetDisbursable - summary.totalPaidDisbursement).toLocaleString()}</span></div></div>
+          <div className="bg-white p-3 rounded-lg border border-slate-200"><span className="text-[9px] font-black text-blue-400 uppercase block">Pure Salary</span><span className="text-lg font-black text-slate-900">PKR {summary.totalPureSalary.toLocaleString()}</span><span className="text-[8px] font-bold text-emerald-600">Paid: {summary.totalPaidSalary.toLocaleString()}</span></div>
+          <div className="bg-white p-3 rounded-lg border border-slate-200"><span className="text-[9px] font-black text-indigo-400 uppercase block">Total OT</span><span className="text-lg font-black text-indigo-600">PKR {summary.totalOTAmount.toLocaleString()}</span><span className="text-[8px] font-bold text-indigo-600">Paid: {summary.totalPaidOT.toLocaleString()}</span></div>
+          <div className="bg-white p-3 rounded-lg border border-slate-200"><span className="text-[9px] font-black text-rose-400 uppercase block">Recoveries</span><span className="text-lg font-black text-rose-600">PKR {summary.totalDeductionsCombined.toLocaleString()}</span></div>
+        </div>
+
+        {/* Tab Switcher */}
+        <div className="flex gap-1 bg-white p-0.5 rounded-lg border border-slate-200 w-fit shrink-0 no-print">
+          <button onClick={() => setViewTab('cumulative')} className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase transition-all ${viewTab === 'cumulative' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>Cumulative</button>
+          <button onClick={() => setViewTab('salary')} className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase transition-all ${viewTab === 'salary' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>Salary</button>
+          <button onClick={() => setViewTab('overtime')} className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase transition-all ${viewTab === 'overtime' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>Overtime</button>
+          <button onClick={exportGroupPayrollRegister} className="px-3 py-1.5 rounded text-[10px] font-bold uppercase text-slate-500 hover:bg-slate-50 flex items-center gap-1"><Download size={10}/>Export</button>
+        </div>
+
+        <DataGridCard columns={payrollColumns} className="flex-1 no-print">
+          {payrolls.map((pay, ri) => {
+            const emp = employees.find(e => e.id === pay.employeeId);
+            const grossSalary = pay.basicPay + pay.allowances;
+            const salaryDeds = pay.absentDeduction + pay.lateDeduction;
+            const financialDeds = pay.loanDeduction + pay.advanceDeduction;
+            const hourlyRate = Math.round((grossSalary / 25) / 8);
+
+            return (
+              <tr key={pay.id} className={[
+                'border-b border-slate-100 last:border-0',
+                ri % 2 === 1 ? 'bg-slate-50/50' : 'bg-white',
+                'hover:bg-slate-50/70 transition-colors',
+              ].join(' ')}>
+                <td className="py-1.5 px-3">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 font-black text-[10px]">{emp?.personal.name.charAt(0)}</div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-900 leading-tight">{emp?.personal.name}</p>
+                      <p className="text-[9px] text-slate-400 font-bold uppercase">{emp?.work.employeeCode}</p>
                     </div>
-                  </td>
-                  
-                  {viewTab === 'cumulative' && (
-                    <>
-                      <td className="px-6 py-4 text-right font-bold text-slate-600">{(Number(grossSalary) || 0).toLocaleString()}</td>
-                      <td className="px-6 py-4 text-right font-bold text-rose-400">
-                        <div className="flex flex-col items-end">
-                            <span>-{(Number(salaryDeds) || 0).toLocaleString()}</span>
-                            {pay.allowedAbsentCount! > 0 && <span className="text-[8px] text-emerald-600 font-black uppercase">Seth Allowed: {pay.allowedAbsentCount} Days</span>}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-right font-bold text-rose-600">
-                        <div className="flex flex-col items-end">
-                            <span className={pay.loanWaived ? 'line-through opacity-30' : ''}>-{(Number(financialDeds) || 0).toLocaleString()}</span>
-                            {pay.loanWaived && <span className="text-[8px] text-rose-500 font-black uppercase flex items-center gap-1"><Ban size={8}/> Seth Waived</span>}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-right font-bold text-indigo-600">{pay.overtimePay.toLocaleString()}</td>
-                      <td className="px-6 py-4 text-right font-black text-blue-800 text-base">PKR {pay.netSalary.toLocaleString()}</td>
-                    </>
-                  )}
-                  {viewTab === 'salary' && (
-                    <>
-                      <td className="px-6 py-4 text-right font-bold text-slate-600">{pay.basicPay.toLocaleString()}</td>
-                      <td className="px-6 py-4 text-right font-bold text-slate-600">{pay.allowances.toLocaleString()}</td>
-                      <td className="px-6 py-4 text-right font-black text-blue-800">{(Number(grossSalary) || 0).toLocaleString()}</td>
-                    </>
-                  )}
-                  {viewTab === 'overtime' && (
-                    <>
-                      <td className="px-6 py-4 text-center font-black text-slate-700">{pay.overtimeHours} h</td>
-                      <td className="px-6 py-4 text-right font-bold text-slate-400">{Math.round(hourlyRate * 1.5).toLocaleString()}</td>
-                      <td className="px-6 py-4 text-right font-black text-indigo-700 text-base">PKR {pay.overtimePay.toLocaleString()}</td>
-                    </>
-                  )}
-                  
-                  <td className="px-6 py-4 text-center"><button onClick={() => setSelectedSlip(pay)} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Printer size={18} /></button></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  </div>
+                </td>
+
+                {viewTab === 'cumulative' && (
+                  <>
+                    <td className="py-1.5 px-3 text-right text-xs font-bold text-slate-600">{(Number(grossSalary) || 0).toLocaleString()}</td>
+                    <td className="py-1.5 px-3 text-right text-xs font-bold text-rose-400">
+                      <span>-{(Number(salaryDeds) || 0).toLocaleString()}</span>
+                      {pay.allowedAbsentCount! > 0 && <span className="block text-[7px] text-emerald-600 font-black uppercase">Allowed: {pay.allowedAbsentCount}d</span>}
+                    </td>
+                    <td className="py-1.5 px-3 text-right text-xs font-bold text-rose-600">
+                      <span className={pay.loanWaived ? 'line-through opacity-30' : ''}>-{(Number(financialDeds) || 0).toLocaleString()}</span>
+                      {pay.loanWaived && <span className="block text-[7px] text-rose-500 font-black uppercase">Waived</span>}
+                    </td>
+                    <td className="py-1.5 px-3 text-right text-xs font-bold text-indigo-600">{pay.overtimePay.toLocaleString()}</td>
+                    <td className="py-1.5 px-3 text-right text-xs font-black text-blue-800">PKR {pay.netSalary.toLocaleString()}</td>
+                  </>
+                )}
+                {viewTab === 'salary' && (
+                  <>
+                    <td className="py-1.5 px-3 text-right text-xs font-bold text-slate-600">{pay.basicPay.toLocaleString()}</td>
+                    <td className="py-1.5 px-3 text-right text-xs font-bold text-slate-600">{pay.allowances.toLocaleString()}</td>
+                    <td className="py-1.5 px-3 text-right text-xs font-black text-blue-800">{(Number(grossSalary) || 0).toLocaleString()}</td>
+                  </>
+                )}
+                {viewTab === 'overtime' && (
+                  <>
+                    <td className="py-1.5 px-3 text-center text-xs font-black text-slate-700">{pay.overtimeHours}h</td>
+                    <td className="py-1.5 px-3 text-right text-xs font-bold text-slate-400">{Math.round(hourlyRate * 1.5).toLocaleString()}</td>
+                    <td className="py-1.5 px-3 text-right text-xs font-black text-indigo-700">PKR {pay.overtimePay.toLocaleString()}</td>
+                  </>
+                )}
+
+                <td className="py-1.5 px-3 text-center"><button onClick={() => setSelectedSlip(pay)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-all"><Printer size={14} /></button></td>
+              </tr>
+            );
+          })}
+        </DataGridCard>
       </div>
 
       {selectedSlip && (

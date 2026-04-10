@@ -1,14 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Printer, X, Plus, Trash2, FileSignature,
   Search, Info, Calculator, Ruler, Layers, Box, Calendar,
   Edit2, FileCheck, Eye, Component, Anchor, PaintBucket,
   Hammer, Grid, CheckCircle2, Image as ImageIcon, MousePointer2,
-  PenTool, UploadCloud, FileImage, Square, Circle, Save
+  PenTool, UploadCloud, FileImage, Square, Circle, Save, RefreshCw
 } from 'lucide-react';
 import { useQuotations } from './useQuotations';
 import { AsyncSalesService } from '../services/asyncSalesService';
 import { toast } from 'sonner';
+import { CompactPageHeader } from '@/modules/shared/components/CompactPageHeader';
+import { DataGridCard, GridColumn } from '@/modules/shared/components/DataGridCard';
 
 const QuotationManager: React.FC = () => {
   const {
@@ -329,69 +331,68 @@ const QuotationManager: React.FC = () => {
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
-          <div className="relative w-96">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Search quotes..." 
-              className="sap-input pl-10 w-full bg-white"
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-            />
-          </div>
-        </div>
-        
-        <table className="w-full text-left sap-table">
-          <thead>
-            <tr>
-              <th>Quote ID</th>
-              <th>Date</th>
-              <th>Client</th>
-              <th>Project</th>
-              <th className="text-right">Amount</th>
-              <th className="text-center">Status</th>
-              <th className="text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {filteredQuotations.map(q => (
-              <tr key={q.id} className="hover:bg-slate-50/50 transition-colors">
-                <td className="font-bold text-blue-600">{q.id}</td>
-                <td className="font-medium text-slate-600">{q.date}</td>
-                <td className="font-bold text-slate-800">{clients.find(c => c.id === q.clientId)?.name}</td>
-                <td className="font-medium text-slate-600">{q.projectName}</td>
-                <td className="text-right font-black text-slate-800">
+      <div className="flex-1 flex flex-col min-h-0">
+        <CompactPageHeader
+          title="Quotation Manager"
+          subtitle={company}
+          breadcrumbs={[{ label: 'Sales' }, { label: 'Quotations' }]}
+          actions={[
+            { label: 'New Quotation', icon: <Plus size={12} />, onClick: () => { setFormData(initialQuotation); setIsModalOpen(true); }, variant: 'primary', shortcut: 'Alt+N' },
+            { label: 'Refresh', icon: <RefreshCw size={12} />, onClick: () => window.dispatchEvent(new CustomEvent('erp:refresh')), variant: 'ghost', shortcut: 'Alt+R' },
+          ]}
+          meta={<span className="text-[10px] font-black text-slate-400 uppercase">{filteredQuotations.length} Quotes</span>}
+        />
+
+        <div className="flex-1 flex flex-col min-h-0 p-4">
+          <DataGridCard
+            columns={[
+              { key: 'id', header: 'Quote ID' },
+              { key: 'date', header: 'Date' },
+              { key: 'client', header: 'Client' },
+              { key: 'project', header: 'Project' },
+              { key: 'amount', header: 'Amount', align: 'right' },
+              { key: 'status', header: 'Status', align: 'center' },
+              { key: 'actions', header: 'Actions', align: 'center' },
+            ]}
+            className="flex-1"
+            toolbar={
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={12} />
+                <input type="text" placeholder="Search quotes..." className="w-full pl-8 pr-3 py-1.5 text-xs font-bold border border-slate-200 rounded bg-white focus:outline-none focus:border-blue-300" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+              </div>
+            }
+            emptyState={<span className="text-xs text-slate-300 font-bold">No quotations found</span>}
+          >
+            {filteredQuotations.map((q, ri) => (
+              <tr key={q.id} className={[
+                'border-b border-slate-100 last:border-0',
+                ri % 2 === 1 ? 'bg-slate-50/50' : 'bg-white',
+                'hover:bg-slate-50/70 transition-colors',
+              ].join(' ')}>
+                <td className="py-1.5 px-3 font-bold text-blue-600 text-xs">{q.id}</td>
+                <td className="py-1.5 px-3 text-xs text-slate-600">{q.date}</td>
+                <td className="py-1.5 px-3 text-xs font-bold text-slate-800">{clients.find(c => c.id === q.clientId)?.name}</td>
+                <td className="py-1.5 px-3 text-xs text-slate-600">{q.projectName}</td>
+                <td className="py-1.5 px-3 text-right text-xs font-black text-slate-800">
                   Rs {q.items.reduce((s, i) => s + i.amount, 0).toLocaleString()}
                 </td>
-                <td className="text-center">
-                  <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                <td className="py-1.5 px-3 text-center">
+                  <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
                     q.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-                  }`}>
-                    {q.status}
-                  </span>
+                  }`}>{q.status}</span>
                 </td>
-                <td>
-                  <div className="flex justify-center space-x-2">
-                    <button onClick={() => { setFormData(q); setIsModalOpen(true); }} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit2 size={16} /></button>
-                    <button onClick={() => { setPrintingQuote(q); setTimeout(() => { window.print(); setPrintingQuote(null); }, 500); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Printer size={16} /></button>
-                    <button onClick={() => handleDelete(q.id)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                <td className="py-1.5 px-3">
+                  <div className="flex justify-center space-x-1">
+                    <button onClick={() => { setFormData(q); setIsModalOpen(true); }} className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit2 size={14} /></button>
+                    <button onClick={() => { setPrintingQuote(q); setTimeout(() => { window.print(); setPrintingQuote(null); }, 500); }} className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"><Printer size={14} /></button>
+                    <button onClick={() => handleDelete(q.id)} className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"><Trash2 size={14} /></button>
                   </div>
                 </td>
               </tr>
             ))}
-            {filteredQuotations.length === 0 && (
-              <tr>
-                <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
-                  No quotations found
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+          </DataGridCard>
+        </div>
       </div>
-
     </div>
   );
 };

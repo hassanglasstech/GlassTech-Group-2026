@@ -11,12 +11,14 @@ import DocumentFolder from '@/modules/hr/components/DocumentFolder';
 import DocExpiryAlerts from '@/modules/hr/components/DocExpiryAlerts';
 import DisciplinaryManager from './DisciplinaryManager';
 import EmployeeProfileCard from '@/modules/hr/components/EmployeeProfileCard';
-import { UserPlus, Search, Edit2, Trash2, X, Briefcase, Wallet, UserCircle, FileUp, Download, Building2, Tags, FolderOpen, Eye, EyeOff } from 'lucide-react';
+import { UserPlus, Search, Edit2, Trash2, X, Briefcase, Wallet, UserCircle, FileUp, Download, Building2, Tags, FolderOpen, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import Pagination from '@/components/Pagination';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
+import { CompactPageHeader } from '@/modules/shared/components/CompactPageHeader';
+import { DataGridCard, GridColumn } from '@/modules/shared/components/DataGridCard';
 
 // ── Status config ───────────────────────────────────────────────────
 const STATUS_OPTIONS: { value: EmployeeStatus; label: string; color: string }[] = [
@@ -241,160 +243,149 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
     setModalTab('personal');
   };
 
+  // ── Wire Alt+R global shortcut ────────────────────────────────────
+  useEffect(() => {
+    const handler = () => {
+      const currentEmployees = HRService.getEmployees().filter(e => e.company === company);
+      setEmployees(currentEmployees);
+      setCompanyTags(TagService.getTags(company));
+      setCompanyDepts(TagService.getDepartments(company));
+    };
+    window.addEventListener('erp:refresh', handler);
+    return () => window.removeEventListener('erp:refresh', handler);
+  }, [company]);
+
   const filteredEmployees = employees.filter(e => {
-    // Hide resigned/terminated unless toggle is on
     if (!showInactive && INACTIVE_STATUSES.includes(e.work.status as EmployeeStatus)) return false;
-    // Search filter
-    return e.personal.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) || 
+    return e.personal.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
       e.work.employeeCode.toLowerCase().includes(debouncedSearchTerm.toLowerCase());
   });
   const inactiveCount = employees.filter(e => INACTIVE_STATUSES.includes(e.work.status as EmployeeStatus)).length;
   const paginatedEmployees = filteredEmployees.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  // Build current employee object for DocumentFolder (when editing)
   const currentEmployee = editingId ? employees.find(e => e.id === editingId) : null;
 
+  const empGridColumns: GridColumn[] = [
+    { key: 'profile', header: 'Employee Profile' },
+    { key: 'tags', header: 'Tags' },
+    { key: 'department', header: 'Department' },
+    { key: 'docs', header: 'Docs', align: 'center' },
+    { key: 'salary', header: 'Gross Salary' },
+    { key: 'actions', header: 'Actions', align: 'right' },
+  ];
+
   return (
-    <div className="space-y-6">
-      {/* Toolbar */}
-      <div className="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm gap-4">
-        <div className="relative w-full md:w-96">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <DocExpiryAlerts />
-          {/* Probation alerts */}
-          {(() => {
-            const today = new Date();
-            const in30 = new Date(today); in30.setDate(today.getDate() + 30);
-            const alerts = employees.filter(e => {
-              if (e.work.status !== 'probation' || !e.work.joinDate) return false;
-              const probEnd = new Date(e.work.joinDate);
-              probEnd.setMonth(probEnd.getMonth() + 3);
-              return probEnd >= today && probEnd <= in30;
-            });
-            if (!alerts.length) return null;
-            return (
-              <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                <p className="text-xs font-black text-amber-700 uppercase tracking-widest mb-2">⚠ Probation Ending Soon</p>
-                {alerts.map(e => {
-                  const probEnd = new Date(e.work.joinDate); probEnd.setMonth(probEnd.getMonth() + 3);
-                  const days = Math.ceil((probEnd.getTime() - today.getTime()) / 86400000);
-                  return <p key={e.id} className="text-xs text-amber-800 font-bold">{e.personal.name} ({e.work.employeeCode}) — {days} days left</p>;
-                })}
+    <div className="flex flex-col h-full min-h-0">
+      <CompactPageHeader
+        title="Employee Management"
+        subtitle={company}
+        breadcrumbs={[{ label: 'HCM' }, { label: 'Employees' }]}
+        actions={[
+          { label: 'Add Employee', icon: <UserPlus size={12} />, onClick: () => { resetForm(); setIsModalOpen(true); }, variant: 'primary' },
+          { label: 'Import', icon: <FileUp size={12} />, onClick: () => fileInputRef.current?.click(), variant: 'secondary' },
+          { label: 'Export', icon: <Download size={12} />, onClick: handleExportExcel, variant: 'secondary' },
+          { label: 'Refresh', icon: <RefreshCw size={12} />, onClick: () => window.dispatchEvent(new CustomEvent('erp:refresh')), variant: 'ghost', shortcut: 'Alt+R' },
+        ]}
+        meta={
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black text-slate-400 uppercase">{filteredEmployees.length} employees</span>
+            <button onClick={() => setShowInactive(!showInactive)}
+              className={`text-[10px] font-bold px-2 py-0.5 rounded border whitespace-nowrap ${
+                showInactive ? 'bg-red-50 text-red-700 border-red-200' : 'text-slate-400 border-slate-200 hover:bg-slate-50'
+              }`}>
+              {showInactive ? <><EyeOff size={10} className="inline mr-1"/>Hide Inactive</> : <><Eye size={10} className="inline mr-1"/>Inactive ({inactiveCount})</>}
+            </button>
+          </div>
+        }
+      />
+      <input type="file" ref={fileInputRef} onChange={handleImportExcel} className="hidden" accept=".xlsx, .xls" />
+      <DocExpiryAlerts />
+
+      <div className="flex-1 flex flex-col min-h-0 p-4 gap-3">
+        <DataGridCard
+          columns={empGridColumns}
+          className="flex-1"
+          toolbar={
+            <div className="flex items-center gap-3 w-full">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={12} />
+                <input type="text" placeholder="Search by name or code..." className="w-full pl-8 pr-3 py-1.5 text-xs font-bold border border-slate-200 rounded bg-white focus:outline-none focus:border-blue-300" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
               </div>
-            );
-          })()}
-          <input type="text" placeholder="Search by name or code..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-        </div>
-        <div className="flex space-x-3 w-full md:w-auto overflow-x-auto no-scrollbar">
-          <button onClick={() => setShowInactive(!showInactive)}
-            className={`px-4 py-2 rounded-lg flex items-center space-x-2 transition-all font-bold text-sm border whitespace-nowrap ${
-              showInactive ? 'bg-red-50 text-red-700 border-red-200' : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
-            }`}>
-            {showInactive ? <EyeOff size={16} /> : <Eye size={16} />}
-            <span>{showInactive ? 'Active Employees' : `Resigned / Terminated (${inactiveCount})`}</span>
-          </button>
-          <input type="file" ref={fileInputRef} onChange={handleImportExcel} className="hidden" accept=".xlsx, .xls" />
-          <button onClick={() => fileInputRef.current?.click()} className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-slate-200 transition-all font-bold text-sm border border-slate-200 whitespace-nowrap"><FileUp size={18} /><span>Import</span></button>
-          <button onClick={handleExportExcel} className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-slate-200 transition-all font-bold text-sm border border-slate-200 whitespace-nowrap"><Download size={18} /><span>Export</span></button>
-          <button onClick={() => { resetForm(); setIsModalOpen(true); }} className="bg-blue-600 text-white px-6 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 font-bold text-sm whitespace-nowrap"><UserPlus size={18} /><span>Add Employee</span></button>
-        </div>
-      </div>
-
-      {/* ── Employee List Table ───────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[900px]">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Employee profile</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tags</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Department</th>
-                <th className="px-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Docs</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Gross salary</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {paginatedEmployees.length > 0 ? paginatedEmployees.map((emp) => {
-                const dept = TagService.getDeptById(emp.work.departmentId || '');
-                const photoUrl = EmployeeDocService.getPhotoUrl(emp.id);
-                const docCompleteness = EmployeeDocService.getCompleteness(emp.id);
-                return (
-                  <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors group cursor-pointer" onClick={() => setViewingEmployee(emp)}>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center space-x-3">
-                        {photoUrl ? (
-                          <img src={photoUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-slate-200" />
-                        ) : (
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm border ${
-                            INACTIVE_STATUSES.includes(emp.work.status as EmployeeStatus)
-                              ? 'bg-red-50 text-red-400 border-red-200 opacity-60'
-                              : 'bg-blue-100 text-blue-600 border-blue-200'
-                          }`}>
-                            {emp.personal.name.charAt(0)}
-                          </div>
+            </div>
+          }
+        >
+          {paginatedEmployees.length > 0 ? paginatedEmployees.map((emp, ri) => {
+            const dept = TagService.getDeptById(emp.work.departmentId || '');
+            const photoUrl = EmployeeDocService.getPhotoUrl(emp.id);
+            const docCompleteness = EmployeeDocService.getCompleteness(emp.id);
+            return (
+              <tr key={emp.id} className={[
+                'border-b border-slate-100 last:border-0 cursor-pointer',
+                ri % 2 === 1 ? 'bg-slate-50/50' : 'bg-white',
+                'hover:bg-blue-50/40 transition-colors group',
+              ].join(' ')} onClick={() => setViewingEmployee(emp)}>
+                <td className="py-1.5 px-3">
+                  <div className="flex items-center space-x-2">
+                    {photoUrl ? (
+                      <img src={photoUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-slate-200" />
+                    ) : (
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs border ${
+                        INACTIVE_STATUSES.includes(emp.work.status as EmployeeStatus)
+                          ? 'bg-red-50 text-red-400 border-red-200 opacity-60'
+                          : 'bg-blue-100 text-blue-600 border-blue-200'
+                      }`}>{emp.personal.name.charAt(0)}</div>
+                    )}
+                    <div>
+                      <div className="flex items-center gap-1">
+                        <p className={`text-xs font-bold leading-tight ${INACTIVE_STATUSES.includes(emp.work.status as EmployeeStatus) ? 'text-slate-400 line-through' : 'text-slate-900'}`}>{emp.personal.name}</p>
+                        {emp.work.status && emp.work.status !== 'confirmed' && (
+                          <span className={`text-[8px] font-bold px-1 py-0.5 rounded-full border ${STATUS_OPTIONS.find(s => s.value === emp.work.status)?.color || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                            {STATUS_OPTIONS.find(s => s.value === emp.work.status)?.label || emp.work.status}
+                          </span>
                         )}
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className={`font-bold leading-tight ${INACTIVE_STATUSES.includes(emp.work.status as EmployeeStatus) ? 'text-slate-400 line-through' : 'text-slate-900'}`}>{emp.personal.name}</p>
-                            {emp.work.status && emp.work.status !== 'confirmed' && (
-                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${STATUS_OPTIONS.find(s => s.value === emp.work.status)?.color || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                                {STATUS_OPTIONS.find(s => s.value === emp.work.status)?.label || emp.work.status}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-slate-400 font-semibold">{emp.work.employeeCode}</p>
-                          {(emp.work as any).lastDate && (
-                            <p className="text-[10px] text-red-400 font-semibold">Last day: {(emp.work as any).lastDate}</p>
-                          )}
-                        </div>
                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <EmployeeTagPills employeeId={emp.id} size="sm" maxDisplay={3} />
-                      {TagService.getEmployeeTags(emp.id).length === 0 && emp.work.designation && (
-                        <span className="text-xs text-slate-500 italic">{emp.work.designation}</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center space-x-2">
-                        <Building2 size={14} className="text-slate-400" />
-                        <span className="text-sm font-bold text-slate-600">{dept?.name || emp.work.department || '—'}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 text-center">
-                      <div className="flex flex-col items-center">
-                        <span className={`text-xs font-black ${docCompleteness === 100 ? 'text-emerald-600' : docCompleteness >= 60 ? 'text-amber-600' : 'text-red-500'}`}>
-                          {docCompleteness}%
-                        </span>
-                        <div className="w-12 bg-slate-100 rounded-full h-1 mt-1">
-                          <div className={`h-1 rounded-full ${docCompleteness === 100 ? 'bg-emerald-500' : docCompleteness >= 60 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${docCompleteness}%` }}></div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="text-sm font-black text-slate-900">PKR {(emp.salary.basic + emp.salary.houseRent + emp.salary.conveyance + emp.salary.specialAllowance).toLocaleString()}</p>
-                      <p className="text-[10px] text-slate-400 font-medium">Base: {emp.salary.basic.toLocaleString()}</p>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={(e) => { e.stopPropagation(); handleEdit(emp); }} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit2 size={16} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDelete(emp.id); }} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              }) : (
-                <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-400 font-medium">No employees found.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                      <p className="text-[10px] text-slate-400 font-semibold">{emp.work.employeeCode}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="py-1.5 px-3">
+                  <EmployeeTagPills employeeId={emp.id} size="sm" maxDisplay={3} />
+                  {TagService.getEmployeeTags(emp.id).length === 0 && emp.work.designation && (
+                    <span className="text-[10px] text-slate-500 italic">{emp.work.designation}</span>
+                  )}
+                </td>
+                <td className="py-1.5 px-3">
+                  <div className="flex items-center space-x-1">
+                    <Building2 size={12} className="text-slate-400" />
+                    <span className="text-xs font-bold text-slate-600">{dept?.name || emp.work.department || '—'}</span>
+                  </div>
+                </td>
+                <td className="py-1.5 px-3 text-center">
+                  <span className={`text-[10px] font-black ${docCompleteness === 100 ? 'text-emerald-600' : docCompleteness >= 60 ? 'text-amber-600' : 'text-red-500'}`}>{docCompleteness}%</span>
+                </td>
+                <td className="py-1.5 px-3">
+                  <p className="text-xs font-black text-slate-900">PKR {(emp.salary.basic + emp.salary.houseRent + emp.salary.conveyance + emp.salary.specialAllowance).toLocaleString()}</p>
+                  <p className="text-[9px] text-slate-400">Base: {emp.salary.basic.toLocaleString()}</p>
+                </td>
+                <td className="py-1.5 px-3 text-right">
+                  <div className="flex justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={(e) => { e.stopPropagation(); handleEdit(emp); }} className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit2 size={14} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); handleDelete(emp.id); }} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={14} /></button>
+                  </div>
+                </td>
+              </tr>
+            );
+          }) : (
+            <tr><td colSpan={6} className="py-8 text-center text-slate-400 text-xs font-medium">No employees found.</td></tr>
+          )}
+        </DataGridCard>
 
-      {filteredEmployees.length > itemsPerPage && (
-        <Pagination currentPage={currentPage} totalPages={Math.ceil(filteredEmployees.length / itemsPerPage)} onPageChange={setCurrentPage} />
-      )}
+        {filteredEmployees.length > itemsPerPage && (
+          <div className="shrink-0">
+            <Pagination currentPage={currentPage} totalPages={Math.ceil(filteredEmployees.length / itemsPerPage)} onPageChange={setCurrentPage} />
+          </div>
+        )}
+      </div>
 
       {/* ── Employee Modal with Tabs ─────────────────────────────────── */}
       {isModalOpen && (
