@@ -4,7 +4,7 @@ import QCCheckPanel from '@/modules/glassco/core/QCCheckPanel';
 import { useProductionContext } from '@/modules/production/components/ProductionContext';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import InwardAuditView from '@/modules/production/components/InwardAuditView';
-import { Flame, ArrowDownLeft, Hourglass, Layers, ChevronLeft, User, LayoutGrid, Clock, CheckCircle2, ArrowLeft, ShieldCheck } from 'lucide-react';
+import { Flame, ArrowDownLeft, Hourglass, Layers, ChevronLeft, User, LayoutGrid, Clock, CheckCircle2, ArrowLeft, ShieldCheck, Truck, AlertTriangle } from 'lucide-react';
 import JobCard from '@/modules/production/components/sub/JobCard';
 import { isInternal, getGlassSize } from '@/modules/production/components/ProductionUtils';
 import { useNavigate } from 'react-router-dom';
@@ -25,6 +25,32 @@ const ProcessingView: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'qc' | 'tempering' | 'inward' | 'wip' | 'lamination' | 'double_glaze'>('qc');
   const [expandedLoadingJob, setExpandedLoadingJob] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  // ── Vehicle Payload Guard state ─────────────────────────────────
+  const [dispatchVehicles, setDispatchVehicles] = useState<{ id: string; vehicle_name: string; plate_number: string; max_payload_kg: number; vehicle_type: string }[]>([]);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
+
+  React.useEffect(() => {
+    ProductionService.getDispatchVehicles(company).then(setDispatchVehicles);
+  }, [company]);
+
+  // Live payload calculation for loaded pieces
+  const payloadInfo = React.useMemo(() => {
+    if (!activeDispatchIdForLoading) return { totalKg: 0, maxKg: 0, pct: 0, overloaded: false };
+    const loadedPcs = pieces.filter(p => p.dispatchId === activeDispatchIdForLoading);
+    const store = InventoryService.getStore();
+    let totalKg = 0;
+    loadedPcs.forEach((p: any) => {
+      const storeItem = store.find((si: any) => si.company === company && si.name?.includes(getGlassSize(p.specs || '')));
+      const sqFt = p.totalSqFt || 0;
+      totalKg += sqFt * (storeItem?.perSqftWeightKg || 0.14);
+    });
+    totalKg = Math.round(totalKg * 10) / 10;
+    const vehicle = dispatchVehicles.find(v => v.id === selectedVehicleId);
+    const maxKg = vehicle?.max_payload_kg || 0;
+    const pct = maxKg > 0 ? Math.round((totalKg / maxKg) * 100) : 0;
+    return { totalKg, maxKg, pct, overloaded: maxKg > 0 && totalKg > maxKg };
+  }, [activeDispatchIdForLoading, pieces, selectedVehicleId, dispatchVehicles, company]);
 
   // ── Auto-detect pending trip from Logistics ──
   React.useEffect(() => {
@@ -308,12 +334,75 @@ const ProcessingView: React.FC = () => {
                   </div></div>
                </div>
 
-               {/* Summary bar */}
+               {/* Summary bar + Vehicle Payload Guard */}
                {activeDispatchIdForLoading && (() => {
                  const st = dispatches.find(d => d.id === activeDispatchIdForLoading);
                  const lp = pieces.filter(p => p.dispatchId === activeDispatchIdForLoading);
                  if (!st) return null;
-                 return (<div className="bg-white border-2 border-rose-200 rounded-2xl p-4 flex items-center justify-between shadow-sm"><div className="flex items-center space-x-4"><div className="bg-rose-100 text-rose-600 p-2 rounded-xl"><Flame size={18}/></div><div><p className="text-xs font-black text-slate-800 uppercase">{st.serviceType}: {st.plantName}</p><p className="text-[10px] text-slate-400 font-bold">{st.id} | {st.vehicleNo}</p></div></div><div className="flex items-center space-x-6 text-right"><div><p className="text-[9px] font-black text-slate-400 uppercase">Loaded</p><p className="text-lg font-black text-rose-600">{lp.length} Pcs</p></div><div><p className="text-[9px] font-black text-slate-400 uppercase">Area</p><p className="text-lg font-black text-slate-700">{lp.reduce((s, p) => s + (p.totalSqFt || 0), 0).toFixed(1)} Ft²</p></div></div></div>);
+                 return (
+                   <div className="space-y-2">
+                     <div className="bg-white border border-slate-200 rounded-lg p-3 flex items-center justify-between">
+                       <div className="flex items-center space-x-3">
+                         <div className="bg-rose-100 text-rose-600 p-2 rounded-lg"><Flame size={16}/></div>
+                         <div>
+                           <p className="text-xs font-black text-slate-800 uppercase">Outward Subcontracting ({st.serviceType}): {st.plantName}</p>
+                           <p className="text-[10px] text-slate-400 font-bold">{st.id} | {st.vehicleNo}</p>
+                         </div>
+                       </div>
+                       <div className="flex items-center space-x-4 text-right">
+                         <div><p className="text-[9px] font-black text-slate-400 uppercase">Loaded</p><p className="text-sm font-black text-rose-600">{lp.length} Pcs</p></div>
+                         <div><p className="text-[9px] font-black text-slate-400 uppercase">Area</p><p className="text-sm font-black text-slate-700">{lp.reduce((s, p) => s + (p.totalSqFt || 0), 0).toFixed(1)} Ft²</p></div>
+                       </div>
+                     </div>
+
+                     {/* ── Vehicle Payload Guard ── */}
+                     <div className="bg-white border border-slate-200 rounded-lg p-3">
+                       <div className="flex items-center gap-3 flex-wrap">
+                         <div className="flex items-center gap-1.5">
+                           <Truck size={14} className="text-slate-500" />
+                           <span className="text-[10px] font-black text-slate-500 uppercase">Dispatch Vehicle</span>
+                         </div>
+                         <select
+                           value={selectedVehicleId}
+                           onChange={e => setSelectedVehicleId(e.target.value)}
+                           className="text-xs font-bold border border-slate-200 rounded px-2 py-1.5 bg-white min-w-[200px]"
+                         >
+                           <option value="">-- Select Vehicle --</option>
+                           {dispatchVehicles.map(v => (
+                             <option key={v.id} value={v.id}>{v.vehicle_name} ({v.plate_number}) — {v.max_payload_kg} kg</option>
+                           ))}
+                         </select>
+                         {selectedVehicleId && payloadInfo.maxKg > 0 && (
+                           <div className="flex-1 flex items-center gap-3 min-w-[200px]">
+                             <div className="flex-1">
+                               <div className="flex justify-between text-[9px] font-black mb-0.5">
+                                 <span className={payloadInfo.overloaded ? 'text-rose-600' : 'text-slate-500'}>
+                                   Payload: {payloadInfo.totalKg} / {payloadInfo.maxKg} kg
+                                 </span>
+                                 <span className={payloadInfo.overloaded ? 'text-rose-600' : payloadInfo.pct > 80 ? 'text-amber-600' : 'text-emerald-600'}>
+                                   {payloadInfo.pct}%
+                                 </span>
+                               </div>
+                               <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                 <div
+                                   className={`h-full rounded-full transition-all ${
+                                     payloadInfo.overloaded ? 'bg-rose-500' : payloadInfo.pct > 80 ? 'bg-amber-500' : 'bg-emerald-500'
+                                   }`}
+                                   style={{ width: `${Math.min(payloadInfo.pct, 100)}%` }}
+                                 />
+                               </div>
+                             </div>
+                             {payloadInfo.overloaded && (
+                               <div className="flex items-center gap-1 text-[10px] font-black text-rose-600 bg-rose-50 border border-rose-200 rounded px-2 py-1 whitespace-nowrap">
+                                 <AlertTriangle size={10} /> OVERLOADED — Remove pieces!
+                               </div>
+                             )}
+                           </div>
+                         )}
+                       </div>
+                     </div>
+                   </div>
+                 );
                })()}
 
                {/* Job list — always show eligible pieces regardless of trip selection */}

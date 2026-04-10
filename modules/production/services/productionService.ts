@@ -217,54 +217,51 @@ export const ProductionService = {
   getWarehouseSpots: (): WarehouseSpot[] => safeParse(KEYS.WAREHOUSE_SPOTS),
   saveWarehouseSpots: (data: WarehouseSpot[]) => safeSave(KEYS.WAREHOUSE_SPOTS, data),
 
-  // ── MFG-5: Oven capacity validation ──────────────────────────────
-  // Must be awaited before dispatching any tempering batch.
-  // Queries tempering_oven_config (Migration 018) for the rated limits.
-  // Throws with a descriptive toast if the batch exceeds either limit.
-  // Fails open (no-op) when offline or the oven has no config row yet.
-  validateTemperingDispatch: async (params: {
-    company: string;
-    ovenId:  string;
-    batchWeightKg: number;
-    batchSqft:     number;
-  }): Promise<void> => {
-    const { company, ovenId, batchWeightKg, batchSqft } = params;
+  // ── MFG-5: Vehicle Payload Guard (replaces oven constraint) ──────
+  // Glass is outsourced to external tempering vendors — we guard
+  // vehicle payload limits, NOT in-house oven capacity.
+  // Queries dispatch_vehicles (Migration 023) for max_payload_kg.
+  // Throws VehicleOverloadError if batch exceeds vehicle rated limit.
+  // Fails open when offline or no vehicle selected (backwards compat).
+  validateVehiclePayload: async (params: {
+    vehicleId:     string | null;
+    totalWeightKg: number;
+  }): Promise<{ maxPayloadKg: number; utilization: number } | null> => {
+    if (!params.vehicleId) return null; // No vehicle selected — skip check
 
-    const { data: config, error } = await supabase
-      .from('tempering_oven_config')
-      .select('max_capacity_kg, max_sqft_per_batch')
-      .eq('company', company)
-      .eq('oven_id', ovenId)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (error) {
-      console.warn('[ProductionService] MFG-5: oven config query failed:', error.message);
-      return; // Fail open — cannot block production without a config table
+    try {
+      const { data, error } = await supabase.rpc('validate_vehicle_payload', {
+        p_vehicle_id:      params.vehicleId,
+        p_total_weight_kg: params.totalWeightKg,
+      });
+      if (error) {
+        console.warn('[ProductionService] MFG-5: vehicle payload check failed:', error.message);
+        return null; // Fail open
+      }
+      if (data && !data.success) {
+        toast.error(data.error, { duration: 10000 });
+        throw new Error(data.error);
+      }
+      return data ? { maxPayloadKg: data.maxPayloadKg, utilization: data.utilization } : null;
+    } catch (e: any) {
+      if (e.message?.includes('VehicleOverloadError')) throw e;
+      console.warn('[ProductionService] MFG-5: vehicle check error:', e.message);
+      return null; // Fail open for network errors
     }
-    if (!config) {
-      console.warn(`[ProductionService] MFG-5: No oven config for ${company}/${ovenId} — skipping capacity check`);
-      return;
-    }
+  },
 
-    const maxKg   = Number(config.max_capacity_kg   ?? 0);
-    const maxSqft = Number(config.max_sqft_per_batch ?? 0);
-
-    if (maxKg > 0 && batchWeightKg > maxKg) {
-      const msg =
-        `MFG-5 OvenCapacityError: Batch weight ${batchWeightKg.toFixed(1)} kg exceeds ` +
-        `oven "${ovenId}" rated capacity ${maxKg} kg. ` +
-        `Reduce the batch size or split across multiple dispatches.`;
-      toast.error(msg, { duration: 10000 });
-      throw new Error(msg);
-    }
-    if (maxSqft > 0 && batchSqft > maxSqft) {
-      const msg =
-        `MFG-5 OvenCapacityError: Batch area ${batchSqft.toFixed(1)} sqft exceeds ` +
-        `oven "${ovenId}" max ${maxSqft} sqft per batch. ` +
-        `Split the batch before dispatching.`;
-      toast.error(msg, { duration: 10000 });
-      throw new Error(msg);
+  // ── Dispatch Vehicles CRUD ─────────────────────────────────────────
+  getDispatchVehicles: async (company: string) => {
+    try {
+      const { data } = await supabase
+        .from('dispatch_vehicles')
+        .select('*')
+        .eq('company', company)
+        .eq('is_active', true)
+        .order('vehicle_name');
+      return (data || []) as { id: string; vehicle_name: string; plate_number: string; max_payload_kg: number; vehicle_type: string }[];
+    } catch {
+      return [];
     }
   },
 
