@@ -164,7 +164,14 @@ export const GeneratorService = {
   /** Delete a log entry */
   deleteLog: async (id: string, company: string): Promise<boolean> => {
     try {
-      const { error } = await supabase.from('generator_logs').delete().eq('id', id);
+      // MFG-6: Scope delete to company to prevent cross-tenant log deletion.
+      // The DB-level RLS (Migration 018) enforces this at the PostgreSQL level
+      // as well — this is the application-layer defence-in-depth.
+      const { error } = await supabase
+        .from('generator_logs')
+        .delete()
+        .eq('id', id)
+        .eq('company', company);
       if (error) console.error('Delete error:', error);
     } catch {}
     // Also clean localStorage

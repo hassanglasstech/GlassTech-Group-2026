@@ -55,6 +55,51 @@ export interface DeliveryKPI {
   monthlyTrend: { month: string; onTimePct: number; total: number }[];
 }
 
+// ── MFG-2: Production cost config ─────────────────────────────────
+// Replaces the hardcoded wages (PKR 150,000) and wastage default (12%)
+// that were baked into calculateTrueCostPerSqft.
+//
+// Config is keyed by company under localStorage key
+// 'gtk_erp_production_config' so each entity can maintain its own
+// labour cost and wastage parameters without a code change.
+//
+// Set via Manufacturing → Settings, or seed via admin scripts.
+// Shape: { [company]: { monthlyWagesBasis, workingDaysPerMonth, defaultWastagePct } }
+export interface ProductionCostConfig {
+  monthlyWagesBasis:    number;  // Total monthly wages pool for the cutting team (PKR)
+  workingDaysPerMonth:  number;  // Denominator for per-day wage rate
+  defaultWastagePct:    number;  // % wastage used when no cutting-session data exists
+}
+
+const PRODUCTION_CONFIG_LS_KEY = 'gtk_erp_production_config';
+
+// Conservative industry defaults — override these per company in the config panel
+const DEFAULT_COST_CONFIG: ProductionCostConfig = {
+  monthlyWagesBasis:   150000,  // 5 cutters × PKR 30,000 — update via settings
+  workingDaysPerMonth: 26,
+  defaultWastagePct:   12,
+};
+
+export function getProductionCostConfig(company: string): ProductionCostConfig {
+  try {
+    const raw = localStorage.getItem(PRODUCTION_CONFIG_LS_KEY);
+    if (!raw) return { ...DEFAULT_COST_CONFIG };
+    const all = JSON.parse(raw) as Record<string, Partial<ProductionCostConfig>>;
+    return { ...DEFAULT_COST_CONFIG, ...(all[company] ?? all['default'] ?? {}) };
+  } catch {
+    return { ...DEFAULT_COST_CONFIG };
+  }
+}
+
+export function saveProductionCostConfig(company: string, config: Partial<ProductionCostConfig>): void {
+  try {
+    const raw = localStorage.getItem(PRODUCTION_CONFIG_LS_KEY);
+    const all = raw ? (JSON.parse(raw) as Record<string, Partial<ProductionCostConfig>>) : {};
+    all[company] = { ...(all[company] ?? {}), ...config };
+    localStorage.setItem(PRODUCTION_CONFIG_LS_KEY, JSON.stringify(all));
+  } catch {}
+}
+
 // ── Helpers ───────────────────────────────────────────────────────
 function getGeneratorLogs(company: string): any[] {
   // Read from localStorage cache (populated by GeneratorService.getLogs Supabase fetch)
@@ -78,19 +123,25 @@ export function calculateTrueCostPerSqft(company: string): TrueCostPerSqft[] {
   const sessions = InventoryService.getCuttingSessions().filter(s => s.company === company);
   const dispatches = ProductionService.getTemperingDispatches().filter(d => d.company === company);
 
+  // MFG-2: Load per-company cost config — replaces hardcoded wages/wastage.
+  const costConfig = getProductionCostConfig(company);
+
   // Compute averages
   const totalGenFuelCost = genLogs.reduce((s: number, l: any) => s + (l.fuelLitresUsed * l.fuelRatePerLitre || l.fuelCost || 0), 0);
   const totalGenSqft = genLogs.reduce((s: number, l: any) => s + (l.cuttingSqftProduced || 0), 0);
   const energyPerSqft = totalGenSqft > 0 ? totalGenFuelCost / totalGenSqft : 0;
 
   const totalLabourSqft = labourLogs.reduce((s: number, l: any) => s + (l.sqftProduced || 0), 0);
-  const estimatedMonthlyWages = 150000; // rough estimate — 5 cutters × 30K
+  // MFG-2: wages and working-days-per-month now from config, not hardcoded.
   const labourDays = new Set(labourLogs.map((l: any) => l.logDate)).size;
-  const labourPerSqft = totalLabourSqft > 0 ? (estimatedMonthlyWages * (labourDays / 26)) / totalLabourSqft : 0;
+  const labourPerSqft = totalLabourSqft > 0
+    ? (costConfig.monthlyWagesBasis * (labourDays / costConfig.workingDaysPerMonth)) / totalLabourSqft
+    : 0;
 
+  // MFG-2: default wastage % from config, not hardcoded 12.
   const avgWastagePct = sessions.length > 0
     ? sessions.reduce((s, cs) => s + (cs.estimatedWastagePct || 0), 0) / sessions.length
-    : 12; // default 12%
+    : costConfig.defaultWastagePct;
 
   const totalDispatchSqft = dispatches.reduce((s, d) => s + d.totalSqFt, 0);
   const totalDispatchCharges = dispatches.reduce((s, d) => s + (d.totalCharges || 0), 0);

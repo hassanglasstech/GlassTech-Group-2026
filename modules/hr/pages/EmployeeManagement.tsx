@@ -164,6 +164,18 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
       );
     }
 
+    // HR-5: Pakistani mobile number format validation.
+    // Accepts: 0300-1234567 or 03001234567 (with or without dash).
+    // The field is optional but if present must match the PTCL/PTA format.
+    const PHONE_REGEX = /^(03\d{2})-?\d{7}$/;
+    const phone = formData.personal?.phone?.trim() ?? '';
+    if (phone && !PHONE_REGEX.test(phone)) {
+      return toast.error(
+        `HR-5: Invalid phone number "${phone}". ` +
+        `Pakistani mobile numbers must match 03XX-XXXXXXX format (e.g. 0300-1234567).`
+      );
+    }
+
     const dept = TagService.getDeptById(formData.work?.departmentId || '');
     const resolvedForm = { ...formData, work: { ...formData.work!, department: dept?.name || formData.work?.department || '' } };
     const all = HRService.getEmployees();

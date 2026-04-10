@@ -194,6 +194,8 @@ export const ProductionService = {
     }
     bgSaveToIDB('productionPieces', data);
     // Push to Supabase in background
+    // MFG-4: include cost_center_id in every upsert row so piece-level
+    // cost attribution is persisted to Supabase (column added in Migration 018).
     const mapped = data
       .filter(p => p.id && (p as any).orderId)
       .map(p => ({
@@ -203,6 +205,7 @@ export const ProductionService = {
         specs: p.specs || '',
         status: p.status || 'Cut',
         last_updated: (p as any).lastUpdated || new Date().toISOString(),
+        cost_center_id: (p as any).costCenterId ?? null,
       }));
     if (mapped.length > 0) {
       supabase.from('production_pieces').upsert(mapped, { onConflict: 'id' })
@@ -213,4 +216,76 @@ export const ProductionService = {
   saveTemperingDispatches: (data: TemperingDispatch[]) => safeSave(KEYS.TEMPERING_DISPATCHES, data),
   getWarehouseSpots: (): WarehouseSpot[] => safeParse(KEYS.WAREHOUSE_SPOTS),
   saveWarehouseSpots: (data: WarehouseSpot[]) => safeSave(KEYS.WAREHOUSE_SPOTS, data),
+
+  // ── MFG-5: Oven capacity validation ──────────────────────────────
+  // Must be awaited before dispatching any tempering batch.
+  // Queries tempering_oven_config (Migration 018) for the rated limits.
+  // Throws with a descriptive toast if the batch exceeds either limit.
+  // Fails open (no-op) when offline or the oven has no config row yet.
+  validateTemperingDispatch: async (params: {
+    company: string;
+    ovenId:  string;
+    batchWeightKg: number;
+    batchSqft:     number;
+  }): Promise<void> => {
+    const { company, ovenId, batchWeightKg, batchSqft } = params;
+
+    const { data: config, error } = await supabase
+      .from('tempering_oven_config')
+      .select('max_capacity_kg, max_sqft_per_batch')
+      .eq('company', company)
+      .eq('oven_id', ovenId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[ProductionService] MFG-5: oven config query failed:', error.message);
+      return; // Fail open — cannot block production without a config table
+    }
+    if (!config) {
+      console.warn(`[ProductionService] MFG-5: No oven config for ${company}/${ovenId} — skipping capacity check`);
+      return;
+    }
+
+    const maxKg   = Number(config.max_capacity_kg   ?? 0);
+    const maxSqft = Number(config.max_sqft_per_batch ?? 0);
+
+    if (maxKg > 0 && batchWeightKg > maxKg) {
+      const msg =
+        `MFG-5 OvenCapacityError: Batch weight ${batchWeightKg.toFixed(1)} kg exceeds ` +
+        `oven "${ovenId}" rated capacity ${maxKg} kg. ` +
+        `Reduce the batch size or split across multiple dispatches.`;
+      toast.error(msg, { duration: 10000 });
+      throw new Error(msg);
+    }
+    if (maxSqft > 0 && batchSqft > maxSqft) {
+      const msg =
+        `MFG-5 OvenCapacityError: Batch area ${batchSqft.toFixed(1)} sqft exceeds ` +
+        `oven "${ovenId}" max ${maxSqft} sqft per batch. ` +
+        `Split the batch before dispatching.`;
+      toast.error(msg, { duration: 10000 });
+      throw new Error(msg);
+    }
+  },
+
+  // ── MFG-2: Production cost config helpers ────────────────────────
+  // Provide read/write access to the per-company wages & wastage config
+  // that costAnalysisService reads. Stored in localStorage and editable
+  // via the Manufacturing → Settings panel without code changes.
+  getProductionCostConfig: (company: string): Record<string, any> => {
+    try {
+      const raw = localStorage.getItem('gtk_erp_production_config');
+      if (!raw) return {};
+      const all = JSON.parse(raw);
+      return all[company] ?? all['default'] ?? {};
+    } catch { return {}; }
+  },
+  saveProductionCostConfig: (company: string, config: Record<string, any>): void => {
+    try {
+      const raw = localStorage.getItem('gtk_erp_production_config');
+      const all = raw ? JSON.parse(raw) : {};
+      all[company] = { ...(all[company] ?? {}), ...config };
+      localStorage.setItem('gtk_erp_production_config', JSON.stringify(all));
+    } catch {}
+  },
 };

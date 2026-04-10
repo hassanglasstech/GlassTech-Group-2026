@@ -26,6 +26,11 @@ const FactoryEventForm: React.FC<Props> = ({ sector, eventTypes, loggedBy, onSav
   const [saving, setSaving]       = useState(false);
   const [stockStatus, setStockStatus] = useState<'idle' | 'checking' | 'available' | 'not_available'>('idle');
   const [savedEvent, setSavedEvent] = useState<FactoryEvent | null>(null);
+  // HSE-3: Shift handover acknowledgement — the logging incharge must
+  // confirm they have briefed the incoming shift supervisor before any
+  // factory event can be submitted. This ensures HSE accountability is
+  // never lost at a shift boundary.
+  const [shiftHandoverAck, setShiftHandoverAck] = useState(false);
 
   const needsReq = REQ_TRIGGERS.includes(eventType);
 
@@ -60,6 +65,17 @@ const FactoryEventForm: React.FC<Props> = ({ sector, eventTypes, loggedBy, onSav
 
   const handleSubmit = async () => {
     if (!eventType || !detail.trim()) return;
+    // HSE-3: Block submission until the incharge acknowledges shift handover.
+    // This is a hard gate — no factory event can be logged without it.
+    if (!shiftHandoverAck) {
+      alert(
+        'HSE-3: Shift Handover Acknowledgement required.\n\n' +
+        'You must confirm the incoming shift supervisor has been briefed on all ' +
+        'open issues and hazards before logging this event. ' +
+        'Check the acknowledgement box to proceed.'
+      );
+      return;
+    }
     setSaving(true);
     try {
       // 1. Insert factory event
@@ -283,10 +299,29 @@ const FactoryEventForm: React.FC<Props> = ({ sector, eventTypes, loggedBy, onSav
         </div>
       )}
 
+      {/* HSE-3: Shift Handover Acknowledgement */}
+      <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all
+        ${shiftHandoverAck
+          ? 'border-green-500/40 bg-green-500/10'
+          : 'border-slate-600 bg-slate-700/50'}`}
+      >
+        <input
+          type="checkbox"
+          checked={shiftHandoverAck}
+          onChange={e => setShiftHandoverAck(e.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-green-500 flex-shrink-0"
+        />
+        <span className="text-xs text-slate-300 leading-relaxed">
+          <span className="font-bold text-white block mb-0.5">Shift Handover Acknowledgement *</span>
+          I confirm the incoming shift supervisor has been verbally briefed on all open
+          issues, active hazards, and pending actions before this event is logged.
+        </span>
+      </label>
+
       {/* Submit */}
       <button
         onClick={handleSubmit}
-        disabled={saving || !eventType || !detail.trim()}
+        disabled={saving || !eventType || !detail.trim() || !shiftHandoverAck}
         className="w-full bg-white text-slate-900 font-black py-3 rounded-xl text-sm uppercase tracking-wider hover:bg-slate-100 transition-all disabled:opacity-40 flex items-center justify-center gap-2"
       >
         {saving ? <><Loader2 size={16} className="animate-spin" /> Saving...</> : 'Submit Event'}

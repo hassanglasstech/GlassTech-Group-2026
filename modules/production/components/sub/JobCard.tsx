@@ -2,6 +2,43 @@ import React from 'react';
 import { ProductionPiece, Quotation, WarehouseSpot } from '@/modules/shared/types';
 import { MapPin } from 'lucide-react';
 
+// ── MFG-3: Production state machine ───────────────────────────────────────
+// Defines ALL allowed status transitions for a production piece.
+// Any transition not listed here is illegal and MUST be blocked in the UI
+// and any service that mutates piece status.
+//
+// Glass manufacturing flow:
+//   Pending → Cut → Edging → Tempering → QA → Warehouse → Delivered
+// Pieces can also move to Broken from any in-progress state.
+//
+// Usage:
+//   if (!isTransitionAllowed(piece.status, nextStatus)) { /* block */ }
+export const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  'Pending':    ['Cut'],
+  'Cut':        ['Edging', 'Tempering', 'QA', 'Broken'],
+  'Edging':     ['Tempering', 'QA', 'Broken'],
+  'Tempering':  ['QA', 'Broken'],
+  'QA':         ['Warehouse', 'Broken'],
+  'Warehouse':  ['Delivered'],
+  'Delivered':  [],  // Terminal — no further moves
+  'Broken':     [],  // Terminal — piece scrapped
+};
+
+/**
+ * Gate every status mutation through this function.
+ * Returns true only when the transition is explicitly listed in ALLOWED_TRANSITIONS.
+ *
+ * @example
+ * // Block illegal jump: Pending → Delivered (skips QA)
+ * if (!isTransitionAllowed('Pending', 'Delivered')) {
+ *   toast.error('MFG-3: Piece must pass through Cut → Edging → Tempering → QA before delivery.');
+ *   return;
+ * }
+ */
+export function isTransitionAllowed(current: string, next: string): boolean {
+  return (ALLOWED_TRANSITIONS[current] ?? []).includes(next);
+}
+
 interface JobCardProps {
   piece: ProductionPiece;
   jobOrder?: Quotation;
