@@ -24,11 +24,12 @@ import CashFlowDashboard from '@/modules/finance/components/CashFlowDashboard';
 import OverheadDashboard from '@/modules/finance/components/OverheadDashboard';
 import JobPLDashboard from '@/modules/finance/components/JobPLDashboard';
 import InventoryValuationReport from '@/modules/finance/pages/InventoryValuationReport';
+import IntercompanySettlement from '@/modules/finance/components/IntercompanySettlement';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import { 
-  Landmark, CreditCard, ListTree, BookOpen, BarChart4, 
-  FilePieChart, Target, Wallet, RefreshCw, FileText, 
-  Inbox, Settings, Clock, Briefcase, Users, BarChart3, Package, ShieldCheck, Lock, BarChart2, Activity, Layers, TrendingUp
+  Landmark, CreditCard, ListTree, BookOpen, BarChart4,
+  FilePieChart, Target, Wallet, RefreshCw, FileText,
+  Inbox, Settings, Clock, Briefcase, Users, BarChart3, Package, ShieldCheck, Lock, BarChart2, Activity, Layers, TrendingUp, ArrowRightLeft
 } from 'lucide-react';
 
 type CategoryKey = 'ops' | 'reporting' | 'hr' | 'assets' | 'config';
@@ -50,6 +51,7 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
           { id: 'cash_journal', label: 'Cash Journal', icon: Wallet },
           { id: 'ledger', label: 'General Ledger', icon: BookOpen },
           { id: 'billing', label: 'Invoice Billing', icon: FileText },
+          { id: 'ico_settle', label: 'ICO Settlements', icon: ArrowRightLeft },
           { id: 'matching', label: 'Job P&L Check', icon: ShieldCheck },
         ]
       },
@@ -156,6 +158,7 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
           {activeTab === 'ledger' && <GeneralLedger company={company} />}
           {activeTab === 'billing' && <BillingHub company={company} />}
           {activeTab === 'matching'      && <ThreeWayMatching company={company} />}
+          {activeTab === 'ico_settle'    && <IntercompanySettlement />}
           {activeTab === 'budget_master'  && <BudgetMaster company={company} />}
           {activeTab === 'cash_flow'       && <CashFlowDashboard company={company} />}
           {activeTab === 'overhead_pool'    && <OverheadDashboard company={company} />}
