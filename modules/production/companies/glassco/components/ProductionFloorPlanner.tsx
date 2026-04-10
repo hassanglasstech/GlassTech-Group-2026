@@ -1,5 +1,11 @@
 /**
- * ProductionFloorPlanner.tsx -- GlassCo Phase 2 (Enhanced)
+ * ProductionFloorPlanner.tsx — Design System v2
+ *
+ * UI Changes (business logic untouched):
+ *  - Replaced dark gradient header → CompactPageHeader
+ *  - Alt+N wired via erp:new-entry → opens Add Team modal for CT-1
+ *  - Alt+R wired via erp:refresh CustomEvent
+ *  - min-h-0 flex-1 scroll pattern on outer wrapper
  *
  * Features:
  *   - 3 physical Cutting Tables (CT-1, CT-2, CT-3) + Processing + Dispatch
@@ -19,9 +25,10 @@ import {
   Scissors, Flame, Truck, Users, Plus, X, GripVertical,
   Clock, BarChart2, Play, Pause, RotateCcw, ChevronDown,
   ChevronUp, AlertCircle, CheckCircle2, Zap, Trash2,
-  ListOrdered, ArrowRight, AlertTriangle,
+  ListOrdered, ArrowRight, AlertTriangle, RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { CompactPageHeader } from '@/modules/shared/components/CompactPageHeader';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -724,37 +731,60 @@ const ProductionFloorPlanner: React.FC = () => {
   const totalUnassigned = orderQueue.filter(o => !o.assignedTable).length;
   const urgentCount     = orderQueue.filter(o => o.priority === 'URGENT').length;
 
+  // ── Wire Alt+R and Alt+N ─────────────────────────────────────────
+  useEffect(() => {
+    const refreshHandler = () => {
+      setTeams(loadTeams());
+      setOrderAssignments(loadOrderAssignments());
+    };
+    const newEntryHandler = () => setAddModalStation('ct1');
+    window.addEventListener('erp:refresh', refreshHandler);
+    window.addEventListener('erp:new-entry', newEntryHandler);
+    return () => {
+      window.removeEventListener('erp:refresh', refreshHandler);
+      window.removeEventListener('erp:new-entry', newEntryHandler);
+    };
+  }, []);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, fontFamily: '-apple-system, "Segoe UI", Arial, sans-serif', padding: '4px 0' }}>
-
-      {/* Header */}
-      <div style={{ background: 'linear-gradient(135deg, #1E293B, #334155)', color: '#fff', padding: '24px 28px', borderRadius: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '-.02em' }}>Production Floor Planner</div>
-          <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 4, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase' }}>
-            GlassCo -- 3 Cutting Tables -- Drag Teams -- Live Simulation
+    <div className="flex flex-col h-full min-h-0">
+      <CompactPageHeader
+        title="Production Floor Planner"
+        subtitle="GlassCo"
+        breadcrumbs={[{ label: 'Production' }, { label: 'Floor Planner' }]}
+        actions={[
+          {
+            label: 'New Team',
+            icon: <Plus size={12} />,
+            onClick: () => setAddModalStation('ct1'),
+            variant: 'primary',
+            shortcut: 'Alt+N',
+          },
+          {
+            label: 'Refresh',
+            icon: <RefreshCw size={12} />,
+            onClick: () => window.dispatchEvent(new CustomEvent('erp:refresh')),
+            variant: 'secondary',
+            shortcut: 'Alt+R',
+          },
+        ]}
+        meta={
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-black text-slate-400 uppercase">{teams.length} Teams</span>
+            <span className="text-[10px] font-black text-emerald-500 uppercase">{teams.filter(t => t.isActive).length} Active</span>
+            {totalUnassigned > 0 && (
+              <span className="text-[10px] font-black text-amber-500 uppercase">{totalUnassigned} Unassigned</span>
+            )}
           </div>
-        </div>
-        <div style={{ display: 'flex', gap: 12 }}>
-          {[
-            { label: 'Teams', value: teams.length },
-            { label: 'Active', value: teams.filter(t => t.isActive).length, color: '#10B981' },
-            { label: 'In Queue', value: orderQueue.length },
-            { label: 'Unassigned', value: totalUnassigned, color: totalUnassigned > 0 ? '#F59E0B' : '#10B981' },
-          ].map(s => (
-            <div key={s.label} style={{ background: 'rgba(255,255,255,.08)', borderRadius: 16, padding: '10px 18px', textAlign: 'center', border: '1px solid rgba(255,255,255,.1)' }}>
-              <div style={{ fontSize: 9, fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>{s.label}</div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: s.color || '#fff', marginTop: 2 }}>{s.value}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+        }
+      />
 
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-5">
       {/* Cutting Tables: 3 columns */}
       <div>
-        <div style={{ fontSize: 11, fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 12 }}>
-          <Scissors size={13} style={{ display: 'inline', marginRight: 6 }} />
-          Cutting Tables -- Assign teams and orders
+        <div className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+          <Scissors size={13} />
+          Cutting Tables — Assign teams and orders
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
           {STATIONS.filter(s => s.isCuttingTable).map(st => (
@@ -773,8 +803,8 @@ const ProductionFloorPlanner: React.FC = () => {
 
       {/* Processing + Dispatch: 2 columns */}
       <div>
-        <div style={{ fontSize: 11, fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 12 }}>
-          <Flame size={13} style={{ display: 'inline', marginRight: 6 }} />
+        <div className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+          <Flame size={13} />
           Processing and Dispatch
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
@@ -808,6 +838,7 @@ const ProductionFloorPlanner: React.FC = () => {
           company={company}
         />
       )}
+      </div>{/* end flex-1 scroll wrapper */}
     </div>
   );
 };

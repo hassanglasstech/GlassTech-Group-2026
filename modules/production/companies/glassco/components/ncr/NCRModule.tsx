@@ -1,4 +1,14 @@
-import React, { useState, useMemo } from 'react';
+/**
+ * NCRModule.tsx — Design System v2
+ *
+ * UI Changes (business logic untouched):
+ *  - Replaced rose-50 bar header → CompactPageHeader with Alt+R refresh
+ *  - NCR Register table → DataGridCard (py-1.5 px-3 high-density)
+ *  - Vendor Claims table → DataGridCard
+ *  - Eradicated old rounded-2xl bloated KPI cards → compact grid
+ *  - min-h-0 flex-1 scroll pattern for tablet/factory screens
+ */
+import React, { useState, useMemo, useEffect } from 'react';
 import { useProductionContext } from '@/modules/production/components/ProductionContext';
 import { NCRService } from '@/modules/production/services/ncrService';
 import { SalesService } from '@/modules/sales/services/salesService';
@@ -12,6 +22,8 @@ import {
 } from 'lucide-react';
 import type { NCREvent, NCRStage, NCRCause, NCRAction, NCRReproduction, NCRVendorClaim } from '@/modules/production/types/ncr';
 import { NCR_CAUSE_LABELS, NCR_STAGE_LABELS } from '@/modules/production/types/ncr';
+import { CompactPageHeader } from '@/modules/shared/components/CompactPageHeader';
+import { DataGridCard, GridColumn } from '@/modules/shared/components/DataGridCard';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -541,6 +553,13 @@ const NCRModule: React.FC = () => {
 
   const vendors = SalesService.getVendors().filter(v => v.company === company);
 
+  // ── Wire Alt+R global shortcut ────────────────────────────────────
+  useEffect(() => {
+    const handler = () => refresh();
+    window.addEventListener('erp:refresh', handler);
+    return () => window.removeEventListener('erp:refresh', handler);
+  }, []);
+
   const ncrs = useMemo(() =>
     NCRService.getNCRByCompany(company)
       .filter(e => filterMonth ? e.reportedAt.startsWith(filterMonth) : true)
@@ -567,61 +586,96 @@ const NCRModule: React.FC = () => {
     };
   });
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center gap-3 px-4 py-2 bg-rose-50 border border-rose-200 rounded-xl">
-        <div className="flex items-center gap-2 shrink-0">
-          <AlertTriangle size={14} className="text-rose-600"/>
-          <span className="text-xs font-black uppercase tracking-widest text-rose-700">NCR — Breakage Control</span>
-          <span className="text-[10px] text-slate-400 font-bold hidden sm:inline">Non-Conformance · Write-offs · Vendor Claims</span>
-        </div>
-        <div className="flex items-center gap-3 ml-auto">
-          <select
-            value={filterMonth}
-            onChange={e => setFilterMonth(e.target.value)}
-            className="bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-xs font-bold text-white outline-none"
-          >
-            <option value="">All Time</option>
-            {monthOptions.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-          </select>
-          <button
-            onClick={() => setShowForm(true)}
-            className="bg-white text-rose-600 px-5 py-2.5 rounded-xl font-black uppercase text-xs flex items-center gap-2 shadow-lg hover:bg-rose-50"
-          >
-            <Plus size={16}/> New NCR
-          </button>
-        </div>
-      </div>
+  // ── NCR Register columns for DataGridCard ─────────────────────────
+  const ncrColumns: GridColumn[] = [
+    { key: 'id', header: 'NCR ID', width: '10%' },
+    { key: 'stage', header: 'Stage' },
+    { key: 'cause', header: 'Cause' },
+    { key: 'piece', header: 'Piece' },
+    { key: 'sqft', header: 'Sqft', align: 'right' },
+    { key: 'loss', header: 'Loss (PKR)', align: 'right' },
+    { key: 'action', header: 'Action' },
+    { key: 'status', header: 'Status' },
+    { key: 'date', header: 'Date' },
+    { key: 'view', header: '', width: '3%' },
+  ];
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+  // ── Vendor Claims columns for DataGridCard ────────────────────────
+  const claimColumns: GridColumn[] = [
+    { key: 'id', header: 'Claim ID' },
+    { key: 'ncrRef', header: 'NCR Ref' },
+    { key: 'vendor', header: 'Vendor' },
+    { key: 'claimAmt', header: 'Claim Amt', align: 'right' },
+    { key: 'settled', header: 'Settled', align: 'right' },
+    { key: 'status', header: 'Status' },
+    { key: 'date', header: 'Date' },
+  ];
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      <CompactPageHeader
+        title="NCR — Breakage Control"
+        subtitle="Non-Conformance"
+        breadcrumbs={[{ label: 'Production' }, { label: 'NCR' }]}
+        actions={[
+          {
+            label: 'New NCR',
+            icon: <Plus size={12} />,
+            onClick: () => setShowForm(true),
+            variant: 'danger',
+          },
+          {
+            label: 'Refresh',
+            icon: <RefreshCw size={12} />,
+            onClick: () => window.dispatchEvent(new CustomEvent('erp:refresh')),
+            variant: 'secondary',
+            shortcut: 'Alt+R',
+          },
+        ]}
+        meta={
+          <div className="flex items-center gap-2">
+            <select
+              value={filterMonth}
+              onChange={e => setFilterMonth(e.target.value)}
+              className="text-[9px] border border-slate-200 rounded px-2 py-1.5 text-slate-600 font-bold bg-white focus:outline-none"
+            >
+              <option value="">All Time</option>
+              {monthOptions.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+            <span className="text-[10px] font-black text-rose-500 uppercase">{ncrs.length} NCRs</span>
+          </div>
+        }
+      />
+
+      <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-4 gap-4">
+      {/* KPI Cards — compact */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
+        <div className="bg-white rounded-lg border border-slate-200 p-3">
           <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Total Breakages</p>
-          <p className="text-3xl font-black text-rose-600 mt-1">{kpis.totalBroken}</p>
-          <p className="text-xs text-slate-400 mt-1">{kpis.totalSqftLost} ft² lost</p>
+          <p className="text-xl font-black text-rose-600 mt-0.5">{kpis.totalBroken}</p>
+          <p className="text-[10px] text-slate-400">{kpis.totalSqftLost} ft² lost</p>
         </div>
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-3">
           <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Breakage Rate</p>
-          <p className={`text-3xl font-black mt-1 ${kpis.breakageRate > 3 ? 'text-rose-600' : kpis.breakageRate > 1.5 ? 'text-amber-600' : 'text-emerald-600'}`}>
+          <p className={`text-xl font-black mt-0.5 ${kpis.breakageRate > 3 ? 'text-rose-600' : kpis.breakageRate > 1.5 ? 'text-amber-600' : 'text-emerald-600'}`}>
             {kpis.breakageRate}%
           </p>
-          <p className="text-xs text-slate-400 mt-1">{kpis.breakageRate > 2 ? '⚠️ Above target' : '✓ Within target'}</p>
+          <p className="text-[10px] text-slate-400">{kpis.breakageRate > 2 ? 'Above target' : 'Within target'}</p>
         </div>
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-3">
           <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Total Loss</p>
-          <p className="text-3xl font-black text-rose-700 mt-1">PKR {fmt(kpis.totalLoss)}</p>
-          <p className="text-xs text-slate-400 mt-1">{kpis.reproduced} reproduced</p>
+          <p className="text-xl font-black text-rose-700 mt-0.5">PKR {fmt(kpis.totalLoss)}</p>
+          <p className="text-[10px] text-slate-400">{kpis.reproduced} reproduced</p>
         </div>
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-3">
           <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Claim Recovery</p>
-          <p className="text-3xl font-black text-emerald-600 mt-1">{kpis.recoveryRate}%</p>
-          <p className="text-xs text-slate-400 mt-1">PKR {fmt(kpis.totalRecovered)} recovered</p>
+          <p className="text-xl font-black text-emerald-600 mt-0.5">{kpis.recoveryRate}%</p>
+          <p className="text-[10px] text-slate-400">PKR {fmt(kpis.totalRecovered)} recovered</p>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex space-x-1 bg-white p-1 rounded-2xl border w-fit shadow-sm overflow-x-auto">
+      {/* Tabs — compact */}
+      <div className="flex gap-1 bg-white p-0.5 rounded-lg border border-slate-200 w-fit shrink-0 overflow-x-auto">
         {[
           { id: 'list', label: 'NCR Register', icon: FileText },
           { id: 'reproductions', label: 'Reproduce Queue', icon: RefreshCw },
@@ -631,11 +685,11 @@ const NCRModule: React.FC = () => {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase whitespace-nowrap transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-bold uppercase whitespace-nowrap transition-all ${
               activeTab === tab.id ? 'bg-rose-600 text-white' : 'text-slate-500 hover:bg-slate-50'
             }`}
           >
-            <tab.icon size={14}/>
+            <tab.icon size={12}/>
             {tab.label}
           </button>
         ))}
@@ -643,68 +697,57 @@ const NCRModule: React.FC = () => {
 
       {/* ── NCR List ── */}
       {activeTab === 'list' && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          {ncrs.length === 0 ? (
-            <div className="py-20 text-center text-slate-300 font-black uppercase text-xs italic">
+        <DataGridCard
+          columns={ncrColumns}
+          className="flex-1"
+          emptyState={
+            <span className="text-xs text-slate-300 font-black uppercase italic">
               No NCRs recorded{filterMonth ? ' this period' : ''}.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full sap-table">
-                <thead>
-                  <tr>
-                    <th>NCR ID</th>
-                    <th>Stage</th>
-                    <th>Cause</th>
-                    <th>Piece</th>
-                    <th className="text-right">Sqft</th>
-                    <th className="text-right">Loss (PKR)</th>
-                    <th>Action</th>
-                    <th>Status</th>
-                    <th>Date</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ncrs.map(ncr => (
-                    <tr key={ncr.id} className="cursor-pointer hover:bg-rose-50/30" onClick={() => setSelectedNCR(ncr)}>
-                      <td className="font-black text-rose-600">{ncr.id}</td>
-                      <td className="text-xs">{ncr.stage}</td>
-                      <td className="text-xs">{ncr.cause.split('-').slice(0,2).join('-')}</td>
-                      <td className="text-xs font-bold text-blue-600">{ncr.pieceId || '—'}</td>
-                      <td className="text-right font-bold">{ncr.sqftLost}</td>
-                      <td className="text-right font-black text-rose-600">{ncr.estimatedValue.toLocaleString()}</td>
-                      <td><span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${actionColor[ncr.action]}`}>{ncr.action}</span></td>
-                      <td><span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${statusColor[ncr.status]}`}>{ncr.status}</span></td>
-                      <td className="text-xs text-slate-400">{ncr.reportedAt.split('T')[0]}</td>
-                      <td><Eye size={14} className="text-slate-300"/></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+            </span>
+          }
+        >
+          {ncrs.map((ncr, ri) => (
+            <tr
+              key={ncr.id}
+              onClick={() => setSelectedNCR(ncr)}
+              className={[
+                'border-b border-slate-100 last:border-0 cursor-pointer',
+                ri % 2 === 1 ? 'bg-slate-50/50' : 'bg-white',
+                'hover:bg-rose-50/40 transition-colors',
+              ].join(' ')}
+            >
+              <td className="py-1.5 px-3 font-black text-rose-600">{ncr.id}</td>
+              <td className="py-1.5 px-3 text-slate-700">{ncr.stage}</td>
+              <td className="py-1.5 px-3 text-slate-700">{ncr.cause.split('-').slice(0,2).join('-')}</td>
+              <td className="py-1.5 px-3 font-bold text-blue-600">{ncr.pieceId || '—'}</td>
+              <td className="py-1.5 px-3 text-right font-bold text-slate-700">{ncr.sqftLost}</td>
+              <td className="py-1.5 px-3 text-right font-black text-rose-600">{ncr.estimatedValue.toLocaleString()}</td>
+              <td className="py-1.5 px-3"><span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${actionColor[ncr.action]}`}>{ncr.action}</span></td>
+              <td className="py-1.5 px-3"><span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${statusColor[ncr.status]}`}>{ncr.status}</span></td>
+              <td className="py-1.5 px-3 text-slate-400">{ncr.reportedAt.split('T')[0]}</td>
+              <td className="py-1.5 px-3"><Eye size={12} className="text-slate-300"/></td>
+            </tr>
+          ))}
+        </DataGridCard>
       )}
 
       {/* ── Reproduction Queue ── */}
       {activeTab === 'reproductions' && (
-        <div className="space-y-3">
+        <div className="space-y-3 flex-1 min-h-0">
           {['Queued', 'In-Production'].map(status => {
             const items = reproductions.filter(r => r.status === status);
             if (items.length === 0) return null;
             return (
-              <div key={status} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <div className="bg-blue-50 px-5 py-3 border-b border-blue-100 flex items-center gap-2">
-                  <RefreshCw size={14} className="text-blue-600"/>
-                  <h3 className="text-xs font-black text-blue-700 uppercase">{status} ({items.length})</h3>
+              <div key={status} className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                <div className="bg-blue-50 px-3 py-2 border-b border-blue-100 flex items-center gap-2">
+                  <RefreshCw size={12} className="text-blue-600"/>
+                  <h3 className="text-[11px] font-black text-blue-700 uppercase">{status} ({items.length})</h3>
                 </div>
                 <div className="divide-y divide-slate-50">
                   {items.map(r => {
-                    const ncr = ncrs.find(n => n.id === r.ncrId);
                     const job = jobOrders.find(j => j.orderNo === r.jobOrderId || j.id === r.jobOrderId);
                     return (
-                      <div key={r.id} className="px-5 py-3 flex items-center justify-between">
+                      <div key={r.id} className="px-3 py-2 flex items-center justify-between">
                         <div>
                           <p className="text-xs font-black text-blue-600">{r.id}</p>
                           <p className="text-[10px] text-slate-500 mt-0.5">
@@ -728,112 +771,93 @@ const NCRModule: React.FC = () => {
             );
           })}
           {reproductions.filter(r => r.status === 'Queued' || r.status === 'In-Production').length === 0 && (
-            <div className="py-16 text-center text-slate-300 font-black uppercase text-xs italic">No pending reproductions.</div>
+            <div className="py-10 text-center text-slate-300 font-black uppercase text-xs italic">No pending reproductions.</div>
           )}
         </div>
       )}
 
       {/* ── Vendor Claims ── */}
       {activeTab === 'claims' && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          {claims.length === 0 ? (
-            <div className="py-16 text-center text-slate-300 font-black uppercase text-xs italic">No vendor claims yet.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full sap-table">
-                <thead>
-                  <tr>
-                    <th>Claim ID</th>
-                    <th>NCR Ref</th>
-                    <th>Vendor</th>
-                    <th className="text-right">Claim Amt</th>
-                    <th className="text-right">Settled</th>
-                    <th>Status</th>
-                    <th>Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {claims.map(c => (
-                    <tr key={c.id}>
-                      <td className="font-black text-amber-600">{c.id}</td>
-                      <td className="text-xs font-bold text-rose-600">{c.ncrId}</td>
-                      <td className="font-bold text-xs">{c.vendorName}</td>
-                      <td className="text-right font-black">PKR {c.claimAmount.toLocaleString()}</td>
-                      <td className="text-right font-bold text-emerald-600">
-                        {c.settledAmount ? `PKR ${c.settledAmount.toLocaleString()}` : '—'}
-                      </td>
-                      <td>
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
-                          c.status === 'Settled' ? 'bg-emerald-100 text-emerald-700' :
-                          c.status === 'Submitted' ? 'bg-blue-100 text-blue-700' :
-                          c.status === 'Rejected' ? 'bg-rose-100 text-rose-700' :
-                          'bg-amber-100 text-amber-700'
-                        }`}>{c.status}</span>
-                      </td>
-                      <td className="text-xs text-slate-400">{c.claimDate}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <DataGridCard
+          columns={claimColumns}
+          className="flex-1"
+          emptyState={<span className="text-xs text-slate-300 font-black uppercase italic">No vendor claims yet.</span>}
+        >
+          {claims.map((c, ri) => (
+            <tr key={c.id} className={[
+              'border-b border-slate-100 last:border-0',
+              ri % 2 === 1 ? 'bg-slate-50/50' : 'bg-white',
+              'hover:bg-slate-50/70 transition-colors',
+            ].join(' ')}>
+              <td className="py-1.5 px-3 font-black text-amber-600">{c.id}</td>
+              <td className="py-1.5 px-3 font-bold text-rose-600">{c.ncrId}</td>
+              <td className="py-1.5 px-3 font-bold text-slate-700">{c.vendorName}</td>
+              <td className="py-1.5 px-3 text-right font-black text-slate-700">PKR {c.claimAmount.toLocaleString()}</td>
+              <td className="py-1.5 px-3 text-right font-bold text-emerald-600">
+                {c.settledAmount ? `PKR ${c.settledAmount.toLocaleString()}` : '—'}
+              </td>
+              <td className="py-1.5 px-3">
+                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                  c.status === 'Settled' ? 'bg-emerald-100 text-emerald-700' :
+                  c.status === 'Submitted' ? 'bg-blue-100 text-blue-700' :
+                  c.status === 'Rejected' ? 'bg-rose-100 text-rose-700' :
+                  'bg-amber-100 text-amber-700'
+                }`}>{c.status}</span>
+              </td>
+              <td className="py-1.5 px-3 text-slate-400">{c.claimDate}</td>
+            </tr>
+          ))}
+        </DataGridCard>
       )}
 
       {/* ── Analytics ── */}
       {activeTab === 'kpi' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 min-h-0">
           {/* By Stage */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-            <h3 className="text-xs font-black text-slate-500 uppercase mb-4">Breakage by Stage</h3>
+          <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <h3 className="text-[11px] font-black text-slate-500 uppercase mb-3">Breakage by Stage</h3>
             {Object.entries(kpis.byStage).sort((a,b) => b[1]-a[1]).map(([stage, count]) => (
-              <div key={stage} className="flex items-center gap-3 mb-2">
-                <span className="text-xs font-bold text-slate-600 w-36 truncate">{stage}</span>
-                <div className="flex-1 bg-slate-100 rounded-full h-2">
-                  <div
-                    className="bg-rose-500 h-2 rounded-full"
-                    style={{ width: `${(count / kpis.totalBroken) * 100}%` }}
-                  />
+              <div key={stage} className="flex items-center gap-3 mb-1.5">
+                <span className="text-[10px] font-bold text-slate-600 w-28 truncate">{stage}</span>
+                <div className="flex-1 bg-slate-100 rounded-full h-1.5">
+                  <div className="bg-rose-500 h-1.5 rounded-full" style={{ width: `${(count / kpis.totalBroken) * 100}%` }} />
                 </div>
-                <span className="text-xs font-black text-slate-700 w-8 text-right">{count}</span>
+                <span className="text-[10px] font-black text-slate-700 w-6 text-right">{count}</span>
               </div>
             ))}
             {Object.keys(kpis.byStage).length === 0 && <p className="text-xs text-slate-300 text-center py-4">No data</p>}
           </div>
 
           {/* By Cause */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-            <h3 className="text-xs font-black text-slate-500 uppercase mb-4">Breakage by Cause</h3>
+          <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <h3 className="text-[11px] font-black text-slate-500 uppercase mb-3">Breakage by Cause</h3>
             {Object.entries(kpis.byCause).sort((a,b) => b[1]-a[1]).map(([cause, count]) => (
-              <div key={cause} className="flex items-center gap-3 mb-2">
-                <span className="text-xs font-bold text-slate-600 w-36 truncate">{cause.split('-').slice(0,2).join('-')}</span>
-                <div className="flex-1 bg-slate-100 rounded-full h-2">
-                  <div
-                    className="bg-amber-500 h-2 rounded-full"
-                    style={{ width: `${(count / kpis.totalBroken) * 100}%` }}
-                  />
+              <div key={cause} className="flex items-center gap-3 mb-1.5">
+                <span className="text-[10px] font-bold text-slate-600 w-28 truncate">{cause.split('-').slice(0,2).join('-')}</span>
+                <div className="flex-1 bg-slate-100 rounded-full h-1.5">
+                  <div className="bg-amber-500 h-1.5 rounded-full" style={{ width: `${(count / kpis.totalBroken) * 100}%` }} />
                 </div>
-                <span className="text-xs font-black text-slate-700 w-8 text-right">{count}</span>
+                <span className="text-[10px] font-black text-slate-700 w-6 text-right">{count}</span>
               </div>
             ))}
             {Object.keys(kpis.byCause).length === 0 && <p className="text-xs text-slate-300 text-center py-4">No data</p>}
           </div>
 
           {/* Summary */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:col-span-2">
-            <h3 className="text-xs font-black text-slate-500 uppercase mb-4">Summary</h3>
-            <div className="grid grid-cols-3 gap-4">
+          <div className="bg-white rounded-lg border border-slate-200 p-4 sm:col-span-2">
+            <h3 className="text-[11px] font-black text-slate-500 uppercase mb-3">Summary</h3>
+            <div className="grid grid-cols-3 gap-3">
               <div className="text-center">
                 <p className="text-[9px] font-black text-slate-400 uppercase">Top Stage</p>
-                <p className="text-sm font-black text-slate-800 mt-1">{kpis.topStage}</p>
+                <p className="text-sm font-black text-slate-800 mt-0.5">{kpis.topStage}</p>
               </div>
               <div className="text-center">
                 <p className="text-[9px] font-black text-slate-400 uppercase">Top Cause</p>
-                <p className="text-sm font-black text-slate-800 mt-1">{kpis.topCause.split('-').slice(0,2).join('-')}</p>
+                <p className="text-sm font-black text-slate-800 mt-0.5">{kpis.topCause.split('-').slice(0,2).join('-')}</p>
               </div>
               <div className="text-center">
                 <p className="text-[9px] font-black text-slate-400 uppercase">Breakage Rate</p>
-                <p className={`text-2xl font-black mt-1 ${kpis.breakageRate > 2 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                <p className={`text-xl font-black mt-0.5 ${kpis.breakageRate > 2 ? 'text-rose-600' : 'text-emerald-600'}`}>
                   {kpis.breakageRate}%
                 </p>
                 <p className="text-[9px] text-slate-400">Target: &lt;2%</p>
@@ -842,6 +866,8 @@ const NCRModule: React.FC = () => {
           </div>
         </div>
       )}
+
+      </div>{/* end flex-1 scroll wrapper */}
 
       {/* Modals */}
       {showForm && (
