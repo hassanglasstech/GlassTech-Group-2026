@@ -166,6 +166,20 @@ export const AsyncSalesService = {
     }
   },
   saveQuotations: async (data: Quotation[]): Promise<void> => {
+    // SAL-1: server-side discount cap — last line of defence before DB write.
+    // Throws so the caller (handleSave) surfaces the error to the user.
+    for (const q of data) {
+      const subTotal  = ((q as any).items ?? []).reduce((s: number, i: any) => s + (Number(i.amount) || 0), 0);
+      const discPct   = Number((q as any).discountPercent ?? 0);
+      const discAmt   = Number((q as any).discountAmount  ?? 0);
+      if (discPct > 99.99) {
+        throw new Error(`SAL-1: Discount percent ${discPct}% exceeds 99.99% on quotation ${q.id}`);
+      }
+      if (subTotal > 0 && discAmt > subTotal) {
+        throw new Error(`SAL-1: Discount amount PKR ${discAmt} exceeds subtotal PKR ${subTotal} on quotation ${q.id}`);
+      }
+    }
+
     try {
       // Map camelCase to snake_case for Supabase
       const mapped = data.map((q: any) => ({

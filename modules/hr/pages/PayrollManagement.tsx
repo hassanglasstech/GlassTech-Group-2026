@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 import { TagService } from '@/modules/hr/services/tagService';
 import CompensationJustice from '@/modules/hr/components/CompensationJustice';
+import { supabase } from '@/src/services/supabaseClient';
 
 const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -23,7 +24,9 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [slipsPer2, setSlipsPer2] = useState(false);
   const [approvedBy, setApprovedBy] = useState('');
   const [showApproveModal, setShowApproveModal] = useState(false);
-  const [approverInput, setApproverInput] = useState('');
+  // HR-1: approverInput removed — identity is resolved server-side from JWT,
+  // never from a free-text field the user types into.
+  const [approvalPending, setApprovalPending] = useState(false);
 
 
   const { refreshKey } = useRealtimeRefresh(['payroll', 'employees', 'attendance', 'loans']);
@@ -238,18 +241,36 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
   // --- PHASE 3: AUTOMATED LEDGER POSTING (Enhanced: Full Breakdown) ---
   const handleApprovePayroll = () => {
     if (!payrolls.length) { toast.error('Generate payroll first'); return; }
-    setApproverInput('');
     setShowApproveModal(true);
   };
 
-  const confirmApproval = () => {
-    if (!approverInput.trim()) { toast.error('Enter your name'); return; }
-    setIsApproved(true);
-    setApprovedBy(approverInput.trim());
-    setShowApproveModal(false);
-    toast.success(`Payroll approved by ${approverInput.trim()} — posting to GL...`);
-    // Auto-post GL immediately on approval
-    handlePostPayrollToLedger(approverInput.trim());
+  // HR-1: confirmApproval now calls the approve-payroll Edge Function.
+  // The server resolves auth.uid() from the JWT — no text input accepted.
+  // Only users with role manager / finance_manager / super_admin may approve.
+  const confirmApproval = async () => {
+    if (approvalPending) return;
+    setApprovalPending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('approve-payroll', {
+        body: { month: selectedMonth, company },
+      });
+      if (error || !data?.approvedBy) {
+        toast.error(
+          error?.message ?? data?.error ?? 'Approval rejected — insufficient role or session expired.'
+        );
+        return;
+      }
+      setIsApproved(true);
+      setApprovedBy(data.approvedBy);
+      setShowApproveModal(false);
+      toast.success(`Payroll approved by ${data.approvedBy} — posting to GL...`);
+      // Auto-post GL immediately on server-confirmed approval
+      handlePostPayrollToLedger(data.approvedBy);
+    } catch (err: any) {
+      toast.error(`Approval failed: ${err.message}`);
+    } finally {
+      setApprovalPending(false);
+    }
   };
 
   const handlePostPayrollToLedger = async (approverOverride?: string) => {
@@ -690,17 +711,32 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[600] p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm">
             <h3 className="font-black text-slate-900 uppercase tracking-widest text-sm mb-2">Approve Payroll</h3>
-            <p className="text-xs text-slate-500 mb-4">{new Date(selectedMonth).toLocaleString('default',{month:'long',year:'numeric'})} — PKR {summary.totalNetDisbursable.toLocaleString()}</p>
-            <input
-              type="text" placeholder="Your full name"
-              className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:ring-2 focus:ring-emerald-500 mb-4"
-              value={approverInput} onChange={e => setApproverInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && confirmApproval()}
-              autoFocus
-            />
+            <p className="text-xs text-slate-500 mb-1">
+              {new Date(selectedMonth).toLocaleString('default',{month:'long',year:'numeric'})} — PKR {summary.totalNetDisbursable.toLocaleString()}
+            </p>
+            {/* HR-1: No free-text input. Identity is verified server-side via your login session JWT.
+                Only managers / finance_managers / super_admins may approve. */}
+            <div className="flex items-start gap-2 bg-slate-50 border border-slate-200 rounded-xl p-3 mb-4 mt-3">
+              <ShieldCheck size={16} className="text-emerald-600 mt-0.5 shrink-0" />
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Your identity will be verified via your login session. Only authorised managers may approve.
+                This action is permanently recorded in the audit log.
+              </p>
+            </div>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setShowApproveModal(false)} className="px-6 py-2.5 text-slate-400 font-black text-xs uppercase">Cancel</button>
-              <button onClick={confirmApproval} className="bg-emerald-600 text-white px-8 py-2.5 rounded-xl font-black text-xs uppercase hover:bg-emerald-700">Approve</button>
+              <button
+                onClick={() => setShowApproveModal(false)}
+                disabled={approvalPending}
+                className="px-6 py-2.5 text-slate-400 font-black text-xs uppercase disabled:opacity-40">
+                Cancel
+              </button>
+              <button
+                onClick={confirmApproval}
+                disabled={approvalPending}
+                className="bg-emerald-600 text-white px-8 py-2.5 rounded-xl font-black text-xs uppercase hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-2">
+                {approvalPending && <span className="animate-spin inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full" />}
+                {approvalPending ? 'Verifying...' : 'Approve'}
+              </button>
             </div>
           </div>
         </div>

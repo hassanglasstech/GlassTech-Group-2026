@@ -572,6 +572,21 @@ export const FinanceService = {
 
     const advanceAmount = advanceEntry
       ? advanceEntry.details.reduce((s, d) => s + (d.debit || 0), 0) : 0;
+
+    // FIN-1: Hard cap on advance overclaiming.
+    // If actual spend > 1.5× the approved advance, reject immediately.
+    // The 50% buffer covers legitimate price fluctuations; beyond that,
+    // CFO-level approval via a separate workflow is mandatory.
+    const MAX_ADVANCE_VARIANCE_MULTIPLIER = 1.5;
+    if (advanceAmount > 0 && actualAmount > advanceAmount * MAX_ADVANCE_VARIANCE_MULTIPLIER) {
+      const maxAllowed = Math.floor(advanceAmount * MAX_ADVANCE_VARIANCE_MULTIPLIER);
+      throw new Error(
+        `AdvanceOverclaimError: Actual PKR ${actualAmount} exceeds ${MAX_ADVANCE_VARIANCE_MULTIPLIER}× ` +
+        `the advance (PKR ${advanceAmount}). Maximum claimable without CFO approval: PKR ${maxAllowed}. ` +
+        `Raise a CFO approval request for the excess PKR ${actualAmount - maxAllowed}.`
+      );
+    }
+
     const variance = actualAmount - advanceAmount;
     const settlementId = `SETTLE-${grnId}`;
     const details: any[] = [];

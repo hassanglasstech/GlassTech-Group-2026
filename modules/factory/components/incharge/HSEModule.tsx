@@ -64,19 +64,71 @@ const HSEModule: React.FC = () => {
   const save = async () => {
     if (!form.description.trim()) return;
     setSaving(true);
-    await supabase.from('hse_incidents').insert({
-      ...form,
-      reported_by: user?.name || 'Incharge',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
+
+    const { data: inserted, error: insertError } = await supabase
+      .from('hse_incidents')
+      .insert({
+        ...form,
+        reported_by: user?.name || 'Incharge',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('[HSEModule] insert failed:', insertError.message);
+    }
+
+    // HSE-2: Critical incidents trigger an immediate server-side escalation.
+    // The Edge Function looks up the HSE Manager for this company, writes to
+    // hse_escalations (30-min SLA), and fires a WhatsApp notification.
+    // Escalation failure is non-blocking — the incident is already saved.
+    if (form.severity === 'Critical' && inserted?.id) {
+      supabase.functions.invoke('hse-escalation', {
+        body: {
+          incidentId:  inserted.id,
+          company:     (inserted as any).company ?? '',
+          severity:    form.severity,
+          description: form.description,
+          location:    form.location,
+          reportedBy:  user?.name || 'Incharge',
+        },
+      }).catch((err: Error) => {
+        // Non-blocking: log but never suppress the incident save
+        console.error('[HSEModule] hse-escalation invoke failed:', err.message);
+      });
+    }
+
     await load();
     setShowForm(false);
     setForm({ ...EMPTY });
     setSaving(false);
   };
 
+  // HSE-1: An incident may only be closed if corrective_action is non-empty
+  // AND action_status is 'Completed'. Closing without corrective documentation
+  // breaks ISO 45001 compliance and voids insurance claims on repeat incidents.
   const closeIncident = async (id: string) => {
+    // Find the incident in local state first (already loaded)
+    const incident = incidents.find(i => i.id === id);
+    if (!incident) return;
+
+    if (!incident.corrective_action?.trim()) {
+      alert(
+        'Cannot close incident: Corrective action is required before closure.\n\n' +
+        'Document the root cause and corrective measures taken, then try again.'
+      );
+      return;
+    }
+    if (incident.action_status !== 'Completed') {
+      alert(
+        `Cannot close incident: Action status is "${incident.action_status}".\n\n` +
+        'Set Action Status to "Completed" before closing.'
+      );
+      return;
+    }
+
     await supabase.from('hse_incidents').update({
       closed: true, closed_at: new Date().toISOString(), updated_at: new Date().toISOString()
     }).eq('id', id);

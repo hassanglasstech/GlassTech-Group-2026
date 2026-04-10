@@ -147,6 +147,20 @@ export const useQuotations = () => {
 
   const handleSave = async (approve: boolean) => {
     if (!formData.clientId) return alert("Client is required.");
+
+    // SAL-1: Discount hard-cap — prevents negative invoices and revenue fraud.
+    // Mirrors the server-side guard in asyncSalesService.saveQuotations.
+    const _subTotal   = (formData.items ?? []).reduce((s, i) => s + (Number((i as any).amount) || 0), 0);
+    const _discPct    = Number(formData.discountPercent ?? 0);
+    const _discAmt    = Number(formData.discountAmount  ?? 0);
+    if (_discPct > 99.99) {
+      toast.error('Discount percent cannot exceed 99.99%.');
+      return;
+    }
+    if (_subTotal > 0 && _discAmt > _subTotal) {
+      toast.error(`Discount amount (PKR ${_discAmt.toLocaleString()}) exceeds subtotal (PKR ${_subTotal.toLocaleString()}).`);
+      return;
+    }
     
     const all = await AsyncSalesService.getQuotations();
     let finalId = formData.id;
