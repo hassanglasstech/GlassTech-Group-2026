@@ -1,12 +1,14 @@
 import React, { useMemo, useState } from 'react';
-import { 
-  Printer, X, Plus, Trash2, FileSignature, 
+import {
+  Printer, X, Plus, Trash2, FileSignature,
   Search, Info, Calculator, Ruler, Layers, Box, Calendar,
   Edit2, FileCheck, Eye, Component, Anchor, PaintBucket,
   Hammer, Grid, CheckCircle2, Image as ImageIcon, MousePointer2,
   PenTool, UploadCloud, FileImage, Square, Circle, Save
 } from 'lucide-react';
 import { useQuotations } from './useQuotations';
+import { AsyncSalesService } from '../services/asyncSalesService';
+import { toast } from 'sonner';
 
 const QuotationManager: React.FC = () => {
   const {
@@ -40,6 +42,43 @@ const QuotationManager: React.FC = () => {
 
   const isLocked = formData.status === 'Approved';
   const subTotal = formData.items?.reduce((s, i) => s + i.amount, 0) || 0;
+
+  // SAL-3: Credit limit guard — wraps handleSave with an AR check.
+  // Queries the live outstanding AR balance for the selected client.
+  // Blocks save if: outstanding_ar + new_order_net_value > client.credit_limit.
+  // Fails open (allows save) when offline or credit limit is 0/unset.
+  const handleSaveWithCreditCheck = async (approve: boolean) => {
+    const client = clients.find(c => c.id === formData.clientId);
+    const creditLimit = Number((client as any)?.creditLimit ?? (client as any)?.credit_limit ?? 0);
+
+    if (client && creditLimit > 0) {
+      try {
+        const outstandingAR = await AsyncSalesService.getClientOutstandingAR(
+          formData.clientId as string,
+          company
+        );
+        const discountAmt  = Number((formData as any).discountAmount ?? 0);
+        const newOrderValue = Math.max(0, subTotal - discountAmt);
+
+        if (outstandingAR + newOrderValue > creditLimit) {
+          toast.error(
+            `SAL-3 Credit Limit Breach: ${client.name}'s outstanding AR ` +
+            `(PKR ${outstandingAR.toLocaleString()}) + this order ` +
+            `(PKR ${newOrderValue.toLocaleString()}) = ` +
+            `PKR ${(outstandingAR + newOrderValue).toLocaleString()} ` +
+            `exceeds credit limit PKR ${creditLimit.toLocaleString()}. ` +
+            `Obtain credit manager approval before saving.`,
+            { duration: 10000 }
+          );
+          return; // Block save
+        }
+      } catch (err) {
+        // Network error during check — fail open (offline mode)
+        console.warn('[QuotationManager] SAL-3 credit check failed — allowing save (offline):', err);
+      }
+    }
+    handleSave(approve);
+  };
 
   const filteredQuotations = useMemo(() => {
     let result = [...quotations];
@@ -198,8 +237,8 @@ const QuotationManager: React.FC = () => {
           <div className="text-2xl font-black text-slate-800"><span className="text-sm text-slate-500 font-bold uppercase mr-2">Total</span>Rs {(Number(subTotal) || 0).toLocaleString()}</div>
           <div className="flex space-x-3">
             <button onClick={() => { setIsModalOpen(false); }} className="sap-btn-light">Close</button>
-            {!isLocked && <button onClick={() => handleSave(false)} className="sap-btn-light"><Save size={16} className="mr-2"/> Save Draft</button>}
-            {!isLocked && <button onClick={() => handleSave(true)} className="sap-btn-primary bg-emerald-600 hover:bg-emerald-700"><FileCheck size={16} className="mr-2"/> Approve</button>}
+            {!isLocked && <button onClick={() => handleSaveWithCreditCheck(false)} className="sap-btn-light"><Save size={16} className="mr-2"/> Save Draft</button>}
+            {!isLocked && <button onClick={() => handleSaveWithCreditCheck(true)} className="sap-btn-primary bg-emerald-600 hover:bg-emerald-700"><FileCheck size={16} className="mr-2"/> Approve</button>}
           </div>
         </div>
       </div>

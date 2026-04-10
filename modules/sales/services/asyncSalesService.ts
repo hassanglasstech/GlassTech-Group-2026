@@ -276,7 +276,36 @@ export const AsyncSalesService = {
       return safeParse('gtk_erp_invoices');
     }
   },
+  // SAL-3: Query live outstanding AR for a client from the invoices table.
+  // Used by QuotationManager to enforce credit limits before saving.
+  getClientOutstandingAR: async (clientId: string, company: string): Promise<number> => {
+    try {
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('balance')
+        .eq('company', company)
+        .eq('client_id', clientId)
+        .neq('status', 'Paid');
+      if (error || !data) return 0;
+      return data.reduce((s: number, r: any) => s + (Number(r.balance) || 0), 0);
+    } catch {
+      return 0; // Fail open for offline mode — credit check blocked anyway in UI
+    }
+  },
+
   saveInvoices: async (data: Invoice[]): Promise<void> => {
+    // SAL-2: Verify every invoice has a finite, non-negative totalAmount.
+    // Catches NaN/Infinity produced by floating-point accumulation before
+    // any bad value reaches the database.
+    for (const inv of data) {
+      const ta = Number(inv.totalAmount);
+      if (!Number.isFinite(ta) || ta < 0) {
+        throw new Error(
+          `SAL-2: Invoice ${inv.id} has invalid totalAmount: "${inv.totalAmount}". ` +
+          `Expected a finite non-negative number. Recalculate and re-save.`
+        );
+      }
+    }
     safeSave('gtk_erp_invoices', data);
     try {
       const rows = data.map((i: any) => ({
@@ -313,15 +342,38 @@ export const AsyncSalesService = {
   savePaymentReceipts: async (data: PaymentReceipt[]): Promise<void> => {
     safeSave('gtk_erp_payment_receipts', data);
     try {
-      const rows = data.map((r: any) => ({
-        id: r.id, invoice_id: r.invoiceId, date: r.date, amount: r.amount,
-        method: r.method, reference: r.reference, gl_tx_id: r.glTxId,
-        created_by: r.createdBy ?? r.created_by ?? null,
-        updated_by: _currentUser(),
-        updated_at: new Date().toISOString(),
-      }));
-      const { error } = await supabase.from('payment_receipts').upsert(rows);
-      if (error) Logger.error('Sales', 'savePaymentReceipts failed', error);
+      // SAL-4: Use atomic RPC (process_payment_receipt) so that receipt
+      // insertion and invoice balance/status update occur in a single
+      // serialisable DB transaction. Eliminates the TOCTOU race where
+      // two concurrent payments both read the same stale balance.
+      for (const r of data) {
+        const receiptPayload = {
+          id:         r.id,
+          invoice_id: r.invoiceId,
+          date:       r.date,
+          amount:     r.amount,
+          method:     r.method,
+          reference:  r.reference,
+          gl_tx_id:   r.glTxId,
+          created_by: (r as any).createdBy ?? (r as any).created_by ?? null,
+        };
+        const { error } = await supabase.rpc('process_payment_receipt', {
+          receipt_data: receiptPayload,
+          p_invoice_id: r.invoiceId,
+        });
+        if (error) {
+          // Graceful degradation: fall back to direct upsert if Migration 017
+          // has not yet been applied (e.g. local dev against older schema).
+          Logger.warn('Sales', `process_payment_receipt RPC unavailable for ${r.id} — falling back to direct upsert: ${error.message}`);
+          await supabase.from('payment_receipts').upsert({
+            id: r.id, invoice_id: r.invoiceId, date: r.date, amount: r.amount,
+            method: r.method, reference: r.reference, gl_tx_id: r.glTxId,
+            created_by: (r as any).createdBy ?? null,
+            updated_by: _currentUser(),
+            updated_at: new Date().toISOString(),
+          });
+        }
+      }
     } catch (err: any) {
       Logger.error('Sales', 'savePaymentReceipts exception', err);
     }

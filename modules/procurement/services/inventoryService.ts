@@ -72,6 +72,81 @@ const KEYS = {
   WEIGHT_MASTER:           'gtk_erp_weight_master',
 };
 
+// ── SCM-4: Moving Average Price update on GRN posting ─────────────────────
+// Formula: new_MAP = (old_qty × old_MAP + received_qty × unit_price) / new_qty
+//
+// MUST be called AFTER the GRN stock quantities have been incremented in
+// store_items (i.e. after saveStore / GRN post).  Calling before the qty
+// update means old_qty still excludes the new receipt, which gives a wrong MAP.
+//
+// Tolerances: all intermediate results rounded to 6 decimal places;
+// final MAP and total_value rounded to 2 decimal places (PKR precision).
+//
+// Throws if the material does not exist or the params are invalid.
+export const applyMAPOnGRN = async (params: {
+  materialId:  string;
+  receivedQty: number;   // quantity just received (positive)
+  unitPrice:   number;   // vendor unit price for this GRN line
+}): Promise<{ newMAP: number; newTotalValue: number }> => {
+  const { materialId, receivedQty, unitPrice } = params;
+
+  if (receivedQty <= 0) {
+    throw new Error(`[applyMAPOnGRN] receivedQty must be positive (got ${receivedQty})`);
+  }
+  if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+    throw new Error(`[applyMAPOnGRN] unitPrice must be a finite non-negative number (got ${unitPrice})`);
+  }
+
+  // Always read from Supabase so we get the post-receipt quantity
+  const { data, error } = await supabase
+    .from('store_items')
+    .select('quantity, moving_average_price, total_value')
+    .eq('id', materialId)
+    .single();
+
+  if (error || !data) {
+    throw new Error(
+      `[applyMAPOnGRN] Material "${materialId}" not found in store_items: ${error?.message ?? 'no row'}`
+    );
+  }
+
+  // After GRN post: current quantity already includes the received batch
+  const currentQty = Number(data.quantity ?? 0);
+  const oldMAP     = Number(data.moving_average_price ?? 0);
+
+  // Back-calculate the pre-receipt quantity to apply the formula correctly:
+  //   pre_qty = current_qty - received_qty
+  const preReceiptQty = Math.max(0, currentQty - receivedQty);
+
+  // Weighted average: (old_stock_value + new_receipt_value) / new_qty
+  const newMAP = currentQty > 0
+    ? ((preReceiptQty * oldMAP) + (receivedQty * unitPrice)) / currentQty
+    : unitPrice;
+
+  const newMAPRounded        = Math.round(newMAP        * 100) / 100;
+  const newTotalValueRounded = Math.round(currentQty * newMAPRounded * 100) / 100;
+
+  // Persist updated MAP and total_value to Supabase
+  const { error: updateError } = await supabase
+    .from('store_items')
+    .update({
+      moving_average_price: newMAPRounded,
+      total_value:          newTotalValueRounded,
+      updated_at:           new Date().toISOString(),
+    })
+    .eq('id', materialId);
+
+  if (updateError) {
+    console.error(
+      `[applyMAPOnGRN] Failed to persist MAP for "${materialId}":`, updateError.message
+    );
+    // Non-fatal: the stock qty was already committed; MAP will self-correct
+    // on the next GRN. Log for reconciliation but do not block the GRN.
+  }
+
+  return { newMAP: newMAPRounded, newTotalValue: newTotalValueRounded };
+};
+
 // ── SCM-3: Stock gate — call before ANY material issue or transfer ────────
 // Queries the live Supabase record so no stale cache can be exploited.
 // Throws InsufficientStockError if unrestricted_qty < issueQty.

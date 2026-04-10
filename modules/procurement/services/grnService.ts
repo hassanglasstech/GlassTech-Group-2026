@@ -41,6 +41,83 @@ export class GRNQAIntegrityError extends Error {
   }
 }
 
+// ── SCM-5: Three-Way Match Error ──────────────────────────────────────────
+// Thrown by assertThreeWayMatch() when PO, GRN, and vendor invoice values
+// do not agree within PKR 1 tolerance. Any of the three legs missing or
+// mismatched must be resolved before a vendor payment GL entry is posted.
+export class ThreeWayMatchError extends Error {
+  constructor(
+    public readonly grnId:  string,
+    public readonly reason: string,
+  ) {
+    super(
+      `ThreeWayMatchError for GRN "${grnId}": ${reason}. ` +
+      `A vendor payment GL entry requires an Approved PO, a posted GRN, and a ` +
+      `vendor invoice whose total matches both within PKR 1 tolerance.`
+    );
+    this.name = 'ThreeWayMatchError';
+    Object.setPrototypeOf(this, ThreeWayMatchError.prototype);
+  }
+}
+
+// ── SCM-5: Three-Way Match assertion ─────────────────────────────────────
+// Verifies the three legs of a purchase before any vendor payment GL entry:
+//   1. PO exists in purchase_orders with status = 'Approved'
+//   2. GRN received value is within PKR 1 of the PO total
+//   3. Vendor invoice amount is within PKR 1 of the GRN received value
+//
+// Call this before posting a Dr GR/IR Clearing / Cr Vendor Payable entry.
+// Throws ThreeWayMatchError if any leg fails.
+export const assertThreeWayMatch = async (params: {
+  company:         string;
+  grnId:           string;
+  poId:            string;
+  grnTotalValue:   number;   // OK value + defective usable value
+  invoicedAmount:  number;   // vendor invoice total for this GRN
+}): Promise<void> => {
+  const { company, grnId, poId, grnTotalValue, invoicedAmount } = params;
+  const TOLERANCE_PKR = 1;
+
+  // Leg 1: PO must exist and be Approved
+  const { data: po, error: poErr } = await supabase
+    .from('purchase_orders')
+    .select('id, status, total_amount')
+    .eq('id', poId)
+    .eq('company', company)
+    .maybeSingle();
+
+  if (poErr || !po) {
+    throw new ThreeWayMatchError(grnId, `PO "${poId}" not found in ${company}`);
+  }
+  if (po.status !== 'Approved') {
+    throw new ThreeWayMatchError(
+      grnId, `PO "${poId}" is in status "${po.status}" — must be "Approved"`
+    );
+  }
+
+  // Leg 2: GRN value must match PO total within tolerance
+  const poTotal = Number(po.total_amount ?? 0);
+  if (poTotal > 0 && Math.abs(grnTotalValue - poTotal) > TOLERANCE_PKR) {
+    throw new ThreeWayMatchError(
+      grnId,
+      `GRN received value PKR ${grnTotalValue.toFixed(0)} differs from ` +
+      `PO total PKR ${poTotal.toFixed(0)} by PKR ` +
+      `${Math.abs(grnTotalValue - poTotal).toFixed(0)} (limit: PKR ${TOLERANCE_PKR})`
+    );
+  }
+
+  // Leg 3: Vendor invoice must match GRN received value within tolerance
+  if (Math.abs(invoicedAmount - grnTotalValue) > TOLERANCE_PKR) {
+    throw new ThreeWayMatchError(
+      grnId,
+      `Vendor invoice amount PKR ${invoicedAmount.toFixed(0)} differs from ` +
+      `GRN received value PKR ${grnTotalValue.toFixed(0)} by PKR ` +
+      `${Math.abs(invoicedAmount - grnTotalValue).toFixed(0)} (limit: PKR ${TOLERANCE_PKR})`
+    );
+  }
+  // All three legs confirmed — vendor payment GL entry may proceed.
+};
+
 // ── SCM-1: QA gate — MUST be awaited before postGRNMaterialGL() ──────────
 // Queries inspection_lots for the given grnId and asserts that the passed-in
 // totalOKValue and totalDefectiveValue match the QA records to within PKR 1
@@ -471,9 +548,27 @@ export async function orchestrateGRNGL(params: {
   cashPaymentRef?: string;
   otherCharges: number;
   otherChargesDesc: string;
+  // SCM-5: Optional Three-Way Match params — supply when posting a vendor
+  // payment GL entry (Dr GR/IR Clearing / Cr Vendor Payable). If provided,
+  // assertThreeWayMatch() is called before any GL entries are written.
+  poId?: string;
+  vendorInvoiceAmount?: number;
 }): Promise<number> {
   const { freightType, freightAmount, otherCharges } = params;
   let glCount = 0;
+
+  // SCM-5: If PO and vendor invoice details are provided, enforce Three-Way
+  // Match before posting. This blocks vendor payment GL if PO/GRN/Invoice
+  // values diverge beyond PKR 1 tolerance.
+  if (params.poId && params.vendorInvoiceAmount !== undefined) {
+    await assertThreeWayMatch({
+      company:        params.company,
+      grnId:          params.grnId,
+      poId:           params.poId,
+      grnTotalValue:  params.totalOKValue + params.totalDefectiveValue,
+      invoicedAmount: params.vendorInvoiceAmount,
+    });
+  }
 
   // 1. Material receipt (throws GRNQAIntegrityError if QA gate fails)
   const ok1 = await postGRNMaterialGL({

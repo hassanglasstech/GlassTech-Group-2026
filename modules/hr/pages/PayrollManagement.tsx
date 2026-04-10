@@ -11,6 +11,7 @@ import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 import { TagService } from '@/modules/hr/services/tagService';
 import CompensationJustice from '@/modules/hr/components/CompensationJustice';
 import { supabase } from '@/src/services/supabaseClient';
+import { useAuthStore } from '@/modules/auth/authStore';
 
 const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -107,7 +108,24 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
           
           if (override.manualLoanDeduction !== undefined && override.manualLoanDeduction !== null) {
               manualLoanDeductionAmount = Number(override.manualLoanDeduction);
-              if (manualLoanDeductionAmount === 0) skipLoan = true;
+              if (manualLoanDeductionAmount === 0) {
+                // HR-3: Loan waiver (skipLoan) is a privileged action.
+                // Only manager-level roles resolved from the JWT-verified profile
+                // may waive a loan deduction. A regular HR clerk cannot set this
+                // — even if they tamper with the override record directly.
+                const role = useAuthStore.getState().profile?.role ?? '';
+                const AUTHORISED_ROLES = ['manager', 'hr_manager', 'finance_manager', 'super_admin'];
+                if (AUTHORISED_ROLES.includes(role)) {
+                  skipLoan = true;
+                } else {
+                  console.warn(
+                    `[PayrollManagement] HR-3: Role "${role}" is not authorised to waive ` +
+                    `loan deduction for employee ${emp.id}. Applying default deduction.`
+                  );
+                  // Revert to standard loan deduction — do NOT honour the zero override
+                  manualLoanDeductionAmount = -1;
+                }
+              }
           }
           
           manualLatePenalty = 0; 

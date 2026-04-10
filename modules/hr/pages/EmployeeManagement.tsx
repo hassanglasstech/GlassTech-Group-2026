@@ -150,6 +150,20 @@ const EmployeeManagement: React.FC<{ company: Company }> = ({ company }) => {
 
   const handleSave = () => {
     if (!formData.personal?.name) return toast.error("Employee name is required.");
+
+    // HR-4: Pakistani CNIC format validation.
+    // Standard format: 35201-1234567-1  (5 digits – 7 digits – 1 digit)
+    // The field is optional (blank is allowed during onboarding), but if
+    // a value is present it MUST match the NADRA format exactly.
+    const CNIC_REGEX = /^\d{5}-\d{7}-\d{1}$/;
+    const cnic = formData.personal?.cnic?.trim() ?? '';
+    if (cnic && !CNIC_REGEX.test(cnic)) {
+      return toast.error(
+        `HR-4: Invalid CNIC "${cnic}". ` +
+        `Pakistani CNIC must match 35201-1234567-1 format (5-7-1 digits with dashes).`
+      );
+    }
+
     const dept = TagService.getDeptById(formData.work?.departmentId || '');
     const resolvedForm = { ...formData, work: { ...formData.work!, department: dept?.name || formData.work?.department || '' } };
     const all = HRService.getEmployees();
