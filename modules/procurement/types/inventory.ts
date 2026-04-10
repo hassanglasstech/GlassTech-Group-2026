@@ -102,6 +102,13 @@ export interface StoreItem {
   // ── Remnant Tracking ──────────────────────────────────────────────
   remnantCount?: number;          // number of remnant pieces in stock
   remnantSqft?: number;           // total usable sqft across all remnants
+  // ── Barcode / QR (Task 4 — Phase 9) ──────────────────────────────
+  /**
+   * Barcode or QR string for mobile scanner integration.
+   * Unique within company. Printed on shelf bin label; scanned at GRN and goods issue.
+   * Format convention: <COMPANY>-<CATEGORY>-<SEQUENCE> (e.g. "GTK-RAW-00142")
+   */
+  barcode?: string;
 }
 
 export type MvmntCode = '101' | '102' | '201' | '261' | '551' | '561' | '601';

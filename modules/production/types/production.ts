@@ -110,19 +110,26 @@ export interface PieceFault {
 }
 
 export interface ProductionPiece {
-  id: string; 
+  id: string;
   orderId: string;
   itemIndex: number;
   specs: string;
   status: PieceStatus;
-  spotId?: string; 
-  receivedAtGateId?: string; 
-  dispatchId?: string; 
+  spotId?: string;
+  receivedAtGateId?: string;
+  dispatchId?: string;
   lastUpdated: string;
   fault?: PieceFault;
-  pendingServices?: string[]; 
-  isRevised?: boolean; 
-  revisionNote?: string; 
+  pendingServices?: string[];
+  isRevised?: boolean;
+  revisionNote?: string;
+  // ── Barcode / QR (Task 4 — Phase 9) ─────────────────────────────
+  /**
+   * Barcode / QR string printed on the job card and the physical glass sticker.
+   * Scanned at each production stage (Cut → Edging → Tempering → QA → Warehouse)
+   * to update piece status without manual data entry on the shop floor.
+   */
+  barcode?: string;
 }
 
 export interface Project { 

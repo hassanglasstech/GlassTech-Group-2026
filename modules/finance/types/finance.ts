@@ -15,23 +15,51 @@ export interface Account {
 
 export type LedgerDocType = 'SA' | 'KR' | 'DR' | 'DZ' | 'KZ' | 'CJ' | 'OB' | 'PV' | 'RV' | 'JV';
 
-export interface LedgerTransaction { 
-  id: string; 
-  company: Company; 
-  docType: LedgerDocType; 
-  docDate: string; 
-  date: string; 
-  description: string; 
-  referenceId: string; 
-  status: LedgerStatus; 
-  details: { 
-    accountId: string; 
-    debit: number; 
-    credit: number; 
-    text?: string; 
-    costCenterId?: string; 
+/**
+ * Full status set for a GL transaction.
+ * Extends the narrow LedgerStatus constant ('Posted'|'Parked') with:
+ *   'Draft'   — JV created by Maker; awaiting Checker approval (Maker-Checker flow)
+ *   'Ignored' — soft-deleted / voided entry that is excluded from reporting
+ */
+export type GLEntryStatus = LedgerStatus | 'Draft' | 'Ignored';
+
+export interface LedgerTransaction {
+  id: string;
+  company: Company;
+  docType: LedgerDocType;
+  docDate: string;
+  date: string;
+  description: string;
+  referenceId: string;
+  /**
+   * Use GLEntryStatus (not raw LedgerStatus) — includes 'Draft' for Maker-Checker JVs
+   * and 'Ignored' for voided/reversed entries.
+   */
+  status: GLEntryStatus;
+  details: {
+    accountId: string;
+    debit: number;
+    credit: number;
+    text?: string;
+    costCenterId?: string;
   }[];
-  reqId?: string; 
+  reqId?: string;
+  // ── Maker-Checker fields (Task 1 — Phase 9) ────────────────────────
+  /**
+   * Email of the user who created this JV in Draft status (the Maker).
+   * Set automatically by FinanceService.draftJV().
+   */
+  draftedBy?:  string;
+  /**
+   * Email of the authorized user who approved and posted this JV (the Checker).
+   * Must differ from draftedBy — 4-eyes principle enforced by approveJV().
+   * Set automatically by FinanceService.approveJV().
+   */
+  approvedBy?: string;
+  // ── Standard audit fields ───────────────────────────────────────────
+  createdBy?:  string;
+  updatedBy?:  string;
+  postedAt?:   string;
 }
 
 export interface CostCenter { 

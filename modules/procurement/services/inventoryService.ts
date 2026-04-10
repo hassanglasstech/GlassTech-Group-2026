@@ -83,12 +83,56 @@ const KEYS = {
 // final MAP and total_value rounded to 2 decimal places (PKR precision).
 //
 // Throws if the material does not exist or the params are invalid.
+/**
+ * applyMAPOnGRN — Weighted Moving Average Price on Goods Receipt
+ *
+ * Task 2 — Phase 9: Landed Cost Absorption into MAP
+ *
+ * BEFORE this fix: only the vendor unit price was used in the MAP formula.
+ * Freight, customs duty, and handling charges went straight to a GL expense
+ * account, understating inventory cost and overstating period expenses.
+ *
+ * AFTER this fix: all acquisition costs (freight + duty + handling) are spread
+ * across the received quantity and folded into the landed unit price before the
+ * MAP formula is applied.  This aligns with IAS-2 §10:
+ *   "The cost of inventories shall comprise all costs of purchase, costs of
+ *    conversion, and other costs incurred in bringing the inventories to their
+ *    present location and condition."
+ *
+ * Formula:
+ *   landedUnitPrice  = unitPrice + (freightPKR + dutyPKR + handlingPKR) / receivedQty
+ *   new_MAP          = (preReceiptQty × oldMAP + receivedQty × landedUnitPrice) / currentQty
+ *
+ * The landed cost components are OPTIONAL (default 0) — fully backward-compatible.
+ * When all three are zero the result is identical to the original formula.
+ *
+ * Timing contract (unchanged):
+ *   Call AFTER the GRN has been committed to store_items so that
+ *   data.quantity already includes the received batch.
+ *
+ * Tolerances: all intermediate results rounded to 6 dp; final values to 2 dp (PKR).
+ *
+ * @returns newMAP, newTotalValue, landedUnitPrice (for caller logging / GL posting)
+ */
 export const applyMAPOnGRN = async (params: {
-  materialId:  string;
-  receivedQty: number;   // quantity just received (positive)
-  unitPrice:   number;   // vendor unit price for this GRN line
-}): Promise<{ newMAP: number; newTotalValue: number }> => {
-  const { materialId, receivedQty, unitPrice } = params;
+  materialId:   string;
+  receivedQty:  number;    // quantity just received (must be positive)
+  unitPrice:    number;    // vendor net unit price (ex-freight, ex-duty)
+  // ── Landed cost components (Task 2 — Phase 9) ─────────────────────
+  // All optional; default 0. When provided, they are absorbed into MAP
+  // rather than expensed directly, matching IAS-2 inventory cost principles.
+  freightPKR?:  number;    // inbound freight allocated to this GRN line
+  dutyPKR?:     number;    // customs duty / import tariff for this GRN line
+  handlingPKR?: number;    // port handling, loading/unloading, clearing charges
+}): Promise<{ newMAP: number; newTotalValue: number; landedUnitPrice: number }> => {
+  const {
+    materialId,
+    receivedQty,
+    unitPrice,
+    freightPKR  = 0,
+    dutyPKR     = 0,
+    handlingPKR = 0,
+  } = params;
 
   if (receivedQty <= 0) {
     throw new Error(`[applyMAPOnGRN] receivedQty must be positive (got ${receivedQty})`);
@@ -97,7 +141,31 @@ export const applyMAPOnGRN = async (params: {
     throw new Error(`[applyMAPOnGRN] unitPrice must be a finite non-negative number (got ${unitPrice})`);
   }
 
-  // Always read from Supabase so we get the post-receipt quantity
+  // ── Landed cost calculation ─────────────────────────────────────────────
+  // Total acquisition cost absorbed per unit for this receipt.
+  // Non-finite or negative landed cost components are coerced to 0 defensively.
+  const safeFreight  = Number.isFinite(freightPKR)  && freightPKR  >= 0 ? freightPKR  : 0;
+  const safeDuty     = Number.isFinite(dutyPKR)     && dutyPKR     >= 0 ? dutyPKR     : 0;
+  const safeHandling = Number.isFinite(handlingPKR) && handlingPKR >= 0 ? handlingPKR : 0;
+
+  const totalLandedCharges = safeFreight + safeDuty + safeHandling;
+  const landedCostPerUnit  = totalLandedCharges / receivedQty; // PKR per unit
+
+  // landedUnitPrice = vendor price + absorbed acquisition cost per unit
+  const landedUnitPrice = unitPrice + landedCostPerUnit;
+
+  if (totalLandedCharges > 0) {
+    console.info(
+      `[applyMAPOnGRN] Landed cost absorption for "${materialId}": ` +
+      `freight PKR ${safeFreight.toFixed(2)} + duty PKR ${safeDuty.toFixed(2)} + ` +
+      `handling PKR ${safeHandling.toFixed(2)} = PKR ${totalLandedCharges.toFixed(2)} total ` +
+      `÷ ${receivedQty} units = PKR ${landedCostPerUnit.toFixed(6)}/unit. ` +
+      `Landed unit price: PKR ${landedUnitPrice.toFixed(6)} (vendor: PKR ${unitPrice.toFixed(6)}).`
+    );
+  }
+
+  // ── Fetch post-receipt stock from Supabase ──────────────────────────────
+  // Always read live so we get the quantity that already includes this receipt.
   const { data, error } = await supabase
     .from('store_items')
     .select('quantity, moving_average_price, total_value')
@@ -110,23 +178,26 @@ export const applyMAPOnGRN = async (params: {
     );
   }
 
-  // After GRN post: current quantity already includes the received batch
+  // After GRN post: currentQty already includes the received batch
   const currentQty = Number(data.quantity ?? 0);
   const oldMAP     = Number(data.moving_average_price ?? 0);
 
-  // Back-calculate the pre-receipt quantity to apply the formula correctly:
-  //   pre_qty = current_qty - received_qty
+  // Back-calculate the pre-receipt quantity
+  //   pre_qty = current_qty − received_qty
   const preReceiptQty = Math.max(0, currentQty - receivedQty);
 
-  // Weighted average: (old_stock_value + new_receipt_value) / new_qty
+  // ── MAP formula with landed unit price ──────────────────────────────────
+  // new_MAP = (old_stock_value + landed_receipt_value) / new_qty
+  //         = (preReceiptQty × oldMAP + receivedQty × landedUnitPrice) / currentQty
   const newMAP = currentQty > 0
-    ? ((preReceiptQty * oldMAP) + (receivedQty * unitPrice)) / currentQty
-    : unitPrice;
+    ? ((preReceiptQty * oldMAP) + (receivedQty * landedUnitPrice)) / currentQty
+    : landedUnitPrice;
 
-  const newMAPRounded        = Math.round(newMAP        * 100) / 100;
-  const newTotalValueRounded = Math.round(currentQty * newMAPRounded * 100) / 100;
+  const newMAPRounded           = Math.round(newMAP            * 100) / 100;
+  const landedUnitPriceRounded  = Math.round(landedUnitPrice   * 100) / 100;
+  const newTotalValueRounded    = Math.round(currentQty * newMAPRounded * 100) / 100;
 
-  // Persist updated MAP and total_value to Supabase
+  // ── Persist updated MAP and total_value ─────────────────────────────────
   const { error: updateError } = await supabase
     .from('store_items')
     .update({
@@ -138,13 +209,17 @@ export const applyMAPOnGRN = async (params: {
 
   if (updateError) {
     console.error(
-      `[applyMAPOnGRN] Failed to persist MAP for "${materialId}":`, updateError.message
+      `[applyMAPOnGRN] Failed to persist MAP for "${materialId}": ${updateError.message}. ` +
+      `Stock qty was committed; MAP will self-correct on next GRN. Logged for reconciliation.`
     );
-    // Non-fatal: the stock qty was already committed; MAP will self-correct
-    // on the next GRN. Log for reconciliation but do not block the GRN.
+    // Non-fatal: fail-open consistent with project offline-resilience pattern.
   }
 
-  return { newMAP: newMAPRounded, newTotalValue: newTotalValueRounded };
+  return {
+    newMAP:           newMAPRounded,
+    newTotalValue:    newTotalValueRounded,
+    landedUnitPrice:  landedUnitPriceRounded,
+  };
 };
 
 // ── SCM-3: Stock gate — call before ANY material issue or transfer ────────
