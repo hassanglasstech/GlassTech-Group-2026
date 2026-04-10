@@ -950,7 +950,20 @@ const Requisitions: React.FC = () => {
                                   <td className="px-6 py-3 text-xs font-bold text-slate-800 uppercase">{po.toVendor}</td>
                                   <td className="px-6 py-3"><span className="px-2 py-0.5 bg-slate-100 rounded text-[9px] font-black uppercase">{po.category}</span></td>
                                   <td className="px-6 py-3 font-black">PKR {po.totalAmount.toLocaleString()}</td>
-                                  <td className="px-6 py-3"><span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${po.status === 'Delivered' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{po.status}</span></td>
+                                  <td className="px-6 py-3">
+                                <div className="flex flex-col gap-0.5">
+                                  <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase w-fit ${po.status === 'Delivered' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{po.status}</span>
+                                  {(po as any).isIntercompany && <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-blue-100 text-blue-600 w-fit">ICO</span>}
+                                  {(po as any).currentEta && (po as any).originalEta && (po as any).currentEta > (po as any).originalEta && (
+                                    <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-rose-100 text-rose-600 w-fit flex items-center gap-0.5" title={(po as any).etaRevisionReason || 'No reason provided'}>
+                                      ETA Revised: {(po as any).currentEta} ({(po as any).etaRevisionReason || 'N/A'})
+                                    </span>
+                                  )}
+                                  {(po as any).currentEta && !((po as any).currentEta > (po as any).originalEta) && (po as any).isIntercompany && (
+                                    <span className="text-[8px] text-slate-400 font-bold">ETA: {(po as any).currentEta}</span>
+                                  )}
+                                </div>
+                              </td>
                               </tr>
                           ))}
                       </tbody>

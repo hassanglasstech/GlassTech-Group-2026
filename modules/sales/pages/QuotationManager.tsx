@@ -4,7 +4,7 @@ import {
   Search, Info, Calculator, Ruler, Layers, Box, Calendar,
   Edit2, FileCheck, Eye, Component, Anchor, PaintBucket,
   Hammer, Grid, CheckCircle2, Image as ImageIcon, MousePointer2,
-  PenTool, UploadCloud, FileImage, Square, Circle, Save, RefreshCw
+  PenTool, UploadCloud, FileImage, Square, Circle, Save, RefreshCw, ArrowRightLeft, AlertTriangle
 } from 'lucide-react';
 import { useQuotations } from './useQuotations';
 import { AsyncSalesService } from '../services/asyncSalesService';
@@ -139,6 +139,38 @@ const QuotationManager: React.FC = () => {
             <input disabled={isLocked} type="text" className="sap-input w-full" placeholder="e.g. Emporium Mall Outlet" value={formData.projectName} onChange={e => setFormData({...formData, projectName: e.target.value})} />
           </div>
 
+          {/* ── Intercompany EDI: ETA & Priority (visible only for linked SOs) ── */}
+          {(formData as any).linkedPOId && (
+            <div className="md:col-span-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <ArrowRightLeft size={14} className="text-blue-600" />
+                <span className="text-[11px] font-black text-blue-700 uppercase tracking-wider">Intercompany Order — Linked to {(formData as any).linkedPOId}</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-blue-500 uppercase">Current ETA</label>
+                  <input type="date" className="sap-input w-full" value={(formData as any).currentEta || ''} onChange={e => setFormData({...formData, currentEta: e.target.value} as any)} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-blue-500 uppercase">Priority Level</label>
+                  <select className="sap-input w-full" value={(formData as any).priorityLevel || 'Normal'} onChange={e => setFormData({...formData, priorityLevel: e.target.value} as any)}>
+                    <option value="Normal">Normal</option>
+                    <option value="High">High</option>
+                    <option value="Urgent">Urgent</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-blue-500 uppercase">ETA Revision Reason</label>
+                  <input type="text" className="sap-input w-full" placeholder="e.g. Raw material delay" value={(formData as any).etaRevisionReason || ''} onChange={e => setFormData({...formData, etaRevisionReason: e.target.value} as any)} />
+                </div>
+              </div>
+              {(formData as any).originalEta && (formData as any).currentEta && (formData as any).currentEta > (formData as any).originalEta && (
+                <div className="mt-2 flex items-center gap-2 text-[10px] font-black text-rose-600 bg-rose-50 border border-rose-200 rounded px-2 py-1">
+                  <span>ETA Revised: {(formData as any).originalEta} &rarr; {(formData as any).currentEta}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Items Table */}
@@ -377,9 +409,19 @@ const QuotationManager: React.FC = () => {
                   Rs {q.items.reduce((s, i) => s + i.amount, 0).toLocaleString()}
                 </td>
                 <td className="py-1.5 px-3 text-center">
-                  <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
-                    q.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-                  }`}>{q.status}</span>
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                      q.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                    }`}>{q.status}</span>
+                    {(q as any).isIntercompany && (
+                      <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-blue-100 text-blue-600">ICO</span>
+                    )}
+                    {(q as any).currentEta && (q as any).originalEta && (q as any).currentEta > (q as any).originalEta && (
+                      <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-rose-100 text-rose-600 flex items-center gap-0.5">
+                        <AlertTriangle size={8} /> ETA Revised
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="py-1.5 px-3">
                   <div className="flex justify-center space-x-1">

@@ -467,6 +467,69 @@ export const InventoryService = {
   getPurchaseOrders: (): PurchaseOrder[] => safeParse(KEYS.PURCHASE_ORDERS),
   savePurchaseOrders: (data: PurchaseOrder[]) => safeSave(KEYS.PURCHASE_ORDERS, data),
 
+  // ── Intercompany EDI: PO-to-SO Automation ─────────────────────────
+  INTERNAL_COMPANIES: ['GTK', 'GTI', 'Glassco', 'GlassCo', 'Nippon', 'Factory'] as const,
+
+  isInternalVendor: (vendorName: string): boolean => {
+    const lower = (vendorName || '').toLowerCase().trim();
+    return InventoryService.INTERNAL_COMPANIES.some(c => c.toLowerCase() === lower);
+  },
+
+  /**
+   * Creates an intercompany PO + SO pair via SECURITY DEFINER RPC.
+   * Returns { success, poId, soId, eta } or { success: false, error }.
+   */
+  createIntercompanyOrder: async (params: {
+    buyerCompany: string;
+    sellerCompany: string;
+    items: { description?: string; qty?: number; rate?: number; specs?: string }[];
+    totalAmount: number;
+    category?: string;
+    projectName?: string;
+    deliveryDate?: string;
+    priority?: 'Normal' | 'High' | 'Urgent';
+    createdBy?: string;
+  }): Promise<{ success: boolean; poId?: string; soId?: string; eta?: string; error?: string }> => {
+    try {
+      const { data, error } = await supabase.rpc('generate_intercompany_order', {
+        p_buyer_company:  params.buyerCompany,
+        p_seller_company: params.sellerCompany,
+        p_items:          JSON.stringify(params.items),
+        p_total_amount:   params.totalAmount,
+        p_category:       params.category || 'Glass',
+        p_project_name:   params.projectName || '',
+        p_delivery_date:  params.deliveryDate || null,
+        p_priority:       params.priority || 'Normal',
+        p_created_by:     params.createdBy || 'system',
+      });
+      if (error) return { success: false, error: error.message };
+      if (data && !data.success) return { success: false, error: data.error };
+      // Sync new PO to localStorage for immediate UI display
+      if (data?.poId) {
+        const allPOs = InventoryService.getPurchaseOrders();
+        const newPO = {
+          id: data.poId,
+          fromCompany: params.buyerCompany,
+          toVendor: params.sellerCompany,
+          date: new Date().toISOString().split('T')[0],
+          status: 'Sent',
+          totalAmount: params.totalAmount,
+          category: params.category || 'Glass',
+          items: params.items,
+          isIntercompany: true,
+          linkedInternalId: data.soId,
+          currentEta: data.eta,
+          originalEta: data.eta,
+          priorityLevel: params.priority || 'Normal',
+        } as any;
+        InventoryService.savePurchaseOrders([...allPOs, newPO]);
+      }
+      return { success: true, poId: data.poId, soId: data.soId, eta: data.eta };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Unknown error' };
+    }
+  },
+
   // ── Inspection Lots ────────────────────────────────────────────────
   getInspectionLots: (): InspectionLot[] => safeParse(KEYS.INSPECTION_LOTS),
   saveInspectionLots: (data: InspectionLot[]) => safeSave(KEYS.INSPECTION_LOTS, data),
