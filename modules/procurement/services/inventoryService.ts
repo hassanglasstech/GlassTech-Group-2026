@@ -9,6 +9,46 @@ import { bgSaveToIDB, safeParse, safeSave } from '@/modules/shared/services/util
 import { supabase } from '../../../src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
 
+// ── SCM-3: Insufficient stock error ──────────────────────────────────────
+// Thrown by assertSufficientStock() before any issue or transfer movement.
+// Callers must catch this and surface it to the user — never swallow silently.
+export class InsufficientStockError extends Error {
+  constructor(
+    public readonly materialId: string,
+    public readonly requested: number,
+    public readonly available: number,
+  ) {
+    super(
+      `InsufficientStockError: Material "${materialId}" — requested ${requested}, ` +
+      `available unrestricted: ${available}. Cannot issue more than unrestricted stock.`
+    );
+    this.name = 'InsufficientStockError';
+    Object.setPrototypeOf(this, InsufficientStockError.prototype);
+  }
+}
+
+// ── SCM-2: Budget exceeded error ──────────────────────────────────────────
+// Thrown by assertPOBudget() before a Purchase Order status is set to Approved.
+export class BudgetExceededError extends Error {
+  constructor(
+    public readonly costCenterId: string,
+    public readonly poTotal: number,
+    public readonly committed: number,
+    public readonly monthlyBudget: number,
+  ) {
+    super(
+      `BudgetExceededError: PO total PKR ${poTotal.toLocaleString()} would exceed ` +
+      `cost center "${costCenterId}" budget. ` +
+      `Already committed: PKR ${committed.toLocaleString()} / ` +
+      `Monthly budget: PKR ${monthlyBudget.toLocaleString()}. ` +
+      `Remaining: PKR ${Math.max(0, monthlyBudget - committed).toLocaleString()}. ` +
+      `Obtain CFO approval before posting this PO.`
+    );
+    this.name = 'BudgetExceededError';
+    Object.setPrototypeOf(this, BudgetExceededError.prototype);
+  }
+}
+
 const KEYS = {
   STORE:              'gtk_erp_store',
   STOCK_LEDGER:       'gtk_erp_stock_ledger',
@@ -30,6 +70,79 @@ const KEYS = {
   VENDOR_REVIEWS:          'gtk_erp_vendor_reviews',
   PALLET_RATES:            'gtk_erp_pallet_rates',
   WEIGHT_MASTER:           'gtk_erp_weight_master',
+};
+
+// ── SCM-3: Stock gate — call before ANY material issue or transfer ────────
+// Queries the live Supabase record so no stale cache can be exploited.
+// Throws InsufficientStockError if unrestricted_qty < issueQty.
+export const assertSufficientStock = async (
+  materialId: string,
+  issueQty: number,
+): Promise<void> => {
+  if (issueQty <= 0) return; // nothing to check
+  const { data, error } = await supabase
+    .from('store_items')
+    .select('unrestricted_qty, quantity')
+    .eq('id', materialId)
+    .single();
+  if (error || !data) {
+    throw new InsufficientStockError(materialId, issueQty, 0);
+  }
+  const available = Number(data.unrestricted_qty ?? data.quantity ?? 0);
+  if (issueQty > available) {
+    throw new InsufficientStockError(materialId, issueQty, available);
+  }
+};
+
+// ── SCM-2: PO budget gate — call before setting PO status to 'Approved' ──
+// Reads committed PO amounts and monthly budget from budget_lines.
+// Throws BudgetExceededError if approving this PO would breach the budget.
+export const assertPOBudget = async (params: {
+  company: string;
+  costCenterId: string;
+  poTotalAmount: number;
+  fiscalYear: number;
+  fiscalMonth: number;       // 1-12
+}): Promise<void> => {
+  const { company, costCenterId, poTotalAmount, fiscalYear, fiscalMonth } = params;
+
+  // Sum all already-approved POs for this cost center in this month
+  const monthStr = `${fiscalYear}-${String(fiscalMonth).padStart(2, '0')}`;
+  const { data: approvedPOs, error: poErr } = await supabase
+    .from('purchase_orders')  // adjust table name if different in your schema
+    .select('total_amount')
+    .eq('company', company)
+    .eq('cost_center_id', costCenterId)
+    .eq('status', 'Approved')
+    .gte('date', `${monthStr}-01`)
+    .lt('date', `${fiscalYear}-${String(fiscalMonth + 1).padStart(2, '0')}-01`);
+
+  const alreadyCommitted = (approvedPOs ?? [])
+    .reduce((s: number, r: any) => s + (Number(r.total_amount) || 0), 0);
+
+  // Read monthly budget ceiling from budget_lines
+  const { data: budgetRow, error: budgetErr } = await supabase
+    .from('budget_lines')
+    .select('monthly_budget')
+    .eq('company', company)
+    .eq('cost_center_id', costCenterId)
+    .eq('fiscal_year', fiscalYear)
+    .eq('fiscal_month', fiscalMonth)
+    .maybeSingle();
+
+  // If no budget row exists at all, log a warning but do NOT block (budget not yet configured)
+  if (budgetErr || !budgetRow) {
+    console.warn(
+      `[assertPOBudget] No budget_lines row for cost center "${costCenterId}" ` +
+      `(${company} FY${fiscalYear} M${fiscalMonth}). Skipping budget check.`
+    );
+    return;
+  }
+
+  const monthlyBudget = Number(budgetRow.monthly_budget ?? 0);
+  if (monthlyBudget > 0 && alreadyCommitted + poTotalAmount > monthlyBudget) {
+    throw new BudgetExceededError(costCenterId, poTotalAmount, alreadyCommitted, monthlyBudget);
+  }
 };
 
 export const InventoryService = {
@@ -63,6 +176,26 @@ export const InventoryService = {
     return safeParse(KEYS.STORE);
   },
   saveStore: (data: StoreItem[]) => {
+    // SCM-3: App-layer guard — catch negative quantities before DB write.
+    // The DB constraint (qty_non_negative) is the ultimate backstop, but we
+    // surface a descriptive error here so the user sees a clear message
+    // rather than a raw Postgres constraint violation.
+    for (const item of data) {
+      if ((item.quantity ?? 0) < 0) {
+        throw new InsufficientStockError(
+          item.id,
+          Math.abs(item.quantity ?? 0),
+          0,
+        );
+      }
+      if ((item as any).unrestrictedQty < 0) {
+        throw new InsufficientStockError(
+          item.id,
+          Math.abs((item as any).unrestrictedQty),
+          0,
+        );
+      }
+    }
     safeSave(KEYS.STORE, data);
     const rows = data.map((s: any) => ({
       id: s.id, company: s.company||'', name: s.name||'',

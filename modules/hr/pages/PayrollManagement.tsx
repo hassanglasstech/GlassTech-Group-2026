@@ -40,7 +40,42 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
   const generatePayrolls = async (emps: Employee[]) => {
     const attendance = HRService.getAttendance();
     const loans = HRService.getLoans();
-    const SALARY_DAYS = 25; // Working days basis per month (Mon-Sat, industry standard Pakistan)
+
+    // HR-2: Fetch official public holidays for this company and month from Supabase.
+    // Holidays that fall on a working day (Mon–Sat) are subtracted from the 25-day
+    // basis so employees are not wrongly deducted for legally-protected paid leave.
+    // Falls back to 0 holidays if Supabase is unreachable (offline mode — err on
+    // the employee's side rather than wrongly deducting).
+    let publicHolidaysThisMonth = 0;
+    try {
+      const [year, monthNum] = selectedMonth.split('-').map(Number);
+      const monthStart = `${selectedMonth}-01`;
+      const nextMonth  = monthNum === 12
+        ? `${year + 1}-01-01`
+        : `${year}-${String(monthNum + 1).padStart(2, '0')}-01`;
+      const { data: holidays } = await supabase
+        .from('public_holidays')
+        .select('holiday_date, is_optional')
+        .or(`company.eq.${company},company.eq.ALL`)
+        .eq('is_optional', false)
+        .gte('holiday_date', monthStart)
+        .lt('holiday_date', nextMonth);
+      if (holidays && holidays.length > 0) {
+        // Only count holidays that fall on Mon–Sat (working days).
+        // Sunday = 0 in JS getDay(); exclude Sundays from holiday credit.
+        publicHolidaysThisMonth = holidays.filter(h => {
+          const day = new Date(h.holiday_date).getDay();
+          return day !== 0; // 0 = Sunday
+        }).length;
+      }
+    } catch (err) {
+      console.warn('[PayrollManagement] public_holidays fetch failed — defaulting to 0:', err);
+    }
+
+    // Base 25-day industry standard, reduced by confirmed public holidays.
+    // Minimum floor of 20 days — prevents absurd values if holiday data is corrupted.
+    const BASE_SALARY_DAYS = 25;
+    const SALARY_DAYS = Math.max(20, BASE_SALARY_DAYS - publicHolidaysThisMonth);
     const daysInMonth = SALARY_DAYS;
     const existingPayrolls = HRService.getPayroll().filter(p => p?.month === selectedMonth);
     const [year, monthNum] = selectedMonth.split('-').map(Number);

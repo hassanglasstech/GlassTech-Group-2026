@@ -141,7 +141,45 @@ export const ProductionService = {
       return { data: statusFiltered.slice(from, from + pageSize), total: statusFiltered.length };
     }
   },
-  saveProductionPieces: (data: ProductionPiece[]) => {
+  // MFG-1: saveProductionPieces now validates that every unique orderId in the
+  // batch actually exists in the quotations table before writing any records.
+  // This prevents ghost pieces from being created for cancelled or deleted orders.
+  //
+  // The check runs against Supabase directly (not localStorage) so that a
+  // locally-deleted order cannot slip through via a stale offline cache.
+  // The function remains synchronous in its localStorage/IDB path but fires
+  // the Supabase existence check before the upsert. If any orderId is
+  // not found, the entire batch is aborted and a descriptive error is thrown.
+  saveProductionPieces: async (data: ProductionPiece[]): Promise<void> => {
+    // MFG-1: Collect distinct orderIds present in the batch
+    const orderIds = [...new Set(
+      data.map(p => (p as any).orderId).filter(Boolean)
+    )] as string[];
+
+    if (orderIds.length > 0) {
+      const { data: foundOrders, error } = await supabase
+        .from('quotations')
+        .select('id')
+        .in('id', orderIds);
+
+      if (error) {
+        // If we cannot reach Supabase (offline), fall through to cache write
+        // rather than blocking production — but log prominently.
+        console.error('[ProductionService] MFG-1 order existence check failed:', error.message);
+      } else {
+        const foundIds = new Set((foundOrders ?? []).map((r: any) => r.id));
+        const ghostIds = orderIds.filter(id => !foundIds.has(id));
+        if (ghostIds.length > 0) {
+          const msg =
+            `MFG-1 GhostOrderError: The following order IDs no longer exist in the ` +
+            `quotations table: [${ghostIds.join(', ')}]. ` +
+            `These pieces were NOT saved. Cancel the production job or restore the order first.`;
+          toast.error(msg, { duration: 10000 });
+          throw new Error(msg);
+        }
+      }
+    }
+
     try {
       safeSave(KEYS.PRODUCTION_PIECES, data);
     } catch(e) {

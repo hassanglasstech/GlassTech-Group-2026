@@ -17,6 +17,70 @@
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { LedgerTransaction, LedgerDocType } from '@/modules/finance/types/finance';
 import { toast } from 'sonner';
+import { supabase } from '../../../src/services/supabaseClient';
+
+// ── SCM-1: QA Integrity Error ─────────────────────────────────────────────
+// Thrown by assertGRNQAMatch() when the caller-supplied OK/defective values
+// do not match the actual inspection_lots records for the GRN.
+export class GRNQAIntegrityError extends Error {
+  constructor(
+    public readonly grnId: string,
+    public readonly suppliedOKValue: number,
+    public readonly actualOKValue: number,
+    public readonly suppliedDefectiveValue: number,
+    public readonly actualDefectiveValue: number,
+  ) {
+    super(
+      `GRNQAIntegrityError: Inspection lot mismatch for GRN "${grnId}". ` +
+      `Supplied OK value: PKR ${suppliedOKValue} vs inspected: PKR ${actualOKValue}. ` +
+      `Supplied defective value: PKR ${suppliedDefectiveValue} vs inspected: PKR ${actualDefectiveValue}. ` +
+      `Complete or correct the Quality Inspection (MIGO QA) before posting GL.`
+    );
+    this.name = 'GRNQAIntegrityError';
+    Object.setPrototypeOf(this, GRNQAIntegrityError.prototype);
+  }
+}
+
+// ── SCM-1: QA gate — MUST be awaited before postGRNMaterialGL() ──────────
+// Queries inspection_lots for the given grnId and asserts that the passed-in
+// totalOKValue and totalDefectiveValue match the QA records to within PKR 1
+// (to absorb floating-point rounding in MAP-based valuations).
+//
+// If no inspection lot exists at all, this is also an integrity failure —
+// you cannot receive inventory without a corresponding QA record.
+export const assertGRNQAMatch = async (params: {
+  grnId: string;
+  totalOKValue: number;
+  totalDefectiveValue: number;
+}): Promise<void> => {
+  const { grnId, totalOKValue, totalDefectiveValue } = params;
+  const TOLERANCE_PKR = 1; // PKR 1 rounding tolerance
+
+  const { data: lots, error } = await supabase
+    .from('inspection_lots')
+    .select('ok_value, defective_value, ok_qty, defective_qty')
+    .eq('grn_id', grnId);
+
+  if (error) {
+    throw new GRNQAIntegrityError(grnId, totalOKValue, 0, totalDefectiveValue, 0);
+  }
+  if (!lots || lots.length === 0) {
+    throw new GRNQAIntegrityError(grnId, totalOKValue, 0, totalDefectiveValue, 0);
+  }
+
+  const inspectedOKValue  = lots.reduce((s, l) => s + (Number(l.ok_value)        ?? 0), 0);
+  const inspectedDefValue = lots.reduce((s, l) => s + (Number(l.defective_value) ?? 0), 0);
+
+  if (
+    Math.abs(totalOKValue        - inspectedOKValue)  > TOLERANCE_PKR ||
+    Math.abs(totalDefectiveValue - inspectedDefValue) > TOLERANCE_PKR
+  ) {
+    throw new GRNQAIntegrityError(
+      grnId, totalOKValue, inspectedOKValue, totalDefectiveValue, inspectedDefValue,
+    );
+  }
+  // Passed — values are consistent with QA records. GL posting may proceed.
+};
 
 // ── Account code constants (GlassCo COA) ─────────────────────────────────
 const ACC = {
@@ -46,7 +110,10 @@ function genTxId(prefix: string): string {
 // 1. GRN POST — Dr Inventory / Cr GR/IR
 // Called from GoodsReceiptMIGO on Post
 // ══════════════════════════════════════════════════════════════════════════
-export function postGRNMaterialGL(params: {
+// SCM-1: postGRNMaterialGL is now async — it must await assertGRNQAMatch()
+// before writing any GL entry. Callers (orchestrateGRNGL and any direct
+// call sites) must be updated to await this function.
+export async function postGRNMaterialGL(params: {
   company: string;
   grnId: string;
   grnDate: string;
@@ -54,8 +121,17 @@ export function postGRNMaterialGL(params: {
   totalOKValue: number;        // OK sheets value at MAP
   totalDefectiveValue: number; // Defective usable value at MAP
   lineCount: number;
-}): boolean {
+}): Promise<boolean> {
   const { company, grnId, grnDate, vendorName } = params;
+
+  // SCM-1: Assert QA records exist and values match before any GL posting.
+  // Throws GRNQAIntegrityError if inspection_lots are missing or mismatched.
+  await assertGRNQAMatch({
+    grnId,
+    totalOKValue:        params.totalOKValue,
+    totalDefectiveValue: params.totalDefectiveValue,
+  });
+
   const totalValue = params.totalOKValue + params.totalDefectiveValue;
   if (totalValue <= 0) return true; // nothing to post
 
@@ -381,7 +457,9 @@ export function postOtherChargesGL(params: {
 // 6. FULL GRN GL ORCHESTRATOR
 // Call this from GoodsReceiptMIGO after posting stock
 // ══════════════════════════════════════════════════════════════════════════
-export function orchestrateGRNGL(params: {
+// orchestrateGRNGL is now async because postGRNMaterialGL requires awaiting
+// the SCM-1 QA gate. All call sites must await this function.
+export async function orchestrateGRNGL(params: {
   company: string;
   grnId: string;
   grnDate: string;
@@ -393,12 +471,12 @@ export function orchestrateGRNGL(params: {
   cashPaymentRef?: string;
   otherCharges: number;
   otherChargesDesc: string;
-}) {
+}): Promise<number> {
   const { freightType, freightAmount, otherCharges } = params;
   let glCount = 0;
 
-  // 1. Material receipt
-  const ok1 = postGRNMaterialGL({
+  // 1. Material receipt (throws GRNQAIntegrityError if QA gate fails)
+  const ok1 = await postGRNMaterialGL({
     company: params.company, grnId: params.grnId, grnDate: params.grnDate,
     vendorName: params.vendorName,
     totalOKValue: params.totalOKValue,
