@@ -28,6 +28,7 @@ import LoginPage from '@/modules/auth/LoginPage';
 
 import NotificationCenter from './modules/shared/components/NotificationCenter';
 import { ConfirmProvider } from './modules/shared/components/ConfirmDialog';
+import { ShortcutProvider } from './modules/shared/components/ShortcutProvider';
 import useKeyboardShortcuts from './modules/shared/hooks/useKeyboardShortcuts';
 
 // ── Lazy load modules ────────────────────────────────────────────────
@@ -356,6 +357,7 @@ const App: React.FC = () => {
   return (
     <GlobalErrorBoundary>
       <a href="#main-content" className="skip-to-content">Skip to main content</a>
+    <ShortcutProvider>
     <ConfirmProvider>
     <HashRouter>
       <KeyboardShortcutsProvider />
@@ -465,6 +467,7 @@ const App: React.FC = () => {
       )}
     </HashRouter>
     </ConfirmProvider>
+    </ShortcutProvider>
     </GlobalErrorBoundary>
   );
 };

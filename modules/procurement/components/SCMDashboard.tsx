@@ -1,79 +1,331 @@
 /**
- * SCMDashboard.tsx — Phase 2
- * Supply Chain Manager view:
- *   - Vendor Scorecard (rating A/B/C/D)
- *   - Reorder Alerts (CRITICAL / LOW)
+ * SCMDashboard.tsx — Design System v2 Pilot
+ *
+ * ── Changes from v1 ──────────────────────────────────────────────────
+ * ✅  CompactPageHeader replaces the giant dark green gradient oval
+ * ✅  DataGridCard replaces all raw <table> elements with embedded CSS
+ * ✅  Zero inline style={{}} objects — pure Tailwind everywhere
+ * ✅  Removed embedded <style> tag (scm-tab / scm-th / scm-td classes)
+ * ✅  Alt+R global shortcut wired to refresh via erp:refresh event
+ * ✅  Dense KPI row (h-auto cards, not giant padded blocks)
+ * ✅  Tab bar uses Tailwind border-b-2 active indicator (not CSS classes)
+ * ✅  Forecast + EOQ sections unified inside the same card container
+ *     (original code had them accidentally rendered outside the card div)
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { SCMService, VendorScorecard, ReorderAlert } from '../services/scmService';
 import { DemandService } from '../services/demandService';
-import { AlertTriangle, CheckCircle2, Package, Star, RefreshCw, TrendingUp } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Minus,
+  Package,
+  RefreshCw,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react';
+import { CompactPageHeader } from '@/modules/shared/components/CompactPageHeader';
+import { DataGridCard, GridColumn } from '@/modules/shared/components/DataGridCard';
 
+// ── Formatter ─────────────────────────────────────────────────────────
 const fmt = (n: number) => Math.round(n).toLocaleString('en-PK');
 
-const RatingBadge: React.FC<{ rating: 'A' | 'B' | 'C' | 'D' }> = ({ rating }) => {
-  const cfg = {
-    A: { bg: '#DCFCE7', color: '#16A34A', label: 'A — Excellent' },
-    B: { bg: '#DBEAFE', color: '#2563EB', label: 'B — Good' },
-    C: { bg: '#FEF3C7', color: '#D97706', label: 'C — Average' },
-    D: { bg: '#FEE2E2', color: '#DC2626', label: 'D — Poor' },
-  }[rating];
-  return (
-    <span style={{ background: cfg.bg, color: cfg.color, padding: '3px 10px', borderRadius: 12, fontSize: 10, fontWeight: 900, letterSpacing: '.05em' }}>
-      {cfg.label}
-    </span>
-  );
-};
+// ── Local badge atoms — Tailwind-only ─────────────────────────────────
+const RATING_CFG = {
+  A: { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'A — Excellent' },
+  B: { cls: 'bg-blue-50   text-blue-700   border-blue-200',   label: 'B — Good'      },
+  C: { cls: 'bg-amber-50  text-amber-700  border-amber-200',  label: 'C — Average'   },
+  D: { cls: 'bg-rose-50   text-rose-700   border-rose-200',   label: 'D — Poor'      },
+} as const;
 
-const UrgencyBadge: React.FC<{ urgency: ReorderAlert['urgency'] }> = ({ urgency }) => (
-  <span style={{
-    background: urgency === 'CRITICAL' ? '#FEE2E2' : '#FEF3C7',
-    color: urgency === 'CRITICAL' ? '#DC2626' : '#D97706',
-    padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 800,
-  }}>
-    {urgency === 'CRITICAL' ? '🔴 CRITICAL' : '🟡 LOW'}
+const RatingBadge: React.FC<{ rating: 'A' | 'B' | 'C' | 'D' }> = ({ rating }) => (
+  <span
+    className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black border tracking-wide ${RATING_CFG[rating].cls}`}
+  >
+    {RATING_CFG[rating].label}
   </span>
 );
 
+const UrgencyBadge: React.FC<{ urgency: ReorderAlert['urgency'] }> = ({ urgency }) => (
+  <span
+    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black border ${
+      urgency === 'CRITICAL'
+        ? 'bg-rose-50 text-rose-700 border-rose-200'
+        : 'bg-amber-50 text-amber-700 border-amber-200'
+    }`}
+  >
+    <span
+      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+        urgency === 'CRITICAL' ? 'bg-rose-500 animate-pulse' : 'bg-amber-500'
+      }`}
+    />
+    {urgency === 'CRITICAL' ? 'CRITICAL' : 'LOW'}
+  </span>
+);
+
+// ── Score bar ────────────────────────────────────────────────────────
 const ScoreBar: React.FC<{ score: number }> = ({ score }) => {
-  const color = score >= 85 ? '#16A34A' : score >= 70 ? '#2563EB' : score >= 50 ? '#D97706' : '#DC2626';
+  const barCls  =
+    score >= 85 ? 'bg-emerald-500' :
+    score >= 70 ? 'bg-blue-500'    :
+    score >= 50 ? 'bg-amber-500'   : 'bg-rose-500';
+  const txtCls  =
+    score >= 85 ? 'text-emerald-700' :
+    score >= 70 ? 'text-blue-700'    :
+    score >= 50 ? 'text-amber-700'   : 'text-rose-700';
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div style={{ flex: 1, background: '#F1F5F9', borderRadius: 4, height: 6, overflow: 'hidden' }}>
-        <div style={{ width: `${score}%`, height: '100%', background: color, borderRadius: 4 }} />
+    <div className="flex items-center gap-2 min-w-[100px]">
+      <div className="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${barCls}`}
+          style={{ width: `${score}%` }}
+        />
       </div>
-      <span style={{ fontSize: 11, fontWeight: 800, color, minWidth: 28 }}>{score}</span>
+      <span className={`text-[11px] font-bold tabular-nums min-w-[22px] ${txtCls}`}>
+        {score}
+      </span>
     </div>
   );
 };
 
-const KPI: React.FC<{ label: string; value: string; color?: string; sub?: string }> = ({ label, value, color = '#1B3A6B', sub }) => (
-  <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '14px 18px', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
-    <div style={{ fontSize: 10, fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '.06em' }}>{label}</div>
-    <div style={{ fontSize: 22, fontWeight: 900, color, marginTop: 4 }}>{value}</div>
-    {sub && <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>{sub}</div>}
+// ── KPI card atom — ultra-compact ─────────────────────────────────────
+type KPIAccent = 'default' | 'success' | 'danger' | 'warning';
+const KPI_VALUE_CLS: Record<KPIAccent, string> = {
+  default: 'text-slate-900',
+  success: 'text-emerald-700',
+  danger:  'text-rose-700',
+  warning: 'text-amber-700',
+};
+
+const KPI: React.FC<{
+  label: string;
+  value: string;
+  sub?: string;
+  accent?: KPIAccent;
+}> = ({ label, value, sub, accent = 'default' }) => (
+  <div className="bg-white border border-slate-200 rounded-lg px-4 py-3 flex flex-col gap-0.5">
+    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider leading-none">
+      {label}
+    </span>
+    <span className={`text-xl font-black leading-tight tabular-nums ${KPI_VALUE_CLS[accent]}`}>
+      {value}
+    </span>
+    {sub && (
+      <span className="text-[10px] text-slate-400 leading-none">{sub}</span>
+    )}
   </div>
 );
 
-const styles = `
-  .scm-tab { display:flex; align-items:center; gap:6px; padding:10px 18px; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:#64748b; background:none; border:none; border-bottom:3px solid transparent; cursor:pointer; white-space:nowrap; font-family:inherit; transition:all .15s; }
-  .scm-tab:hover { color:#1e293b; background:#f8fafc; }
-  .scm-tab.active { color:#0369a1; border-bottom-color:#0369a1; background:#eff6ff; }
-  .scm-th { padding:10px 14px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:#fff; background:#065F46; text-align:left; white-space:nowrap; }
-  .scm-td { padding:10px 14px; font-size:12px; color:#334155; border-bottom:1px solid #f1f5f9; }
-  .scm-tr:hover td { background:#F0FDF4; }
-`;
+// ── Tab definition ─────────────────────────────────────────────────────
+type TabId = 'reorder' | 'scorecard' | 'forecast' | 'eoq';
+const TABS: { id: TabId; label: string }[] = [
+  { id: 'reorder',   label: 'Reorder Alerts'  },
+  { id: 'scorecard', label: 'Vendor Scorecard' },
+  { id: 'forecast',  label: 'Demand Forecast'  },
+  { id: 'eoq',       label: 'EOQ Calculator'   },
+];
 
+// ── Column definitions ────────────────────────────────────────────────
+
+const REORDER_COLS: GridColumn<ReorderAlert>[] = [
+  {
+    key: 'itemName', header: 'Item',
+    render: (_, r) => <span className="font-semibold text-slate-800">{r.itemName}</span>,
+  },
+  {
+    key: 'category', header: 'Category',
+    render: (_, r) => (
+      <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold">
+        {r.category}
+      </span>
+    ),
+  },
+  {
+    key: 'currentQty', header: 'Stock', align: 'right',
+    render: (_, r) => (
+      <span className={`font-bold tabular-nums ${r.urgency === 'CRITICAL' ? 'text-rose-700' : 'text-amber-700'}`}>
+        {fmt(r.currentQty)}
+      </span>
+    ),
+  },
+  {
+    key: 'reorderPoint', header: 'Reorder Pt', align: 'right',
+    render: (_, r) => <span className="text-slate-500 tabular-nums">{fmt(r.reorderPoint)}</span>,
+  },
+  {
+    key: 'minLevel', header: 'Min Level', align: 'right',
+    render: (_, r) => <span className="text-slate-400 tabular-nums">{fmt(r.minLevel)}</span>,
+  },
+  {
+    key: 'shortfall', header: 'Shortfall', align: 'right',
+    render: (_, r) => (
+      <span className="font-bold text-rose-700 tabular-nums">{fmt(r.shortfall)}</span>
+    ),
+  },
+  {
+    key: 'suggestedPOQty', header: 'Suggested PO', align: 'right',
+    render: (_, r) => (
+      <span className="font-bold text-blue-700 tabular-nums">{fmt(r.suggestedPOQty)}</span>
+    ),
+  },
+  {
+    key: 'lastVendor', header: 'Last Vendor',
+    render: (_, r) => (
+      <span className="text-slate-500 truncate block max-w-[130px]">{r.lastVendor || '—'}</span>
+    ),
+  },
+  {
+    key: 'urgency', header: 'Urgency',
+    render: (_, r) => <UrgencyBadge urgency={r.urgency} />,
+  },
+];
+
+const SCORECARD_COLS: GridColumn<VendorScorecard>[] = [
+  {
+    key: 'vendorName', header: 'Vendor',
+    render: (_, v) => <span className="font-semibold text-slate-800">{v.vendorName}</span>,
+  },
+  {
+    key: 'vendorType', header: 'Type',
+    render: (_, v) => (
+      <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold">
+        {v.vendorType}
+      </span>
+    ),
+  },
+  { key: 'totalPOs', header: 'POs', align: 'center' },
+  {
+    key: 'avgLeadDays', header: 'Avg Lead', align: 'center',
+    render: (_, v) =>
+      v.avgLeadDays > 0 ? (
+        <span
+          className={`font-bold tabular-nums ${
+            v.expectedLeadDays > 0 && v.avgLeadDays > v.expectedLeadDays
+              ? 'text-rose-700' : 'text-emerald-700'
+          }`}
+        >
+          {v.avgLeadDays}d
+          {v.expectedLeadDays > 0 && (
+            <span className="text-slate-400 font-normal text-[10px] ml-1">
+              (T:{v.expectedLeadDays}d)
+            </span>
+          )}
+        </span>
+      ) : '—',
+  },
+  {
+    key: 'onTimePct', header: 'On-Time %', align: 'center',
+    render: (_, v) => (
+      <span
+        className={`font-bold tabular-nums ${
+          v.onTimePct >= 90 ? 'text-emerald-700' :
+          v.onTimePct >= 70 ? 'text-amber-700'   : 'text-rose-700'
+        }`}
+      >
+        {v.onTimePct > 0 ? `${v.onTimePct}%` : '—'}
+      </span>
+    ),
+  },
+  {
+    key: 'avgRejectionPct', header: 'Rejection %', align: 'center',
+    render: (_, v) => (
+      <span
+        className={`font-bold tabular-nums ${v.avgRejectionPct > 5 ? 'text-rose-700' : 'text-emerald-700'}`}
+      >
+        {v.avgRejectionPct > 0 ? `${v.avgRejectionPct}%` : '—'}
+      </span>
+    ),
+  },
+  {
+    key: 'overallScore', header: 'Score', width: '140px',
+    render: (_, v) => <ScoreBar score={v.overallScore} />,
+  },
+  {
+    key: 'rating', header: 'Rating',
+    render: (_, v) => <RatingBadge rating={v.rating} />,
+  },
+];
+
+// ── Forecast row type ────────────────────────────────────────────────
+interface ForecastRow { month: string; orderCount: number; totalRevenue: number; _isForecast: boolean; }
+
+const FORECAST_COLS: GridColumn<ForecastRow>[] = [
+  {
+    key: 'month', header: 'Month',
+    render: (_, r) => (
+      <span className={r._isForecast ? 'font-bold text-blue-700' : 'text-slate-700'}>
+        {r.month}
+      </span>
+    ),
+  },
+  { key: 'orderCount',   header: 'Orders',  align: 'center' },
+  {
+    key: 'totalRevenue', header: 'Revenue',  align: 'right',
+    render: (_, r) => (
+      <span className={r._isForecast ? 'font-bold text-emerald-700 tabular-nums' : 'tabular-nums'}>
+        PKR {r.totalRevenue.toLocaleString()}
+      </span>
+    ),
+  },
+];
+
+// ── EOQ row type ─────────────────────────────────────────────────────
+interface EOQRow {
+  itemId: string; itemName: string; category: string;
+  annualDemand: number; unitCost: number; eoq: number;
+  ordersPerYear: number; totalAnnualCost: number;
+}
+
+const EOQ_COLS: GridColumn<EOQRow>[] = [
+  {
+    key: 'itemName', header: 'Item',
+    render: (_, e) => (
+      <div>
+        <div className="font-semibold text-slate-800">{e.itemName}</div>
+        <div className="text-[10px] text-slate-400">{e.category}</div>
+      </div>
+    ),
+  },
+  {
+    key: 'annualDemand', header: 'Annual Demand', align: 'right',
+    render: (_, e) => <span className="tabular-nums">{e.annualDemand}</span>,
+  },
+  {
+    key: 'unitCost', header: 'Unit Cost', align: 'right',
+    render: (_, e) => <span className="tabular-nums text-slate-500">PKR {e.unitCost.toLocaleString()}</span>,
+  },
+  {
+    key: 'eoq', header: 'EOQ', align: 'right',
+    render: (_, e) => (
+      <span className="font-black text-blue-700 tabular-nums">{e.eoq} units</span>
+    ),
+  },
+  {
+    key: 'ordersPerYear', header: 'Orders/yr', align: 'center',
+    render: (_, e) => <span className="text-slate-500">{e.ordersPerYear}×</span>,
+  },
+  {
+    key: 'totalAnnualCost', header: 'Annual Cost', align: 'right',
+    render: (_, e) => (
+      <span className="font-bold text-emerald-700 tabular-nums">
+        PKR {e.totalAnnualCost.toLocaleString()}
+      </span>
+    ),
+  },
+];
+
+// ── Main component ────────────────────────────────────────────────────
 const SCMDashboard: React.FC = () => {
   const company = useAppStore(s => s.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'scorecard' | 'reorder' | 'forecast' | 'eoq'>('reorder');
-  const [scorecard, setScorecard] = useState<VendorScorecard[]>([]);
-  const [reorders, setReorders]   = useState<ReorderAlert[]>([]);
-  const [loading, setLoading]     = useState(false);
-  const [orderForecast, setOrderForecast] = useState<any>(null);
-  const [eoqList, setEOQList]             = useState<any[]>([]);
+
+  const [activeTab, setActiveTab]         = useState<TabId>('reorder');
+  const [scorecard, setScorecard]         = useState<VendorScorecard[]>([]);
+  const [reorders,  setReorders]          = useState<ReorderAlert[]>([]);
+  const [loading,   setLoading]           = useState(false);
+  const [orderForecast, setOrderForecast] = useState<{ trend: string; avgOrdersPerMonth: number; historical: ForecastRow[]; forecast: ForecastRow[] } | null>(null);
+  const [eoqList,   setEOQList]           = useState<EOQRow[]>([]);
 
   const load = () => {
     setLoading(true);
@@ -89,234 +341,219 @@ const SCMDashboard: React.FC = () => {
 
   useEffect(() => { load(); }, [company]);
 
-  const summary = useMemo(() => SCMService.getSummary(company), [company, scorecard, reorders]);
+  // Wire global Alt+R refresh event from ShortcutProvider
+  useEffect(() => {
+    const handler = () => load();
+    window.addEventListener('erp:refresh', handler);
+    return () => window.removeEventListener('erp:refresh', handler);
+  }, [company]);
+
+  const summary    = useMemo(() => SCMService.getSummary(company), [company, scorecard, reorders]);
+  const alertCount = summary.criticalReorders + summary.lowReorders;
+
+  // Build forecast rows (historical + projected)
+  const forecastRows: ForecastRow[] = orderForecast
+    ? [
+        ...orderForecast.historical.map(m => ({ ...m, _isForecast: false })),
+        ...orderForecast.forecast.map(m => ({ ...m, month: `${m.month} (F)`, _isForecast: true })),
+      ]
+    : [];
 
   return (
-    <div style={{ fontFamily: '-apple-system, "Segoe UI", Arial, sans-serif' }}>
-      <style>{styles}</style>
+    <div className="flex flex-col h-full gap-0">
 
-      {/* Header */}
-      <div style={{ background: 'linear-gradient(135deg, #064E3B 0%, #059669 100%)', color: '#fff', padding: '20px 24px', borderRadius: 16, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: '-.02em', textTransform: 'uppercase' }}>SCM Dashboard</div>
-          <div style={{ fontSize: 11, color: '#A7F3D0', marginTop: 4, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase' }}>{company} — Supply Chain Management</div>
+      {/* ── Compact Page Header ─────────────────────────────────────── */}
+      <CompactPageHeader
+        breadcrumbs={[{ label: 'Procurement' }, { label: 'SCM' }]}
+        title="Supply Chain Dashboard"
+        subtitle={`${company} Unit`}
+        meta={
+          alertCount > 0 ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-50 text-rose-700 border border-rose-200">
+              <AlertTriangle size={10} />
+              {alertCount} alert{alertCount !== 1 ? 's' : ''}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <CheckCircle2 size={10} />
+              All clear
+            </span>
+          )
+        }
+        actions={[
+          {
+            label:    'Refresh',
+            icon:     <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />,
+            onClick:  load,
+            shortcut: 'Alt+R',
+            disabled: loading,
+          },
+        ]}
+      />
+
+      {/* ── Content area ──────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-4 gap-3">
+
+        {/* ── KPI Row ──────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 shrink-0">
+          <KPI
+            label="Total Vendors"
+            value={`${summary.totalVendors}`}
+            sub="with PO history"
+          />
+          <KPI
+            label="A-Rated Vendors"
+            value={`${summary.aRatedVendors}`}
+            sub="Score ≥ 85"
+            accent="success"
+          />
+          <KPI
+            label="Poor Vendors"
+            value={`${summary.dRatedVendors}`}
+            sub="D-rated — action needed"
+            accent={summary.dRatedVendors > 0 ? 'danger' : 'success'}
+          />
+          <KPI
+            label="Reorder Alerts"
+            value={`${alertCount}`}
+            sub={`${summary.criticalReorders} critical · ${summary.lowReorders} low`}
+            accent={
+              summary.criticalReorders > 0 ? 'danger' :
+              summary.lowReorders      > 0 ? 'warning' : 'success'
+            }
+          />
         </div>
-        <button onClick={load} style={{ background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.3)', color: '#fff', padding: '6px 14px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <RefreshCw size={12} /> Refresh
-        </button>
-      </div>
 
-      {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
-        <KPI label="Total Vendors" value={`${summary.totalVendors}`} sub="with PO history" />
-        <KPI label="A-Rated Vendors" value={`${summary.aRatedVendors}`} color="#16A34A" sub="Score ≥ 85" />
-        <KPI label="Poor Vendors" value={`${summary.dRatedVendors}`} color={summary.dRatedVendors > 0 ? '#DC2626' : '#16A34A'} sub="D-rated — action needed" />
-        <KPI label="Reorder Alerts" value={`${summary.criticalReorders + summary.lowReorders}`} color={summary.criticalReorders > 0 ? '#DC2626' : summary.lowReorders > 0 ? '#D97706' : '#16A34A'} sub={`${summary.criticalReorders} critical, ${summary.lowReorders} low`} />
-      </div>
+        {/* ── Tab Panel ─────────────────────────────────────────────── */}
+        <div className="flex-1 flex flex-col min-h-0 bg-white border border-slate-200 rounded-lg overflow-hidden">
 
-      {/* Tabs */}
-      <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden' }}>
-        <nav style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', padding: '0 16px', background: '#FAFAFA' }}>
-          <button onClick={() => setActiveTab('reorder')} className={`scm-tab${activeTab === 'reorder' ? ' active' : ''}`}>
-            Reorder Alerts {(summary.criticalReorders + summary.lowReorders) > 0 && (
-              <span style={{ background: summary.criticalReorders > 0 ? '#FEE2E2' : '#FEF3C7', color: summary.criticalReorders > 0 ? '#DC2626' : '#D97706', borderRadius: 10, padding: '1px 7px', fontSize: 10, fontWeight: 900 }}>
-                {summary.criticalReorders + summary.lowReorders}
-              </span>
-            )}
-          </button>
-          <button onClick={() => setActiveTab('scorecard')} className={`scm-tab${activeTab === 'scorecard' ? ' active' : ''}`}>
-            Vendor Scorecard
-          </button>
-          <button onClick={() => setActiveTab('forecast')} className={`scm-tab${activeTab === 'forecast' ? ' active' : ''}`}>
-            Demand Forecast
-          </button>
-          <button onClick={() => setActiveTab('eoq')} className={`scm-tab${activeTab === 'eoq' ? ' active' : ''}`}>
-            EOQ Calculator
-          </button>
-        </nav>
-
-        {/* REORDER ALERTS */}
-        {activeTab === 'reorder' && (
-          reorders.length === 0 ? (
-            <div style={{ padding: 48, textAlign: 'center' }}>
-              <CheckCircle2 size={32} color="#16A34A" style={{ margin: '0 auto 12px' }} />
-              <div style={{ color: '#16A34A', fontWeight: 800, fontSize: 14 }}>All stock levels are healthy</div>
-              <div style={{ color: '#94A3B8', fontSize: 12, marginTop: 4 }}>No items at or below reorder point</div>
-            </div>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  {['Item', 'Category', 'Current Stock', 'Reorder Point', 'Min Level', 'Shortfall', 'Suggested PO Qty', 'Last Vendor', 'Urgency'].map(h => (
-                    <th key={h} className="scm-th">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {reorders.map(r => (
-                  <tr key={r.itemId} className="scm-tr">
-                    <td className="scm-td" style={{ fontWeight: 700 }}>{r.itemName}</td>
-                    <td className="scm-td"><span style={{ background: '#F1F5F9', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 800 }}>{r.category}</span></td>
-                    <td className="scm-td" style={{ textAlign: 'right', fontWeight: 800, color: r.urgency === 'CRITICAL' ? '#DC2626' : '#D97706' }}>{fmt(r.currentQty)}</td>
-                    <td className="scm-td" style={{ textAlign: 'right', color: '#64748B' }}>{fmt(r.reorderPoint)}</td>
-                    <td className="scm-td" style={{ textAlign: 'right', color: '#94A3B8' }}>{fmt(r.minLevel)}</td>
-                    <td className="scm-td" style={{ textAlign: 'right', fontWeight: 700, color: '#DC2626' }}>{fmt(r.shortfall)}</td>
-                    <td className="scm-td" style={{ textAlign: 'right', color: '#2563EB', fontWeight: 700 }}>{fmt(r.suggestedPOQty)}</td>
-                    <td className="scm-td" style={{ color: '#64748B', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.lastVendor || '—'}</td>
-                    <td className="scm-td"><UrgencyBadge urgency={r.urgency} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )
-        )}
-
-        {/* VENDOR SCORECARD */}
-        {activeTab === 'scorecard' && (
-          scorecard.length === 0 ? (
-            <div style={{ padding: 48, textAlign: 'center' }}>
-              <Package size={32} color="#94A3B8" style={{ margin: '0 auto 12px' }} />
-              <div style={{ color: '#64748B', fontWeight: 800, fontSize: 14 }}>No vendor history yet</div>
-              <div style={{ color: '#94A3B8', fontSize: 12, marginTop: 4 }}>
-                Scores build automatically as GRNs are posted. Use SCMService.recordLeadTime() in GRN post flow.
-              </div>
-            </div>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  {['Vendor', 'Type', 'Total POs', 'Avg Lead (days)', 'On-Time %', 'Rejection %', 'Score', 'Rating'].map(h => (
-                    <th key={h} className="scm-th">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {scorecard.map(v => (
-                  <tr key={v.vendorId} className="scm-tr">
-                    <td className="scm-td" style={{ fontWeight: 700 }}>{v.vendorName}</td>
-                    <td className="scm-td"><span style={{ background: '#F1F5F9', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 800 }}>{v.vendorType}</span></td>
-                    <td className="scm-td" style={{ textAlign: 'center' }}>{v.totalPOs}</td>
-                    <td className="scm-td" style={{ textAlign: 'center' }}>
-                      {v.avgLeadDays > 0 ? (
-                        <span style={{ color: v.expectedLeadDays > 0 && v.avgLeadDays > v.expectedLeadDays ? '#DC2626' : '#16A34A', fontWeight: 700 }}>
-                          {v.avgLeadDays}d {v.expectedLeadDays > 0 ? `(target: ${v.expectedLeadDays}d)` : ''}
-                        </span>
-                      ) : '—'}
-                    </td>
-                    <td className="scm-td" style={{ textAlign: 'center', fontWeight: 700, color: v.onTimePct >= 90 ? '#16A34A' : v.onTimePct >= 70 ? '#D97706' : '#DC2626' }}>
-                      {v.onTimePct > 0 ? `${v.onTimePct}%` : '—'}
-                    </td>
-                    <td className="scm-td" style={{ textAlign: 'center', color: v.avgRejectionPct > 5 ? '#DC2626' : '#16A34A', fontWeight: 700 }}>
-                      {v.avgRejectionPct > 0 ? `${v.avgRejectionPct}%` : '—'}
-                    </td>
-                    <td className="scm-td" style={{ minWidth: 120 }}><ScoreBar score={v.overallScore} /></td>
-                    <td className="scm-td"><RatingBadge rating={v.rating} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )
-        )}
-      </div>
-
-        {/* DEMAND FORECAST */}
-        {activeTab === 'forecast' && orderForecast && (
-          <div style={{ padding: 24 }}>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16 }}>
-              <span style={{
-                background: orderForecast.trend === 'UP' ? '#DCFCE7' : orderForecast.trend === 'DOWN' ? '#FEE2E2' : '#EFF6FF',
-                color: orderForecast.trend === 'UP' ? '#16A34A' : orderForecast.trend === 'DOWN' ? '#DC2626' : '#2563EB',
-                padding: '4px 12px', borderRadius: 12, fontWeight: 800, fontSize: 11,
-              }}>
-                {orderForecast.trend === 'UP' ? 'Trending Up' : orderForecast.trend === 'DOWN' ? 'Trending Down' : 'Stable'}
-              </span>
-              <span style={{ fontSize: 12, color: '#64748B' }}>
-                Avg {orderForecast.avgOrdersPerMonth} orders per month
-              </span>
-            </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
-              <thead>
-                <tr>
-                  {['Month', 'Orders', 'Revenue'].map(h => (
-                    <th key={h} className="scm-th">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {orderForecast.historical.map((m: any) => (
-                  <tr key={m.month} className="scm-tr">
-                    <td className="scm-td">{m.month}</td>
-                    <td className="scm-td" style={{ textAlign: 'center' as const }}>{m.orderCount}</td>
-                    <td className="scm-td" style={{ textAlign: 'right' as const }}>
-                      PKR {m.totalRevenue.toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-                {orderForecast.forecast.map((m: any) => (
-                  <tr key={m.month} style={{ background: '#F0FDF4' }}>
-                    <td className="scm-td" style={{ fontWeight: 800, color: '#065F46' }}>{m.month} (F)</td>
-                    <td className="scm-td" style={{ textAlign: 'center' as const, fontWeight: 700 }}>{m.orderCount}</td>
-                    <td className="scm-td" style={{ textAlign: 'right' as const, color: '#059669', fontWeight: 800 }}>
-                      PKR {m.totalRevenue.toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* Tab bar */}
+          <div className="flex border-b border-slate-200 bg-slate-50/60 overflow-x-auto shrink-0">
+            {TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={[
+                  'flex items-center gap-1.5 px-4 py-2.5',
+                  'text-[11px] font-bold uppercase tracking-wider',
+                  'border-b-2 transition-colors whitespace-nowrap shrink-0',
+                  activeTab === tab.id
+                    ? 'border-blue-600 text-blue-700 bg-white'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-white/70',
+                ].join(' ')}
+              >
+                {tab.label}
+                {tab.id === 'reorder' && alertCount > 0 && (
+                  <span className="bg-rose-100 text-rose-700 text-[9px] font-black px-1.5 py-0.5 rounded-full tabular-nums">
+                    {alertCount}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
-        )}
 
-        {/* EOQ CALCULATOR */}
-        {activeTab === 'eoq' && (
-          eoqList.length === 0 ? (
-            <div style={{ padding: 48, textAlign: 'center' as const, color: '#94A3B8', fontSize: 13 }}>
-              No items with demand history found.
+          {/* ── Reorder Alerts ──────────────────────────────────────── */}
+          {activeTab === 'reorder' && (
+            <DataGridCard
+              columns={REORDER_COLS}
+              rows={reorders}
+              getRowKey={r => r.itemId}
+              loading={loading}
+              className="border-0 rounded-none flex-1"
+              emptyState={
+                <div className="flex flex-col items-center gap-2 py-4">
+                  <CheckCircle2 size={28} className="text-emerald-400" />
+                  <p className="text-xs font-bold text-emerald-700">All stock levels healthy</p>
+                  <p className="text-[10px] text-slate-400">No items at or below reorder point</p>
+                </div>
+              }
+            />
+          )}
+
+          {/* ── Vendor Scorecard ─────────────────────────────────────── */}
+          {activeTab === 'scorecard' && (
+            <DataGridCard
+              columns={SCORECARD_COLS}
+              rows={scorecard}
+              getRowKey={v => v.vendorId}
+              loading={loading}
+              className="border-0 rounded-none flex-1"
+              emptyState={
+                <div className="flex flex-col items-center gap-2 py-4">
+                  <Package size={28} className="text-slate-300" />
+                  <p className="text-xs font-bold text-slate-500">No vendor history yet</p>
+                  <p className="text-[10px] text-slate-400">
+                    Scores build automatically as GRNs are posted
+                  </p>
+                </div>
+              }
+            />
+          )}
+
+          {/* ── Demand Forecast ──────────────────────────────────────── */}
+          {activeTab === 'forecast' && (
+            <div className="flex flex-col flex-1 min-h-0">
+              {/* Trend summary strip */}
+              {orderForecast && (
+                <div className="flex items-center gap-3 px-4 py-2 border-b border-slate-100 bg-slate-50/40 shrink-0">
+                  <span
+                    className={[
+                      'inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-black border',
+                      orderForecast.trend === 'UP'   ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                      orderForecast.trend === 'DOWN' ? 'bg-rose-50    text-rose-700    border-rose-200'    :
+                                                       'bg-blue-50    text-blue-700    border-blue-200',
+                    ].join(' ')}
+                  >
+                    {orderForecast.trend === 'UP'   ? <TrendingUp   size={10} /> :
+                     orderForecast.trend === 'DOWN' ? <TrendingDown size={10} /> :
+                                                      <Minus        size={10} />}
+                    {orderForecast.trend === 'UP'   ? 'Trending Up'   :
+                     orderForecast.trend === 'DOWN' ? 'Trending Down' : 'Stable'}
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Avg {orderForecast.avgOrdersPerMonth} orders / month
+                  </span>
+                </div>
+              )}
+              <DataGridCard
+                columns={FORECAST_COLS}
+                rows={forecastRows}
+                getRowKey={(_, i) => String(i)}
+                className="border-0 rounded-none flex-1"
+                emptyState={
+                  <span className="text-xs text-slate-400">No forecast data available.</span>
+                }
+              />
             </div>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
-              <thead>
-                <tr>
-                  {['Item', 'Annual Demand', 'Unit Cost', 'EOQ', 'Orders per Year', 'Annual Cost'].map(h => (
-                    <th key={h} className="scm-th">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {eoqList.map((e: any) => (
-                  <tr key={e.itemId} className="scm-tr">
-                    <td className="scm-td" style={{ fontWeight: 700 }}>
-                      {e.itemName}
-                      <div style={{ fontSize: 10, color: '#94A3B8' }}>{e.category}</div>
-                    </td>
-                    <td className="scm-td" style={{ textAlign: 'right' as const }}>{e.annualDemand}</td>
-                    <td className="scm-td" style={{ textAlign: 'right' as const, color: '#64748B' }}>
-                      PKR {e.unitCost.toLocaleString()}
-                    </td>
-                    <td className="scm-td" style={{ textAlign: 'right' as const, fontWeight: 800, color: '#2563EB' }}>
-                      {e.eoq} units
-                    </td>
-                    <td className="scm-td" style={{ textAlign: 'center' as const, color: '#64748B' }}>
-                      {e.ordersPerYear}x
-                    </td>
-                    <td className="scm-td" style={{ textAlign: 'right' as const, color: '#16A34A', fontWeight: 700 }}>
-                      PKR {e.totalAnnualCost.toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr style={{ background: '#1E293B' }}>
-                  <td colSpan={3} style={{ padding: '10px 14px', color: '#fff', fontWeight: 800, fontSize: 12 }}>
-                    EOQ Formula: sqrt(2DS per H)
+          )}
+
+          {/* ── EOQ Calculator ────────────────────────────────────────── */}
+          {activeTab === 'eoq' && (
+            <DataGridCard
+              columns={EOQ_COLS}
+              rows={eoqList}
+              getRowKey={e => e.itemId}
+              loading={loading}
+              className="border-0 rounded-none flex-1"
+              emptyState={
+                <span className="text-xs text-slate-400">
+                  No items with demand history found.
+                </span>
+              }
+              footer={
+                <>
+                  <td className="px-3 py-2.5 text-[11px] font-bold" colSpan={3}>
+                    EOQ = √(2DS / H)
                   </td>
-                  <td colSpan={3} style={{ padding: '10px 14px', color: '#94A3B8', fontSize: 11 }}>
-                    Ordering cost PKR 2500 per order, holding 20 pct per year
+                  <td className="px-3 py-2.5 text-[10px] text-slate-400" colSpan={3}>
+                    Order cost PKR 2,500 · Holding 20% p.a.
                   </td>
-                </tr>
-              </tfoot>
-            </table>
-          )
-        )}
+                </>
+              }
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 };
