@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Company, Account } from '../../shared/types';
 import { FinanceService } from '../services/financeService';
 import { Calendar, Filter, Printer, Download, AlertCircle, Clock, TrendingUp, TrendingDown } from 'lucide-react';
@@ -8,6 +8,22 @@ import * as XLSX from 'xlsx';
 const AgingReport: React.FC<{ company: Company }> = ({ company }) => {
   const [reportType, setReportType] = useState<'Receivable' | 'Payable'>('Receivable');
   const [agingDate, setAgingDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // FIN-4: Load live invoice balances from the invoice_balances view (Migration 016).
+  // This is a real-time calculation of total_amount − Σ(payment_receipts) and replaces
+  // the stale invoices.paid_amount field that was prone to drift.
+  const [liveInvoiceBalances, setLiveInvoiceBalances] = useState<Array<{
+    id: string; total_amount: number; paid_amount: number; live_balance: number;
+  }>>([]);
+  const totalLiveOutstanding = useMemo(
+    () => liveInvoiceBalances.reduce((s, r) => s + r.live_balance, 0),
+    [liveInvoiceBalances]
+  );
+  useEffect(() => {
+    FinanceService.getInvoiceBalancesAsync(company).then(rows => {
+      setLiveInvoiceBalances(rows.filter(r => r.live_balance > 0));
+    });
+  }, [company]);
 
   const accounts = FinanceService.getAccounts().filter(a => a.company === company);
   // H-7: Aging reports are management-facing — only 'Posted' entries represent
@@ -233,6 +249,45 @@ const AgingReport: React.FC<{ company: Company }> = ({ company }) => {
             </tfoot>
          </table></div>
       </div>
+      {/* FIN-4: Live Invoice Balances reconciliation panel.
+           Sourced from the invoice_balances DB view (Migration 016) which
+           computes live_balance = total_amount − Σ(payment_receipts) in
+           real-time. Shown only for Receivables mode where unpaid invoices
+           are actionable. */}
+      {reportType === 'Receivable' && liveInvoiceBalances.length > 0 && (
+        <div className="bg-white rounded-3xl border border-amber-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 bg-amber-50 border-b border-amber-200 flex justify-between items-center">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">Live Invoice Balances</p>
+              <p className="text-[9px] text-amber-600 mt-0.5">Real-time: invoice total − receipts posted</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[9px] font-black uppercase text-amber-600">Total Outstanding</p>
+              <p className="text-base font-black text-amber-800">PKR {totalLiveOutstanding.toLocaleString()}</p>
+            </div>
+          </div>
+          <div className="overflow-x-auto"><table className="w-full text-left sap-table">
+            <thead className="bg-slate-50 border-b text-[10px] font-black uppercase tracking-widest text-slate-500">
+              <tr>
+                <th className="px-6 py-3">Invoice ID</th>
+                <th className="px-6 py-3 text-right">Invoice Total</th>
+                <th className="px-6 py-3 text-right text-emerald-600">Paid</th>
+                <th className="px-6 py-3 text-right text-rose-600">Outstanding</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs font-medium">
+              {liveInvoiceBalances.map(row => (
+                <tr key={row.id} className="hover:bg-slate-50">
+                  <td className="px-6 py-3 font-mono text-slate-700">{row.id}</td>
+                  <td className="px-6 py-3 text-right text-slate-900">{row.total_amount.toLocaleString()}</td>
+                  <td className="px-6 py-3 text-right text-emerald-700">{row.paid_amount.toLocaleString()}</td>
+                  <td className="px-6 py-3 text-right font-black text-rose-700">{row.live_balance.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table></div>
+        </div>
+      )}
     </div>
   );
 };

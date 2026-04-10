@@ -52,9 +52,14 @@ const HSEModule: React.FC = () => {
 
   const load = async () => {
     setLoading(true);
+    // SEC-6: Explicit company filter prevents cross-tenant data exposure.
+    // useAuthStore.getState() is safe here (non-hook context) because Zustand
+    // exposes getState() outside React's render cycle.
+    const company = useAuthStore.getState().profile?.company ?? 'Factory';
     const { data } = await supabase
       .from('hse_incidents')
       .select('*')
+      .eq('company', company)
       .eq('closed', filter === 'closed')
       .order('incident_date', { ascending: false });
     if (data) setIncidents(data as Incident[]);

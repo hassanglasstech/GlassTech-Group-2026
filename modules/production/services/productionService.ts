@@ -19,7 +19,13 @@ import { toast } from 'sonner';
 export const ProductionService = {
   getProductionPiecesAsync: async (filterCompany?: string): Promise<ProductionPiece[]> => {
     try {
-      const { data, error } = await supabase.from('production_pieces').select('*');
+      // SEC-5: Inject explicit company filter so RLS is applied at the query
+      // level in addition to the DB-side policy. Belt-and-suspenders: if the
+      // RLS policy is ever temporarily disabled for maintenance, the app layer
+      // still enforces the tenant boundary.
+      let query = supabase.from('production_pieces').select('*');
+      if (filterCompany) query = query.eq('company', filterCompany);
+      const { data, error } = await query;
       if (error || !data || data.length === 0) {
         // Fallback to IDB/localStorage
         try {

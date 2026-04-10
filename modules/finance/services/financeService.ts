@@ -355,6 +355,13 @@ export const FinanceService = {
   },
 
   saveLedger: (d: LedgerTransaction[]): void => {
+    // FIN-3: Hard gate — every Posted entry must balance before ANY write.
+    // A single imbalanced entry in the batch aborts the entire save so the
+    // caller can fix the offending transaction. Parked / Draft entries are
+    // intentionally exempt: they may be works-in-progress.
+    d.forEach(entry => {
+      if (entry.status === 'Posted') _assertGLBalance(entry);
+    });
     _cache.ledger = d;
     safeSave(KEYS.LEDGER, d);
     _upsert('ledger', d.map(ledgerToRow), 'ledger');
@@ -573,6 +580,20 @@ export const FinanceService = {
     const advanceAmount = advanceEntry
       ? advanceEntry.details.reduce((s, d) => s + (d.debit || 0), 0) : 0;
 
+    // FIN-2: Orphan settlement guard.
+    // If a reqId was supplied but no matching advance GL entry was found, the
+    // settlement has no originating advance — allowing it would create phantom
+    // credits (Employee Advances cleared with nothing on the debit side).
+    // The only safe option is to reject and ask the user to restore or re-raise
+    // the advance entry before settling.
+    if (reqId && !advanceEntry) {
+      throw new Error(
+        `OrphanSettlementError: No advance GL entry found for requisition "${reqId}". ` +
+        `The advance may have been deleted, never posted, or settled already. ` +
+        `Restore the originating advance entry or create a new one before settling.`
+      );
+    }
+
     // FIN-1: Hard cap on advance overclaiming.
     // If actual spend > 1.5× the approved advance, reject immediately.
     // The 50% buffer covers legitimate price fluctuations; beyond that,
@@ -641,6 +662,34 @@ export const FinanceService = {
     allGL.push(settleTx);
     FinanceService.saveLedger(allGL);
     return { settlementId, variance, status: variance === 0 ? 'Exact' : variance < 0 ? 'Under-spend' : 'Over-spend' };
+  },
+
+  // ── FIN-4: Live Invoice Balances ───────────────────────────────────
+  // Queries the `invoice_balances` view (Migration 016) which computes
+  //   live_balance = total_amount − Σ(payment_receipts.amount)
+  // in real-time, eliminating the stale `paid_amount` field on invoices.
+  // AgingReport and BillingHub should call this instead of invoices.paid_amount.
+  getInvoiceBalancesAsync: async (company: Company): Promise<Array<{
+    id: string;
+    company: string;
+    total_amount: number;
+    paid_amount: number;
+    live_balance: number;
+  }>> => {
+    try {
+      const { data, error } = await supabase
+        .from('invoice_balances')
+        .select('id, company, total_amount, paid_amount, live_balance')
+        .eq('company', company);
+      if (error) {
+        console.warn('[FinanceService] getInvoiceBalancesAsync:', error.message);
+        return [];
+      }
+      return (data ?? []) as any[];
+    } catch (e) {
+      console.error('[FinanceService] getInvoiceBalancesAsync failed:', e);
+      return [];
+    }
   },
 
   // ── Get Outstanding Advances ────────────────────────────────────────
