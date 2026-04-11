@@ -237,7 +237,7 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
     SalesService.getProducts()
       .filter((p: any) =>
         (p.company === company || !p.company) &&
-        (p.category === 'Glass' || p.category === 'Raw' || p.glassType)
+        p.category !== 'Service'  // Include all materials, exclude services
       )
       .forEach((p: any) => {
         const th = p.thickness || '';
