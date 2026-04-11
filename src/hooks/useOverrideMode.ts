@@ -26,7 +26,7 @@ interface BypassEntry {
   sla_status?: string;
 }
 
-const ADMIN_ROLES = ['super_admin', 'owner', 'hassan'];
+const ADMIN_ROLES = ['super_admin', 'owner', 'hassan', 'gtk_admin', 'glassco_admin', 'nippon_admin'];
 
 export function useOverrideMode() {
   const profile = useAuthStore(s => s.profile);
@@ -35,11 +35,14 @@ export function useOverrideMode() {
   const [openCount, setOpenCount] = useState(0);
   const [overdueCount, setOverdueCount] = useState(0);
 
-  const isAdmin = profile?.role ? ADMIN_ROLES.includes(profile.role) : false;
+  // Check both profile.role and user.role — auth store may populate either
+  const role = profile?.role || (user as any)?.role || '';
+  const isAdmin = ADMIN_ROLES.includes(role);
+  const userId = userId || (user as any)?.id || '';
 
   // Load override state from profile
   useEffect(() => {
-    if (!profile?.id) return;
+    if (!userId) return;
     supabase
       .from('user_profiles')
       .select('override_mode_active')
@@ -49,7 +52,7 @@ export function useOverrideMode() {
         if (data) setIsOverrideMode(!!data.override_mode_active);
       })
       .catch(() => {});
-  }, [profile?.id]);
+  }, [userId]);
 
   // Load open bypass count
   const refreshCounts = useCallback(async () => {
@@ -78,7 +81,7 @@ export function useOverrideMode() {
       await supabase
         .from('user_profiles')
         .update({ override_mode_active: next })
-        .eq('id', profile!.id);
+        .eq('id', userId);
       toast.success(next ? 'Override Mode ACTIVATED — all bypasses will be logged.' : 'Override Mode DEACTIVATED.');
     } catch {
       toast.error('Failed to update override mode.');
@@ -95,7 +98,7 @@ export function useOverrideMode() {
   ) => {
     const entry = {
       id: `BYP-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      user_id: user?.id || profile?.id || '',
+      user_id: user?.id || userId || '',
       user_name: profile?.fullName || user?.email || 'Unknown',
       module,
       rule_bypassed: ruleBypassed,

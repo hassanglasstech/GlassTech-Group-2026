@@ -10,6 +10,8 @@ import React from 'react';
 import { useOverrideMode } from '@/src/hooks/useOverrideMode';
 import { ShieldAlert, Power, AlertTriangle } from 'lucide-react';
 
+const ADMIN_ROLES = ['super_admin', 'owner', 'hassan', 'gtk_admin', 'glassco_admin'];
+
 const OverrideModeBar: React.FC = () => {
   const { isOverrideMode, isAdmin, toggleOverrideMode, openCount, overdueCount } = useOverrideMode();
 
