@@ -73,11 +73,7 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
         if (r.company !== company && (r as any).targetCompany !== company) return false;
         if (r.status !== 'Approved') return false;
         if (linkedReqIds.has(r.id)) return false;
-        // Only show reqs that require cash disbursement (PV-eligible)
-        // HR loans, expense reqs with cash/petty cash payment mode
-        const mode = (r as any).paymentMode || '';
-        const isCashOut = r.requiresCashPayment || mode === 'Cash' || mode === 'Petty Cash' || r.category === 'HR';
-        return isCashOut;
+        return true; // Show all approved reqs — user picks the correct one
     });
     setAuthorizedReqs(relevant);
   };
