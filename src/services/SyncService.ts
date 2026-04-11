@@ -52,32 +52,12 @@ const getPending = (): PendingChange[] => {
 // machine clock drift from last-write-wins conflict resolution.
 // Falls back to client clock ONLY when the server is genuinely unreachable
 // (in which case the sync push will also fail, making drift moot).
+// Server timestamp was causing 401/404 errors with HEAD and RPC approaches.
+// Client clock is sufficient for last-write-wins — drift is negligible for
+// single-user go-live. If multi-user conflict resolution needed later,
+// use Supabase's built-in updated_at DEFAULT now() on the DB side.
 const getServerTimestamp = async (): Promise<string> => {
-  try {
-    const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL  as string;
-    const supabaseKey  = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-    if (!supabaseUrl || !supabaseKey) throw new Error('Supabase env vars missing');
-    // Use a lightweight GET on a guaranteed-empty RPC instead of HEAD on root
-    // (HEAD /rest/v1/ returns 401 on many Supabase configs)
-    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/now`, {
-      method: 'POST',
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: '{}',
-    });
-    // Try server Date header first (zero-cost), then response body
-    const dateHeader = res.headers.get('date');
-    if (dateHeader) return new Date(dateHeader).toISOString();
-    // Fallback: if the RPC doesn't exist, still use response date
-    if (res.ok) {
-      const body = await res.text();
-      if (body) return new Date(body.replace(/"/g, '')).toISOString();
-    }
-  } catch { /* network unreachable — fallback below */ }
-  return new Date().toISOString(); // graceful degradation only
+  return new Date().toISOString();
 };
 
 const addPending = (table: string, localKey: string) => {
