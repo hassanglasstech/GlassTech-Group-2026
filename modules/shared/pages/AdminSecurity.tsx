@@ -3,20 +3,21 @@ import UserAccessManager from '@/modules/auth/UserAccessManager';
 import { toast } from 'sonner';
 import { Company, ActivityLog } from '../types';
 import { AppService } from '../services/appService';
-import { 
-  ShieldCheck, Database, FileUp, Download, 
+import {
+  ShieldCheck, Database, FileUp, Download,
   History, Users, X, Info, Activity, Filter, RefreshCw, BarChart2,
-  AlertTriangle, Trash2, Archive
+  AlertTriangle, Trash2, Archive, ShieldAlert
 } from 'lucide-react';
 
 import { useAppStore } from '../store/appStore';
 
 import GlasscoDataWiper from '@/modules/shared/components/GlasscoDataWiper';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
+import BypassLogDashboard from '@/modules/admin/components/BypassLogDashboard';
 
 const AdminSecurity: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'command_center' | 'admin' | 'users' | 'data_reset'>('command_center');
+  const [activeTab, setActiveTab] = useState<'command_center' | 'admin' | 'users' | 'data_reset' | 'exceptions'>('command_center');
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [filterModule, setFilterModule] = useState<string>('All');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -129,6 +130,7 @@ const AdminSecurity: React.FC = () => {
             { id: 'command_center', label: 'Live Activity Feed', icon: Activity },
             { id: 'admin', label: 'Basis (DB Management)', icon: Database },
           { id: 'data_reset', label: 'Data Reset', icon: ShieldCheck },
+            { id: 'exceptions', label: 'Exception Register', icon: ShieldAlert },
             ...(company === 'Factory' ? [{ id: 'users', label: 'User Roles (SU01)', icon: Users }] : []),
           ].map(tab => (
             <button
@@ -260,6 +262,9 @@ const AdminSecurity: React.FC = () => {
         </div>
       )}
 
+        {activeTab === 'exceptions' && (
+          <BypassLogDashboard />
+        )}
       </div>
     </div>
   );
