@@ -8,6 +8,7 @@
 -- ══════════════════════════════════════════════════════════════════════
 
 ALTER TABLE payment_receipts
+  ADD COLUMN IF NOT EXISTS company     TEXT,
   ADD COLUMN IF NOT EXISTS invoice_id  TEXT,
   ADD COLUMN IF NOT EXISTS date        DATE,
   ADD COLUMN IF NOT EXISTS amount      NUMERIC(14,2) DEFAULT 0,
@@ -15,9 +16,9 @@ ALTER TABLE payment_receipts
   ADD COLUMN IF NOT EXISTS reference   TEXT,
   ADD COLUMN IF NOT EXISTS gl_tx_id    TEXT,
   ADD COLUMN IF NOT EXISTS created_by  TEXT,
-  ADD COLUMN IF NOT EXISTS updated_by  TEXT;
+  ADD COLUMN IF NOT EXISTS updated_by  TEXT,
+  ADD COLUMN IF NOT EXISTS data        JSONB NOT NULL DEFAULT '{}';
 
--- Index for the common join pattern (invoice_id lookup)
 CREATE INDEX IF NOT EXISTS idx_payment_receipts_invoice
   ON payment_receipts (invoice_id);
 
