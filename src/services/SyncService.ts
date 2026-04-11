@@ -57,12 +57,25 @@ const getServerTimestamp = async (): Promise<string> => {
     const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL  as string;
     const supabaseKey  = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
     if (!supabaseUrl || !supabaseKey) throw new Error('Supabase env vars missing');
-    const res = await fetch(`${supabaseUrl}/rest/v1/`, {
-      method: 'HEAD',
-      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+    // Use a lightweight GET on a guaranteed-empty RPC instead of HEAD on root
+    // (HEAD /rest/v1/ returns 401 on many Supabase configs)
+    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/now`, {
+      method: 'POST',
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
     });
+    // Try server Date header first (zero-cost), then response body
     const dateHeader = res.headers.get('date');
     if (dateHeader) return new Date(dateHeader).toISOString();
+    // Fallback: if the RPC doesn't exist, still use response date
+    if (res.ok) {
+      const body = await res.text();
+      if (body) return new Date(body.replace(/"/g, '')).toISOString();
+    }
   } catch { /* network unreachable — fallback below */ }
   return new Date().toISOString(); // graceful degradation only
 };

@@ -28,24 +28,27 @@ const computeStatus = (expiryDate: string | null): DocStatus => {
 
 const rowToDoc = (r: any): EmployeeDoc => ({
   id: r.id,
-  employeeId: r.employee_id,
-  docType: r.doc_type,
-  fileName: r.file_name,
-  fileUrl: r.file_url,
-  expiryDate: r.expiry_date || null,
-  uploadedAt: r.uploaded_at,
-  status: computeStatus(r.expiry_date),
+  employeeId: r.employee_id || (r.data as any)?.employee_id || '',
+  docType: r.doc_type || (r.data as any)?.doc_type || 'other',
+  fileName: r.doc_name || (r.data as any)?.file_name || '',
+  fileUrl: r.file_url || (r.data as any)?.file_url || '',
+  expiryDate: r.expiry_date || (r.data as any)?.expiry_date || null,
+  uploadedAt: (r.data as any)?.uploaded_at || r.created_at || '',
+  status: computeStatus(r.expiry_date || (r.data as any)?.expiry_date),
 });
 
-const docToRow = (d: EmployeeDoc) => ({
+// Map to actual DB columns: id, company, employee_id, doc_type, doc_name, file_url, expiry_date, notes, data
+const docToRow = (d: EmployeeDoc, company?: string) => ({
   id: d.id,
+  company: company || '',
   employee_id: d.employeeId,
   doc_type: d.docType,
-  file_name: d.fileName,
+  doc_name: d.fileName,
   file_url: d.fileUrl,
   expiry_date: d.expiryDate || null,
-  uploaded_at: d.uploadedAt,
-  status: computeStatus(d.expiryDate),
+  notes: '',
+  data: { uploaded_at: d.uploadedAt, status: computeStatus(d.expiryDate), file_name: d.fileName },
+  updated_at: new Date().toISOString(),
 });
 
 // ── Update local cache after any Supabase operation ─────────────────
@@ -262,7 +265,7 @@ export const EmployeeDocService = {
       // Insert new doc
       const { error: dbError } = await supabase
         .from(SUPABASE_TABLE)
-        .insert(docToRow(doc));
+        .insert(docToRow(doc, company));
 
       if (dbError) throw dbError;
 

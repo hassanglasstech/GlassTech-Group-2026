@@ -240,7 +240,7 @@ export const AsyncSalesService = {
   getVendors: async (): Promise<Vendor[]> => {
     const company = useAuthStore.getState().profile?.company ?? '';
     try {
-      const { data, error } = await supabase.from('vendor_contracts').select('*').eq('company', company);
+      const { data, error } = await supabase.from('vendors').select('*').eq('company', company);
       if (error || !data || data.length === 0) return safeParse(KEYS.VENDORS);
       const mapped = data.map((r: any) => ({ ...r }));
       safeSave(KEYS.VENDORS, mapped);
@@ -252,7 +252,13 @@ export const AsyncSalesService = {
   saveVendors: async (data: Vendor[]): Promise<void> => {
     safeSave(KEYS.VENDORS, data);
     try {
-      const { error } = await supabase.from('vendor_contracts').upsert(data.map((v: any) => ({ ...v })));
+      const mapped = data.map((v: any) => ({
+        id: v.id,
+        company: v.company || '',
+        data: v,
+        updated_at: new Date().toISOString(),
+      }));
+      const { error } = await supabase.from('vendors').upsert(mapped, { onConflict: 'id' });
       if (error) Logger.error('Sales', 'saveVendors failed', error);
     } catch (err: any) {
       Logger.error('Sales', 'saveVendors exception', err);
