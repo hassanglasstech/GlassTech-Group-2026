@@ -18,7 +18,7 @@ import { checkSchemaVersion } from '@/modules/shared/services/utils';
 import { prefetchCriticalTables } from '@/modules/shared/hooks/useSupabaseData';
 import { flushOfflineQueue } from '@/modules/shared/services/supabaseDB';
 import { Logger, setLogContext, installConsoleOverride } from '@/modules/shared/services/logger';
-import OverrideModeBar from '@/src/components/OverrideModeBar';
+const OverrideModeBar = React.lazy(() => import('@/src/components/OverrideModeBar'));
 import { Toaster, toast } from 'sonner';
 import { useAuthStore, isOfficeHours, ROLE_DEFAULT_COMPANY, ROLE_MODULES, ROLE_LABELS } from '@/modules/auth/authStore';
 import { HRService } from '@/modules/hr/services/hrService';
@@ -436,7 +436,7 @@ const App: React.FC = () => {
               <span>Connected — System Online</span>
             </div>
           )}
-          <OverrideModeBar />
+          <Suspense fallback={null}><OverrideModeBar /></Suspense>
           <div className="flex-1 overflow-y-auto scroll-smooth pb-16 lg:pb-0">
             <div className="p-3 md:p-8 max-w-[1600px] mx-auto min-h-full flex flex-col">
               <Suspense fallback={

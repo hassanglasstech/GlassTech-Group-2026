@@ -13,7 +13,7 @@ import { useAppStore } from '../store/appStore';
 
 import GlasscoDataWiper from '@/modules/shared/components/GlasscoDataWiper';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
-import BypassLogDashboard from '@/modules/admin/components/BypassLogDashboard';
+const BypassLogDashboard = React.lazy(() => import('@/modules/admin/components/BypassLogDashboard'));
 
 const AdminSecurity: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
@@ -263,7 +263,9 @@ const AdminSecurity: React.FC = () => {
       )}
 
         {activeTab === 'exceptions' && (
-          <BypassLogDashboard />
+          <React.Suspense fallback={<div className="py-10 text-center text-slate-400 text-xs">Loading...</div>}>
+            <BypassLogDashboard />
+          </React.Suspense>
         )}
       </div>
     </div>
