@@ -228,21 +228,25 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
   const packingBuyback = palletCount * palletRate;
   const labourNetPayable = labourCharges - packingBuyback;
 
-  // Build suggestion catalogue from product master + GRN history
+  // Build suggestion catalogue from product master + store items (fallback)
+  // Products are the primary source; store items fill gaps when products
+  // table is missing entries (e.g., Glassco items added via Material Master
+  // may only exist in store, not products).
   const catalogue: SuggestionItem[] = useMemo(() => {
     const items: SuggestionItem[] = [];
     const seen = new Set<string>();
     const storeItems = InventoryService.getStore().filter((s: StoreItem) => s.company === company);
 
+    // Source 1: Product Master
     SalesService.getProducts()
       .filter((p: any) =>
         (p.company === company || !p.company) &&
-        p.category !== 'Service'  // Include all materials, exclude services
+        p.category !== 'Service'
       )
       .forEach((p: any) => {
         const th = p.thickness || '';
         const sz = p.sheetSize || '';
-        const key = `${p.glassType || p.category}-${th}-${sz}-${p.id}`;
+        const key = p.id;
         if (seen.has(key)) return; seen.add(key);
         const store = storeItems.find((s: StoreItem) => s.id === p.id);
         items.push({
@@ -253,6 +257,26 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
           stockOnHand: store?.unrestrictedQty || 0,
         });
       });
+
+    // Source 2: Store Items not already in products (fallback for Material Master items)
+    storeItems.forEach((s: any) => {
+      if (seen.has(s.id)) return; seen.add(s.id);
+      // Extract thickness and sheet size from name (e.g., "12MM PLAIN GLASS (84"X144")")
+      const nameMatch = (s.name || '').match(/(\d+)MM/i);
+      const sizeMatch = (s.name || '').match(/\((\d+)"?\s*[xX×]\s*(\d+)"?\)/);
+      const th = nameMatch ? `${nameMatch[1]}mm` : '';
+      const sz = sizeMatch ? `${sizeMatch[1]}x${sizeMatch[2]}` : '';
+      items.push({
+        label: s.name || s.id,
+        productId: s.id,
+        category: s.category || 'Raw',
+        thickness: th,
+        sheetSize: sz,
+        lastMAP: s.movingAveragePrice || 0,
+        stockOnHand: s.unrestrictedQty || 0,
+      });
+    });
+
     return items;
   }, [company]);
 
