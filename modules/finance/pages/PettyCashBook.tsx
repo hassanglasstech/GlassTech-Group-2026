@@ -3,7 +3,8 @@ import { useDebounce } from '@/modules/shared/hooks/useDebounce';
 import { Company, PettyCashEntry, CostCenter, Account, LedgerTransaction, Requisition } from '@/modules/shared/types';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
-import { Plus, Search, ArrowUpRight, ArrowDownLeft, X, Save, Wallet, Check, AlertTriangle, Fingerprint, Printer } from 'lucide-react';
+import { Plus, Search, ArrowUpRight, ArrowDownLeft, X, Save, Wallet, Check, AlertTriangle, Fingerprint, Printer, Calendar } from 'lucide-react';
+import { useAuthStore } from '@/modules/auth/authStore';
 import Pagination from '@/components/Pagination';
 import { UnifiedPaymentPrint } from '@/modules/finance/components/prints/UnifiedPaymentPrint';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
@@ -69,11 +70,14 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
     const linkedReqIds = new Set(allEntries.map(e => e.referenceDoc).filter(Boolean));
     
     const relevant = allReqs.filter(r => {
-        if (r.company !== company) return false;
+        if (r.company !== company && (r as any).targetCompany !== company) return false;
         if (r.status !== 'Approved') return false;
         if (linkedReqIds.has(r.id)) return false;
-        // Show all approved reqs — HR loans, expense reqs, empty type reqs all included
-        return true;
+        // Only show reqs that require cash disbursement (PV-eligible)
+        // HR loans, expense reqs with cash/petty cash payment mode
+        const mode = (r as any).paymentMode || '';
+        const isCashOut = r.requiresCashPayment || mode === 'Cash' || mode === 'Petty Cash' || r.category === 'HR';
+        return isCashOut;
     });
     setAuthorizedReqs(relevant);
   };
@@ -284,11 +288,32 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
                 <select className="w-full bg-white border border-emerald-200 p-2 rounded-lg text-xs font-bold outline-none text-emerald-900" onChange={(e) => handleLinkRequisition(e.target.value)} value={linkedReqId}>
                   <option value="">-- Direct Payment (No Link) --</option>
                   {authorizedReqs.map(req => (
-                    <option key={req.id} value={req.id}>{req.id} | {req.reqType?.toUpperCase() || 'N/A'} | PKR {req.totalValue?.toLocaleString() || '0'}</option>
+                    <option key={req.id} value={req.id}>{req.id} | {req.date || ''} | {req.requisitioner || ''} | {req.subCategory || req.reqType || 'N/A'} | PKR {req.totalValue?.toLocaleString() || '0'}</option>
                   ))}
                 </select>
               </div>
             )}
+            {/* ── SAP BUDAT: Posting Date (editable for super_admin) ── */}
+            <div className="flex items-center gap-4 pb-2 border-b border-slate-100 mb-2">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-slate-500 flex items-center gap-1"><Calendar size={10}/>Posting Date (BUDAT)</label>
+                {(['super_admin','owner','hassan'] as string[]).includes(useAuthStore.getState().profile?.role || '') ? (
+                  <input type="date" className="sap-input font-bold w-44" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
+                ) : (
+                  <span className="text-xs font-black text-slate-700">{selectedDate}</span>
+                )}
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-slate-400">Entry Date (CPUDT)</label>
+                <span className="text-xs font-bold text-slate-400">{new Date().toISOString().split('T')[0]}</span>
+              </div>
+              {selectedDate !== new Date().toISOString().split('T')[0] && (
+                <span className="text-[9px] font-black text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded flex items-center gap-1">
+                  <AlertTriangle size={10}/> Backdated Entry
+                </span>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-6">
               <div className="space-y-1">
                 <label className="text-[10px] font-bold uppercase text-slate-500">Business Transaction</label>

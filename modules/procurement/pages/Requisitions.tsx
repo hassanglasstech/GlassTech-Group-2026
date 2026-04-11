@@ -109,7 +109,7 @@ const InlineApprovalPanel: React.FC<{
   const primaryCC = r.items?.[0]?.costCenter;
 
   return (
-    <tr><td colSpan={8} className="px-6 pb-4">
+    <tr><td colSpan={10} className="px-6 pb-4">
       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 animate-in slide-in-from-top-2 duration-200">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-black uppercase text-slate-600 tracking-widest">MD Review — {r.id}</h3>
@@ -858,11 +858,13 @@ const Requisitions: React.FC = () => {
                   <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase text-slate-500 tracking-widest">
                       <tr>
                           <th className="px-6 py-3">PR Number</th>
+                          <th className="px-6 py-3">Date</th>
                           <th className="px-6 py-3">Category</th>
                           <th className="px-6 py-3">Requisitioner</th>
                           <th className="px-6 py-3">Requirement</th>
                           <th className="px-6 py-3">Value (PKR)</th>
                           <th className="px-6 py-3 text-center">Status</th>
+                          <th className="px-6 py-3">Linked Req</th>
                           <th className="px-6 py-3 text-right">Action</th>
                       </tr>
                   </thead>
@@ -879,6 +881,7 @@ const Requisitions: React.FC = () => {
                                   <span className="font-black text-blue-600">{r.id}</span>
                                 </div>
                               </td>
+                              <td className="px-6 py-3 text-xs text-slate-500 font-bold">{r.date || '—'}</td>
                               <td className="px-6 py-3">
                                 <div className="flex flex-col">
                                     <span className="text-[9px] font-black uppercase text-slate-400">{r.category}</span>
@@ -893,6 +896,15 @@ const Requisitions: React.FC = () => {
                               <td className="px-6 py-3 text-center">
                                 <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase border ${r.status === 'Approved' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : r.status === 'Rejected' ? 'bg-rose-100 text-rose-700 border-rose-200' : 'bg-amber-100 text-amber-700 border-amber-200'}`}>{r.status}</span>
                               </td>
+                              <td className="px-6 py-3">
+                                {(r as any).paymentRef ? (
+                                  <span className="text-[9px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">{(r as any).paymentRef}</span>
+                                ) : (r as any).sourceEventId || (r as any).source_event_id ? (
+                                  <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">Event: {((r as any).sourceEventId || (r as any).source_event_id || '').slice(0, 12)}</span>
+                                ) : (
+                                  <span className="text-[9px] text-slate-300">—</span>
+                                )}
+                              </td>
                               <td className="px-6 py-3 text-right" onClick={e => e.stopPropagation()}>
                                   {r.status === 'Pending' && company === 'Factory' && <button onClick={() => handleApprove(r.id)} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase hover:bg-emerald-700">Release</button>}
                                   {r.status === 'Approved' && (r.subCategory === 'Material / Inventory' || r.reqType === 'Material') && <button onClick={() => openConversionModal(r)} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase hover:bg-blue-700">Create PO</button>}
@@ -902,7 +914,7 @@ const Requisitions: React.FC = () => {
                             <InlineApprovalPanel r={r} company={company} onApprove={() => handleApprove(r.id)} onReject={(reason) => handleDisapprove(r.id, reason)} onClose={() => setExpandedId(null)} />
                           )}
                           {expandedId === r.id && r.status !== 'Pending' && (
-                            <tr><td colSpan={8} className="px-6 pb-4">
+                            <tr><td colSpan={10} className="px-6 pb-4">
                               <div className="bg-slate-50 border rounded-2xl p-5 space-y-3 animate-in slide-in-from-top-2 duration-200">
                                 <div className="flex items-center justify-between">
                                   <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Detail — {r.status}</p>
@@ -1719,7 +1731,7 @@ const Requisitions: React.FC = () => {
                 </tbody>
                 <tfoot>
                   <tr style={{borderTop:'2px solid #0f172a',background:'#f8fafc'}}>
-                    <td colSpan={8} style={{padding:'9px 8px',textAlign:'right',fontWeight:900,textTransform:'uppercase',fontSize:11,color:'#475569'}}>Grand Total</td>
+                    <td colSpan={10} style={{padding:'9px 8px',textAlign:'right',fontWeight:900,textTransform:'uppercase',fontSize:11,color:'#475569'}}>Grand Total</td>
                     <td style={{padding:'9px 8px',textAlign:'right',fontWeight:900,fontSize:14,color:'#059669'}}>PKR {Math.round(poPrintData.totalAmount).toLocaleString()}</td>
                   </tr>
                 </tfoot>
