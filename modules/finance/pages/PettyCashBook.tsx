@@ -65,15 +65,20 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
 
     // Fetch Authorized Requisitions for Linking
     const allReqs = InventoryService.getRequisitions().filter(Boolean);
-    const allEntries = FinanceService.getPettyCashEntries();
-    // Already linked req IDs
-    const linkedReqIds = new Set(allEntries.map(e => e.referenceDoc).filter(Boolean));
-    
+    const allPCEntries = FinanceService.getPettyCashEntries();
+    const allLedger = FinanceService.getLedger();
+    // Already consumed req IDs — check BOTH petty cash referenceDoc AND GL reqId
+    const consumedReqIds = new Set([
+      ...allPCEntries.map(e => e.referenceDoc).filter(Boolean),
+      ...allLedger.filter(t => t.reqId).map(t => t.reqId!),
+    ]);
+
     const relevant = allReqs.filter(r => {
         if (r.company !== company && (r as any).targetCompany !== company) return false;
         if (r.status !== 'Approved') return false;
-        if (linkedReqIds.has(r.id)) return false;
-        return true; // Show all approved reqs — user picks the correct one
+        if (consumedReqIds.has(r.id)) return false; // Once consumed, never show again
+        if ((r as any).paymentStatus === 'Paid' || (r as any).paymentStatus === 'Completed') return false;
+        return true;
     });
     setAuthorizedReqs(relevant);
   };
@@ -125,10 +130,15 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
         : { accountId: mainCashAccount.id, debit: 0, credit: entryOrForm.amount!, text: `CJ: ${bizTrans}` };
 
     const txId = `CJ-${Date.now().toString().slice(-6)}`;
+    const payMethod = (entryOrForm as any).paymentMethod || 'Cash';
+    const bankTxnId = (entryOrForm as any).bankTransactionId || '';
+    const bankAcct = (entryOrForm as any).bankAccountName || '';
+    const paymentRef = bankTxnId ? ` [${payMethod}: ${bankTxnId}${bankAcct ? ' @ ' + bankAcct : ''}]` : '';
     const ledgerTx: LedgerTransaction = {
         id: txId, company, docType: 'CJ', docDate: selectedDate, date: selectedDate,
-        description: `FBCJ: ${bizTrans} - ${entryOrForm.description}`,
-        referenceId: entryOrForm.referenceDoc || 'CASH_DESK',
+        description: `FBCJ: ${bizTrans} - ${entryOrForm.description}${paymentRef}`,
+        referenceId: entryOrForm.referenceDoc || bankTxnId || 'CASH_DESK',
+        reqId: linkedReqId || undefined,
         status: 'Posted',
         details: [debitLine, creditLine]
     };
@@ -144,10 +154,17 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
         };
         FinanceService.savePettyCashEntries([...FinanceService.getPettyCashEntries(), newEntry]);
 
-        // Phase 3: Mark Linked Requisition as Completed
+        // Mark Linked Requisition as Completed + record payment ref
         if (linkedReqId) {
             const allReqs = InventoryService.getRequisitions();
-            const updatedReqs = allReqs.map(r => r.id === linkedReqId ? { ...r, status: 'Completed' as const } : r);
+            const updatedReqs = allReqs.map(r => r.id === linkedReqId ? {
+              ...r,
+              status: 'Completed' as const,
+              paymentStatus: 'Paid',
+              paymentRef: txId,
+              paidAmount: entryOrForm.amount,
+              paymentDate: selectedDate,
+            } : r);
             InventoryService.saveRequisitions(updatedReqs);
         }
 
@@ -278,15 +295,45 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
             </div>
           )}
           <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
-            {!formData.id && activeTab === 'Payment' && authorizedReqs.length > 0 && (
-              <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl">
-                <label className="text-[10px] font-black uppercase text-emerald-700 ml-1 mb-1 block flex items-center gap-1"><Fingerprint size={10}/> Pay Against Approved Request (Optional)</label>
-                <select className="w-full bg-white border border-emerald-200 p-2 rounded-lg text-xs font-bold outline-none text-emerald-900" onChange={(e) => handleLinkRequisition(e.target.value)} value={linkedReqId}>
-                  <option value="">-- Direct Payment (No Link) --</option>
-                  {authorizedReqs.map(req => (
-                    <option key={req.id} value={req.id}>{req.id} | {req.date || ''} | {req.requisitioner || ''} | {req.subCategory || req.reqType || 'N/A'} | PKR {req.totalValue?.toLocaleString() || '0'}</option>
-                  ))}
-                </select>
+            {/* ── Requisition Link + Bank Transaction Details ── */}
+            {activeTab === 'Payment' && (
+              <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl space-y-3">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-emerald-700 ml-1 mb-1 block flex items-center gap-1"><Fingerprint size={10}/> Link to Approved Requisition</label>
+                  {authorizedReqs.length > 0 ? (
+                    <select className="w-full bg-white border border-emerald-200 p-2 rounded-lg text-xs font-bold outline-none text-emerald-900" onChange={(e) => handleLinkRequisition(e.target.value)} value={linkedReqId}>
+                      <option value="">-- Direct Payment (No Link) --</option>
+                      {authorizedReqs.map(req => (
+                        <option key={req.id} value={req.id}>{req.id} | {req.date || ''} | {req.requisitioner || ''} | {req.subCategory || req.reqType || 'N/A'} | PKR {req.totalValue?.toLocaleString() || '0'}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-[10px] text-slate-400 italic ml-1">No pending approved requisitions for this company.</p>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-emerald-600">Payment Method</label>
+                    <select className="sap-input w-full text-xs font-bold" value={(formData as any).paymentMethod || 'Cash'} onChange={e => setFormData({...formData, paymentMethod: e.target.value} as any)}>
+                      <option value="Cash">Cash</option>
+                      <option value="Bank Transfer">Bank Transfer</option>
+                      <option value="Cheque">Cheque</option>
+                      <option value="Online">Online Transfer</option>
+                    </select>
+                  </div>
+                  {((formData as any).paymentMethod === 'Bank Transfer' || (formData as any).paymentMethod === 'Cheque' || (formData as any).paymentMethod === 'Online') && (
+                    <>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-emerald-600">Transaction ID / Cheque #</label>
+                        <input type="text" className="sap-input w-full text-xs font-bold" placeholder="e.g. TXN-12345 or CHQ-678" value={(formData as any).bankTransactionId || ''} onChange={e => setFormData({...formData, bankTransactionId: e.target.value} as any)} />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-emerald-600">Bank / Account Name</label>
+                        <input type="text" className="sap-input w-full text-xs font-bold" placeholder="e.g. MCB Main Account" value={(formData as any).bankAccountName || ''} onChange={e => setFormData({...formData, bankAccountName: e.target.value} as any)} />
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             )}
             {/* ── SAP BUDAT: Posting Date (editable for super_admin) ── */}
