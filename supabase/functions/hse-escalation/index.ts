@@ -13,7 +13,60 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { requireAuth, corsHeaders } from '../_shared/auth.ts';
+
+// ── Inlined from _shared/auth.ts (Supabase deploys functions in isolation) ──
+const ALLOWED_ORIGIN = Deno.env.get('SITE_URL') || 'https://glasstech-erp.vercel.app';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin':  ALLOWED_ORIGIN,
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+};
+
+type AuthResult =
+  | { ok: true;  isCron: boolean; userId: string | null }
+  | { ok: false; response: Response };
+
+async function requireAuth(req: Request): Promise<AuthResult> {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return {
+      ok: false,
+      response: new Response(
+        JSON.stringify({ error: 'Missing or invalid Authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      ),
+    };
+  }
+
+  const token      = authHeader.slice(7);
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const cronSecret = Deno.env.get('CRON_SECRET') ?? '';
+
+  if ((serviceKey && token === serviceKey) || (cronSecret && token === cronSecret)) {
+    return { ok: true, isCron: true, userId: null };
+  }
+
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+    { global: { headers: { Authorization: authHeader } } }
+  );
+
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) {
+    return {
+      ok: false,
+      response: new Response(
+        JSON.stringify({ error: 'Invalid or expired token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      ),
+    };
+  }
+
+  return { ok: true, isCron: false, userId: user.id };
+}
+// ── End inlined auth ────────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
