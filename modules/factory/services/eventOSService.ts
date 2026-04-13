@@ -40,6 +40,23 @@ const QUERY_KEYWORDS = [
   'vendor', 'client', 'employee', 'attendance', 'salary',
 ];
 
+// ── Greeting / conversational detection ───────────────────────────────
+const GREETING_PATTERNS = [
+  'hello', 'hi', 'hey', 'salam', 'assalam', 'aoa', 'good morning',
+  'good evening', 'kya hal', 'kaise ho', 'shukriya', 'thank', 'ok',
+  'theek', 'acha', 'bye', 'alvida', 'welcome', 'ji',
+];
+
+export const isConversational = (message: string): boolean => {
+  const lower = message.toLowerCase().trim();
+  const words = lower.split(/\s+/);
+  // Short messages (1-3 words) that match greeting patterns
+  if (words.length <= 4 && GREETING_PATTERNS.some(g => lower.includes(g))) return true;
+  // Very short messages with no action words
+  if (words.length <= 2) return true;
+  return false;
+};
+
 export const isDataQuery = (message: string): boolean => {
   const lower = message.toLowerCase();
   const matchCount = QUERY_KEYWORDS.filter(kw => lower.includes(kw)).length;

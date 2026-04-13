@@ -6,7 +6,7 @@
 
 import React, { useState, useRef } from 'react';
 import { MessageSquare, Send, X, Mic, MicOff, CheckCircle2, XCircle, Edit3, Loader2, AlertTriangle, Zap } from 'lucide-react';
-import { processStaffMessage, executeWorkflow, recordFeedback, isDataQuery, answerDataQuery, EventOSResult, QueryResult } from '../../services/eventOSService';
+import { processStaffMessage, executeWorkflow, recordFeedback, isDataQuery, isConversational, answerDataQuery, EventOSResult, QueryResult } from '../../services/eventOSService';
 import { generateDevPrompt } from '../agent/DevPromptGenerator';
 import { useAuthStore } from '@/modules/auth/authStore';
 
@@ -41,8 +41,8 @@ const EventOSChatWidget: React.FC = () => {
     setState('classifying');
 
     try {
-      // Route: data query → Claude tool_use, action event → EventOS workflow
-      if (isDataQuery(text)) {
+      // Route: greeting/chat → Claude reply, data query → Claude tool_use, action → workflow
+      if (isConversational(text) || isDataQuery(text)) {
         const qr = await answerDataQuery(text);
         setQueryAnswer(qr);
         setState('query_answer');
