@@ -2,6 +2,7 @@ import { supabase } from '@/src/services/supabaseClient';
 import { FinanceAgent } from './FinanceAgent';
 import { ProductionAgent } from './ProductionAgent';
 import { OpsAgent } from './OpsAgent';
+import { logAudit } from '@/modules/factory/services/auditService';
 
 const ls    = (key: string) => { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; } };
 const lsSet = (key: string, val: any) => localStorage.setItem(key, JSON.stringify(val));
@@ -778,11 +779,34 @@ export const executeTool = async (
     }
 
     if (action?.id) { await supabase.from('agent_actions').update({ result, status: 'executed' }).eq('id', action.id); }
+
+    // Silent audit log (never blocks execution)
+    logAudit({
+      action_type: 'tool_execution',
+      module: toolName.startsWith('get_') || toolName.startsWith('search_') ? 'read' : 'write',
+      user_id: approvedBy,
+      agent_id: 'agentTools',
+      tool_name: toolName,
+      data_before: {},
+      data_after: result || {},
+      approval_chain: [{ user: approvedBy, at: new Date().toISOString() }],
+    }, { amount: params.amount || result?.total_amount || result?.amount || 0 });
+
     return { success: true, result };
 
   } catch (err) {
     const error = String(err);
     if (action?.id) { await supabase.from('agent_actions').update({ error, status: 'failed' }).eq('id', action.id); }
+
+    logAudit({
+      action_type: 'tool_failure',
+      module: 'error',
+      user_id: approvedBy,
+      agent_id: 'agentTools',
+      tool_name: toolName,
+      data_after: { error },
+    });
+
     return { success: false, error };
   }
 };
