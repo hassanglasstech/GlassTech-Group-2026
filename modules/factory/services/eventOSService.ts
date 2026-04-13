@@ -40,7 +40,7 @@ export const processStaffMessage = async (
     outcome:          null,
     execution_time_ms: Date.now() - start,
     created_at:       new Date().toISOString(),
-  }).catch(() => {});
+  }).then(() => {}, () => {});
 
   return { classification, workflow };
 };
@@ -84,7 +84,7 @@ export const executeWorkflow = async (
   }).eq('staff_message', workflow.staff_message)
     .order('created_at', { ascending: false })
     .limit(1)
-    .catch(() => {});
+    .then(() => {}, () => {});
 
   // Record pattern usage
   if (workflow.event_id.startsWith('EVT-')) {
@@ -110,7 +110,7 @@ export const recordFeedback = async (
     pattern_update:  patternUpdate || null,
     confidence_delta: feedback === 'correct' ? 0.005 : -0.01,
     created_at:      new Date().toISOString(),
-  }).catch(() => {});
+  }).then(() => {}, () => {});
 
   // Update pattern confidence
   if (eventId.startsWith('EVT-')) {
