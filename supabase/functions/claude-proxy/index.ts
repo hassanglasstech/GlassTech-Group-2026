@@ -1,7 +1,7 @@
 // supabase functions deploy claude-proxy
 // Proxies Claude API calls server-side — avoids CORS + keeps API key secure
 // Supports both standard and streaming responses.
-// Requires JWT auth (user session or service role key).
+// Security: JWT auth, model whitelist, max tokens cap, rate limiting.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -11,7 +11,7 @@ const ALLOWED_ORIGIN = Deno.env.get('SITE_URL') || 'https://glasstech-erp.vercel
 const corsHeaders = {
   'Access-Control-Allow-Origin':  ALLOWED_ORIGIN,
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 type AuthResult =
@@ -58,9 +58,52 @@ async function requireAuth(req: Request): Promise<AuthResult> {
   return { ok: true, isCron: false, userId: user.id };
 }
 
+// ── Security: Model whitelist ────────────────────────────────────────
+const ALLOWED_MODELS = new Set([
+  'claude-haiku-4-5-20251001',
+  'claude-sonnet-4-6',
+]);
+
+// ── Security: Allowed request body keys ──────────────────────────────
+const ALLOWED_BODY_KEYS = new Set([
+  'model', 'max_tokens', 'messages', 'system', 'tools',
+  'stream', '_agent_id', 'tool_choice', 'temperature',
+]);
+
+// ── Security: Rate limiter (inline) ──────────────────────────────────
+async function checkRateLimit(userId: string, supabase: any): Promise<{ allowed: boolean; retryAfter?: number }> {
+  const now      = new Date();
+  const hourAgo  = new Date(now.getTime() - 3600000).toISOString();
+  const minAgo   = new Date(now.getTime() - 60000).toISOString();
+
+  // Count calls in last hour and last minute
+  const [hourRes, minRes] = await Promise.all([
+    supabase.from('agent_rate_limits').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', hourAgo),
+    supabase.from('agent_rate_limits').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', minAgo),
+  ]);
+
+  const hourCount = hourRes.count ?? 0;
+  const minCount  = minRes.count ?? 0;
+
+  if (minCount >= 10) return { allowed: false, retryAfter: 60 };
+  if (hourCount >= 100) return { allowed: false, retryAfter: 3600 };
+
+  // Log this call
+  await supabase.from('agent_rate_limits').insert({ user_id: userId, created_at: now.toISOString() }).catch(() => {});
+
+  return { allowed: true };
+}
+
 // ── Main handler ────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  // Reject non-POST
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
 
   const auth = await requireAuth(req);
   if (!auth.ok) return auth.response;
@@ -72,10 +115,63 @@ Deno.serve(async (req) => {
     }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  );
+
   try {
     const body = await req.json();
-    const isStreaming = body.stream === true;
 
+    // ── Rate limiting (skip for cron/service calls) ─────────────
+    if (!auth.isCron && auth.userId) {
+      const rateCheck = await checkRateLimit(auth.userId, supabase);
+      if (!rateCheck.allowed) {
+        return new Response(JSON.stringify({
+          error: 'Rate limit exceeded. Try again later.',
+          limit: rateCheck.retryAfter === 60 ? '10 calls/minute' : '100 calls/hour',
+        }), {
+          status: 429,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+            'Retry-After': String(rateCheck.retryAfter),
+          },
+        });
+      }
+    }
+
+    // ── Model whitelist ─────────────────────────────────────────
+    if (!body.model || !ALLOWED_MODELS.has(body.model)) {
+      return new Response(JSON.stringify({
+        error: `Model not allowed. Use: ${[...ALLOWED_MODELS].join(', ')}`,
+      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // ── Validate messages array ─────────────────────────────────
+    if (!Array.isArray(body.messages) || body.messages.length === 0) {
+      return new Response(JSON.stringify({ error: 'messages must be a non-empty array' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ── Cap max tokens ──────────────────────────────────────────
+    body.max_tokens = Math.min(body.max_tokens || 1000, 1500);
+
+    // ── Cap system prompt length ────────────────────────────────
+    if (body.system && typeof body.system === 'string' && body.system.length > 5000) {
+      body.system = body.system.slice(0, 5000);
+    }
+
+    // ── Strip unknown keys ──────────────────────────────────────
+    const sanitizedBody: Record<string, any> = {};
+    for (const key of Object.keys(body)) {
+      if (ALLOWED_BODY_KEYS.has(key)) sanitizedBody[key] = body[key];
+    }
+
+    const isStreaming = sanitizedBody.stream === true;
+
+    // ── Forward to Anthropic ────────────────────────────────────
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -83,7 +179,7 @@ Deno.serve(async (req) => {
         'x-api-key':         anthropicKey,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(sanitizedBody),
     });
 
     // Streaming: pipe SSE directly to client
@@ -104,25 +200,22 @@ Deno.serve(async (req) => {
 
     // Fire-and-forget token tracking
     if (data.usage) {
-      try {
-        const supabase = createClient(
-          Deno.env.get('SUPABASE_URL')!,
-          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-        );
-        const inp = data.usage.input_tokens || 0;
-        const out = data.usage.output_tokens || 0;
-        const costUsd = (inp * 0.80 + out * 4.00) / 1_000_000; // Haiku default
-        await supabase.from('agent_api_calls').insert({
-          agent_name:     body._agent_id || 'proxy',
-          model:          body.model || 'unknown',
-          input_tokens:   inp,
-          output_tokens:  out,
-          tokens_used:    inp + out,
-          cost_usd:       costUsd,
-          cost_pkr:       costUsd * 278,
-          created_at:     new Date().toISOString(),
-        }).catch(() => {});
-      } catch {}
+      const inp = data.usage.input_tokens || 0;
+      const out = data.usage.output_tokens || 0;
+      const pricing = sanitizedBody.model === 'claude-sonnet-4-6'
+        ? { i: 3.00, o: 15.00 }
+        : { i: 0.80, o: 4.00 };
+      const costUsd = (inp * pricing.i + out * pricing.o) / 1_000_000;
+      await supabase.from('agent_api_calls').insert({
+        agent_name:     body._agent_id || 'proxy',
+        model:          sanitizedBody.model,
+        input_tokens:   inp,
+        output_tokens:  out,
+        tokens_used:    inp + out,
+        cost_usd:       costUsd,
+        cost_pkr:       costUsd * 278,
+        created_at:     new Date().toISOString(),
+      }).catch(() => {});
     }
 
     return new Response(JSON.stringify(data), {

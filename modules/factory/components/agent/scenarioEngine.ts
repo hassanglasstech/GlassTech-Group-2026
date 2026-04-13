@@ -1,5 +1,6 @@
 import { supabase } from '@/src/services/supabaseClient';
 import { callClaude } from '@/modules/factory/services/claudeAgentService';
+import { sanitizeDBField } from '@/modules/factory/services/promptSanitizer';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
@@ -87,7 +88,7 @@ Open POs: PKR ${snap.openPOValue.toLocaleString()}
 Active production pieces: ${snap.activePieces}
 QC failures: ${snap.qcFailPieces} | Broken: ${snap.brokenPieces}
 Urgent factory events: ${snap.urgentEvents}
-High-risk vendors: ${snap.highRiskVendors.join(', ') || 'none'}
+High-risk vendors: ${snap.highRiskVendors.map(v => sanitizeDBField(v)).join(', ') || 'none'}
 Active loans: ${snap.activeLoanCount} (PKR ${snap.activeLoanValue.toLocaleString()})
 
 Generate 3 scenarios (optimistic, base, pessimistic) for next 90 days:`,

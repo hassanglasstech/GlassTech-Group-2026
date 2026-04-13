@@ -13,12 +13,16 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { corsHeaders } from '../_shared/auth.ts';
+import { requireAuth, corsHeaders } from '../_shared/auth.ts';
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
+
+  // ── Auth gate (was missing — CRITICAL security fix) ────────────────
+  const auth = await requireAuth(req);
+  if (!auth.ok) return auth.response;
 
   try {
     const { incidentId, company, severity, description, location, reportedBy } =

@@ -1,5 +1,6 @@
 import { supabase } from '@/src/services/supabaseClient';
 import { callClaude } from '@/modules/factory/services/claudeAgentService';
+import { sanitizeUserInput, sanitizeDBField } from '@/modules/factory/services/promptSanitizer';
 
 // ── Embedding via Claude API (free with Max plan) ─────────────────────
 // Using Claude's text generation to create semantic summaries,
@@ -159,17 +160,18 @@ export const logMarketIntel = async (
 
 // ── Get narrative for a topic ─────────────────────────────────────────
 export const getNarrativeForTopic = async (topic: string): Promise<string> => {
+  const safeTopic = sanitizeUserInput(topic);
   const { data } = await supabase
     .from('market_intelligence')
     .select('content, created_at, topic')
-    .ilike('content', `%${topic}%`)
+    .ilike('content', `%${safeTopic}%`)
     .order('created_at', { ascending: false })
     .limit(10);
 
   if (!data || data.length === 0) return `No intelligence found for "${topic}".`;
 
   const intel = data.map((d: any) =>
-    `[${new Date(d.created_at).toLocaleDateString('en-PK')}] ${d.content}`
+    `[${new Date(d.created_at).toLocaleDateString('en-PK')}] ${sanitizeDBField(d.content, 300)}`
   ).join('\n');
 
   const d = await callClaude({

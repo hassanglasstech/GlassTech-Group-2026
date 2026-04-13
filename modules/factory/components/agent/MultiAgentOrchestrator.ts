@@ -1,5 +1,6 @@
 import { supabase } from '@/src/services/supabaseClient';
 import { callClaude } from '@/modules/factory/services/claudeAgentService';
+import { sanitizeUserInput } from '@/modules/factory/services/promptSanitizer';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
@@ -131,6 +132,9 @@ export const runMultiAgent = async (
   onAgentComplete?: (agent: AgentResponse) => void
 ): Promise<{ agents: AgentResponse[]; synthesis: string }> => {
 
+  // Sanitize user query before sending to any agent
+  const safeQuery = sanitizeUserInput(query);
+
   // Build all context in parallel
   const [factoryCtx, vendorCtx] = await Promise.all([
     buildFactoryContext(),
@@ -142,11 +146,11 @@ export const runMultiAgent = async (
 
   // Run all 5 agents in parallel
   const agentPromises = [
-    callAgent('Factory', '🏭', 'You are GlassTech Factory Agent. Analyze factory capacity, production status, and operational risks.', factoryCtx, query),
-    callAgent('Finance', '💰', 'You are GlassTech Finance Agent. Analyze cash position, margins, receivables, and financial risks.', financeCtx, query),
-    callAgent('Vendor',  '🤝', 'You are GlassTech Vendor Agent. Analyze vendor reliability, open POs, supply risks, and SLA performance.', vendorCtx, query),
-    callAgent('HR',      '👥', 'You are GlassTech HR Agent. Analyze workforce availability, attendance, and employee issues.', hrCtx, query),
-    callAgent('Sales',   '📈', 'You are GlassTech Sales Agent. Analyze order pipeline, revenue, client relationships, and delivery commitments.', salesCtx, query),
+    callAgent('Factory', '🏭', 'You are GlassTech Factory Agent. Analyze factory capacity, production status, and operational risks.', factoryCtx, safeQuery),
+    callAgent('Finance', '💰', 'You are GlassTech Finance Agent. Analyze cash position, margins, receivables, and financial risks.', financeCtx, safeQuery),
+    callAgent('Vendor',  '🤝', 'You are GlassTech Vendor Agent. Analyze vendor reliability, open POs, supply risks, and SLA performance.', vendorCtx, safeQuery),
+    callAgent('HR',      '👥', 'You are GlassTech HR Agent. Analyze workforce availability, attendance, and employee issues.', hrCtx, safeQuery),
+    callAgent('Sales',   '📈', 'You are GlassTech Sales Agent. Analyze order pipeline, revenue, client relationships, and delivery commitments.', salesCtx, safeQuery),
   ];
 
   // Collect as they complete
@@ -176,7 +180,7 @@ Rules:
 - Max 5 sentences`,
     messages: [{
       role:    'user',
-      content: `Query: "${query}"\n\nAgent findings:\n${allFindings}\n\nProvide master synthesis:`,
+      content: `Query: "${safeQuery}"\n\nAgent findings:\n${allFindings}\n\nProvide master synthesis:`,
     }],
     agentId: 'multi-master',
   });

@@ -15,6 +15,7 @@ import { runAdversarial, needsAdversarial, generateUncomfortableTruths } from '.
 import { logDecision } from '../agent/decisionLearning';
 import { supabase } from '@/src/services/supabaseClient';
 import { chatWithTools, getSessionUsage } from '@/modules/factory/services/claudeAgentService';
+import { sanitizeUserInput } from '@/modules/factory/services/promptSanitizer';
 import { GlassCoQuotationPrint } from '@/modules/glassco/core/prints/GlassCoQuotationPrint';
 import { createRoot } from 'react-dom/client';
 
@@ -178,6 +179,7 @@ const AIChatInterface: React.FC = () => {
   const send = async (userInput?: string) => {
     const text = (userInput ?? input).trim();
     if (!text || loading) return;
+    const safeText = sanitizeUserInput(text);
 
     setInput('');
     const userMsg: Message = { role: 'user', content: text, ts: Date.now() };
@@ -250,7 +252,7 @@ ${erpCtx}`;
       }));
 
     // ── Multi-agent mode ───────────────────────────────────────────
-    if (shouldUseMultiAgent(text)) {
+    if (shouldUseMultiAgent(safeText)) {
       const placeholderIdx = messages.length + 1;
       setMessages(prev => [...prev, {
         role:            'assistant',
@@ -260,7 +262,7 @@ ${erpCtx}`;
       }]);
       setLoading(false);
 
-      const { agents, synthesis } = await runMultiAgent(text);
+      const { agents, synthesis } = await runMultiAgent(safeText);
       setMessages(prev => prev.map((m, i) =>
         m.agents_loading ? { ...m, content: synthesis, agents_loading: false, multi_agent: { agents, synthesis } } : m
       ));
@@ -274,7 +276,7 @@ ${erpCtx}`;
         maxTokens: 1000,
         system:    systemPrompt,
         tools:     TOOL_DEFINITIONS,
-        messages:  [...history, { role: 'user', content: text }],
+        messages:  [...history, { role: 'user', content: safeText }],
         agentId:   'erp-chat',
       });
 
@@ -285,7 +287,7 @@ ${erpCtx}`;
           role: 'assistant', content: reply || `${toolBlocks.length} action${toolBlocks.length > 1 ? 's' : ''} propose kar raha hun:`,
           ts: Date.now(), tool_calls: toolBlocks, tool_done: false,
         }]);
-      } else if (needsAdversarial(text) && reply.length > 50) {
+      } else if (needsAdversarial(safeText) && reply.length > 50) {
         // Run adversarial check on decision queries
         const adv = await runAdversarial(text, reply, erpCtx);
         setMessages(prev => [...prev, {

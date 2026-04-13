@@ -1,4 +1,5 @@
 import { supabase } from '@/src/services/supabaseClient';
+import { sanitizeUserInput } from '@/modules/factory/services/promptSanitizer';
 
 interface AdversarialResult {
   initialAnswer:  string;
@@ -14,6 +15,9 @@ export const runAdversarial = async (
   initialAnswer: string,
   erpContext:    string
 ): Promise<AdversarialResult> => {
+
+  // Sanitize inputs before sending to Claude
+  query = sanitizeUserInput(query);
 
   // Step 1: Generate challenges against the initial answer
   const { data: { session: _s1 } } = await supabase.auth.getSession();
