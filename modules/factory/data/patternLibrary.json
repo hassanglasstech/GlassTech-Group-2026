@@ -1,0 +1,254 @@
+{
+  "version": "1.0.0",
+  "patterns": [
+    {
+      "event_id": "EVT-001",
+      "trigger_keywords": ["tanker", "pani", "water", "water delivery", "paani"],
+      "category": "local_purchase",
+      "label": "Water Tanker Purchase",
+      "color": "#3B82F6",
+      "modules_involved": ["Purchase", "Finance"],
+      "workflow_steps": [
+        {
+          "step": 1,
+          "module": "Purchase",
+          "action": "Create local purchase requisition",
+          "tool": "create_requisition",
+          "fields": { "category": "Logistics", "priority": "Normal", "description": "Water tanker delivery" },
+          "gl_flag": false,
+          "requires_approval": false
+        },
+        {
+          "step": 2,
+          "module": "Finance",
+          "action": "Record petty cash payment",
+          "tool": "log_factory_event",
+          "fields": { "sector": "Logistics", "event_type": "Petty Cash", "priority": "Low" },
+          "gl_flag": true,
+          "requires_approval": true
+        }
+      ],
+      "confidence": 0.95,
+      "defined_by": "system"
+    },
+    {
+      "event_id": "EVT-002",
+      "trigger_keywords": ["late", "absent", "chutti", "leave", "hajri", "attendance", "nahi aaya", "half day", "sick"],
+      "category": "attendance",
+      "label": "Staff Attendance Update",
+      "color": "#EAB308",
+      "modules_involved": ["HR"],
+      "workflow_steps": [
+        {
+          "step": 1,
+          "module": "HR",
+          "action": "Log attendance status for employee",
+          "tool": "log_factory_event",
+          "fields": { "sector": "HR", "event_type": "Attendance", "priority": "Low" },
+          "gl_flag": false,
+          "requires_approval": false
+        }
+      ],
+      "confidence": 0.92,
+      "defined_by": "system"
+    },
+    {
+      "event_id": "EVT-003",
+      "trigger_keywords": ["maal aaya", "shipment", "delivery aai", "truck aaya", "GRN", "goods received", "vendor ne bheja", "glass aaya"],
+      "category": "grn",
+      "label": "GRN Material Receipt",
+      "color": "#22C55E",
+      "modules_involved": ["Purchase", "Store", "QC"],
+      "workflow_steps": [
+        {
+          "step": 1,
+          "module": "Purchase",
+          "action": "Verify against purchase order",
+          "tool": "purchase_order_status",
+          "fields": {},
+          "gl_flag": false,
+          "requires_approval": false
+        },
+        {
+          "step": 2,
+          "module": "Store",
+          "action": "Update stock quantity",
+          "tool": "stock_status",
+          "fields": {},
+          "gl_flag": false,
+          "requires_approval": false
+        },
+        {
+          "step": 3,
+          "module": "QC",
+          "action": "Create inspection lot for quality check",
+          "tool": "log_factory_event",
+          "fields": { "sector": "Store", "event_type": "GRN Received", "priority": "Medium" },
+          "gl_flag": true,
+          "requires_approval": true
+        }
+      ],
+      "confidence": 0.93,
+      "defined_by": "system"
+    },
+    {
+      "event_id": "EVT-004",
+      "trigger_keywords": ["khareed", "purchase", "buy", "lelo", "mangao", "vendor se", "local purchase", "bazaar se"],
+      "category": "local_purchase",
+      "label": "Local Vendor Purchase",
+      "color": "#8B5CF6",
+      "modules_involved": ["Purchase", "Finance"],
+      "workflow_steps": [
+        {
+          "step": 1,
+          "module": "Purchase",
+          "action": "Create purchase requisition with vendor details",
+          "tool": "create_requisition",
+          "fields": { "category": "Store", "priority": "Normal" },
+          "gl_flag": false,
+          "requires_approval": true
+        },
+        {
+          "step": 2,
+          "module": "Finance",
+          "action": "Process payment (petty cash or bank transfer)",
+          "tool": "draft_payment_voucher",
+          "fields": {},
+          "gl_flag": true,
+          "requires_approval": true
+        }
+      ],
+      "confidence": 0.88,
+      "defined_by": "system"
+    },
+    {
+      "event_id": "EVT-005",
+      "trigger_keywords": ["machine kharab", "breakdown", "band ho gayi", "repair", "maintenance", "generator", "compressor", "table kharab"],
+      "category": "production_issue",
+      "label": "Production Issue / Machine Breakdown",
+      "color": "#EF4444",
+      "modules_involved": ["Production", "Maintenance", "Ops"],
+      "workflow_steps": [
+        {
+          "step": 1,
+          "module": "Production",
+          "action": "Log factory event with sector and priority",
+          "tool": "log_factory_event",
+          "fields": { "sector": "Maintenance", "event_type": "Machine Breakdown", "priority": "Urgent" },
+          "gl_flag": false,
+          "requires_approval": false
+        },
+        {
+          "step": 2,
+          "module": "Ops",
+          "action": "Create maintenance task and assign technician",
+          "tool": "create_task",
+          "fields": { "priority": "Urgent" },
+          "gl_flag": false,
+          "requires_approval": false
+        }
+      ],
+      "confidence": 0.91,
+      "defined_by": "system"
+    },
+    {
+      "event_id": "EVT-006",
+      "trigger_keywords": ["toot gaya", "broken", "defect", "crack", "NCR", "quality issue", "tuta hua", "kharab piece", "chip", "scratch"],
+      "category": "quality_issue",
+      "label": "Quality Issue / NCR",
+      "color": "#F97316",
+      "modules_involved": ["QC", "Production", "Finance"],
+      "workflow_steps": [
+        {
+          "step": 1,
+          "module": "QC",
+          "action": "Log NCR event with defect details",
+          "tool": "log_factory_event",
+          "fields": { "sector": "Production", "event_type": "NCR - Glass Breakage", "priority": "Medium" },
+          "gl_flag": false,
+          "requires_approval": false
+        },
+        {
+          "step": 2,
+          "module": "Production",
+          "action": "Identify responsible cutter and piece details",
+          "tool": "ncr_report",
+          "fields": { "query": "aaj" },
+          "gl_flag": false,
+          "requires_approval": false
+        },
+        {
+          "step": 3,
+          "module": "Finance",
+          "action": "Post breakage GL entry if disposed",
+          "tool": "log_factory_event",
+          "fields": { "sector": "Production", "event_type": "Breakage Write-off", "priority": "Medium" },
+          "gl_flag": true,
+          "requires_approval": true
+        }
+      ],
+      "confidence": 0.90,
+      "defined_by": "system"
+    },
+    {
+      "event_id": "EVT-007",
+      "trigger_keywords": ["kharcha", "expense", "petty cash", "paisa diya", "bill", "receipt", "chai pani", "riksha", "fuel", "diesel"],
+      "category": "petty_cash",
+      "label": "Petty Cash Expense",
+      "color": "#06B6D4",
+      "modules_involved": ["Finance"],
+      "workflow_steps": [
+        {
+          "step": 1,
+          "module": "Finance",
+          "action": "Record petty cash entry with amount and description",
+          "tool": "log_factory_event",
+          "fields": { "sector": "Office", "event_type": "Petty Cash", "priority": "Low" },
+          "gl_flag": true,
+          "requires_approval": false
+        }
+      ],
+      "confidence": 0.94,
+      "defined_by": "system"
+    },
+    {
+      "event_id": "EVT-008",
+      "trigger_keywords": ["dispatch", "bhejo", "delivery", "gate pass", "truck load", "nikal do", "client ko", "ready hai"],
+      "category": "dispatch",
+      "label": "Delivery Dispatch",
+      "color": "#10B981",
+      "modules_involved": ["Production", "Logistics", "Sales"],
+      "workflow_steps": [
+        {
+          "step": 1,
+          "module": "Production",
+          "action": "Verify pieces ready for dispatch",
+          "tool": "delivery_status",
+          "fields": {},
+          "gl_flag": false,
+          "requires_approval": false
+        },
+        {
+          "step": 2,
+          "module": "Logistics",
+          "action": "Create gate pass and assign vehicle",
+          "tool": "log_factory_event",
+          "fields": { "sector": "Logistics", "event_type": "Dispatch", "priority": "Medium" },
+          "gl_flag": false,
+          "requires_approval": true
+        },
+        {
+          "step": 3,
+          "module": "Sales",
+          "action": "Update order status to Dispatched",
+          "tool": "update_order_status",
+          "fields": { "doc_type": "job_order", "status": "Dispatched" },
+          "gl_flag": false,
+          "requires_approval": true
+        }
+      ],
+      "confidence": 0.89,
+      "defined_by": "system"
+    }
+  ]
+}

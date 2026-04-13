@@ -1,0 +1,174 @@
+{
+  "version": "1.0.0",
+  "manual": [
+    {
+      "event_type": "water_tanker_purchase",
+      "pattern_id": "EVT-001",
+      "description": "Pani ka tanker office/factory ke liye",
+      "trigger_examples": [
+        "tanker aaya hai 2000 ka",
+        "pani ki zaroorat hai factory mein",
+        "water delivery karo urgent"
+      ],
+      "forms_required": ["Local Purchase Requisition", "Petty Cash Voucher"],
+      "modules_involved": ["Purchase", "Finance"],
+      "disposal_steps": [
+        { "step": 1, "responsible": "Purchase Clerk / Incharge", "action": "Create requisition with vendor name and amount", "status_update": "Pending" },
+        { "step": 2, "responsible": "Finance Staff", "action": "Issue cash from petty cash box", "status_update": "Paid" },
+        { "step": 3, "responsible": "Finance Agent", "action": "Post GL entry: Dr Utilities / Cr Petty Cash", "status_update": "Posted" }
+      ],
+      "gl_entries": [
+        { "debit": "5310 - Utilities Expense", "credit": "1050 - Petty Cash", "amount_source": "requisition.amount", "ias_reference": "IAS 1 - Expense recognition" }
+      ],
+      "approvals_required": ["Purchase Manager (if > PKR 5000)"],
+      "exceptions": ["Urgent delivery: skip approval, owner confirms later via WhatsApp"]
+    },
+    {
+      "event_type": "staff_attendance",
+      "pattern_id": "EVT-002",
+      "description": "Staff ki attendance update — late, absent, leave",
+      "trigger_examples": [
+        "Ahmad aaj nahi aaya",
+        "Bilal late hai 30 min",
+        "Saleem ki chutti hai aaj"
+      ],
+      "forms_required": ["Attendance Register"],
+      "modules_involved": ["HR"],
+      "disposal_steps": [
+        { "step": 1, "responsible": "Incharge / Gate Guard", "action": "Report attendance status with employee name", "status_update": "Logged" },
+        { "step": 2, "responsible": "HR System", "action": "Update attendance record: Present/Absent/Late/Leave", "status_update": "Updated" }
+      ],
+      "gl_entries": [],
+      "approvals_required": ["Incharge confirms if disputed"],
+      "exceptions": ["Medical emergency: mark leave, notify HR separately"]
+    },
+    {
+      "event_type": "grn_material_receipt",
+      "pattern_id": "EVT-003",
+      "description": "Vendor se maal aaya — glass, store items, raw material",
+      "trigger_examples": [
+        "Ali Glass ka truck aaya hai",
+        "8mm plain glass ki delivery",
+        "vendor ne 50 sheets bheja"
+      ],
+      "forms_required": ["GRN Sheet", "Inspection Lot", "Stock Update"],
+      "modules_involved": ["Purchase", "Store", "QC"],
+      "disposal_steps": [
+        { "step": 1, "responsible": "Store Keeper", "action": "Unload and count against PO", "status_update": "Received" },
+        { "step": 2, "responsible": "QC Inspector", "action": "Inspect quality, record defects", "status_update": "Inspected" },
+        { "step": 3, "responsible": "Store Keeper", "action": "Post GRN, update stock", "status_update": "Posted" },
+        { "step": 4, "responsible": "Finance", "action": "Post GL: Dr Inventory / Cr GR/IR", "status_update": "GL Posted" }
+      ],
+      "gl_entries": [
+        { "debit": "1410 - Inventory", "credit": "2120 - GR/IR Clearing", "amount_source": "grn.total_value", "ias_reference": "IAS 2 - Inventory at landed cost" }
+      ],
+      "approvals_required": ["Store Manager verifies count", "QC passes inspection (SCM-1)"],
+      "exceptions": ["Short delivery: accept partial, note shortage on GRN"]
+    },
+    {
+      "event_type": "local_vendor_purchase",
+      "pattern_id": "EVT-004",
+      "description": "Local bazaar se koi cheez khareedni hai",
+      "trigger_examples": [
+        "cutter ke blade chahiye bazaar se",
+        "office supplies mangao",
+        "vendor se welding rod lelo"
+      ],
+      "forms_required": ["Purchase Requisition", "Payment Voucher"],
+      "modules_involved": ["Purchase", "Finance"],
+      "disposal_steps": [
+        { "step": 1, "responsible": "Requestor", "action": "Submit requisition with item details and vendor", "status_update": "Pending" },
+        { "step": 2, "responsible": "Purchase Manager", "action": "Approve requisition", "status_update": "Approved" },
+        { "step": 3, "responsible": "Finance", "action": "Process payment (cash/bank)", "status_update": "Paid" }
+      ],
+      "gl_entries": [
+        { "debit": "5XXX - Expense (by category)", "credit": "1050 - Petty Cash / 1111 - Bank", "amount_source": "requisition.amount", "ias_reference": "IAS 1" }
+      ],
+      "approvals_required": ["Purchase Manager"],
+      "exceptions": ["Emergency: Incharge can approve up to PKR 2000"]
+    },
+    {
+      "event_type": "machine_breakdown",
+      "pattern_id": "EVT-005",
+      "description": "Machine kharab ho gayi — production ruk gayi",
+      "trigger_examples": [
+        "cutting table band ho gayi",
+        "compressor kharab hai",
+        "generator start nahi ho raha"
+      ],
+      "forms_required": ["Factory Event Log", "Maintenance Task"],
+      "modules_involved": ["Production", "Maintenance"],
+      "disposal_steps": [
+        { "step": 1, "responsible": "Floor Supervisor", "action": "Report breakdown with machine ID and description", "status_update": "Open" },
+        { "step": 2, "responsible": "Maintenance Team", "action": "Diagnose and repair or call external vendor", "status_update": "In Progress" },
+        { "step": 3, "responsible": "Floor Supervisor", "action": "Confirm machine operational, close event", "status_update": "Resolved" }
+      ],
+      "gl_entries": [],
+      "approvals_required": ["Maintenance Head (if external vendor needed)"],
+      "exceptions": ["Critical machine: escalate to Owner immediately via WhatsApp"]
+    },
+    {
+      "event_type": "quality_issue_ncr",
+      "pattern_id": "EVT-006",
+      "description": "Glass toot gaya ya defective hai — NCR create karo",
+      "trigger_examples": [
+        "8mm ka piece toot gaya cutting pe",
+        "client ne quality reject kiya",
+        "scratch hai glass pe"
+      ],
+      "forms_required": ["NCR Event Form"],
+      "modules_involved": ["QC", "Production", "Finance"],
+      "disposal_steps": [
+        { "step": 1, "responsible": "QC / Supervisor", "action": "Log NCR with defect type, piece ID, cutter name", "status_update": "Open" },
+        { "step": 2, "responsible": "Production Manager", "action": "Decide: Dispose / Reproduce / Vendor Claim", "status_update": "Action Assigned" },
+        { "step": 3, "responsible": "Finance (if Dispose)", "action": "Post GL: Dr Breakage Loss / Cr WIP", "status_update": "GL Posted" }
+      ],
+      "gl_entries": [
+        { "debit": "5210 - Glass Breakage Loss", "credit": "1420 - WIP Glass", "amount_source": "piece.absorbed_cost", "ias_reference": "IAS 2 - Abnormal waste" }
+      ],
+      "approvals_required": ["Production Manager decides action"],
+      "exceptions": ["Vendor defect: auto-create vendor claim, skip disposal GL"]
+    },
+    {
+      "event_type": "petty_cash_expense",
+      "pattern_id": "EVT-007",
+      "description": "Chhota kharcha — chai, riksha, fuel, misc",
+      "trigger_examples": [
+        "chai pani ka bill 500",
+        "riksha ka kharcha 200",
+        "diesel dala 5000 ka"
+      ],
+      "forms_required": ["Petty Cash Voucher"],
+      "modules_involved": ["Finance"],
+      "disposal_steps": [
+        { "step": 1, "responsible": "Requestor", "action": "Submit expense with receipt/description", "status_update": "Submitted" },
+        { "step": 2, "responsible": "Finance", "action": "Record in petty cash register, post GL", "status_update": "Posted" }
+      ],
+      "gl_entries": [
+        { "debit": "5XXX - Expense (by type)", "credit": "1050 - Petty Cash", "amount_source": "expense.amount", "ias_reference": "IAS 1" }
+      ],
+      "approvals_required": ["Finance Head (if > PKR 5000)"],
+      "exceptions": ["Fuel: auto-categorize as Logistics expense"]
+    },
+    {
+      "event_type": "delivery_dispatch",
+      "pattern_id": "EVT-008",
+      "description": "Client ko maal bhejo — dispatch aur gate pass",
+      "trigger_examples": [
+        "order 2367 dispatch karo",
+        "client ko glass ready hai bhej do",
+        "gate pass banao truck ke liye"
+      ],
+      "forms_required": ["Gate Pass", "Dispatch Note"],
+      "modules_involved": ["Production", "Logistics", "Sales"],
+      "disposal_steps": [
+        { "step": 1, "responsible": "Dispatch Supervisor", "action": "Verify pieces ready, load on vehicle", "status_update": "Loading" },
+        { "step": 2, "responsible": "Gate Guard", "action": "Issue gate pass with vehicle and driver details", "status_update": "Gate Pass Issued" },
+        { "step": 3, "responsible": "Sales", "action": "Update order status to Dispatched", "status_update": "Dispatched" }
+      ],
+      "gl_entries": [],
+      "approvals_required": ["Dispatch Supervisor (loading verification)", "Owner (if high-value order > PKR 100,000)"],
+      "exceptions": ["Urgent client: skip loading verification, direct dispatch"]
+    }
+  ]
+}
