@@ -116,7 +116,7 @@ async function checkRateLimit(userId: string, supabase: any): Promise<{ allowed:
   if (minCount >= config.max_per_minute) return { allowed: false, retryAfter: 60, reason: `${config.max_per_minute} calls/minute limit` };
   if (hourCount >= config.max_per_hour)  return { allowed: false, retryAfter: 3600, reason: `${config.max_per_hour} calls/hour limit` };
 
-  await supabase.from('agent_rate_limits').insert({ user_id: userId, created_at: now.toISOString() }).catch(() => {});
+  await supabase.from('agent_rate_limits').insert({ user_id: userId, created_at: now.toISOString() }).then(() => {}, () => {});
   return { allowed: true };
 }
 
@@ -279,7 +279,7 @@ Deno.serve(async (req) => {
         cost_usd:       costUsd,
         cost_pkr:       costUsd * 278,
         created_at:     new Date().toISOString(),
-      }).catch(() => {});
+      }).then(() => {}, () => {});
     }
 
     return new Response(JSON.stringify(data), {
