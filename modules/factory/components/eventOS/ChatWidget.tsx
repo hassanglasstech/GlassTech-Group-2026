@@ -2,9 +2,10 @@
 // EventOS Chat Widget — Staff message → Classify → Workflow/Query/Teach
 // ═══════════════════════════════════════════════════════════════════
 
-import React, { useState, useRef } from 'react';
-import { Send, X, CheckCircle2, XCircle, Edit3, Loader2, AlertTriangle, Zap, Plus, Trash2, BookOpen, Undo2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Send, X, CheckCircle2, XCircle, Edit3, Loader2, AlertTriangle, Zap, Plus, Trash2, BookOpen, Undo2, Bell } from 'lucide-react';
 import { processStaffMessage, executeWorkflow, recordFeedback, reverseExecution, getPreExecutionDecision, recordDecisionFeedback, recordDecisionOutcome, isDataQuery, isConversational, answerDataQuery, EventOSResult, QueryResult, DecisionRecommendation } from '../../services/eventOSService';
+import { runAnomalyScan, acknowledgeAnomaly, Anomaly } from '../../services/anomalyDetectionService';
 import { saveNewPattern } from '../agent/EventClassifier';
 import { supabase } from '@/src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
@@ -41,8 +42,17 @@ const EventOSChatWidget: React.FC = () => {
   const [executionLogId, setExecutionLogId] = useState<string | null>(null);
   const [reversing, setReversing] = useState(false);
   const [decision, setDecision] = useState<DecisionRecommendation | null>(null);
+  const [alerts, setAlerts] = useState<Anomaly[]>([]);
+  const [alertsDismissed, setAlertsDismissed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const user = useAuthStore?.getState?.()?.user;
+
+  // Scan for anomalies when chat opens
+  useEffect(() => {
+    if (open && alerts.length === 0 && !alertsDismissed) {
+      runAnomalyScan().then(setAlerts).catch(() => {});
+    }
+  }, [open]);
 
   const handleSend = async () => {
     const text = input.trim();
@@ -180,6 +190,9 @@ const EventOSChatWidget: React.FC = () => {
       <button onClick={() => setOpen(true)}
         className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg hover:scale-105 transition-transform z-50">
         <Zap size={24} className="text-white" />
+        {alerts.length > 0 && !alertsDismissed && (
+          <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{alerts.length}</span>
+        )}
       </button>
     );
   }
@@ -199,10 +212,43 @@ const EventOSChatWidget: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
 
         {state === 'idle' && (
-          <div className="text-center py-6">
-            <Zap size={32} className="text-cyan-400 mx-auto mb-2" />
-            <p className="text-sm text-slate-400">Staff ka message likho</p>
-            <p className="text-[10px] text-slate-600 mt-1">Query, action, ya naya event — sab handle hoga</p>
+          <div className="space-y-3">
+            <div className="text-center py-4">
+              <Zap size={32} className="text-cyan-400 mx-auto mb-2" />
+              <p className="text-sm text-slate-400">Staff ka message likho</p>
+              <p className="text-[10px] text-slate-600 mt-1">Query, action, ya naya event — sab handle hoga</p>
+            </div>
+
+            {/* Anomaly alerts */}
+            {alerts.length > 0 && !alertsDismissed && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1 text-[10px] text-orange-400 uppercase tracking-widest">
+                    <Bell size={10} /> {alerts.length} Alert{alerts.length > 1 ? 's' : ''}
+                  </div>
+                  <button onClick={() => setAlertsDismissed(true)} className="text-[9px] text-slate-600 hover:text-slate-400">Dismiss all</button>
+                </div>
+                {alerts.slice(0, 4).map((a, i) => (
+                  <div key={i} className={`rounded-lg border px-3 py-2 ${
+                    a.severity === 'critical' ? 'bg-red-500/10 border-red-500/30' :
+                    a.severity === 'high'     ? 'bg-orange-500/10 border-orange-500/30' :
+                    a.severity === 'medium'   ? 'bg-yellow-500/10 border-yellow-500/30' :
+                    'bg-slate-500/10 border-slate-500/30'
+                  }`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className={`text-[9px] font-bold uppercase ${
+                          a.severity === 'critical' ? 'text-red-400' :
+                          a.severity === 'high'     ? 'text-orange-400' :
+                          a.severity === 'medium'   ? 'text-yellow-400' : 'text-slate-400'
+                        }`}>{a.severity} — {a.department}</span>
+                        <p className="text-[10px] text-slate-300 mt-0.5">{a.description}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
