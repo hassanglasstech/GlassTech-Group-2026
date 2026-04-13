@@ -14,6 +14,7 @@ import { runMultiAgent, shouldUseMultiAgent, AgentResponse } from '../agent/Mult
 import { runAdversarial, needsAdversarial, generateUncomfortableTruths } from '../agent/adversarialIntelligence';
 import { logDecision } from '../agent/decisionLearning';
 import { supabase } from '@/src/services/supabaseClient';
+import { chatWithTools, getSessionUsage } from '@/src/services/claudeAgentService';
 import { GlassCoQuotationPrint } from '@/modules/glassco/core/prints/GlassCoQuotationPrint';
 import { createRoot } from 'react-dom/client';
 
@@ -268,54 +269,21 @@ ${erpCtx}`;
     }
 
     // ── Single agent mode (default) ───────────────────────────────
-      const PROXY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/claude-proxy`;
-      const ANON_KEY  = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-      // ── Retry with exponential backoff (3 attempts) ──────────────
-      const fetchWithRetry = async (url: string, opts: RequestInit, maxRetries = 3): Promise<Response> => {
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          try {
-            const response = await fetch(url, opts);
-            if ((response.status === 429 || response.status === 529) && attempt < maxRetries) {
-              await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 1000));
-              continue;
-            }
-            return response;
-          } catch (netErr) {
-            if (attempt === maxRetries) throw netErr;
-            await new Promise(r => setTimeout(r, attempt * 1500));
-          }
-        }
-        throw new Error('Max retries reached');
-      };
-
-      const res = await fetchWithRetry(PROXY_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Bearer ${ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          model:      'claude-haiku-4-5-20251001',
-          max_tokens: 1000,
-          system:     systemPrompt,
-          tools:      TOOL_DEFINITIONS.map(t => ({ type: 'custom' as const, ...t })),
-          messages:   [...history, { role: 'user', content: text }],
-        }),
+      const { text: reply, toolCalls, response: data } = await chatWithTools({
+        model:     'claude-haiku-4-5-20251001',
+        maxTokens: 1000,
+        system:    systemPrompt,
+        tools:     TOOL_DEFINITIONS,
+        messages:  [...history, { role: 'user', content: text }],
+        agentId:   'erp-chat',
       });
 
-      const data = await res.json();
-
-      // Check for tool_use blocks
-      const toolBlocks = data.content?.filter((b: any) => b.type === 'tool_use') ?? [];
-      const textBlock  = data.content?.find((b: any) => b.type === 'text');
-      const reply      = textBlock?.text || '';
+      const toolBlocks = toolCalls;
 
       if (toolBlocks.length > 0) {
-        const toolCalls = toolBlocks.map((b: any) => ({ id: b.id, name: b.name, params: b.input }));
         setMessages(prev => [...prev, {
-          role: 'assistant', content: reply || `${toolCalls.length} action${toolCalls.length > 1 ? 's' : ''} propose kar raha hun:`,
-          ts: Date.now(), tool_calls: toolCalls, tool_done: false,
+          role: 'assistant', content: reply || `${toolBlocks.length} action${toolBlocks.length > 1 ? 's' : ''} propose kar raha hun:`,
+          ts: Date.now(), tool_calls: toolBlocks, tool_done: false,
         }]);
       } else if (needsAdversarial(text) && reply.length > 50) {
         // Run adversarial check on decision queries
@@ -406,6 +374,11 @@ ${erpCtx}`;
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {messages.length > 0 && (
+            <span className="text-[9px] text-slate-600 font-mono">
+              {getSessionUsage().calls}calls {getSessionUsage().input + getSessionUsage().output}tok ~${getSessionUsage().cost.toFixed(4)}
+            </span>
+          )}
           <button onClick={loadCtx} disabled={ctxLoading}
             className="text-slate-400 hover:text-white transition-colors disabled:opacity-50">
             <RefreshCw size={14} className={ctxLoading ? 'animate-spin' : ''} />

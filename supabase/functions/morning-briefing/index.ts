@@ -23,6 +23,26 @@ import { requireAuth, corsHeaders } from '../_shared/auth.ts';
 
 const PKR = (n: number) => `PKR ${Math.round(n).toLocaleString('en-PK')}`;
 
+// ── Retry with exponential backoff ──────────────────────────────────────
+const fetchWithRetry = async (url: string, opts: RequestInit, maxRetries = 3): Promise<Response> => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, opts);
+      if ((response.status === 429 || response.status === 529) && attempt < maxRetries) {
+        const retryAfter = response.headers.get('retry-after');
+        const delay = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 1000;
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      return response;
+    } catch (netErr) {
+      if (attempt === maxRetries) throw netErr;
+      await new Promise(r => setTimeout(r, attempt * 1500));
+    }
+  }
+  throw new Error('Max retries reached');
+};
+
 // ── M-2: Prompt injection sanitizer ──────────────────────────────────────────
 // Strips characters that could be used to inject instructions into LLM prompts:
 // angle brackets, braces, backticks, control characters, and markdown emphasis.
@@ -116,8 +136,8 @@ Deno.serve(async (req) => {
       },
     };
 
-    // ── 4. Generate smart summary via Claude ─────────────────────
-    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+    // ── 4. Generate smart summary via Claude (with retry) ─────────
+    const claudeRes = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -148,6 +168,19 @@ Rules:
 
     const claudeData = await claudeRes.json();
     const briefingText = claudeData.content?.[0]?.text || 'Morning briefing generate nahi ho saka.';
+
+    // Track token usage
+    if (claudeData.usage) {
+      await supabase.from('agent_token_usage').insert({
+        agent_id:       'morning-briefing',
+        model:          'claude-haiku-4-5-20251001',
+        input_tokens:   claudeData.usage.input_tokens || 0,
+        output_tokens:  claudeData.usage.output_tokens || 0,
+        total_tokens:   (claudeData.usage.input_tokens || 0) + (claudeData.usage.output_tokens || 0),
+        estimated_cost: 0,
+        created_at:     new Date().toISOString(),
+      }).catch(() => {});
+    }
 
     // ── 5. Store briefing in Supabase ─────────────────────────────
     await supabase.from('morning_briefings').upsert({

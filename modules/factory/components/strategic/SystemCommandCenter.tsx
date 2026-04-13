@@ -6,6 +6,7 @@ import {
   Plus, X, ChevronRight
 } from 'lucide-react';
 import { supabase } from '@/src/services/supabaseClient';
+import { callClaude } from '@/src/services/claudeAgentService';
 import { logMarketIntel } from '../agent/semanticService';
 
 const STATUS_CONFIG = {
@@ -98,16 +99,13 @@ const SystemCommandCenter: React.FC = () => {
     setProcessing(true);
 
     // Classify with Claude
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001', max_tokens: 200,
-        system: 'Classify this voice note from a Pakistani business owner. Return JSON only: { "intent": string, "market_intel": string or null, "erp_actions": array, "confidence": 0-100 }',
-        messages: [{ role: 'user', content: transcript }],
-      }),
+    const d = await callClaude({
+      model:     'claude-haiku-4-5-20251001',
+      maxTokens: 200,
+      system:    'Classify this voice note from a Pakistani business owner. Return JSON only: { "intent": string, "market_intel": string or null, "erp_actions": array, "confidence": 0-100 }',
+      messages:  [{ role: 'user', content: transcript }],
+      agentId:   'voice-classifier',
     });
-    const d    = await res.json();
     const text = d.content?.[0]?.text || '{}';
     let classified: any = {};
     try { classified = JSON.parse(text.replace(/```json|```/g, '').trim()); } catch {}

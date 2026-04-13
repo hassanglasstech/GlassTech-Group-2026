@@ -1,4 +1,5 @@
 import { supabase } from '@/src/services/supabaseClient';
+import { callClaude } from '@/src/services/claudeAgentService';
 
 // ── Embedding via Claude API (free with Max plan) ─────────────────────
 // Using Claude's text generation to create semantic summaries,
@@ -171,16 +172,12 @@ export const getNarrativeForTopic = async (topic: string): Promise<string> => {
     `[${new Date(d.created_at).toLocaleDateString('en-PK')}] ${d.content}`
   ).join('\n');
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 200,
-      system:     'Summarize market intelligence for a Pakistani glass/aluminium business owner. Be concise and actionable. Urdu/English mix ok.',
-      messages:   [{ role: 'user', content: `Summarize this intelligence:\n${intel}` }],
-    }),
+  const d = await callClaude({
+    model:     'claude-haiku-4-5-20251001',
+    maxTokens: 200,
+    system:    'Summarize market intelligence for a Pakistani glass/aluminium business owner. Be concise and actionable. Urdu/English mix ok.',
+    messages:  [{ role: 'user', content: `Summarize this intelligence:\n${intel}` }],
+    agentId:   'semantic-narrative',
   });
-  const d = await res.json();
   return d.content?.[0]?.text || intel;
 };

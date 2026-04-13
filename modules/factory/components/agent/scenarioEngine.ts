@@ -1,4 +1,5 @@
 import { supabase } from '@/src/services/supabaseClient';
+import { callClaude } from '@/src/services/claudeAgentService';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
@@ -69,19 +70,16 @@ const buildSnapshot = async () => {
 export const generateScenarios = async (): Promise<void> => {
   const snap = await buildSnapshot();
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model:      'claude-sonnet-4-6',
-      max_tokens: 1200,
-      system:     `You are a strategic business analyst for a Pakistani glass manufacturing company (GlassCo, Karachi).
+  const data = await callClaude({
+    model:     'claude-sonnet-4-6',
+    maxTokens: 1200,
+    system:    `You are a strategic business analyst for a Pakistani glass manufacturing company (GlassCo, Karachi).
 Generate 3 business scenarios for the next 90 days based on ERP data.
 Respond ONLY with a JSON array — no markdown, no preamble.
 Each scenario: { title, scenario_type (optimistic|base|pessimistic), probability (0-100), time_horizon ("90d"), description (2-3 sentences), key_assumptions (array of strings), actions (array of actionable strings), financial_impact (PKR number, positive=gain negative=loss), triggers (array of strings) }`,
-      messages: [{
-        role:    'user',
-        content: `Current ERP State:
+    messages: [{
+      role:    'user',
+      content: `Current ERP State:
 Revenue this month: PKR ${snap.revenue.toLocaleString()}
 Cash balance: PKR ${snap.cashBalance.toLocaleString()}
 Overdue receivables: PKR ${snap.overdueAmount.toLocaleString()} (${snap.overdueCount} invoices)
@@ -93,11 +91,10 @@ High-risk vendors: ${snap.highRiskVendors.join(', ') || 'none'}
 Active loans: ${snap.activeLoanCount} (PKR ${snap.activeLoanValue.toLocaleString()})
 
 Generate 3 scenarios (optimistic, base, pessimistic) for next 90 days:`,
-      }],
-    }),
+    }],
+    agentId: 'scenario-engine',
   });
 
-  const data = await res.json();
   const text = data.content?.[0]?.text || '[]';
 
   try {

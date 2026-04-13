@@ -1,4 +1,5 @@
 import { supabase } from '@/src/services/supabaseClient';
+import { callClaude } from '@/src/services/claudeAgentService';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
@@ -108,18 +109,13 @@ const callAgent = async (
 ): Promise<AgentResponse> => {
   const start = Date.now();
   try {
-    const _proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/claude-proxy`;
-    const res = await fetch(_proxyUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-      body: JSON.stringify({
-        model:      'claude-haiku-4-5-20251001',
-        max_tokens: 200,
-        system:     `${systemPrompt}\n\n${context}\n\nRespond in 2-3 bullet points max. Be specific with numbers. Flag risks with ⚠️. Language: mix English/Urdu ok.`,
-        messages:   [{ role: 'user', content: query }],
-      }),
+    const data = await callClaude({
+      model:     'claude-haiku-4-5-20251001',
+      maxTokens: 200,
+      system:    `${systemPrompt}\n\n${context}\n\nRespond in 2-3 bullet points max. Be specific with numbers. Flag risks with ⚠️. Language: mix English/Urdu ok.`,
+      messages:  [{ role: 'user', content: query }],
+      agentId:   `multi-${agentName.toLowerCase()}`,
     });
-    const data     = await res.json();
     const text     = data.content?.[0]?.text || 'Data unavailable.';
     const alerts   = text.match(/⚠️[^\n]*/g) || [];
     const findings = text.replace(/⚠️[^\n]*/g, '').trim();
@@ -166,13 +162,10 @@ export const runMultiAgent = async (
   // Master synthesis
   const allFindings = agents.map(a => `${a.emoji} ${a.agent}:\n${a.findings}\n${a.alerts.join('\n')}`).join('\n\n');
 
-  const masterRes = await fetch('PROXY_PLACEHOLDER', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model:      'claude-sonnet-4-6',
-      max_tokens: 400,
-      system:     `You are GlassTech Master Agent. You receive analysis from 5 specialized agents and synthesize into ONE clear recommendation for the business owner Hassan.
+  const masterData = await callClaude({
+    model:     'claude-sonnet-4-6',
+    maxTokens: 400,
+    system:    `You are GlassTech Master Agent. You receive analysis from 5 specialized agents and synthesize into ONE clear recommendation for the business owner Hassan.
 
 Rules:
 - Start with bottom-line recommendation (yes/no/what to do)
@@ -181,15 +174,14 @@ Rules:
 - Be direct and actionable
 - Mix English/Urdu is fine
 - Max 5 sentences`,
-      messages: [{
-        role:    'user',
-        content: `Query: "${query}"\n\nAgent findings:\n${allFindings}\n\nProvide master synthesis:`,
-      }],
-    }),
+    messages: [{
+      role:    'user',
+      content: `Query: "${query}"\n\nAgent findings:\n${allFindings}\n\nProvide master synthesis:`,
+    }],
+    agentId: 'multi-master',
   });
 
-  const masterData  = await masterRes.json();
-  const synthesis   = masterData.content?.[0]?.text || 'Synthesis unavailable.';
+  const synthesis = masterData.content?.[0]?.text || 'Synthesis unavailable.';
 
   return { agents, synthesis };
 };
