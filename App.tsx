@@ -48,7 +48,7 @@ const VendorHub        = React.lazy(() => import('./modules/procurement/pages/Ve
 const MDDashboard       = React.lazy(() => import('./modules/md-dashboard/MDDashboard'));
 const FactoryInchargeModule = React.lazy(() => import('./modules/factory/pages/FactoryInchargeModule'));
 const ProcurementHub   = React.lazy(() => import('./modules/procurement/pages/ProcurementHub'));
-const EventOSChatWidget = React.lazy(() => import('./modules/factory/components/eventOS/ChatWidget'));
+const EventOSChatWidget = React.lazy(() => import('./modules/factory/components/eventOS/ChatWidget').catch(() => ({ default: () => null })));
 
 // ── All nav items definition ─────────────────────────────────────────
 // ── Core nav — always visible (role-filtered) ───────────────────────

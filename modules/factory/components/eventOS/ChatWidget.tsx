@@ -8,7 +8,7 @@ import React, { useState, useRef } from 'react';
 import { MessageSquare, Send, X, Mic, MicOff, CheckCircle2, XCircle, Edit3, Loader2, AlertTriangle, Zap } from 'lucide-react';
 import { processStaffMessage, executeWorkflow, recordFeedback, EventOSResult } from '../../services/eventOSService';
 import { generateDevPrompt } from '../agent/DevPromptGenerator';
-import { useAuthStore } from '@/modules/auth/stores/authStore';
+import { useAuthStore } from '@/modules/auth/authStore';
 
 // ── Types ────────────────────────────────────────────────────────────
 type WidgetState = 'idle' | 'classifying' | 'review' | 'executing' | 'done' | 'error';
