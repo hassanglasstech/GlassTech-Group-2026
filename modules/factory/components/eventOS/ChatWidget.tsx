@@ -4,7 +4,7 @@
 
 import React, { useState, useRef } from 'react';
 import { Send, X, CheckCircle2, XCircle, Edit3, Loader2, AlertTriangle, Zap, Plus, Trash2, BookOpen, Undo2 } from 'lucide-react';
-import { processStaffMessage, executeWorkflow, recordFeedback, reverseExecution, isDataQuery, isConversational, answerDataQuery, EventOSResult, QueryResult } from '../../services/eventOSService';
+import { processStaffMessage, executeWorkflow, recordFeedback, reverseExecution, getPreExecutionDecision, recordDecisionFeedback, recordDecisionOutcome, isDataQuery, isConversational, answerDataQuery, EventOSResult, QueryResult, DecisionRecommendation } from '../../services/eventOSService';
 import { saveNewPattern } from '../agent/EventClassifier';
 import { supabase } from '@/src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
@@ -40,6 +40,7 @@ const EventOSChatWidget: React.FC = () => {
   const [teachSaving, setTeachSaving] = useState(false);
   const [executionLogId, setExecutionLogId] = useState<string | null>(null);
   const [reversing, setReversing] = useState(false);
+  const [decision, setDecision] = useState<DecisionRecommendation | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const user = useAuthStore?.getState?.()?.user;
 
@@ -58,6 +59,11 @@ const EventOSChatWidget: React.FC = () => {
       } else {
         const res = await processStaffMessage(text, 'text');
         setResult(res);
+        // Fetch decision recommendation for action workflows
+        if (res.classification.matched && res.workflow.steps.length > 0) {
+          const dec = await getPreExecutionDecision(res.workflow);
+          setDecision(dec);
+        }
         // If unmatched → go to teach flow
         if (!res.classification.matched && res.workflow.steps.length === 0) {
           setTeachLabel(res.classification.label !== 'Unknown Event' ? res.classification.label : '');
@@ -79,6 +85,7 @@ const EventOSChatWidget: React.FC = () => {
 
   const handleApprove = async () => {
     if (!result?.workflow) return;
+    if (decision?.id) await recordDecisionFeedback(decision.id, 'followed');
     setState('executing');
     try {
       const exec = await executeWorkflow(result.workflow, user?.name || 'Owner');
@@ -102,6 +109,7 @@ const EventOSChatWidget: React.FC = () => {
   };
 
   const handleReject = async () => {
+    if (decision?.id) await recordDecisionFeedback(decision.id, 'overridden');
     if (result?.classification) {
       await recordFeedback(result.classification.pattern_id || '', result.workflow?.staff_message || '', result.classification.category, 'rejected');
     }
@@ -164,6 +172,7 @@ const EventOSChatWidget: React.FC = () => {
     setTeachSteps([{ module: 'Purchase', action: '' }]);
     setExecutionLogId(null);
     setReversing(false);
+    setDecision(null);
   };
 
   if (!open) {
@@ -216,6 +225,35 @@ const EventOSChatWidget: React.FC = () => {
               </div>
               <p className="text-[10px] text-slate-500">{result.classification.reasoning}</p>
             </div>
+
+            {/* Decision recommendation card */}
+            {decision && (
+              <div className={`rounded-xl border p-3 space-y-1.5 ${
+                decision.decision === 'APPROVE' ? 'bg-green-500/5 border-green-500/20' :
+                decision.decision === 'ESCALATE' ? 'bg-red-500/5 border-red-500/20' :
+                'bg-yellow-500/5 border-yellow-500/20'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Agent Recommendation</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    decision.confidence >= 0.8 ? 'bg-green-500/20 text-green-400' :
+                    decision.confidence >= 0.6 ? 'bg-yellow-500/20 text-yellow-400' :
+                    'bg-red-500/20 text-red-400'
+                  }`}>{Math.round(decision.confidence * 100)}%</span>
+                </div>
+                <p className={`text-xs font-bold ${
+                  decision.decision.includes('APPROVE') ? 'text-green-400' :
+                  decision.decision === 'ESCALATE' ? 'text-red-400' : 'text-yellow-400'
+                }`}>{decision.decision.replace(/_/g, ' ')}</p>
+                <p className="text-[10px] text-slate-400">{decision.reasoning}</p>
+                {decision.conditions.length > 0 && decision.conditions.map((c, i) => (
+                  <p key={i} className="text-[10px] text-orange-300 pl-2 border-l border-orange-500/30">{c}</p>
+                ))}
+                {decision.similar_past.length > 0 && (
+                  <p className="text-[9px] text-slate-600">{decision.similar_past.length} similar past decisions referenced</p>
+                )}
+              </div>
+            )}
 
             {result.workflow.steps.length > 0 && (
               <div className="space-y-1.5">

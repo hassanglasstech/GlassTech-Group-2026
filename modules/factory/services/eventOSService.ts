@@ -149,6 +149,151 @@ export const processStaffMessage = async (
   return { classification, workflow };
 };
 
+// ═══════════════════════════════════════════════════════════════════════
+// DECISION INTELLIGENCE — pre-execution recommendation
+// Checks history, builds context, generates recommendation with confidence
+// ═══════════════════════════════════════════════════════════════════════
+
+export interface DecisionRecommendation {
+  id:          string;
+  decision:    string;   // APPROVE, APPROVE_WITH_CONDITIONS, REJECT, ESCALATE
+  reasoning:   string;
+  conditions:  string[];
+  confidence:  number;
+  department:  string;
+  similar_past: { decision: string; outcome: string; confidence: number }[];
+}
+
+export const getPreExecutionDecision = async (
+  workflow: AssembledWorkflow
+): Promise<DecisionRecommendation | null> => {
+  // Only generate decision for workflows with write steps or GL impact
+  const hasWrites = workflow.steps.some(s =>
+    s.tool?.startsWith('create_') || s.tool?.startsWith('update_') ||
+    s.tool?.startsWith('draft_') || s.gl_flag
+  );
+  if (!hasWrites) return null;
+
+  // Determine department from modules
+  const modules = workflow.steps.map(s => s.module);
+  const department = modules.includes('Finance') ? 'finance'
+    : modules.includes('Production') ? 'production'
+    : modules.includes('Purchase') || modules.includes('Store') ? 'ops'
+    : 'general';
+
+  // Fetch similar past decisions
+  const { data: pastDecisions } = await supabase
+    .from('agent_decisions')
+    .select('decision, outcome, confidence')
+    .eq('department', department)
+    .eq('decision_type', workflow.category)
+    .not('outcome', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  const similar = (pastDecisions || []).map((d: any) => ({
+    decision: d.decision, outcome: d.outcome, confidence: d.confidence,
+  }));
+
+  // Calculate confidence from history
+  const withOutcome = similar.filter(d => d.outcome);
+  const correctCount = withOutcome.filter(d => d.outcome === 'correct').length;
+  const baseConf = withOutcome.length >= 3
+    ? 0.5 + (correctCount / withOutcome.length) * 0.4
+    : 0.55; // Low confidence without history
+
+  // Build recommendation
+  const hasGLStep = workflow.steps.some(s => s.gl_flag);
+  const conditions: string[] = [];
+  let decision = 'APPROVE';
+  let reasoning = `${workflow.steps.length} steps, ${workflow.category} category.`;
+
+  if (hasGLStep) {
+    conditions.push('GL entry involved — verify period is open');
+    reasoning += ' GL posting required.';
+  }
+
+  if (workflow.steps.some(s => s.requires_approval)) {
+    decision = 'APPROVE_WITH_CONDITIONS';
+    conditions.push('Steps marked for approval — review before proceeding');
+  }
+
+  // Check amounts
+  const amounts = workflow.steps.flatMap(s => {
+    const a = s.params?.amount;
+    return a && typeof a === 'number' ? [a] : [];
+  });
+  const totalAmount = amounts.reduce((s, a) => s + a, 0);
+  if (totalAmount > 50000) {
+    decision = 'APPROVE_WITH_CONDITIONS';
+    conditions.push(`High value: PKR ${totalAmount.toLocaleString()} — owner confirmation required`);
+  }
+
+  // Enrich with past outcome patterns
+  if (similar.length > 0) {
+    const wrongCount = similar.filter(d => d.outcome === 'wrong').length;
+    if (wrongCount >= 2) {
+      reasoning += ` Warning: ${wrongCount}/${similar.length} similar past decisions had bad outcomes.`;
+      decision = 'ESCALATE';
+    }
+  }
+
+  const confidence = Math.round(Math.min(0.95, baseConf) * 1000) / 1000;
+  const id = crypto.randomUUID?.() || `DEC-${Date.now()}`;
+
+  // Save to agent_decisions
+  await supabase.from('agent_decisions').insert({
+    id, department, decision_type: workflow.category,
+    context: { event_id: workflow.event_id, label: workflow.label, steps: workflow.steps.length, amount: totalAmount },
+    decision, reasoning, conditions, confidence,
+    feedback: null, outcome: null,
+  }).then(() => {}, () => {});
+
+  return { id, decision, reasoning, conditions, confidence, department, similar_past: similar };
+};
+
+// ── Record decision outcome (owner marks later) ──────────────────────
+export const recordDecisionOutcome = async (
+  decisionId: string,
+  outcome: 'correct' | 'wrong' | 'partial',
+  notes?: string
+): Promise<void> => {
+  // Update outcome
+  await supabase.from('agent_decisions').update({
+    outcome, outcome_date: new Date().toISOString(), outcome_notes: notes || null,
+  }).eq('id', decisionId).then(() => {}, () => {});
+
+  // Update confidence for this decision type
+  const { data } = await supabase.from('agent_decisions').select('department, decision_type').eq('id', decisionId).single();
+  if (!data) return;
+
+  const { data: history } = await supabase.from('agent_decisions')
+    .select('confidence, outcome')
+    .eq('department', data.department)
+    .eq('decision_type', data.decision_type)
+    .not('outcome', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (!history || history.length < 3) return;
+
+  const correctRate = history.filter((h: any) => h.outcome === 'correct').length / history.length;
+  const delta = outcome === 'correct' ? 0.05 : -0.10;
+
+  // Update the decision's confidence retroactively
+  await supabase.from('agent_decisions').update({
+    confidence: Math.max(0.30, Math.min(0.95, (history[0]?.confidence || 0.5) + delta)),
+  }).eq('id', decisionId).then(() => {}, () => {});
+};
+
+// ── Record decision feedback (followed/overridden/dismissed) ─────────
+export const recordDecisionFeedback = async (
+  decisionId: string,
+  feedback: 'followed' | 'overridden' | 'dismissed'
+): Promise<void> => {
+  await supabase.from('agent_decisions').update({ feedback }).eq('id', decisionId).then(() => {}, () => {});
+};
+
 // ── Write tables that agent tools INSERT into ────────────────────────
 const WRITE_TABLE_MAP: Record<string, string> = {
   create_quotation:      'quotations',
