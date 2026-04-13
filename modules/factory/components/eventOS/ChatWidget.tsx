@@ -6,6 +6,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, X, CheckCircle2, XCircle, Edit3, Loader2, AlertTriangle, Zap, Plus, Trash2, BookOpen, Undo2, Bell } from 'lucide-react';
 import { processStaffMessage, executeWorkflow, recordFeedback, reverseExecution, getPreExecutionDecision, recordDecisionFeedback, recordDecisionOutcome, getPendingOutcomes, getAgentAccuracyTrend, isDataQuery, isConversational, answerDataQuery, EventOSResult, QueryResult, DecisionRecommendation } from '../../services/eventOSService';
 import { runAnomalyScan, acknowledgeAnomaly, Anomaly } from '../../services/anomalyDetectionService';
+import { runPredictions, PredictiveAlert } from '../../services/predictiveAlertService';
 import { saveNewPattern } from '../agent/EventClassifier';
 import { supabase } from '@/src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
@@ -47,6 +48,7 @@ const EventOSChatWidget: React.FC = () => {
   const [pendingOutcomes, setPendingOutcomes] = useState<any[]>([]);
   const [accuracyTrend, setAccuracyTrend] = useState<{ accuracy: number; trend: string } | null>(null);
   const [briefing, setBriefing] = useState<string | null>(null);
+  const [predictions, setPredictions] = useState<PredictiveAlert[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const user = useAuthStore?.getState?.()?.user;
 
@@ -54,6 +56,7 @@ const EventOSChatWidget: React.FC = () => {
   useEffect(() => {
     if (open) {
       if (alerts.length === 0 && !alertsDismissed) runAnomalyScan().then(setAlerts).catch(() => {});
+      if (predictions.length === 0) runPredictions().then(setPredictions).catch(() => {});
       getPendingOutcomes().then(setPendingOutcomes).catch(() => {});
       getAgentAccuracyTrend('finance').then(setAccuracyTrend).catch(() => {});
       // Load today's morning briefing
@@ -265,6 +268,29 @@ const EventOSChatWidget: React.FC = () => {
                         <p className="text-[10px] text-slate-300 mt-0.5">{a.description}</p>
                       </div>
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Predictive alerts */}
+            {predictions.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-[10px] text-blue-400 uppercase tracking-widest flex items-center gap-1">
+                  Predictions ({predictions.length})
+                </div>
+                {predictions.slice(0, 3).map((p, i) => (
+                  <div key={i} className={`rounded-lg border px-3 py-2 ${
+                    p.severity === 'High' ? 'bg-red-500/5 border-red-500/20' : 'bg-blue-500/5 border-blue-500/20'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-300">{p.title}</span>
+                      <span className="text-[9px] text-slate-500">{p.horizon_days}d horizon</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-0.5">{p.message}</p>
+                    {p.impact_pkr > 0 && <p className="text-[9px] text-orange-400 mt-0.5">Impact: PKR {p.impact_pkr.toLocaleString()}</p>}
+                    <button onClick={() => { setInput(p.action_hint); setState('idle'); }}
+                      className="text-[9px] text-cyan-400 mt-1 hover:underline">Take Action →</button>
                   </div>
                 ))}
               </div>
