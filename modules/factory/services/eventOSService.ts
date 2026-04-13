@@ -140,7 +140,13 @@ RULES:
       }
     }
 
-    // Send tool results back to Claude for natural response
+    // Send tool results back to Claude as proper tool_result blocks
+    const toolResultBlocks = toolCalls.map((tc, i) => ({
+      type: 'tool_result' as const,
+      tool_use_id: tc.id,
+      content: toolResults[i] || 'No result',
+    }));
+
     const { text: finalAnswer } = await chatWithTools({
       model:     'claude-haiku-4-5-20251001',
       maxTokens: 600,
@@ -148,9 +154,7 @@ RULES:
       messages:  [
         { role: 'user', content: safeMessage },
         { role: 'assistant', content: response.content as any },
-        { role: 'user', content: toolResults.map((r, i) =>
-          `Tool ${toolCalls[i].name} result:\n${r}`
-        ).join('\n\n') },
+        { role: 'user', content: toolResultBlocks as any },
       ],
       agentId: 'eventos-query',
     });
