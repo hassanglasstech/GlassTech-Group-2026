@@ -4,7 +4,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, X, CheckCircle2, XCircle, Edit3, Loader2, AlertTriangle, Zap, Plus, Trash2, BookOpen, Undo2, Bell } from 'lucide-react';
-import { processStaffMessage, executeWorkflow, recordFeedback, reverseExecution, getPreExecutionDecision, recordDecisionFeedback, recordDecisionOutcome, isDataQuery, isConversational, answerDataQuery, EventOSResult, QueryResult, DecisionRecommendation } from '../../services/eventOSService';
+import { processStaffMessage, executeWorkflow, recordFeedback, reverseExecution, getPreExecutionDecision, recordDecisionFeedback, recordDecisionOutcome, getPendingOutcomes, getAgentAccuracyTrend, isDataQuery, isConversational, answerDataQuery, EventOSResult, QueryResult, DecisionRecommendation } from '../../services/eventOSService';
 import { runAnomalyScan, acknowledgeAnomaly, Anomaly } from '../../services/anomalyDetectionService';
 import { saveNewPattern } from '../agent/EventClassifier';
 import { supabase } from '@/src/services/supabaseClient';
@@ -44,13 +44,17 @@ const EventOSChatWidget: React.FC = () => {
   const [decision, setDecision] = useState<DecisionRecommendation | null>(null);
   const [alerts, setAlerts] = useState<Anomaly[]>([]);
   const [alertsDismissed, setAlertsDismissed] = useState(false);
+  const [pendingOutcomes, setPendingOutcomes] = useState<any[]>([]);
+  const [accuracyTrend, setAccuracyTrend] = useState<{ accuracy: number; trend: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const user = useAuthStore?.getState?.()?.user;
 
-  // Scan for anomalies when chat opens
+  // Scan for anomalies + pending outcomes when chat opens
   useEffect(() => {
-    if (open && alerts.length === 0 && !alertsDismissed) {
-      runAnomalyScan().then(setAlerts).catch(() => {});
+    if (open) {
+      if (alerts.length === 0 && !alertsDismissed) runAnomalyScan().then(setAlerts).catch(() => {});
+      getPendingOutcomes().then(setPendingOutcomes).catch(() => {});
+      getAgentAccuracyTrend('finance').then(setAccuracyTrend).catch(() => {});
     }
   }, [open]);
 
@@ -247,6 +251,41 @@ const EventOSChatWidget: React.FC = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Pending outcome follow-ups */}
+            {pendingOutcomes.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-[10px] text-purple-400 uppercase tracking-widest">Outcome Follow-up</div>
+                {pendingOutcomes.slice(0, 2).map((d: any) => (
+                  <div key={d.id} className="bg-purple-500/5 border border-purple-500/20 rounded-lg px-3 py-2">
+                    <p className="text-[10px] text-slate-300">{d.reasoning?.slice(0, 80)}...</p>
+                    <p className="text-[9px] text-slate-500 mt-1">Kya hua? ({new Date(d.created_at).toLocaleDateString('en-PK')})</p>
+                    <div className="flex gap-1 mt-1.5">
+                      {['correct', 'wrong', 'partial'].map(o => (
+                        <button key={o} onClick={async () => {
+                          await recordDecisionOutcome(d.id, o as any);
+                          setPendingOutcomes(prev => prev.filter(p => p.id !== d.id));
+                        }} className={`text-[9px] px-2 py-1 rounded-lg border ${
+                          o === 'correct' ? 'border-green-500/30 text-green-400 hover:bg-green-500/10' :
+                          o === 'wrong' ? 'border-red-500/30 text-red-400 hover:bg-red-500/10' :
+                          'border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10'
+                        }`}>{o === 'correct' ? 'Sahi tha' : o === 'wrong' ? 'Galat tha' : 'Partial'}</button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Accuracy trend */}
+            {accuracyTrend && accuracyTrend.total > 0 && (
+              <div className="bg-slate-800 rounded-lg px-3 py-2 flex items-center justify-between">
+                <span className="text-[10px] text-slate-500">Agent accuracy (30d)</span>
+                <span className={`text-xs font-bold ${accuracyTrend.accuracy >= 70 ? 'text-green-400' : accuracyTrend.accuracy >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {accuracyTrend.accuracy}% <span className="text-[9px] font-normal">{accuracyTrend.trend.startsWith('+') ? `(${accuracyTrend.trend})` : accuracyTrend.trend !== '0%' ? `(${accuracyTrend.trend})` : ''}</span>
+                </span>
               </div>
             )}
           </div>

@@ -241,11 +241,19 @@ export const getPreExecutionDecision = async (
   const confidence = Math.round(Math.min(0.95, baseConf) * 1000) / 1000;
   const id = crypto.randomUUID?.() || `DEC-${Date.now()}`;
 
-  // Save to agent_decisions
+  // Calculate historical accuracy for this decision type
+  const totalWithOutcome = (pastDecisions || []).filter((d: any) => d.outcome).length;
+  const histCorrect = (pastDecisions || []).filter((d: any) => d.outcome === 'correct').length;
+  const historicalAccuracy = totalWithOutcome >= 3 ? histCorrect / totalWithOutcome : 0.5;
+
+  // Save to agent_decisions with accuracy metadata
   await supabase.from('agent_decisions').insert({
     id, department, decision_type: workflow.category,
     context: { event_id: workflow.event_id, label: workflow.label, steps: workflow.steps.length, amount: totalAmount },
     decision, reasoning, conditions, confidence,
+    similar_cases_count: similar.length,
+    historical_accuracy: Math.round(historicalAccuracy * 1000) / 1000,
+    outcome_due_date: new Date(Date.now() + 7 * 86400000).toISOString(),
     feedback: null, outcome: null,
   }).then(() => {}, () => {});
 
@@ -258,32 +266,76 @@ export const recordDecisionOutcome = async (
   outcome: 'correct' | 'wrong' | 'partial',
   notes?: string
 ): Promise<void> => {
-  // Update outcome
+  // Get current decision
+  const { data: dec } = await supabase.from('agent_decisions')
+    .select('confidence, department, decision_type')
+    .eq('id', decisionId).single();
+  if (!dec) return;
+
+  // Apply confidence update: correct = +0.05, wrong = -0.10, partial = -0.03
+  const delta = outcome === 'correct' ? 0.05 : outcome === 'wrong' ? -0.10 : -0.03;
+  const newConf = Math.max(0.10, Math.min(0.95, (dec.confidence || 0.5) + delta));
+
+  // Update outcome + confidence
   await supabase.from('agent_decisions').update({
-    outcome, outcome_date: new Date().toISOString(), outcome_notes: notes || null,
+    outcome,
+    outcome_date:  new Date().toISOString(),
+    outcome_notes: notes || null,
+    confidence:    newConf,
   }).eq('id', decisionId).then(() => {}, () => {});
+};
 
-  // Update confidence for this decision type
-  const { data } = await supabase.from('agent_decisions').select('department, decision_type').eq('id', decisionId).single();
-  if (!data) return;
+// ── Get pending outcome follow-ups (7+ days old) ─────────────────────
+export const getPendingOutcomes = async (): Promise<any[]> => {
+  const { data } = await supabase
+    .from('agent_decisions')
+    .select('id, department, decision_type, decision, reasoning, context, confidence, created_at')
+    .is('outcome', null)
+    .eq('feedback', 'followed')
+    .lt('created_at', new Date(Date.now() - 7 * 86400000).toISOString())
+    .order('created_at', { ascending: true })
+    .limit(5);
+  return data || [];
+};
 
-  const { data: history } = await supabase.from('agent_decisions')
-    .select('confidence, outcome')
-    .eq('department', data.department)
-    .eq('decision_type', data.decision_type)
+// ── Get agent accuracy trend for display ─────────────────────────────
+export const getAgentAccuracyTrend = async (department: string): Promise<{
+  accuracy: number;
+  total: number;
+  correct: number;
+  trend: string;
+}> => {
+  const now = new Date();
+  const monthAgo = new Date(now.getTime() - 30 * 86400000).toISOString();
+  const prevMonthStart = new Date(now.getTime() - 60 * 86400000).toISOString();
+
+  // This month
+  const { data: current } = await supabase.from('agent_decisions')
+    .select('outcome')
+    .eq('department', department)
     .not('outcome', 'is', null)
-    .order('created_at', { ascending: false })
-    .limit(20);
+    .gte('created_at', monthAgo);
 
-  if (!history || history.length < 3) return;
+  const total = (current || []).length;
+  const correct = (current || []).filter((d: any) => d.outcome === 'correct').length;
+  const accuracy = total > 0 ? Math.round((correct / total) * 100) : 0;
 
-  const correctRate = history.filter((h: any) => h.outcome === 'correct').length / history.length;
-  const delta = outcome === 'correct' ? 0.05 : -0.10;
+  // Previous month for trend
+  const { data: prev } = await supabase.from('agent_decisions')
+    .select('outcome')
+    .eq('department', department)
+    .not('outcome', 'is', null)
+    .gte('created_at', prevMonthStart)
+    .lt('created_at', monthAgo);
 
-  // Update the decision's confidence retroactively
-  await supabase.from('agent_decisions').update({
-    confidence: Math.max(0.30, Math.min(0.95, (history[0]?.confidence || 0.5) + delta)),
-  }).eq('id', decisionId).then(() => {}, () => {});
+  const prevTotal = (prev || []).length;
+  const prevCorrect = (prev || []).filter((d: any) => d.outcome === 'correct').length;
+  const prevAccuracy = prevTotal > 0 ? Math.round((prevCorrect / prevTotal) * 100) : 0;
+
+  const diff = accuracy - prevAccuracy;
+  const trend = diff > 0 ? `+${diff}%` : diff < 0 ? `${diff}%` : '0%';
+
+  return { accuracy, total, correct, trend };
 };
 
 // ── Record decision feedback (followed/overridden/dismissed) ─────────
