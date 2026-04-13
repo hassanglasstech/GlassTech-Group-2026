@@ -126,65 +126,82 @@ Deno.serve(async (req) => {
     const weekAgo  = new Date(now); weekAgo.setDate(now.getDate() - 7);
     const monthAgo = new Date(now); monthAgo.setDate(now.getDate() - 30);
 
-    // ── 1. Fetch all data in parallel ────────────────────────────
+    const yesterdayStr = new Date(now.getTime() - 86400000).toISOString().split('T')[0];
+
+    // ── 1. Fetch comprehensive data in parallel ──────────────────
     const [
       quotationsRes, jobOrdersRes, requisitionsRes,
-      agentActionsRes, factoryEventsRes,
+      factoryEventsRes, invoicesRes, ncrRes,
+      pettyCashRes, decisionsRes, anomalyRes,
     ] = await Promise.all([
       supabase.from('quotations').select('id,client_name,project_name,status,total_amount,created_at,due_date').gte('created_at', monthAgo.toISOString()),
       supabase.from('quotations').select('id,client_name,project_name,status,total_amount,created_at').eq('status', 'In Production').limit(20),
       supabase.from('requisitions').select('id,category,status,priority,created_at,header_text').eq('status', 'Pending').limit(20),
-      supabase.from('agent_actions').select('tool_name,result,executed_at').gte('executed_at', weekAgo.toISOString()).order('executed_at', { ascending: false }).limit(20),
       supabase.from('factory_events').select('sector,event_type,priority,status,detail,created_at').gte('created_at', weekAgo.toISOString()).eq('status', 'Open'),
+      supabase.from('invoices').select('id,client_name,total_amount,status,due_date,date').gte('created_at', monthAgo.toISOString()),
+      supabase.from('factory_events').select('id,event_type,detail,priority,created_at').eq('event_type', 'NCR - Glass Breakage').gte('created_at', yesterdayStr),
+      supabase.from('petty_cash').select('id,amount,description,date,type').gte('date', yesterdayStr).eq('type', 'Payment'),
+      supabase.from('agent_decisions').select('id,decision,department,outcome,confidence').order('created_at', { ascending: false }).limit(10),
+      supabase.from('anomaly_log').select('id,anomaly_type,severity,description').is('acknowledged_at', null).order('created_at', { ascending: false }).limit(5),
     ]);
 
     const quotations    = quotationsRes.data    || [];
     const jobOrders     = jobOrdersRes.data     || [];
     const requisitions  = requisitionsRes.data  || [];
-    const agentActions  = agentActionsRes.data  || [];
     const factoryEvents = factoryEventsRes.data || [];
+    const invoices      = invoicesRes.data      || [];
+    const ncrs          = ncrRes.data           || [];
+    const pettyCash     = pettyCashRes.data     || [];
+    const decisions     = decisionsRes.data     || [];
+    const anomalies     = anomalyRes.data       || [];
 
-    // ── 2. Compute KPIs ──────────────────────────────────────────
+    // ── 2. Compute comprehensive KPIs ────────────────────────────
     const todayQuotations = quotations.filter(q => q.created_at?.startsWith(todayStr));
+    const yesterdayQuotes = quotations.filter(q => q.created_at?.startsWith(yesterdayStr));
     const totalBilled     = quotations.reduce((s, q) => s + (q.total_amount || 0), 0);
-    const overdueOrders   = quotations.filter(q => {
-      if (!q.due_date || q.status === 'Cancelled') return false;
-      return new Date(q.due_date) < now && q.status !== 'Dispatched';
-    });
-
+    const overdueInvoices = invoices.filter(i => (i.status === 'Outstanding' || i.status === 'Overdue') && i.due_date && new Date(i.due_date) < now);
+    const overdueTotal    = overdueInvoices.reduce((s, i) => s + (i.total_amount || 0), 0);
     const urgentReqs      = requisitions.filter(r => r.priority === 'Urgent');
     const urgentEvents    = factoryEvents.filter(e => e.priority === 'Urgent');
-    const stuckJobs       = jobOrders.filter(j => {
-      const days = Math.floor((now.getTime() - new Date(j.created_at).getTime()) / 86400000);
-      return days >= 3;
-    });
+    const stuckJobs       = jobOrders.filter(j => Math.floor((now.getTime() - new Date(j.created_at).getTime()) / 86400000) >= 3);
+    const bigCashMoves    = pettyCash.filter(p => (p.amount || 0) >= 50000);
+    const decisionAccuracy = decisions.filter(d => d.outcome).length > 0
+      ? Math.round(decisions.filter(d => d.outcome === 'correct').length / decisions.filter(d => d.outcome).length * 100) : null;
 
-    // ── 3. Build data summary for Claude ─────────────────────────
+    // ── 3. Build structured data for Claude narrative ─────────────
     const dataForClaude = {
       date: now.toLocaleDateString('en-PK', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
-      finance: {
-        this_month_quotations: quotations.length,
-        total_billed_month: PKR(totalBilled),
-        today_new_quotations: todayQuotations.length,
-        overdue_orders: overdueOrders.length,
-        overdue_details: overdueOrders.slice(0, 5).map(q => `${sanitizeName(q.client_name)} — ${PKR(q.total_amount || 0)}`),
+      yesterday_summary: {
+        quotations_created: yesterdayQuotes.length,
+        quotations_approved: yesterdayQuotes.filter(q => q.status === 'Approved').length,
+        ncr_breakage_events: ncrs.length,
+        ncr_details: ncrs.slice(0, 3).map(n => sanitizeName(n.detail || n.event_type)),
+        cash_expenses_yesterday: pettyCash.reduce((s, p) => s + (p.amount || 0), 0),
+        big_cash_moves: bigCashMoves.map(p => `${sanitizeName(p.description)} — ${PKR(p.amount)}`),
       },
-      production: {
-        active_job_orders: jobOrders.length,
-        stuck_3plus_days: stuckJobs.length,
-        stuck_details: stuckJobs.slice(0, 5).map(j => `${sanitizeName(j.client_name)} / ${sanitizeName(j.project_name)}`),
-      },
-      operations: {
+      today_priorities: {
+        overdue_invoices: overdueInvoices.length,
+        overdue_total: PKR(overdueTotal),
+        overdue_top3: overdueInvoices.slice(0, 3).map(i => `${sanitizeName(i.client_name)} — ${PKR(i.total_amount || 0)}`),
         pending_requisitions: requisitions.length,
         urgent_requisitions: urgentReqs.length,
-        urgent_req_details: urgentReqs.slice(0, 3).map(r => sanitizeName(r.header_text?.replace('[AGENT] ', '') || r.category)),
-        open_factory_events: factoryEvents.length,
-        urgent_events: urgentEvents.length,
-        urgent_event_details: urgentEvents.slice(0, 3).map(e => `${sanitizeName(e.sector)}: ${sanitizeName(e.event_type)}`),
+        stuck_jobs_3plus_days: stuckJobs.length,
+        stuck_details: stuckJobs.slice(0, 3).map(j => sanitizeName(j.client_name)),
+        open_urgent_events: urgentEvents.length,
+        unacknowledged_anomalies: anomalies.length,
+        anomaly_highlights: anomalies.slice(0, 2).map(a => `[${a.severity}] ${a.description}`),
       },
-      agent_activity: {
-        actions_this_week: agentActions.length,
-        recent_actions: agentActions.slice(0, 5).map(a => a.tool_name),
+      finance_snapshot: {
+        month_quotations: quotations.length,
+        month_billed: PKR(totalBilled),
+        today_new: todayQuotations.length,
+      },
+      production_snapshot: {
+        active_jobs: jobOrders.length,
+      },
+      agent_intelligence: {
+        decision_accuracy: decisionAccuracy ? `${decisionAccuracy}%` : 'Not enough data yet',
+        recent_decisions: decisions.slice(0, 3).map(d => `${d.department}: ${d.decision}`),
       },
     };
 
@@ -199,21 +216,36 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 600,
+        system: `You are GlassTech owner Hassan's daily business briefer. Be concise, specific, and action-oriented. Reference real numbers from the data provided. Write in Roman Urdu + English mix.`,
         messages: [{
           role: 'user',
-          content: `You are GlassTech ERP assistant. Generate a WhatsApp morning briefing for Hassan (owner).
+          content: `Generate morning briefing for ${dataForClaude.date}.
 
-Data: ${JSON.stringify(dataForClaude)}
+DATA: ${JSON.stringify(dataForClaude)}
 
-Rules:
-- Write in Roman Urdu + English mix (conversational, like a smart assistant)
-- Max 300 words
+FORMAT (exactly 3 sections, max 400 words total):
+
+☀️ YESTERDAY SUMMARY
+- What happened yesterday: quotations, production, cash moves, NCR events
+- Use actual numbers. Skip sections with zero activity.
+
+📋 TODAY PRIORITIES (ranked by urgency)
+1. Overdue payments approaching critical
+2. Pending approvals
+3. Stuck production orders
+4. Stock/anomaly alerts
+
+🤖 AGENT RECOMMENDATIONS (max 3 one-liners)
+- One finance action
+- One production action
+- One ops/HR action
+
+RULES:
 - Start with "Assalam o Alaikum Hassan bhai! ☀️"
-- Structure: 3 sections only — 💰 Finance, 🏭 Production, ⚡ Action Needed
-- Highlight urgent items with emojis
-- End with one key focus recommendation
-- No markdown headers, use emojis instead
-- Be direct and actionable`,
+- Use emojis for section headers, not markdown
+- Be direct — no fluff
+- End with one key focus for today
+- If anomaly alerts exist, flag them prominently`,
         }],
       }),
     });
@@ -248,9 +280,12 @@ Rules:
         active_jobs:          jobOrders.length,
         pending_reqs:         requisitions.length,
         urgent_reqs:          urgentReqs.length,
-        overdue_orders:       overdueOrders.length,
+        overdue_invoices:     overdueInvoices.length,
+        overdue_total:        overdueTotal,
         open_events:          factoryEvents.length,
         stuck_jobs:           stuckJobs.length,
+        ncr_yesterday:        ncrs.length,
+        anomalies_open:       anomalies.length,
       },
       created_at: now.toISOString(),
     }, { onConflict: 'briefing_date' });
@@ -286,8 +321,9 @@ Rules:
       kpis: {
         active_jobs: jobOrders.length,
         pending_reqs: requisitions.length,
-        overdue_orders: overdueOrders.length,
+        overdue_invoices: overdueInvoices.length,
         stuck_jobs: stuckJobs.length,
+        anomalies: anomalies.length,
       },
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 

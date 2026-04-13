@@ -46,15 +46,23 @@ const EventOSChatWidget: React.FC = () => {
   const [alertsDismissed, setAlertsDismissed] = useState(false);
   const [pendingOutcomes, setPendingOutcomes] = useState<any[]>([]);
   const [accuracyTrend, setAccuracyTrend] = useState<{ accuracy: number; trend: string } | null>(null);
+  const [briefing, setBriefing] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const user = useAuthStore?.getState?.()?.user;
 
-  // Scan for anomalies + pending outcomes when chat opens
+  // Scan for anomalies + pending outcomes + today's briefing when chat opens
   useEffect(() => {
     if (open) {
       if (alerts.length === 0 && !alertsDismissed) runAnomalyScan().then(setAlerts).catch(() => {});
       getPendingOutcomes().then(setPendingOutcomes).catch(() => {});
       getAgentAccuracyTrend('finance').then(setAccuracyTrend).catch(() => {});
+      // Load today's morning briefing
+      if (!briefing) {
+        const today = new Date().toISOString().split('T')[0];
+        supabase.from('morning_briefings').select('briefing_text').eq('briefing_date', today).single()
+          .then(({ data }) => { if (data?.briefing_text) setBriefing(data.briefing_text); })
+          .catch(() => {});
+      }
     }
   }, [open]);
 
@@ -222,6 +230,14 @@ const EventOSChatWidget: React.FC = () => {
               <p className="text-sm text-slate-400">Staff ka message likho</p>
               <p className="text-[10px] text-slate-600 mt-1">Query, action, ya naya event — sab handle hoga</p>
             </div>
+
+            {/* Today's morning briefing */}
+            {briefing && (
+              <div className="bg-slate-800 rounded-xl p-3 space-y-1">
+                <div className="text-[10px] text-cyan-400 uppercase tracking-widest">Morning Briefing</div>
+                <p className="text-[10px] text-slate-300 leading-relaxed whitespace-pre-wrap">{briefing.slice(0, 500)}{briefing.length > 500 ? '...' : ''}</p>
+              </div>
+            )}
 
             {/* Anomaly alerts */}
             {alerts.length > 0 && !alertsDismissed && (
