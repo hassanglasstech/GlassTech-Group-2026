@@ -223,13 +223,17 @@ Rules:
 
     // Track token usage
     if (claudeData.usage) {
-      await supabase.from('agent_token_usage').insert({
-        agent_id:       'morning-briefing',
+      const inp = claudeData.usage.input_tokens || 0;
+      const out = claudeData.usage.output_tokens || 0;
+      const costUsd = (inp * 0.80 + out * 4.00) / 1_000_000;
+      await supabase.from('agent_api_calls').insert({
+        agent_name:     'morning-briefing',
         model:          'claude-haiku-4-5-20251001',
-        input_tokens:   claudeData.usage.input_tokens || 0,
-        output_tokens:  claudeData.usage.output_tokens || 0,
-        total_tokens:   (claudeData.usage.input_tokens || 0) + (claudeData.usage.output_tokens || 0),
-        estimated_cost: 0,
+        input_tokens:   inp,
+        output_tokens:  out,
+        tokens_used:    inp + out,
+        cost_usd:       costUsd,
+        cost_pkr:       costUsd * 278,
         created_at:     new Date().toISOString(),
       }).catch(() => {});
     }

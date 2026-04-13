@@ -109,13 +109,17 @@ Deno.serve(async (req) => {
           Deno.env.get('SUPABASE_URL')!,
           Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
         );
-        await supabase.from('agent_token_usage').insert({
-          agent_id:       body._agent_id || 'proxy',
+        const inp = data.usage.input_tokens || 0;
+        const out = data.usage.output_tokens || 0;
+        const costUsd = (inp * 0.80 + out * 4.00) / 1_000_000; // Haiku default
+        await supabase.from('agent_api_calls').insert({
+          agent_name:     body._agent_id || 'proxy',
           model:          body.model || 'unknown',
-          input_tokens:   data.usage.input_tokens || 0,
-          output_tokens:  data.usage.output_tokens || 0,
-          total_tokens:   (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0),
-          estimated_cost: 0,
+          input_tokens:   inp,
+          output_tokens:  out,
+          tokens_used:    inp + out,
+          cost_usd:       costUsd,
+          cost_pkr:       costUsd * 278,
           created_at:     new Date().toISOString(),
         }).catch(() => {});
       } catch {}

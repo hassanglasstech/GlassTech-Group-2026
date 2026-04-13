@@ -1,5 +1,5 @@
 import { supabase } from '@/src/services/supabaseClient';
-import { callClaude } from '@/src/services/claudeAgentService';
+import { callClaude } from '@/modules/factory/services/claudeAgentService';
 
 // ── Embedding via Claude API (free with Max plan) ─────────────────────
 // Using Claude's text generation to create semantic summaries,

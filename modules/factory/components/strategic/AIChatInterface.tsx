@@ -14,7 +14,7 @@ import { runMultiAgent, shouldUseMultiAgent, AgentResponse } from '../agent/Mult
 import { runAdversarial, needsAdversarial, generateUncomfortableTruths } from '../agent/adversarialIntelligence';
 import { logDecision } from '../agent/decisionLearning';
 import { supabase } from '@/src/services/supabaseClient';
-import { chatWithTools, getSessionUsage } from '@/src/services/claudeAgentService';
+import { chatWithTools, getSessionUsage } from '@/modules/factory/services/claudeAgentService';
 import { GlassCoQuotationPrint } from '@/modules/glassco/core/prints/GlassCoQuotationPrint';
 import { createRoot } from 'react-dom/client';
 

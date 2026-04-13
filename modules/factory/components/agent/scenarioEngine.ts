@@ -1,5 +1,5 @@
 import { supabase } from '@/src/services/supabaseClient';
-import { callClaude } from '@/src/services/claudeAgentService';
+import { callClaude } from '@/modules/factory/services/claudeAgentService';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';

@@ -1,9 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════════
 // Claude Agent Service — Centralized AI gateway for GlassTech ERP
 // All Claude API calls route through Supabase claude-proxy Edge Function
+// API key stays server-side (Supabase secrets) — never exposed to browser
 // ═══════════════════════════════════════════════════════════════════════
 
-import { supabase } from './supabaseClient';
+import { supabase } from '@/src/services/supabaseClient';
 
 // ── Types ────────────────────────────────────────────────────────────────
 export interface ClaudeMessage {
@@ -53,11 +54,14 @@ export interface TokenUsageEntry {
   inputTokens:   number;
   outputTokens:  number;
   totalTokens:   number;
-  estimatedCost: number;
+  costUsd:       number;
+  costPkr:       number;
   timestamp:     string;
 }
 
-// ── Token pricing (USD per 1M tokens) ────────────────────────────────────
+// ── Token pricing (USD per 1M tokens) + PKR conversion ───────────────────
+const USD_TO_PKR = 278; // Update as rate changes
+
 const PRICING: Record<string, { input: number; output: number }> = {
   'claude-haiku-4-5-20251001': { input: 0.80,  output: 4.00  },
   'claude-sonnet-4-6':         { input: 3.00,  output: 15.00 },
@@ -65,11 +69,12 @@ const PRICING: Record<string, { input: number; output: number }> = {
 
 // ── In-memory token usage tracker ────────────────────────────────────────
 const usageLog: TokenUsageEntry[] = [];
-const SESSION_USAGE = { input: 0, output: 0, cost: 0, calls: 0 };
+const SESSION_USAGE = { input: 0, output: 0, costUsd: 0, costPkr: 0, calls: 0 };
 
 const trackUsage = (agentId: string, model: string, input: number, output: number) => {
   const pricing = PRICING[model] || PRICING['claude-haiku-4-5-20251001'];
-  const cost = (input * pricing.input + output * pricing.output) / 1_000_000;
+  const costUsd = (input * pricing.input + output * pricing.output) / 1_000_000;
+  const costPkr = costUsd * USD_TO_PKR;
 
   const entry: TokenUsageEntry = {
     agentId,
@@ -77,24 +82,27 @@ const trackUsage = (agentId: string, model: string, input: number, output: numbe
     inputTokens:   input,
     outputTokens:  output,
     totalTokens:   input + output,
-    estimatedCost: cost,
+    costUsd,
+    costPkr,
     timestamp:     new Date().toISOString(),
   };
   usageLog.push(entry);
 
-  SESSION_USAGE.input  += input;
-  SESSION_USAGE.output += output;
-  SESSION_USAGE.cost   += cost;
-  SESSION_USAGE.calls  += 1;
+  SESSION_USAGE.input   += input;
+  SESSION_USAGE.output  += output;
+  SESSION_USAGE.costUsd += costUsd;
+  SESSION_USAGE.costPkr += costPkr;
+  SESSION_USAGE.calls   += 1;
 
   // Persist to Supabase (fire-and-forget)
-  supabase.from('agent_token_usage').insert({
-    agent_id:       agentId,
+  supabase.from('agent_api_calls').insert({
+    agent_name:     agentId,
     model,
     input_tokens:   input,
     output_tokens:  output,
-    total_tokens:   input + output,
-    estimated_cost: Math.round(cost * 1_000_000) / 1_000_000,
+    tokens_used:    input + output,
+    cost_usd:       Math.round(costUsd * 1_000_000) / 1_000_000,
+    cost_pkr:       Math.round(costPkr * 100) / 100,
     created_at:     entry.timestamp,
   }).then(() => {}).catch(() => {});
 };
@@ -288,20 +296,21 @@ export const getSessionUsage = () => ({ ...SESSION_USAGE });
 export const getUsageLog = () => [...usageLog];
 
 export const getUsageByAgent = () => {
-  const byAgent: Record<string, { calls: number; tokens: number; cost: number }> = {};
+  const byAgent: Record<string, { calls: number; tokens: number; costPkr: number }> = {};
   for (const entry of usageLog) {
-    if (!byAgent[entry.agentId]) byAgent[entry.agentId] = { calls: 0, tokens: 0, cost: 0 };
-    byAgent[entry.agentId].calls  += 1;
-    byAgent[entry.agentId].tokens += entry.totalTokens;
-    byAgent[entry.agentId].cost   += entry.estimatedCost;
+    if (!byAgent[entry.agentId]) byAgent[entry.agentId] = { calls: 0, tokens: 0, costPkr: 0 };
+    byAgent[entry.agentId].calls   += 1;
+    byAgent[entry.agentId].tokens  += entry.totalTokens;
+    byAgent[entry.agentId].costPkr += entry.costPkr;
   }
   return byAgent;
 };
 
 export const resetSessionUsage = () => {
   usageLog.length = 0;
-  SESSION_USAGE.input  = 0;
-  SESSION_USAGE.output = 0;
-  SESSION_USAGE.cost   = 0;
-  SESSION_USAGE.calls  = 0;
+  SESSION_USAGE.input   = 0;
+  SESSION_USAGE.output  = 0;
+  SESSION_USAGE.costUsd = 0;
+  SESSION_USAGE.costPkr = 0;
+  SESSION_USAGE.calls   = 0;
 };

@@ -6,7 +6,7 @@ import {
   Plus, X, ChevronRight
 } from 'lucide-react';
 import { supabase } from '@/src/services/supabaseClient';
-import { callClaude } from '@/src/services/claudeAgentService';
+import { callClaude } from '@/modules/factory/services/claudeAgentService';
 import { logMarketIntel } from '../agent/semanticService';
 
 const STATUS_CONFIG = {
