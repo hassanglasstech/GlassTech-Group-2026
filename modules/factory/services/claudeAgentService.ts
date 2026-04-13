@@ -405,13 +405,51 @@ const executeQueryTool = async (name: string, params: Record<string, any>): Prom
   }
 };
 
+// ── Record Expense write tool ────────────────────────────────────────
+const EXPENSE_TOOL: ClaudeToolDef = {
+  name: 'record_expense',
+  description: 'Record a new expense / kharcha. "5000 ka rent record karo", "diesel 3000 likh do".',
+  input_schema: { type: 'object', properties: {
+    description: { type: 'string', description: 'What was the expense for' },
+    amount:      { type: 'number', description: 'Amount in PKR' },
+    category:    { type: 'string', description: 'Rent, Fuel, Utilities, Misc, etc.' },
+    company:     { type: 'string', description: 'GlassCo, GTK, etc.' },
+    paid_by:     { type: 'string', description: 'Who paid (optional)' },
+    notes:       { type: 'string', description: 'Any notes (optional)' },
+  }, required: ['description', 'amount', 'category'] },
+};
+
+const executeRecordExpense = async (params: Record<string, any>): Promise<any> => {
+  console.log('[record_expense] Recording:', params);
+  const { data, error } = await supabase.from('expenses').insert({
+    description: params.description,
+    amount:      params.amount,
+    category:    params.category,
+    company:     params.company || 'GlassCo',
+    paid_by:     params.paid_by || null,
+    notes:       params.notes || null,
+    recorded_by: 'EventOS Agent',
+    created_at:  new Date().toISOString(),
+  }).select('id').single();
+
+  if (error) return { success: false, error: error.message };
+  return { success: true, id: data?.id, message: `${params.description} — PKR ${(params.amount || 0).toLocaleString()} recorded for ${params.company || 'GlassCo'}` };
+};
+
 // ── Full query-with-tools loop (handles tool_use → execute → tool_result → answer) ──
 export const queryWithTools = async (
   message: string,
   systemPrompt: string,
   agentId = 'query-agent'
 ): Promise<{ answer: string; toolsUsed: string[] }> => {
-  const allTools = QUERY_TOOL_DEFS;
+  // Merge: built-in tools + schema-generated tools + write tools
+  let schemaTools: ClaudeToolDef[] = [];
+  try {
+    const { generateSchemaTools } = await import('./schemaIntrospector');
+    schemaTools = await generateSchemaTools();
+  } catch {}
+
+  const allTools = [...QUERY_TOOL_DEFS, ...schemaTools, EXPENSE_TOOL];
   const toolsUsed: string[] = [];
 
   // First call — Claude decides which tools to use
@@ -432,18 +470,33 @@ export const queryWithTools = async (
     return { answer: textBlock?.text || 'Koi data nahi mila.', toolsUsed: [] };
   }
 
-  // Execute each tool and build tool_result blocks
+  // Execute each tool: built-in → schema → expense
   const toolResultBlocks: ContentBlock[] = [];
   for (const tb of toolBlocks) {
     try {
-      const result = await executeQueryTool(tb.name!, tb.input || {});
-      toolsUsed.push(tb.name!);
+      let result: any;
+      const name = tb.name!;
+      const input = tb.input || {};
+
+      console.log(`[queryWithTools] Executing tool: ${name}`, input);
+
+      if (name === 'record_expense') {
+        result = await executeRecordExpense(input);
+      } else if (name.startsWith('db_')) {
+        const { executeSchemaQuery } = await import('./schemaIntrospector');
+        result = await executeSchemaQuery(name, input);
+      } else {
+        result = await executeQueryTool(name, input);
+      }
+
+      toolsUsed.push(name);
       toolResultBlocks.push({
         type:        'tool_result',
         tool_use_id: tb.id!,
         content:     JSON.stringify(result).slice(0, 2000),
       });
     } catch (err) {
+      console.error(`[queryWithTools] Tool error: ${tb.name}`, err);
       toolResultBlocks.push({
         type:        'tool_result',
         tool_use_id: tb.id!,

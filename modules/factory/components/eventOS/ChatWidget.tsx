@@ -21,7 +21,7 @@ const STEP_STATUS_COLORS: Record<string, string> = {
   failed:    'bg-red-500/10 border-red-500/30 text-red-400',
 };
 
-const CATEGORIES = ['attendance', 'grn_inward', 'local_purchase', 'cash_expense', 'production_table_assign', 'ncr_breakage', 'delivery_update', 'vendor_payment', 'maintenance', 'hr', 'other'];
+const DEFAULT_CATEGORIES = ['attendance', 'grn_inward', 'local_purchase', 'cash_expense', 'production_table_assign', 'ncr_breakage', 'delivery_update', 'vendor_payment', 'maintenance', 'hr', 'other'];
 const MODULES = ['Purchase', 'Finance', 'Production', 'HR', 'Store', 'QC', 'Logistics', 'Sales', 'Maintenance'];
 
 const EventOSChatWidget: React.FC = () => {
@@ -40,6 +40,9 @@ const EventOSChatWidget: React.FC = () => {
   const [teachModules, setTeachModules] = useState<string[]>([]);
   const [teachSteps, setTeachSteps] = useState<{ module: string; action: string }[]>([{ module: 'Purchase', action: '' }]);
   const [teachSaving, setTeachSaving] = useState(false);
+  const [customCategory, setCustomCategory] = useState('');
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [executionLogId, setExecutionLogId] = useState<string | null>(null);
   const [reversing, setReversing] = useState(false);
   const [decision, setDecision] = useState<DecisionRecommendation | null>(null);
@@ -198,6 +201,8 @@ const EventOSChatWidget: React.FC = () => {
     setExecutionLogId(null);
     setReversing(false);
     setDecision(null);
+    setShowNewCategory(false);
+    setCustomCategory('');
   };
 
   if (!open) {
@@ -446,10 +451,29 @@ const EventOSChatWidget: React.FC = () => {
             {/* Category */}
             <div>
               <label className="text-[10px] text-slate-500 block mb-1">Category</label>
-              <select value={teachCategory} onChange={e => setTeachCategory(e.target.value)}
-                className="w-full bg-slate-800 text-white text-xs px-3 py-2 rounded-lg outline-none">
-                {CATEGORIES.map(c => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
+              <select value={teachCategory} onChange={e => {
+                if (e.target.value === '__new__') { setShowNewCategory(true); }
+                else { setTeachCategory(e.target.value); setShowNewCategory(false); }
+              }} className="w-full bg-slate-800 text-white text-xs px-3 py-2 rounded-lg outline-none">
+                {categories.map(c => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
+                <option value="__new__">+ Naya category banao</option>
               </select>
+              {showNewCategory && (
+                <div className="flex gap-1 mt-1">
+                  <input value={customCategory} onChange={e => setCustomCategory(e.target.value)}
+                    placeholder="Naya category naam..."
+                    className="flex-1 bg-slate-800 text-white text-[10px] px-2 py-1.5 rounded-lg outline-none placeholder-slate-600" />
+                  <button onClick={() => {
+                    if (customCategory.trim()) {
+                      const slug = customCategory.trim().toLowerCase().replace(/\s+/g, '_');
+                      setCategories(prev => [...prev.filter(c => c !== 'other'), slug, 'other']);
+                      setTeachCategory(slug);
+                      setShowNewCategory(false);
+                      setCustomCategory('');
+                    }
+                  }} className="text-[9px] bg-cyan-500/20 text-cyan-300 px-2 py-1.5 rounded-lg">Add</button>
+                </div>
+              )}
             </div>
 
             {/* Modules */}
