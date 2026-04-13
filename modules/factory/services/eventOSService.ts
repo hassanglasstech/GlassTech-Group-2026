@@ -6,8 +6,8 @@
 import { supabase } from '@/src/services/supabaseClient';
 import { classifyEvent, ClassificationResult } from '../components/agent/EventClassifier';
 import { assembleWorkflow, recordPatternUsage, AssembledWorkflow } from '../components/agent/WorkflowAssembler';
-import { executeTool, TOOL_DEFINITIONS } from '../components/agent/agentTools';
-import { chatWithTools } from './claudeAgentService';
+import { executeTool } from '../components/agent/agentTools';
+import { queryWithTools } from './claudeAgentService';
 import { sanitizeUserInput } from './promptSanitizer';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { FinanceService } from '@/modules/finance/services/financeService';
@@ -90,7 +90,7 @@ Month: ${month}
   } catch { return '=== ERP data unavailable ==='; }
 };
 
-// ── Answer data queries via Claude + tool_use ────────────────────────
+// ── Answer data queries via Claude + built-in Supabase query tools ────
 export const answerDataQuery = async (message: string): Promise<QueryResult> => {
   const safeMessage = sanitizeUserInput(message);
   const erpCtx = buildERPContext();
@@ -100,70 +100,14 @@ export const answerDataQuery = async (message: string): Promise<QueryResult> => 
 ${erpCtx}
 
 RULES:
-- Use tools to fetch real data, then answer naturally
+- ALWAYS use a tool to fetch real data before answering
 - Language: Roman Urdu + English mix
 - Numbers: PKR format with commas
-- Be direct, concise
-- If tool returns data, summarize it conversationally`;
+- Be direct, concise, conversational
+- Summarize tool results naturally — don't dump raw JSON`;
 
-  // Only include READ tools (no create/update/delete)
-  const readTools = TOOL_DEFINITIONS.filter(t =>
-    !t.name.startsWith('create_') &&
-    !t.name.startsWith('update_') &&
-    !t.name.startsWith('draft_') &&
-    !t.name.startsWith('log_') &&
-    t.name !== 'send_whatsapp' &&
-    t.name !== 'print_document'
-  );
-
-  const { text, toolCalls, response } = await chatWithTools({
-    model:     'claude-haiku-4-5-20251001',
-    maxTokens: 800,
-    system:    systemPrompt,
-    tools:     readTools,
-    messages:  [{ role: 'user', content: safeMessage }],
-    agentId:   'eventos-query',
-  });
-
-  // If Claude used tools, execute them and get data
-  if (toolCalls.length > 0) {
-    const toolResults: string[] = [];
-    const toolsUsed: string[] = [];
-
-    for (const tc of toolCalls) {
-      try {
-        const result = await executeTool(tc.name, tc.params, 'EventOS');
-        toolsUsed.push(tc.name);
-        toolResults.push(JSON.stringify(result.result || result, null, 2).slice(0, 1000));
-      } catch (err) {
-        toolResults.push(`Error: ${String(err)}`);
-      }
-    }
-
-    // Send tool results back to Claude as proper tool_result blocks
-    const toolResultBlocks = toolCalls.map((tc, i) => ({
-      type: 'tool_result' as const,
-      tool_use_id: tc.id,
-      content: toolResults[i] || 'No result',
-    }));
-
-    const { text: finalAnswer } = await chatWithTools({
-      model:     'claude-haiku-4-5-20251001',
-      maxTokens: 600,
-      system:    systemPrompt,
-      messages:  [
-        { role: 'user', content: safeMessage },
-        { role: 'assistant', content: response.content as any },
-        { role: 'user', content: toolResultBlocks as any },
-      ],
-      agentId: 'eventos-query',
-    });
-
-    return { type: 'query', answer: finalAnswer || text || 'Data mil gayi lekin summarize nahi ho saki.', toolsUsed };
-  }
-
-  // No tools used — Claude answered directly from context
-  return { type: 'query', answer: text || 'Jawab nahi mil saka.', toolsUsed: [] };
+  const { answer, toolsUsed } = await queryWithTools(safeMessage, systemPrompt, 'eventos-query');
+  return { type: 'query', answer, toolsUsed };
 };
 
 // ── Step 1-4: Classify + Assemble ────────────────────────────────────

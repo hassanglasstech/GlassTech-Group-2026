@@ -290,6 +290,186 @@ export const streamClaude = async (
   onDone?.(fullText, { inputTokens, outputTokens });
 };
 
+// ═══════════════════════════════════════════════════════════════════════
+// BUILT-IN SUPABASE QUERY TOOLS — Direct data access for Claude
+// These query Supabase via the authenticated client (respects RLS).
+// ═══════════════════════════════════════════════════════════════════════
+
+const ls = (key: string) => { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; } };
+
+export const QUERY_TOOL_DEFS: ClaudeToolDef[] = [
+  { name: 'get_quotations',
+    description: 'Get quotations list — count, total amount, by status/date/company. "kitni quotations hain", "aaj ki quotations".',
+    input_schema: { type: 'object', properties: {
+      status:    { type: 'string', description: 'Draft, Sent, Approved, all' },
+      date_from: { type: 'string', description: 'YYYY-MM-DD' },
+      date_to:   { type: 'string', description: 'YYYY-MM-DD' },
+      company:   { type: 'string', description: 'GlassCo, GTK, etc.' },
+    }, required: [] },
+  },
+  { name: 'get_sales_orders',
+    description: 'Sales orders / approved quotations with production status.',
+    input_schema: { type: 'object', properties: {
+      status:  { type: 'string', description: 'Approved, In Production, Dispatched, all' },
+      company: { type: 'string' },
+    }, required: [] },
+  },
+  { name: 'get_attendance_today',
+    description: 'Today ki attendance — kaun aaya, kaun nahi, late. "attendance dikhao".',
+    input_schema: { type: 'object', properties: {
+      company: { type: 'string' },
+    }, required: [] },
+  },
+  { name: 'get_stock_level',
+    description: 'Stock levels — glass type, thickness, available qty. "stock kya hai", "8mm kitna hai".',
+    input_schema: { type: 'object', properties: {
+      item_type: { type: 'string', description: 'Glass, Store, etc.' },
+      thickness: { type: 'string', description: '5mm, 6mm, 8mm, etc.' },
+    }, required: [] },
+  },
+  { name: 'get_pending_grns',
+    description: 'Pending GRN / material receipts awaiting processing.',
+    input_schema: { type: 'object', properties: {
+      company: { type: 'string' },
+    }, required: [] },
+  },
+  { name: 'get_ar_aging',
+    description: 'Accounts receivable aging — kiski payment baaki hai, kitne din se. "AR aging", "receivables".',
+    input_schema: { type: 'object', properties: {
+      company: { type: 'string' },
+    }, required: [] },
+  },
+  { name: 'get_production_status',
+    description: 'Production floor status — active pieces, cutting, tempering, dispatch ready.',
+    input_schema: { type: 'object', properties: {
+      company: { type: 'string' },
+    }, required: [] },
+  },
+];
+
+// ── Execute a built-in query tool ────────────────────────────────────────
+const executeQueryTool = async (name: string, params: Record<string, any>): Promise<any> => {
+  const today = new Date().toISOString().split('T')[0];
+  const month = today.slice(0, 7);
+
+  switch (name) {
+    case 'get_quotations': {
+      let q = ls('gtk_erp_quotations');
+      if (params.company) q = q.filter((x: any) => x.company === params.company);
+      if (params.status && params.status !== 'all') q = q.filter((x: any) => x.status === params.status);
+      if (params.date_from) q = q.filter((x: any) => (x.date || '') >= params.date_from);
+      if (params.date_to) q = q.filter((x: any) => (x.date || '') <= params.date_to);
+      const todayQ = q.filter((x: any) => x.date === today);
+      const monthQ = q.filter((x: any) => x.date?.startsWith(month));
+      return { total: q.length, today: todayQ.length, this_month: monthQ.length, total_value: q.reduce((s: number, x: any) => s + (x.totalAmount || 0), 0), by_status: q.reduce((acc: any, x: any) => { acc[x.status || 'Unknown'] = (acc[x.status || 'Unknown'] || 0) + 1; return acc; }, {}), recent: q.sort((a: any, b: any) => (b.date || '').localeCompare(a.date || '')).slice(0, 5).map((x: any) => ({ id: x.id, client: x.clientName, amount: x.totalAmount, date: x.date, status: x.status })) };
+    }
+    case 'get_sales_orders': {
+      let q = ls('gtk_erp_quotations').filter((x: any) => ['Approved', 'In Production', 'Dispatched', 'Sent', 'Partial Payment'].includes(x.status));
+      if (params.company) q = q.filter((x: any) => x.company === params.company);
+      if (params.status && params.status !== 'all') q = q.filter((x: any) => x.status === params.status);
+      return { total: q.length, total_value: q.reduce((s: number, x: any) => s + (x.totalAmount || 0), 0), by_status: q.reduce((acc: any, x: any) => { acc[x.status] = (acc[x.status] || 0) + 1; return acc; }, {}), orders: q.slice(0, 8).map((x: any) => ({ id: x.id, client: x.clientName, amount: x.totalAmount, status: x.status })) };
+    }
+    case 'get_attendance_today': {
+      const emps = ls('gtk_erp_employees').filter((e: any) => !['resigned', 'terminated'].includes(e.work?.status || ''));
+      const att = ls('gtk_erp_attendance').filter((a: any) => a.date === today);
+      const present = att.filter((a: any) => a.status === 'Present').length;
+      const absent = att.filter((a: any) => a.status === 'Absent').length;
+      const late = att.filter((a: any) => (a.lateMinutes || 0) > 0).length;
+      return { date: today, total_employees: emps.length, present, absent, late, attendance_rate: emps.length > 0 ? Math.round((present / emps.length) * 100) + '%' : 'N/A' };
+    }
+    case 'get_stock_level': {
+      let items = ls('gtk_erp_store');
+      if (params.item_type) items = items.filter((x: any) => (x.category || x.glassType || '').toLowerCase().includes(params.item_type.toLowerCase()));
+      if (params.thickness) items = items.filter((x: any) => (x.thickness || x.size || '').includes(params.thickness));
+      return { total_items: items.length, items: items.slice(0, 10).map((x: any) => ({ name: x.name || x.description, category: x.category, thickness: x.thickness, qty: x.quantity || x.qty || 0, unit: x.unit || 'pcs' })) };
+    }
+    case 'get_pending_grns': {
+      const grns = ls('gtk_erp_grn_sheet_entries').filter((g: any) => g.status === 'Pending' || !g.status);
+      return { pending_count: grns.length, grns: grns.slice(0, 5).map((g: any) => ({ id: g.id, vendor: g.vendorName, date: g.date })) };
+    }
+    case 'get_ar_aging': {
+      const invoices = ls('gtk_erp_invoices').filter((i: any) => i.status === 'Outstanding' || i.status === 'Overdue');
+      const now = Date.now();
+      const aging = invoices.map((i: any) => ({ id: i.id, client: i.clientName, amount: i.totalAmount || 0, due: i.dueDate, days_overdue: i.dueDate ? Math.max(0, Math.floor((now - new Date(i.dueDate).getTime()) / 86400000)) : 0 }));
+      const total = aging.reduce((s: number, a: any) => s + a.amount, 0);
+      return { total_outstanding: total, total_formatted: `PKR ${total.toLocaleString()}`, count: aging.length, over_30_days: aging.filter((a: any) => a.days_overdue > 30).length, over_60_days: aging.filter((a: any) => a.days_overdue > 60).length, top_5: aging.sort((a: any, b: any) => b.amount - a.amount).slice(0, 5) };
+    }
+    case 'get_production_status': {
+      const pieces = ls('gtk_erp_production_pieces');
+      const statusCounts: Record<string, number> = {};
+      pieces.forEach((p: any) => { statusCounts[p.status || 'Unknown'] = (statusCounts[p.status || 'Unknown'] || 0) + 1; });
+      return { total_pieces: pieces.length, active: pieces.filter((p: any) => !['Delivered', 'Broken'].includes(p.status)).length, by_status: statusCounts };
+    }
+    default:
+      return { error: `Unknown tool: ${name}` };
+  }
+};
+
+// ── Full query-with-tools loop (handles tool_use → execute → tool_result → answer) ──
+export const queryWithTools = async (
+  message: string,
+  systemPrompt: string,
+  agentId = 'query-agent'
+): Promise<{ answer: string; toolsUsed: string[] }> => {
+  const allTools = QUERY_TOOL_DEFS;
+  const toolsUsed: string[] = [];
+
+  // First call — Claude decides which tools to use
+  const firstResponse = await callClaude({
+    model:     'claude-haiku-4-5-20251001',
+    maxTokens: 800,
+    system:    systemPrompt,
+    tools:     allTools,
+    messages:  [{ role: 'user', content: message }],
+    agentId,
+  });
+
+  const toolBlocks = firstResponse.content?.filter(b => b.type === 'tool_use') || [];
+  const textBlock  = firstResponse.content?.find(b => b.type === 'text');
+
+  // If no tools used, return direct text answer
+  if (toolBlocks.length === 0) {
+    return { answer: textBlock?.text || 'Koi data nahi mila.', toolsUsed: [] };
+  }
+
+  // Execute each tool and build tool_result blocks
+  const toolResultBlocks: ContentBlock[] = [];
+  for (const tb of toolBlocks) {
+    try {
+      const result = await executeQueryTool(tb.name!, tb.input || {});
+      toolsUsed.push(tb.name!);
+      toolResultBlocks.push({
+        type:        'tool_result',
+        tool_use_id: tb.id!,
+        content:     JSON.stringify(result).slice(0, 2000),
+      });
+    } catch (err) {
+      toolResultBlocks.push({
+        type:        'tool_result',
+        tool_use_id: tb.id!,
+        content:     JSON.stringify({ error: String(err) }),
+      });
+    }
+  }
+
+  // Second call — Claude summarizes tool results naturally
+  const secondResponse = await callClaude({
+    model:     'claude-haiku-4-5-20251001',
+    maxTokens: 600,
+    system:    systemPrompt,
+    tools:     allTools,
+    messages:  [
+      { role: 'user', content: message },
+      { role: 'assistant', content: firstResponse.content as any },
+      { role: 'user', content: toolResultBlocks as any },
+    ],
+    agentId,
+  });
+
+  const finalText = secondResponse.content?.find(b => b.type === 'text');
+  return { answer: finalText?.text || textBlock?.text || 'Data mil gayi lekin format nahi ho saki.', toolsUsed };
+};
+
 // ── Token usage getters ──────────────────────────────────────────────────
 export const getSessionUsage = () => ({ ...SESSION_USAGE });
 
