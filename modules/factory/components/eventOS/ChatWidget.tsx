@@ -6,12 +6,12 @@
 
 import React, { useState, useRef } from 'react';
 import { MessageSquare, Send, X, Mic, MicOff, CheckCircle2, XCircle, Edit3, Loader2, AlertTriangle, Zap } from 'lucide-react';
-import { processStaffMessage, executeWorkflow, recordFeedback, EventOSResult } from '../../services/eventOSService';
+import { processStaffMessage, executeWorkflow, recordFeedback, isDataQuery, answerDataQuery, EventOSResult, QueryResult } from '../../services/eventOSService';
 import { generateDevPrompt } from '../agent/DevPromptGenerator';
 import { useAuthStore } from '@/modules/auth/authStore';
 
 // ── Types ────────────────────────────────────────────────────────────
-type WidgetState = 'idle' | 'classifying' | 'review' | 'executing' | 'done' | 'error';
+type WidgetState = 'idle' | 'classifying' | 'review' | 'executing' | 'done' | 'error' | 'query_answer';
 
 const STEP_STATUS_COLORS: Record<string, string> = {
   ready:     'bg-green-500/10 border-green-500/30 text-green-400',
@@ -29,6 +29,7 @@ const EventOSChatWidget: React.FC = () => {
   const [executionResult, setExecutionResult] = useState<any>(null);
   const [gapMode, setGapMode] = useState(false);
   const [gapText, setGapText] = useState('');
+  const [queryAnswer, setQueryAnswer] = useState<QueryResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const user = useAuthStore?.getState?.()?.user;
 
@@ -40,9 +41,16 @@ const EventOSChatWidget: React.FC = () => {
     setState('classifying');
 
     try {
-      const res = await processStaffMessage(text, 'text');
-      setResult(res);
-      setState('review');
+      // Route: data query → Claude tool_use, action event → EventOS workflow
+      if (isDataQuery(text)) {
+        const qr = await answerDataQuery(text);
+        setQueryAnswer(qr);
+        setState('query_answer');
+      } else {
+        const res = await processStaffMessage(text, 'text');
+        setResult(res);
+        setState('review');
+      }
     } catch (err) {
       setState('error');
     }
@@ -94,6 +102,7 @@ const EventOSChatWidget: React.FC = () => {
     setState('idle');
     setResult(null);
     setExecutionResult(null);
+    setQueryAnswer(null);
     setGapMode(false);
     setGapText('');
   };
@@ -217,6 +226,29 @@ const EventOSChatWidget: React.FC = () => {
           </>
         )}
 
+        {/* Query Answer (data response — no workflow) */}
+        {state === 'query_answer' && queryAnswer && (
+          <div className="space-y-3">
+            <div className="bg-slate-800 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Zap size={14} className="text-cyan-400" />
+                <span className="text-[10px] text-cyan-300 uppercase tracking-widest">ERP Data Response</span>
+              </div>
+              <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap">{queryAnswer.answer}</p>
+              {queryAnswer.toolsUsed.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {queryAnswer.toolsUsed.map((t, i) => (
+                    <span key={i} className="text-[9px] px-1.5 py-0.5 bg-slate-700 text-slate-400 rounded">{t}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button onClick={reset} className="w-full bg-slate-800 text-slate-300 text-xs py-2 rounded-xl">
+              Ask Another Question
+            </button>
+          </div>
+        )}
+
         {/* Executing */}
         {state === 'executing' && (
           <div className="flex items-center justify-center gap-2 py-8">
@@ -265,7 +297,7 @@ const EventOSChatWidget: React.FC = () => {
       </div>
 
       {/* Input bar */}
-      {(state === 'idle' || state === 'error') && (
+      {(state === 'idle' || state === 'error' || state === 'query_answer') && (
         <div className="flex items-center gap-2 px-4 py-3 border-t border-slate-700">
           <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSend()}

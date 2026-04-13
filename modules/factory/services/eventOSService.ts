@@ -6,7 +6,14 @@
 import { supabase } from '@/src/services/supabaseClient';
 import { classifyEvent, ClassificationResult } from '../components/agent/EventClassifier';
 import { assembleWorkflow, recordPatternUsage, AssembledWorkflow } from '../components/agent/WorkflowAssembler';
-import { executeTool } from '../components/agent/agentTools';
+import { executeTool, TOOL_DEFINITIONS } from '../components/agent/agentTools';
+import { chatWithTools } from './claudeAgentService';
+import { sanitizeUserInput } from './promptSanitizer';
+import { SalesService } from '@/modules/sales/services/salesService';
+import { FinanceService } from '@/modules/finance/services/financeService';
+import { InventoryService } from '@/modules/procurement/services/inventoryService';
+import { ProductionService } from '@/modules/production/services/productionService';
+import { HRService } from '@/modules/hr/services/hrService';
 
 // ── Types ────────────────────────────────────────────────────────────
 export interface EventOSResult {
@@ -14,6 +21,129 @@ export interface EventOSResult {
   workflow:       AssembledWorkflow;
   execution?:     { success: boolean; results: any[]; errors: string[] };
 }
+
+export interface QueryResult {
+  type:    'query';
+  answer:  string;
+  toolsUsed: string[];
+}
+
+// ── Query detection keywords ─────────────────────────────────────────
+const QUERY_KEYWORDS = [
+  'kitni', 'kitna', 'kitne', 'how many', 'how much', 'total', 'count',
+  'kya hai', 'kya hain', 'what is', 'what are', 'show', 'dikhao',
+  'status', 'report', 'summary', 'hisab', 'balance', 'list',
+  'pending', 'overdue', 'outstanding', 'stuck', 'ready',
+  'aaj', 'today', 'is hafte', 'this week', 'is mahine', 'this month',
+  'floor', 'stock', 'inventory', 'revenue', 'expense', 'payment',
+  'quotation', 'invoice', 'order', 'piece', 'NCR', 'breakage',
+  'vendor', 'client', 'employee', 'attendance', 'salary',
+];
+
+export const isDataQuery = (message: string): boolean => {
+  const lower = message.toLowerCase();
+  const matchCount = QUERY_KEYWORDS.filter(kw => lower.includes(kw)).length;
+  // If 2+ query keywords hit, it's a data question — not an action event
+  return matchCount >= 2;
+};
+
+// ── Build live ERP context for Claude ────────────────────────────────
+const buildERPContext = (): string => {
+  try {
+    const now   = new Date();
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const today = now.toISOString().split('T')[0];
+
+    const quotations = SalesService.getQuotations().filter((q: any) => q.company === 'Glassco');
+    const monthQuotes = quotations.filter((q: any) => q.date?.startsWith(month));
+    const invoices = SalesService.getInvoices().filter((i: any) => i.company === 'Glassco');
+    const revenue = invoices.filter((i: any) => i.date?.startsWith(month))
+      .reduce((s: number, i: any) => s + (i.amount || i.totalAmount || 0), 0);
+
+    const pieces = ProductionService.getProductionPieces();
+    const active = pieces.filter(p => !['Delivered', 'Broken'].includes(p.status));
+
+    return `
+=== ERP SNAPSHOT (${today}) ===
+Month quotations: ${monthQuotes.length} | Total quotations: ${quotations.length}
+Month revenue: PKR ${revenue.toLocaleString()}
+Active pieces: ${active.length}
+Month: ${month}
+===`;
+  } catch { return '=== ERP data unavailable ==='; }
+};
+
+// ── Answer data queries via Claude + tool_use ────────────────────────
+export const answerDataQuery = async (message: string): Promise<QueryResult> => {
+  const safeMessage = sanitizeUserInput(message);
+  const erpCtx = buildERPContext();
+
+  const systemPrompt = `You are GlassTech ERP Assistant. Answer data questions using tools.
+
+${erpCtx}
+
+RULES:
+- Use tools to fetch real data, then answer naturally
+- Language: Roman Urdu + English mix
+- Numbers: PKR format with commas
+- Be direct, concise
+- If tool returns data, summarize it conversationally`;
+
+  // Only include READ tools (no create/update/delete)
+  const readTools = TOOL_DEFINITIONS.filter(t =>
+    !t.name.startsWith('create_') &&
+    !t.name.startsWith('update_') &&
+    !t.name.startsWith('draft_') &&
+    !t.name.startsWith('log_') &&
+    t.name !== 'send_whatsapp' &&
+    t.name !== 'print_document'
+  );
+
+  const { text, toolCalls, response } = await chatWithTools({
+    model:     'claude-haiku-4-5-20251001',
+    maxTokens: 800,
+    system:    systemPrompt,
+    tools:     readTools,
+    messages:  [{ role: 'user', content: safeMessage }],
+    agentId:   'eventos-query',
+  });
+
+  // If Claude used tools, execute them and get data
+  if (toolCalls.length > 0) {
+    const toolResults: string[] = [];
+    const toolsUsed: string[] = [];
+
+    for (const tc of toolCalls) {
+      try {
+        const result = await executeTool(tc.name, tc.params, 'EventOS');
+        toolsUsed.push(tc.name);
+        toolResults.push(JSON.stringify(result.result || result, null, 2).slice(0, 1000));
+      } catch (err) {
+        toolResults.push(`Error: ${String(err)}`);
+      }
+    }
+
+    // Send tool results back to Claude for natural response
+    const { text: finalAnswer } = await chatWithTools({
+      model:     'claude-haiku-4-5-20251001',
+      maxTokens: 600,
+      system:    systemPrompt,
+      messages:  [
+        { role: 'user', content: safeMessage },
+        { role: 'assistant', content: response.content as any },
+        { role: 'user', content: toolResults.map((r, i) =>
+          `Tool ${toolCalls[i].name} result:\n${r}`
+        ).join('\n\n') },
+      ],
+      agentId: 'eventos-query',
+    });
+
+    return { type: 'query', answer: finalAnswer || text || 'Data mil gayi lekin summarize nahi ho saki.', toolsUsed };
+  }
+
+  // No tools used — Claude answered directly from context
+  return { type: 'query', answer: text || 'Jawab nahi mil saka.', toolsUsed: [] };
+};
 
 // ── Step 1-4: Classify + Assemble ────────────────────────────────────
 export const processStaffMessage = async (
