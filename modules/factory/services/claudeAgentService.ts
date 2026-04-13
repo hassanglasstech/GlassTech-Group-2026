@@ -470,6 +470,120 @@ export const queryWithTools = async (
   return { answer: finalText?.text || textBlock?.text || 'Data mil gayi lekin format nahi ho saki.', toolsUsed };
 };
 
+// ═══════════════════════════════════════════════════════════════════════
+// PERSISTENT CONVERSATION SESSIONS
+// Stores chat history per user/company/day in Supabase agent_sessions.
+// Injects last 10 messages as context for continuity.
+// Auto-summarizes and resets after 50 messages.
+// ═══════════════════════════════════════════════════════════════════════
+
+interface SessionMessage {
+  role:    'user' | 'assistant';
+  content: string;
+  ts:      number;
+}
+
+let _sessionCache: { id: string; messages: SessionMessage[]; summary: string | null } | null = null;
+let _sessionKey = '';
+
+const getSessionKey = async (): Promise<{ userId: string; company: string; date: string }> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  return {
+    userId:  session?.user?.id || 'anonymous',
+    company: 'GlassCo',
+    date:    new Date().toISOString().split('T')[0],
+  };
+};
+
+// ── Load today's session ─────────────────────────────────────────────────
+export const loadSession = async (): Promise<SessionMessage[]> => {
+  const { userId, company, date } = await getSessionKey();
+  const key = `${userId}:${company}:${date}`;
+
+  if (_sessionCache && _sessionKey === key) return _sessionCache.messages;
+
+  const { data } = await supabase
+    .from('agent_sessions')
+    .select('id, messages, summary')
+    .eq('user_id', userId)
+    .eq('company', company)
+    .eq('session_date', date)
+    .single();
+
+  if (data) {
+    _sessionCache = { id: data.id, messages: data.messages || [], summary: data.summary };
+    _sessionKey = key;
+    return _sessionCache.messages;
+  }
+
+  // Create new session
+  const { data: newSession } = await supabase
+    .from('agent_sessions')
+    .insert({ user_id: userId, company, session_date: date, messages: [], message_count: 0 })
+    .select('id')
+    .single();
+
+  _sessionCache = { id: newSession?.id || '', messages: [], summary: null };
+  _sessionKey = key;
+  return [];
+};
+
+// ── Append message to session ────────────────────────────────────────────
+export const appendToSession = async (role: 'user' | 'assistant', content: string) => {
+  if (!_sessionCache) await loadSession();
+  if (!_sessionCache) return;
+
+  const msg: SessionMessage = { role, content: content.slice(0, 2000), ts: Date.now() };
+  _sessionCache.messages.push(msg);
+
+  // Auto-summarize at 50 messages
+  if (_sessionCache.messages.length >= 50) {
+    const summary = _sessionCache.messages
+      .slice(0, 40)
+      .filter(m => m.role === 'user')
+      .map(m => m.content.slice(0, 80))
+      .join('; ');
+    _sessionCache.summary = `Earlier today: ${summary}`;
+    _sessionCache.messages = _sessionCache.messages.slice(-10);
+  }
+
+  // Upsert to Supabase
+  const { userId, company, date } = await getSessionKey();
+  await supabase
+    .from('agent_sessions')
+    .upsert({
+      user_id:       userId,
+      company,
+      session_date:  date,
+      messages:      _sessionCache.messages,
+      message_count: _sessionCache.messages.length,
+      summary:       _sessionCache.summary,
+      updated_at:    new Date().toISOString(),
+    }, { onConflict: 'user_id,company,session_date' })
+    .then(() => {}, () => {});
+};
+
+// ── Get conversation history for Claude (last 10 messages) ───────────────
+export const getConversationHistory = async (): Promise<ClaudeMessage[]> => {
+  const messages = await loadSession();
+  return messages.slice(-10).map(m => ({
+    role:    m.role,
+    content: m.content,
+  }));
+};
+
+// ── Get session summary for system prompt injection ──────────────────────
+export const getSessionSummary = async (): Promise<string | null> => {
+  if (!_sessionCache) await loadSession();
+  return _sessionCache?.summary || null;
+};
+
+// ── Clear session cache (on logout or date change) ───────────────────────
+export const clearSessionCache = () => {
+  _sessionCache = null;
+  _sessionKey = '';
+};
+
 // ── Token usage getters ──────────────────────────────────────────────────
 export const getSessionUsage = () => ({ ...SESSION_USAGE });
 

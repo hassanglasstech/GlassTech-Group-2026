@@ -7,7 +7,7 @@ import { supabase } from '@/src/services/supabaseClient';
 import { classifyEvent, ClassificationResult } from '../components/agent/EventClassifier';
 import { assembleWorkflow, recordPatternUsage, AssembledWorkflow } from '../components/agent/WorkflowAssembler';
 import { executeTool } from '../components/agent/agentTools';
-import { queryWithTools } from './claudeAgentService';
+import { queryWithTools, appendToSession, getSessionSummary } from './claudeAgentService';
 import { sanitizeUserInput } from './promptSanitizer';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { FinanceService } from '@/modules/finance/services/financeService';
@@ -94,19 +94,28 @@ Month: ${month}
 export const answerDataQuery = async (message: string): Promise<QueryResult> => {
   const safeMessage = sanitizeUserInput(message);
   const erpCtx = buildERPContext();
+  const sessionSummary = await getSessionSummary();
 
   const systemPrompt = `You are GlassTech ERP Assistant. Answer data questions using tools.
 
 ${erpCtx}
-
+${sessionSummary ? `\nCONVERSATION CONTEXT:\n${sessionSummary}\n` : ''}
 RULES:
 - ALWAYS use a tool to fetch real data before answering
 - Language: Roman Urdu + English mix
 - Numbers: PKR format with commas
 - Be direct, concise, conversational
-- Summarize tool results naturally — don't dump raw JSON`;
+- Summarize tool results naturally — don't dump raw JSON
+- If user refers to something from earlier conversation, use the context above`;
+
+  // Save user message to session
+  await appendToSession('user', message);
 
   const { answer, toolsUsed } = await queryWithTools(safeMessage, systemPrompt, 'eventos-query');
+
+  // Save assistant reply to session
+  await appendToSession('assistant', answer);
+
   return { type: 'query', answer, toolsUsed };
 };
 
