@@ -1,0 +1,6 @@
+[project]
+id = "kqitcgoaibwcsaqvdsit"
+
+[functions]
+# Tells Supabase CLI to bundle _shared/ imports for all edge functions
+deno_dir = "./functions"
