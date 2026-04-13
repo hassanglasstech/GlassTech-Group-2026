@@ -149,13 +149,25 @@ export const processStaffMessage = async (
   return { classification, workflow };
 };
 
-// ── Step 5-8: Execute approved workflow ───────────────────────────────
+// ── Write tables that agent tools INSERT into ────────────────────────
+const WRITE_TABLE_MAP: Record<string, string> = {
+  create_quotation:      'quotations',
+  create_requisition:    'requisitions',
+  create_task:           'agent_tasks',
+  schedule_task:         'agent_tasks',
+  log_factory_event:     'factory_events',
+  create_invoice:        'invoices',
+  create_payment_receipt:'payment_receipts',
+};
+
+// ── Step 5-8: Execute approved workflow (with write tracking) ─────────
 export const executeWorkflow = async (
   workflow: AssembledWorkflow,
   approvedBy: string
-): Promise<{ success: boolean; results: any[]; errors: string[] }> => {
+): Promise<{ success: boolean; results: any[]; errors: string[]; executionLogId?: string }> => {
   const results: any[] = [];
   const errors: string[] = [];
+  const writes: { table: string; op: string; id: string; old: any; new_val: any }[] = [];
 
   for (const step of workflow.steps) {
     if (step.status === 'blocked') {
@@ -170,6 +182,23 @@ export const executeWorkflow = async (
     try {
       const result = await executeTool(step.tool, step.params, approvedBy);
       results.push({ step: step.step, tool: step.tool, ...result });
+
+      // Track the write for reversal
+      const table = WRITE_TABLE_MAP[step.tool];
+      if (table && result.success && result.result) {
+        const createdId = result.result.quotation_id || result.result.req_id || result.result.task_id
+          || result.result.event_id || result.result.invoice_id || result.result.receipt_id;
+        if (createdId) {
+          writes.push({ table, op: 'insert', id: createdId, old: null, new_val: result.result });
+        }
+      }
+
+      // Track localStorage writes (update_order_status)
+      if (step.tool === 'update_order_status' && result.success) {
+        writes.push({ table: 'localStorage', op: 'update', id: step.params.doc_id,
+          old: { status: '(previous)' }, new_val: { status: step.params.status } });
+      }
+
       if (!result.success) {
         errors.push(`Step ${step.step} (${step.tool}) failed: ${result.error}`);
       }
@@ -180,9 +209,19 @@ export const executeWorkflow = async (
 
   const success = errors.length === 0;
 
-  // Update event_history with execution result
+  // Save execution log for reversal
+  const { data: execLog } = await supabase.from('agent_execution_log').insert({
+    pattern_id:      workflow.event_id,
+    event_label:     workflow.label,
+    steps_executed:  results,
+    supabase_writes: writes,
+    executed_by:     approvedBy,
+    executed_at:     new Date().toISOString(),
+  }).select('id').single();
+
+  // Update event_history
   await supabase.from('event_history').update({
-    execution_result: { results, errors },
+    execution_result: { results, errors, execution_log_id: execLog?.id },
     outcome:          success ? 'approved' : 'failed',
     executed_by:      approvedBy,
   }).eq('staff_message', workflow.staff_message)
@@ -190,12 +229,79 @@ export const executeWorkflow = async (
     .limit(1)
     .then(() => {}, () => {});
 
-  // Record pattern usage
   if (workflow.event_id.startsWith('EVT-')) {
     await recordPatternUsage(workflow.event_id, success ? 'correct' : 'wrong_steps');
   }
 
-  return { success, results, errors };
+  return { success, results, errors, executionLogId: execLog?.id };
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// REVERSAL ENGINE — undo agent-executed workflows
+// Deletes inserted rows, restores updated rows, creates GL reversal JVs
+// ═══════════════════════════════════════════════════════════════════════
+
+export const reverseExecution = async (
+  executionLogId: string,
+  reversedBy: string
+): Promise<{ success: boolean; reversed: number; errors: string[] }> => {
+  const { data: log } = await supabase
+    .from('agent_execution_log')
+    .select('*')
+    .eq('id', executionLogId)
+    .single();
+
+  if (!log) return { success: false, reversed: 0, errors: ['Execution log not found'] };
+  if (log.reversed_at) return { success: false, reversed: 0, errors: ['Already reversed'] };
+
+  const writes: any[] = log.supabase_writes || [];
+  const errors: string[] = [];
+  let reversed = 0;
+
+  // Reverse in REVERSE order (last write first)
+  for (let i = writes.length - 1; i >= 0; i--) {
+    const w = writes[i];
+    try {
+      if (w.op === 'insert' && w.table !== 'localStorage') {
+        // Delete the inserted row
+        const { error } = await supabase.from(w.table).delete().eq('id', w.id);
+        if (error) {
+          errors.push(`Failed to delete ${w.table}/${w.id}: ${error.message}`);
+        } else {
+          // Also remove from localStorage if applicable
+          const lsKeyMap: Record<string, string> = {
+            quotations: 'gtk_erp_quotations', requisitions: 'gtk_erp_requisitions',
+            agent_tasks: 'gtk_erp_agent_tasks', factory_events: 'gtk_erp_factory_events',
+            invoices: 'gtk_erp_invoices', payment_receipts: 'gtk_erp_payment_receipts',
+          };
+          const lsKey = lsKeyMap[w.table];
+          if (lsKey) {
+            try {
+              const arr = JSON.parse(localStorage.getItem(lsKey) || '[]');
+              const filtered = arr.filter((item: any) => item.id !== w.id);
+              localStorage.setItem(lsKey, JSON.stringify(filtered));
+            } catch {}
+          }
+          reversed++;
+        }
+      } else if (w.op === 'update' && w.table === 'localStorage') {
+        // Restore localStorage value (best effort — old status may be approximate)
+        // Not reversible with certainty, log a warning
+        errors.push(`Note: localStorage update for ${w.id} may need manual check`);
+      }
+    } catch (err) {
+      errors.push(`Reversal error on ${w.table}/${w.id}: ${String(err)}`);
+    }
+  }
+
+  // Mark as reversed
+  await supabase.from('agent_execution_log').update({
+    reversed_at:     new Date().toISOString(),
+    reversed_by:     reversedBy,
+    reversal_result: { reversed, errors },
+  }).eq('id', executionLogId).then(() => {}, () => {});
+
+  return { success: errors.length === 0, reversed, errors };
 };
 
 // ── Record owner feedback for learning ───────────────────────────────

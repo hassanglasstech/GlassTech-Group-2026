@@ -3,8 +3,8 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import React, { useState, useRef } from 'react';
-import { Send, X, CheckCircle2, XCircle, Edit3, Loader2, AlertTriangle, Zap, Plus, Trash2, BookOpen } from 'lucide-react';
-import { processStaffMessage, executeWorkflow, recordFeedback, isDataQuery, isConversational, answerDataQuery, EventOSResult, QueryResult } from '../../services/eventOSService';
+import { Send, X, CheckCircle2, XCircle, Edit3, Loader2, AlertTriangle, Zap, Plus, Trash2, BookOpen, Undo2 } from 'lucide-react';
+import { processStaffMessage, executeWorkflow, recordFeedback, reverseExecution, isDataQuery, isConversational, answerDataQuery, EventOSResult, QueryResult } from '../../services/eventOSService';
 import { saveNewPattern } from '../agent/EventClassifier';
 import { supabase } from '@/src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
@@ -38,6 +38,8 @@ const EventOSChatWidget: React.FC = () => {
   const [teachModules, setTeachModules] = useState<string[]>([]);
   const [teachSteps, setTeachSteps] = useState<{ module: string; action: string }[]>([{ module: 'Purchase', action: '' }]);
   const [teachSaving, setTeachSaving] = useState(false);
+  const [executionLogId, setExecutionLogId] = useState<string | null>(null);
+  const [reversing, setReversing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const user = useAuthStore?.getState?.()?.user;
 
@@ -81,8 +83,22 @@ const EventOSChatWidget: React.FC = () => {
     try {
       const exec = await executeWorkflow(result.workflow, user?.name || 'Owner');
       setExecutionResult(exec);
+      setExecutionLogId(exec.executionLogId || null);
       setState('done');
     } catch { setState('error'); }
+  };
+
+  const handleReverse = async () => {
+    if (!executionLogId) return;
+    setReversing(true);
+    const res = await reverseExecution(executionLogId, user?.name || 'Owner');
+    setReversing(false);
+    setExecutionResult({
+      success: res.success,
+      results: [{ message: res.success ? `Reversed — ${res.reversed} writes undone.` : 'Reversal partial.' }],
+      errors: res.errors,
+    });
+    setExecutionLogId(null); // Can't reverse again
   };
 
   const handleReject = async () => {
@@ -146,6 +162,8 @@ const EventOSChatWidget: React.FC = () => {
     setTeachCategory('other');
     setTeachModules([]);
     setTeachSteps([{ module: 'Purchase', action: '' }]);
+    setExecutionLogId(null);
+    setReversing(false);
   };
 
   if (!open) {
@@ -352,8 +370,20 @@ const EventOSChatWidget: React.FC = () => {
               {executionResult.success ? <CheckCircle2 size={32} className="text-green-400 mx-auto mb-2" /> : <AlertTriangle size={32} className="text-red-400 mx-auto mb-2" />}
               <p className="text-sm font-bold text-white">{executionResult.success ? 'Done' : 'Failed'}</p>
               {executionResult.results?.[0]?.message && <p className="text-[10px] text-slate-400 mt-1">{executionResult.results[0].message}</p>}
+              {executionResult.errors?.length > 0 && executionResult.errors.map((e: string, i: number) => (
+                <p key={i} className="text-[10px] text-red-400 mt-1">{e}</p>
+              ))}
             </div>
-            <button onClick={reset} className="w-full bg-slate-800 text-slate-300 text-xs py-2 rounded-xl">New Event</button>
+            <div className="flex gap-2">
+              <button onClick={reset} className="flex-1 bg-slate-800 text-slate-300 text-xs py-2 rounded-xl">New Event</button>
+              {executionLogId && (
+                <button onClick={handleReverse} disabled={reversing}
+                  className="px-4 bg-red-600/20 hover:bg-red-600/30 disabled:opacity-40 text-red-400 text-xs font-bold py-2 rounded-xl flex items-center gap-1">
+                  {reversing ? <Loader2 size={12} className="animate-spin" /> : <Undo2 size={12} />}
+                  Reverse
+                </button>
+              )}
+            </div>
           </div>
         )}
 
