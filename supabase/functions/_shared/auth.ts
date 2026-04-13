@@ -5,10 +5,25 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const ALLOWED_ORIGIN = Deno.env.get('SITE_URL') || 'https://glasstech-erp.vercel.app';
+const ALLOWED_ORIGINS = [
+  Deno.env.get('SITE_URL'),
+  'https://glasstech-erp.vercel.app',
+  'https://glass-tech-group-2026.vercel.app',
+].filter(Boolean) as string[];
 
+export function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('Origin') || '';
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+  };
+}
+
+// Static fallback for non-request contexts
 export const corsHeaders = {
-  'Access-Control-Allow-Origin':  ALLOWED_ORIGIN,
+  'Access-Control-Allow-Origin':  ALLOWED_ORIGINS[0] || '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };

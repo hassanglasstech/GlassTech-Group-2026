@@ -6,10 +6,24 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 // ── Inline shared auth (dashboard deploy mein _shared available nahi hota) ──
-const ALLOWED_ORIGIN = Deno.env.get('SITE_URL') || 'https://glasstech-erp.vercel.app';
+const ALLOWED_ORIGINS = [
+  Deno.env.get('SITE_URL'),
+  'https://glasstech-erp.vercel.app',
+  'https://glass-tech-group-2026.vercel.app',
+].filter(Boolean) as string[];
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('Origin') || '';
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  };
+}
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin':  ALLOWED_ORIGIN,
+  'Access-Control-Allow-Origin':  ALLOWED_ORIGINS[0] || '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
@@ -25,7 +39,7 @@ async function requireAuth(req: Request): Promise<AuthResult> {
       ok: false,
       response: new Response(
         JSON.stringify({ error: 'Missing or invalid Authorization header' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }  // Note: auth uses static corsHeaders as req not available here
       ),
     };
   }
@@ -50,7 +64,7 @@ async function requireAuth(req: Request): Promise<AuthResult> {
       ok: false,
       response: new Response(
         JSON.stringify({ error: 'Invalid or expired token' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }  // Note: auth uses static corsHeaders as req not available here
       ),
     };
   }
@@ -137,12 +151,13 @@ function verifyRequestFreshness(req: Request): { ok: boolean; error?: string } {
 
 // ── Main handler ────────────────────────────────────────────────────
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  const cors = getCorsHeaders(req);
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
 
   // Reject non-POST
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 405, headers: { ...cors, 'Content-Type': 'application/json' },
     });
   }
 
@@ -153,7 +168,7 @@ Deno.serve(async (req) => {
   const freshness = verifyRequestFreshness(req);
   if (!freshness.ok) {
     return new Response(JSON.stringify({ error: freshness.error }), {
-      status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
     });
   }
 
@@ -161,7 +176,7 @@ Deno.serve(async (req) => {
   if (!anthropicKey) {
     return new Response(JSON.stringify({
       error: 'ANTHROPIC_API_KEY not set in Supabase secrets'
-    }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }), { status: 400, headers: { ...cors, 'Content-Type': 'application/json' } });
   }
 
   const supabase = createClient(
@@ -182,7 +197,7 @@ Deno.serve(async (req) => {
         }), {
           status: 429,
           headers: {
-            ...corsHeaders,
+            ...cors,
             'Content-Type': 'application/json',
             'Retry-After': String(rateCheck.retryAfter),
           },
@@ -194,13 +209,13 @@ Deno.serve(async (req) => {
     if (!body.model || !ALLOWED_MODELS.has(body.model)) {
       return new Response(JSON.stringify({
         error: `Model not allowed. Use: ${[...ALLOWED_MODELS].join(', ')}`,
-      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }), { status: 400, headers: { ...cors, 'Content-Type': 'application/json' } });
     }
 
     // ── Validate messages array ─────────────────────────────────
     if (!Array.isArray(body.messages) || body.messages.length === 0) {
       return new Response(JSON.stringify({ error: 'messages must be a non-empty array' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
       });
     }
 
@@ -236,7 +251,7 @@ Deno.serve(async (req) => {
       return new Response(res.body, {
         status: res.status,
         headers: {
-          ...corsHeaders,
+          ...cors,
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           'Connection': 'keep-alive',
@@ -269,13 +284,13 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify(data), {
       status: res.status,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
     });
 
   } catch (err) {
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
     });
   }
 });
