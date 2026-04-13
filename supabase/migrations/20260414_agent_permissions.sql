@@ -1,12 +1,10 @@
 -- ═══════════════════════════════════════════════════════════════════
--- Migration: Agent Permissions + Rate Limiting
+-- Migration: Agent Permissions + Rate Limiting + Rate Config
 -- Date: 2026-04-14
--- Purpose: Scope agent capabilities, enable per-user rate limiting
+-- Purpose: Scope agent capabilities, enable configurable rate limiting
 -- ═══════════════════════════════════════════════════════════════════
 
 -- ── 1. Rate Limiting Table ───────────────────────────────────────────
--- Stores one row per Claude API call for sliding-window rate checks.
--- claude-proxy queries this to enforce 100/hr and 10/min limits.
 CREATE TABLE IF NOT EXISTS agent_rate_limits (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    TEXT NOT NULL,
@@ -21,13 +19,31 @@ ALTER TABLE agent_rate_limits ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "service_role_only" ON agent_rate_limits
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- Cleanup: delete rows older than 2 hours (run via pg_cron or manually)
--- SELECT cron.schedule('cleanup-rate-limits', '0 * * * *',
---   $$DELETE FROM agent_rate_limits WHERE created_at < now() - interval '2 hours'$$);
+-- ── 2. Rate Config Table (configurable, not hardcoded) ───────────────
+CREATE TABLE IF NOT EXISTS agent_rate_config (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  config_key      TEXT NOT NULL UNIQUE,
+  max_per_minute  INTEGER NOT NULL DEFAULT 10,
+  max_per_hour    INTEGER NOT NULL DEFAULT 100,
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
--- ── 2. Agent Permissions Table ───────────────────────────────────────
--- Defines what each agent ID is allowed to do.
--- Read-only agents cannot invoke write tools (enforced at application layer).
+ALTER TABLE agent_rate_config ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "authenticated_read_config" ON agent_rate_config
+  FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "service_role_all_config" ON agent_rate_config
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+INSERT INTO agent_rate_config (config_key, max_per_minute, max_per_hour) VALUES
+  ('claude_proxy', 10, 100)
+ON CONFLICT (config_key) DO NOTHING;
+
+-- ── 3. Agent Permissions Table ───────────────────────────────────────
+-- Two-level permission model:
+-- (a) agent_permissions: which agents exist, their default model/token limits
+-- (b) agent_table_access: per-agent, per-table CRUD scoping
 CREATE TABLE IF NOT EXISTS agent_permissions (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   agent_id      TEXT NOT NULL UNIQUE,
@@ -49,9 +65,28 @@ CREATE POLICY "authenticated_read" ON agent_permissions
 CREATE POLICY "service_role_all" ON agent_permissions
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- ── 3. Seed Default Permissions ──────────────────────────────────────
--- erp-chat is the only agent with write permission (creates quotations, reqs, etc.)
--- All other agents are read-only analysis agents.
+-- ── 4. Agent Table Access (per-agent, per-table CRUD) ────────────────
+-- Maps which agent can read/write/delete from which Supabase table.
+CREATE TABLE IF NOT EXISTS agent_table_access (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_name  TEXT NOT NULL,
+  table_name  TEXT NOT NULL,
+  can_read    BOOLEAN NOT NULL DEFAULT true,
+  can_write   BOOLEAN NOT NULL DEFAULT false,
+  can_delete  BOOLEAN NOT NULL DEFAULT false,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(agent_name, table_name)
+);
+
+ALTER TABLE agent_table_access ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "authenticated_read_access" ON agent_table_access
+  FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "service_role_all_access" ON agent_table_access
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- ── 5. Seed Agent Permissions ────────────────────────────────────────
 INSERT INTO agent_permissions (agent_id, agent_label, permission, allowed_tools, max_tokens, model) VALUES
   ('erp-chat',          'ERP Chat Agent',       'write',
     ARRAY['find_order','search_client','get_glass_rate','petty_cash_report','outstanding_payments',
@@ -61,7 +96,6 @@ INSERT INTO agent_permissions (agent_id, agent_label, permission, allowed_tools,
           'update_order_status','create_task','draft_payment_voucher','log_factory_event',
           'print_document','send_whatsapp'],
     1000, 'claude-haiku-4-5-20251001'),
-
   ('multi-factory',     'Multi-Agent Factory',  'read', '{}', 200, 'claude-haiku-4-5-20251001'),
   ('multi-finance',     'Multi-Agent Finance',  'read', '{}', 200, 'claude-haiku-4-5-20251001'),
   ('multi-vendor',      'Multi-Agent Vendor',   'read', '{}', 200, 'claude-haiku-4-5-20251001'),
@@ -75,12 +109,32 @@ INSERT INTO agent_permissions (agent_id, agent_label, permission, allowed_tools,
   ('adversarial',       'Adversarial Intel',    'read', '{}', 500, 'claude-sonnet-4-6')
 ON CONFLICT (agent_id) DO NOTHING;
 
--- ── 4. Multi-Tenant RLS Design Reference ─────────────────────────────
--- For future SaaS multi-tenancy, every table needs:
---   ALTER TABLE <table> ADD COLUMN client_id TEXT DEFAULT 'glasstech-internal';
---   CREATE POLICY "tenant_isolation" ON <table>
---     FOR ALL USING (client_id = auth.jwt()->>'client_id');
--- This is documented here as the pattern. Applying to 58+ unprotected
--- tables is a separate migration effort.
+-- ── 6. Seed Agent Table Access (write agents) ────────────────────────
+-- erp-chat is the only agent that writes to Supabase tables.
+-- Identified from agentTools.ts executeTool():
+INSERT INTO agent_table_access (agent_name, table_name, can_read, can_write, can_delete) VALUES
+  -- erp-chat: write access
+  ('erp-chat', 'quotations',        true, true, false),
+  ('erp-chat', 'requisitions',      true, true, false),
+  ('erp-chat', 'requisition_items', true, true, false),
+  ('erp-chat', 'agent_tasks',       true, true, false),
+  ('erp-chat', 'factory_events',    true, true, false),
+  ('erp-chat', 'agent_actions',     true, true, false),
+  -- Read-only agents (no Supabase writes)
+  ('scenario-engine',   'business_scenarios',     true, false, false),
+  ('scenario-engine',   'vendor_sla',             true, false, false),
+  ('semantic-narrative', 'transaction_semantics',  true, false, false),
+  ('semantic-narrative', 'market_intelligence',    true, false, false),
+  ('morning-briefing',  'quotations',             true, false, false),
+  ('morning-briefing',  'requisitions',           true, false, false),
+  ('morning-briefing',  'factory_events',         true, false, false),
+  ('morning-briefing',  'morning_briefings',      true, true,  false)
+ON CONFLICT (agent_name, table_name) DO NOTHING;
+
+-- ── 7. Multi-Tenant RLS Design Reference ─────────────────────────────
+-- See /docs/MULTI_TENANT_SCHEMA_DESIGN.md for full design.
+-- Pattern: ALTER TABLE <t> ADD COLUMN client_id TEXT DEFAULT 'glasstech-internal';
+-- Policy: CREATE POLICY "tenant" ON <t> FOR ALL USING (client_id = auth.jwt()->>'client_id');
+-- NOT EXECUTED HERE — documented only. Phase 8 pre-SaaS launch.
 COMMENT ON TABLE agent_permissions IS
-  'Multi-tenant pattern: add client_id TEXT + RLS policy USING (client_id = auth.jwt()->>client_id) to each table. Default: glasstech-internal';
+  'Multi-tenant: see /docs/MULTI_TENANT_SCHEMA_DESIGN.md. Phase 8 migration.';

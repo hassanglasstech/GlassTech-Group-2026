@@ -70,13 +70,27 @@ const ALLOWED_BODY_KEYS = new Set([
   'stream', '_agent_id', 'tool_choice', 'temperature',
 ]);
 
-// ── Security: Rate limiter (inline) ──────────────────────────────────
-async function checkRateLimit(userId: string, supabase: any): Promise<{ allowed: boolean; retryAfter?: number }> {
-  const now      = new Date();
-  const hourAgo  = new Date(now.getTime() - 3600000).toISOString();
-  const minAgo   = new Date(now.getTime() - 60000).toISOString();
+// ── Security: Configurable rate limiter (loads limits from DB) ───────
+let _rateConfig: { max_per_minute: number; max_per_hour: number } | null = null;
+let _rateConfigExpiry = 0;
 
-  // Count calls in last hour and last minute
+async function loadRateConfig(supabase: any) {
+  const now = Date.now();
+  if (_rateConfig && now < _rateConfigExpiry) return _rateConfig;
+  try {
+    const { data } = await supabase.from('agent_rate_config').select('max_per_minute, max_per_hour').eq('config_key', 'claude_proxy').single();
+    _rateConfig = data ? { max_per_minute: data.max_per_minute ?? 10, max_per_hour: data.max_per_hour ?? 100 } : { max_per_minute: 10, max_per_hour: 100 };
+  } catch { _rateConfig = { max_per_minute: 10, max_per_hour: 100 }; }
+  _rateConfigExpiry = now + 300000; // 5 min cache
+  return _rateConfig;
+}
+
+async function checkRateLimit(userId: string, supabase: any): Promise<{ allowed: boolean; retryAfter?: number; reason?: string }> {
+  const config  = await loadRateConfig(supabase);
+  const now     = new Date();
+  const hourAgo = new Date(now.getTime() - 3600000).toISOString();
+  const minAgo  = new Date(now.getTime() - 60000).toISOString();
+
   const [hourRes, minRes] = await Promise.all([
     supabase.from('agent_rate_limits').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', hourAgo),
     supabase.from('agent_rate_limits').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', minAgo),
@@ -85,13 +99,40 @@ async function checkRateLimit(userId: string, supabase: any): Promise<{ allowed:
   const hourCount = hourRes.count ?? 0;
   const minCount  = minRes.count ?? 0;
 
-  if (minCount >= 10) return { allowed: false, retryAfter: 60 };
-  if (hourCount >= 100) return { allowed: false, retryAfter: 3600 };
+  if (minCount >= config.max_per_minute) return { allowed: false, retryAfter: 60, reason: `${config.max_per_minute} calls/minute limit` };
+  if (hourCount >= config.max_per_hour)  return { allowed: false, retryAfter: 3600, reason: `${config.max_per_hour} calls/hour limit` };
 
-  // Log this call
   await supabase.from('agent_rate_limits').insert({ user_id: userId, created_at: now.toISOString() }).catch(() => {});
-
   return { allowed: true };
+}
+
+// ── Security: Request signature verification (replay prevention) ─────
+// Frontend sends X-Request-Nonce (UUID) + X-Request-Timestamp (epoch ms).
+// Proxy rejects if timestamp > 5 min old or nonce already seen.
+const _seenNonces = new Set<string>();
+const NONCE_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+
+function verifyRequestFreshness(req: Request): { ok: boolean; error?: string } {
+  const nonce     = req.headers.get('X-Request-Nonce');
+  const timestamp = req.headers.get('X-Request-Timestamp');
+
+  // Signature headers are optional — if not sent, skip (backwards compatible)
+  if (!nonce || !timestamp) return { ok: true };
+
+  const ts = parseInt(timestamp, 10);
+  if (isNaN(ts) || Math.abs(Date.now() - ts) > NONCE_WINDOW_MS) {
+    return { ok: false, error: 'Request timestamp expired (>5 min)' };
+  }
+
+  if (_seenNonces.has(nonce)) {
+    return { ok: false, error: 'Duplicate request nonce (replay detected)' };
+  }
+
+  _seenNonces.add(nonce);
+  // Cleanup old nonces every 1000 entries
+  if (_seenNonces.size > 1000) _seenNonces.clear();
+
+  return { ok: true };
 }
 
 // ── Main handler ────────────────────────────────────────────────────
@@ -107,6 +148,14 @@ Deno.serve(async (req) => {
 
   const auth = await requireAuth(req);
   if (!auth.ok) return auth.response;
+
+  // ── Replay prevention ─────────────────────────────────────────
+  const freshness = verifyRequestFreshness(req);
+  if (!freshness.ok) {
+    return new Response(JSON.stringify({ error: freshness.error }), {
+      status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
 
   const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
   if (!anthropicKey) {

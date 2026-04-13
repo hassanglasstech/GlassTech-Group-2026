@@ -80,9 +80,10 @@ agent_alert_history, agent_memories, agent_tasks, assets, business_scenarios, cu
 |---------|--------|-------|
 | Model whitelist | None (any model) | haiku + sonnet only |
 | Max tokens | None | Capped at 1500 |
-| Rate limiting | None | 100/hr + 10/min per user |
+| Rate limiting | None | Configurable from agent_rate_config table (default 100/hr + 10/min) |
 | Request validation | None | Required messages array, system cap 5000 chars |
 | Body sanitization | None | Strip unknown keys |
+| Replay prevention | None | Nonce + timestamp verification (X-Request-Nonce, X-Request-Timestamp) |
 
 ---
 
