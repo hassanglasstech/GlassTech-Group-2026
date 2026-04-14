@@ -556,6 +556,64 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
     ? [{ key: 'emp', header: 'Employee' }, { key: 'basic', header: 'Basic Pay', align: 'right' }, { key: 'allow', header: 'Allowances', align: 'right' }, { key: 'gross', header: 'Gross Salary', align: 'right' }, { key: 'slip', header: 'Slip', align: 'center' }]
     : [{ key: 'emp', header: 'Employee' }, { key: 'otHrs', header: 'OT Hours', align: 'center' }, { key: 'rate', header: 'Hourly Rate (x1.5)', align: 'right' }, { key: 'otWage', header: 'Total OT Wage', align: 'right' }, { key: 'slip', header: 'Slip', align: 'center' }];
 
+  // ── Group Payroll Register — Phase 8 ──────────────────────────────────────
+  const exportGroupPayrollRegister = async () => {
+    const COMPANIES_ALL = ['GTK', 'GTI', 'Glassco', 'Nippon', 'Factory'];
+    const wb = XLSX.utils.book_new();
+    const allRows: any[] = [];
+
+    for (const co of COMPANIES_ALL) {
+      const emps = HRService.getEmployees().filter((e: any) => e.company === co);
+      if (emps.length === 0) continue;
+
+      const overrides = await AttendanceOverrideService.load(co, selectedMonth);
+      const loans = HRService.getLoans();
+      const SALARY_DAYS = 25;
+
+      const rows = emps.map((emp: any) => {
+        const override = overrides[emp.id];
+        const basic = emp?.compensation?.basic || emp?.salary || 0;
+        const allowances = emp?.compensation?.allowances || 0;
+        const gross = basic + allowances;
+        const dayRate = gross / SALARY_DAYS;
+
+        const absentDays = override ? Math.max(0, (override.absent || 0) - (override.allowedAbsent || 0)) : 0;
+        const latePenaltyDays = override ? Math.floor((override.lates || 0) / 3) : 0;
+        const otHours = override ? Number(override.ot || 0) : 0;
+        const otPay = Math.round((dayRate / 8) * 1.5 * otHours);
+        const absentDed = Math.round(absentDays * dayRate);
+        const lateDed = Math.round(latePenaltyDays * dayRate);
+        const loanDed = override?.manualLoanDeduction !== undefined && override.manualLoanDeduction >= 0
+          ? override.manualLoanDeduction
+          : loans.filter((l: any) => l.employeeId === emp.id && l.status === 'Active')
+                 .reduce((s: number, l: any) => s + (l.repaymentAmount || l.amount || 0), 0);
+        const net = Math.max(0, gross + otPay - absentDed - lateDed - loanDed);
+
+        return {
+          Company: co, Code: emp?.work?.employeeCode || emp.id,
+          Name: emp?.personal?.name || '—', Designation: emp?.work?.designation || '—',
+          Basic: basic, Allowances: allowances, Gross: gross,
+          'Absent Days': absentDays, 'Late Penalty': latePenaltyDays,
+          'OT Hours': otHours, 'OT Pay': otPay,
+          'Absent Dedn': absentDed, 'Late Dedn': lateDed, 'Loan Dedn': loanDed,
+          'Net Payable': net, Month: selectedMonth,
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, co.substring(0, 10));
+      allRows.push(...rows);
+    }
+
+    if (allRows.length > 0) {
+      const wsAll = XLSX.utils.json_to_sheet(allRows);
+      XLSX.utils.book_append_sheet(wb, wsAll, 'All Companies');
+    }
+
+    XLSX.writeFile(wb, `GlassTech_Payroll_Register_${selectedMonth}.xlsx`);
+    toast.success(`Group Payroll Register exported — ${allRows.length} employees`);
+  };
+
   return (
     <div className="flex flex-col h-full min-h-0">
       <CompactPageHeader
@@ -675,78 +733,7 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
                       if (!phone) return null;
                       const wa = `92${phone.replace(/^0/,'')}`;
                       const msg = encodeURIComponent(`Payslip — ${emp?.personal?.name} — ${selectedSlip?.month}\nNet Salary: PKR ${selectedSlip?.netSalary?.toLocaleString()}\nSent from GlassTech ERP`);
-                    
-  // ── Group Payroll Register — Phase 8 ──────────────────────────────────────
-  const exportGroupPayrollRegister = async () => {
-    const COMPANIES_ALL = ['GTK', 'GTI', 'Glassco', 'Nippon', 'Factory'];
-    const wb = XLSX.utils.book_new();
-    const allRows: any[] = [];
-
-    for (const co of COMPANIES_ALL) {
-      const emps = HRService.getEmployees().filter((e: any) => e.company === co);
-      if (emps.length === 0) continue;
-
-      const overrides = await AttendanceOverrideService.load(co, selectedMonth);
-      const attendance = HRService.getAttendance();
-      const loans = HRService.getLoans();
-      const SALARY_DAYS = 25;
-
-      const rows = emps.map((emp: any) => {
-        const override = overrides[emp.id];
-        const basic = emp?.compensation?.basic || emp?.salary || 0;
-        const allowances = emp?.compensation?.allowances || 0;
-        const gross = basic + allowances;
-        const dayRate = gross / SALARY_DAYS;
-
-        const absentDays = override ? Math.max(0, (override.absent || 0) - (override.allowedAbsent || 0)) : 0;
-        const latePenaltyDays = override ? Math.floor((override.lates || 0) / 3) : 0;
-        const otHours = override ? Number(override.ot || 0) : 0;
-        const otPay = Math.round((dayRate / 8) * 1.5 * otHours);
-        const absentDed = Math.round(absentDays * dayRate);
-        const lateDed = Math.round(latePenaltyDays * dayRate);
-        const loanDed = override?.manualLoanDeduction !== undefined && override.manualLoanDeduction >= 0
-          ? override.manualLoanDeduction
-          : loans.filter((l: any) => l.employeeId === emp.id && l.status === 'Active')
-                 .reduce((s: number, l: any) => s + (l.repaymentAmount || l.amount || 0), 0);
-        const net = Math.max(0, gross + otPay - absentDed - lateDed - loanDed);
-
-        return {
-          Company:           co,
-          Code:              emp?.work?.employeeCode || emp.id,
-          Name:              emp?.personal?.name || '—',
-          Designation:       emp?.work?.designation || '—',
-          Basic:             basic,
-          Allowances:        allowances,
-          Gross:             gross,
-          'Absent Days':     absentDays,
-          'Late Penalty':    latePenaltyDays,
-          'OT Hours':        otHours,
-          'OT Pay':          otPay,
-          'Absent Dedn':     absentDed,
-          'Late Dedn':       lateDed,
-          'Loan Dedn':       loanDed,
-          'Net Payable':     net,
-          Month:             selectedMonth,
-        };
-      });
-
-      // Per-company sheet
-      const ws = XLSX.utils.json_to_sheet(rows);
-      XLSX.utils.book_append_sheet(wb, ws, co.substring(0, 10));
-      allRows.push(...rows);
-    }
-
-    // Consolidated sheet
-    if (allRows.length > 0) {
-      const wsAll = XLSX.utils.json_to_sheet(allRows);
-      XLSX.utils.book_append_sheet(wb, wsAll, 'All Companies');
-    }
-
-    XLSX.writeFile(wb, `GlassTech_Payroll_Register_${selectedMonth}.xlsx`);
-    toast.success(`Group Payroll Register exported — ${allRows.length} employees`);
-  };
-
-  return (
+                      return (
                         <a href={`https://wa.me/${wa}?text=${msg}`} target="_blank" rel="noreferrer"
                           className="bg-green-600 text-white px-6 py-3 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-2 hover:bg-green-700">
                           <span>💬</span> WhatsApp
