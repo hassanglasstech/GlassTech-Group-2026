@@ -23,12 +23,24 @@ interface InvoiceResult {
 
 // ── Sequential invoice number ─────────────────────────────────────────
 const getNextInvoiceNumber = (company: Company): string => {
-  const year = new Date().getFullYear();
+  const now = new Date();
+  const year = now.getFullYear();
+  const prefix = company.substring(0, 3).toUpperCase();
+
+  if (company === 'Glassco') {
+    // Glassco: GT-INV-GLS-MMYY-XXXX
+    const mmyy = `${(now.getMonth() + 1).toString().padStart(2, '0')}${year.toString().slice(-2)}`;
+    const key = `gtk_erp_inv_seq_${company}_${year}`;
+    const current = parseInt(localStorage.getItem(key) || '0', 10);
+    const next = current + 1;
+    localStorage.setItem(key, String(next));
+    return `GT-INV-GLS-${mmyy}-${String(next).padStart(4, '0')}`;
+  }
+
   const key = `gtk_erp_inv_seq_${company}_${year}`;
   const current = parseInt(localStorage.getItem(key) || '0', 10);
   const next = current + 1;
   localStorage.setItem(key, String(next));
-  const prefix = company.substring(0, 3).toUpperCase();
   return `INV-${prefix}-${year}-${String(next).padStart(4, '0')}`;
 };
 

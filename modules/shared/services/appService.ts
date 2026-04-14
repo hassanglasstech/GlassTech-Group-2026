@@ -489,21 +489,32 @@ export const AppService = {
           return `REQ-${compCode}-${mmyy}-${nextSeq}`;
       }
 
-      // 2. Special handling for Glassco Sales documents (SO, QT, CH)
+      // 2. Special handling for Glassco Sales documents (SO, QT/QUT, CH/DC)
       if (company === 'Glassco' && (prefix === 'SO' || prefix === 'QT' || prefix === 'CH')) {
-          const countKey = `gtk_last_seq_Glassco_MASTER`;
-          const glasscoPrefix = `${prefix}-GLS-${mmyy}-`;
-          
-          let lastSeq = parseInt(localStorage.getItem(countKey) || '2349', 10);
-          if (lastSeq < 2349) lastSeq = 2349;
-          
+          // Map prefix to new 3-letter doc code: QT→QUT, SO→SO, CH→DC
+          const docCodeMap: Record<string, string> = { 'QT': 'QUT', 'SO': 'SO', 'CH': 'DC' };
+          const docCode = docCodeMap[prefix] || prefix;
+
+          // DC (Delivery Challan) has its own series starting from 9001
+          const isDC = prefix === 'CH';
+          const countKey = isDC ? `gtk_last_seq_Glassco_DC` : `gtk_last_seq_Glassco_MASTER`;
+          const baseSeq = isDC ? 9000 : 2522; // DC starts 9001, QUT/SO starts 2523
+          const glasscoPrefix = `GT-${docCode}-GLS-${mmyy}-`;
+
+          let lastSeq = parseInt(localStorage.getItem(countKey) || String(baseSeq), 10);
+          if (lastSeq < baseSeq) lastSeq = baseSeq;
+
           let maxExisting = 0;
           existingData.forEach(item => {
               const id = item.id || item.orderNo;
-              if (id && typeof id === 'string' && id.startsWith(`${prefix}-GLS-`)) {
+              if (id && typeof id === 'string' && (id.includes('-GLS-'))) {
                   const parts = id.split('-');
                   const seq = parseInt(parts[parts.length - 1], 10);
-                  if (!isNaN(seq) && seq > maxExisting) maxExisting = seq;
+                  if (!isNaN(seq) && seq > maxExisting) {
+                      // For DC, only count DC-range (>=9000); for QUT/SO, only count formal range (<9000)
+                      if (isDC && seq >= 9000) maxExisting = seq;
+                      else if (!isDC && seq < 9000) maxExisting = seq;
+                  }
               }
           });
 

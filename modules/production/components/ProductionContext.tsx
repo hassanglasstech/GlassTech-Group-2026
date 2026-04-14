@@ -290,7 +290,25 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
     if (selectedPiecesForDelivery.size === 0) return toast.error("No pieces selected.", { duration: 4000 });
 
     const newChallan: TemperingDispatch = {
-      id: `CHL-SITE-${Date.now().toString().slice(-5)}`,
+      id: company === 'Glassco'
+        ? (() => {
+            const _now = new Date();
+            const _mmyy = `${(_now.getMonth() + 1).toString().padStart(2, '0')}${_now.getFullYear().toString().slice(-2)}`;
+            const _dcKey = `gtk_last_seq_Glassco_DC`;
+            let _lastSeq = parseInt(localStorage.getItem(_dcKey) || '9000', 10);
+            if (_lastSeq < 9000) _lastSeq = 9000;
+            dispatches.forEach(d => {
+              if (d.id && typeof d.id === 'string' && d.id.includes('-GLS-')) {
+                const parts = d.id.split('-');
+                const seq = parseInt(parts[parts.length - 1], 10);
+                if (!isNaN(seq) && seq >= 9000 && seq > _lastSeq) _lastSeq = seq;
+              }
+            });
+            const _nextSeq = _lastSeq + 1;
+            try { localStorage.setItem(_dcKey, _nextSeq.toString()); } catch {}
+            return `GT-DC-GLS-${_mmyy}-${_nextSeq.toString().padStart(4, '0')}`;
+          })()
+        : `CHL-SITE-${Date.now().toString().slice(-5)}`,
       company,
       date: new Date().toISOString().split('T')[0],
       plantName: directDeliveryForm.siteName.toUpperCase(),

@@ -719,7 +719,30 @@ export const FinanceService = {
       ? req.items.map((i: any) => i.materialDesc).filter(Boolean).join(', ').slice(0, 80)
       : req.headerText || subCategory;
 
-    const pvId = `PV-${company.slice(0,3).toUpperCase()}-${Date.now().toString().slice(-8)}`;
+    // Glassco PV: GT-PV-GLS-MMYY-XXXX starting from 12001
+    const now = new Date();
+    const pvMmyy = `${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getFullYear().toString().slice(-2)}`;
+    const compPrefix = company.slice(0,3).toUpperCase();
+    let pvId: string;
+    if (company === 'Glassco') {
+      const pvCountKey = `gtk_last_seq_Glassco_PV`;
+      const allLedger = FinanceService.getLedger();
+      let maxPvSeq = 12000;
+      const storedSeq = parseInt(localStorage.getItem(pvCountKey) || '12000', 10);
+      if (storedSeq > maxPvSeq) maxPvSeq = storedSeq;
+      allLedger.forEach((t: any) => {
+        if (t.id && typeof t.id === 'string' && t.id.startsWith('GT-PV-GLS-')) {
+          const parts = t.id.split('-');
+          const seq = parseInt(parts[parts.length - 1], 10);
+          if (!isNaN(seq) && seq > maxPvSeq) maxPvSeq = seq;
+        }
+      });
+      const nextPvSeq = maxPvSeq + 1;
+      try { localStorage.setItem(pvCountKey, nextPvSeq.toString()); } catch {}
+      pvId = `GT-PV-GLS-${pvMmyy}-${nextPvSeq.toString().padStart(4, '0')}`;
+    } else {
+      pvId = `PV-${compPrefix}-${Date.now().toString().slice(-8)}`;
+    }
 
     const creditMap: Record<string, { code: string; name: string }> = {
       'Cash':             { code: '11112', name: 'Cash in Hand — Main' },

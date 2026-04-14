@@ -40,14 +40,14 @@ export const useGlasscoQuotations = () => {
       let max = 0;
       all.forEach(q => {
           const refId = q.orderNo || q.id;
-          // Only count formal IDs (QT or SO) for the main serial count
+          // Only count formal IDs (GT-QUT / GT-SO or legacy QT / SO) for the main serial count
           if (!refId || refId.startsWith('DRF-')) return;
           const parts = refId.split('-');
           const num = parseInt(parts[parts.length - 1]);
           // Strictly formal range: below 9000
           if (!isNaN(num) && num > max && num < 9000) max = num;
       });
-      return max || 2472;
+      return max || 2522;
   }, [allQuotations]);
 
   const refreshData = async () => {
@@ -81,7 +81,7 @@ export const useGlasscoQuotations = () => {
     const dateParts = (dataToSave.date || new Date().toISOString().split('T')[0]).split('-');
     const mmyy = `${dateParts[1]}${dateParts[0].slice(-2)}`;
 
-    const hasFormalId = finalId && (finalId.startsWith('QT-') || finalId.startsWith('SO-'));
+    const hasFormalId = finalId && (finalId.startsWith('GT-QUT-') || finalId.startsWith('GT-SO-') || finalId.startsWith('QT-') || finalId.startsWith('SO-'));
     const hasDraftId = finalId && finalId.startsWith('DRF-');
 
     if (action === 'draft') {
@@ -100,18 +100,17 @@ export const useGlasscoQuotations = () => {
             });
             finalId = `DRF-GLS-${mmyy}-${(maxSeq + 1).toString().padStart(4, '0')}`;
         }
-    } 
+    }
     else if (action === 'save' || action === 'approve') {
         if (!hasFormalId) {
-            // New Formal Quotation/Sales Order — start from 2472 (next = 2473)
-            let maxSeq = 2472;
+            // New Formal Quotation/Sales Order — GT-QUT-GLS-MMYY-XXXX / GT-SO-GLS-MMYY-XXXX, start from 2523
+            let maxSeq = 2522;
             all.forEach(q => {
                 const refId = q.orderNo || q.id || '';
-                // Only look at formal IDs to determine the next number
-                if (refId.startsWith('QT-GLS-') || refId.startsWith('SO-GLS-')) {
+                // Look at both new GT- format and legacy QT-/SO- format
+                if (refId.includes('-GLS-')) {
                     const parts = refId.split('-');
                     const lastPart = parts[parts.length - 1];
-                    // Handle revisions like -R1
                     const baseNum = lastPart.split('-')[0];
                     const num = parseInt(baseNum);
                     // Formal range: below 9000
@@ -119,11 +118,11 @@ export const useGlasscoQuotations = () => {
                 }
             });
             const nextSeq = (maxSeq + 1).toString().padStart(4, '0');
-            const prefix = action === 'approve' ? 'SO-GLS' : 'QT-GLS';
+            const prefix = action === 'approve' ? 'GT-SO-GLS' : 'GT-QUT-GLS';
             finalId = `${prefix}-${mmyy}-${nextSeq}`;
-        } else if (action === 'approve' && finalId.startsWith('QT-')) {
-            // Transitioning existing QT to SO: Keep the same number
-            finalId = finalId.replace('QT-', 'SO-');
+        } else if (action === 'approve' && (finalId.startsWith('GT-QUT-') || finalId.startsWith('QT-'))) {
+            // Transitioning existing QUT to SO: Keep the same number
+            finalId = finalId.replace('GT-QUT-', 'GT-SO-').replace('QT-', 'GT-SO-');
         }
     }
 
@@ -134,7 +133,7 @@ export const useGlasscoQuotations = () => {
             toast.error(`Quotation expired on ${dataToSave.dueDate}. Update due date or get manager approval before converting to order.`);
             return;
         }
-        finalOrderNo = finalId.replace('QT-', 'SO-');
+        finalOrderNo = finalId.replace('GT-QUT-', 'GT-SO-').replace('QT-', 'GT-SO-');
     }
 
     const finalQuo: Quotation = { 
