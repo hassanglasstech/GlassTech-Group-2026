@@ -243,7 +243,7 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
             </tr>
           </thead>
           <tbody>
-            {entries.filter(e => e.description.includes(searchTerm.toUpperCase())).reverse().map(e => (
+            {entries.filter(e => (e.description||'').includes(searchTerm.toUpperCase())).reverse().map(e => (
               <tr key={e.id} className={e.status === 'Parked' ? 'bg-amber-50' : ''}>
                 <td className="px-4 py-2 text-slate-400 font-bold text-[11px] uppercase">{e.date}</td>
                 <td className="px-4 py-2">

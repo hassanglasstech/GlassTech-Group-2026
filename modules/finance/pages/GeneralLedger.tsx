@@ -256,7 +256,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
     .slice(0, 10);
 
   const autoPostings: AutoPostRow[] = transactions
-    .filter(t => t.description.includes('Automated') || t.description.includes('Approved') || t.description.includes('PAYROLL'))
+    .filter(t => (t.description||'').includes('Automated') || (t.description||'').includes('Approved') || (t.description||'').includes('PAYROLL'))
     .slice(0, 10)
     .map(tx => ({
       id:          tx.id,
@@ -455,7 +455,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
             <div className="grid grid-cols-3 gap-2 shrink-0">
               {[
                 { icon: <BookOpen size={16} className="text-indigo-600" />, bg: 'bg-indigo-50', label: 'System Accounts (L5)', value: FinanceService.getAccounts().filter(a => a.company === company && a.level === 5).length },
-                { icon: <Zap      size={16} className="text-emerald-600" />, bg: 'bg-emerald-50', label: 'Automated Postings', value: transactions.filter(t => t.description.includes('Automated') || t.description.includes('Approved')).length },
+                { icon: <Zap      size={16} className="text-emerald-600" />, bg: 'bg-emerald-50', label: 'Automated Postings', value: transactions.filter(t => (t.description||'').includes('Automated') || (t.description||'').includes('Approved')).length },
                 { icon: <ShieldCheck size={16} className="text-blue-600" />, bg: 'bg-blue-50', label: 'Audit Compliance', value: '100%' },
               ].map((card, i) => (
                 <div key={i} className="bg-white border border-slate-200 rounded-lg p-3 flex items-center gap-3">

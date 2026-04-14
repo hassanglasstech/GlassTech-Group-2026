@@ -79,7 +79,7 @@ const CostCenterMaster: React.FC<{ company: Company }> = ({ company }) => {
             </tr>
           </thead>
           <tbody>
-            {centers.filter(cc => cc.name.includes(searchTerm.toUpperCase())).map(cc => (
+            {centers.filter(cc => (cc.name||'').includes(searchTerm.toUpperCase())).map(cc => (
               <tr key={cc.id}>
                 <td className="font-mono font-black text-blue-600">{cc.code}</td>
                 <td className="font-bold text-slate-800 uppercase text-xs">{cc.name}</td>
