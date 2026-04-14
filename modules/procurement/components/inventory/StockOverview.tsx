@@ -112,6 +112,7 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                           <th className="px-6 py-4">Item & Code</th>
                           <th className="px-6 py-4">Description</th>
                           <th className="px-6 py-4">Specs (Color/Dir/Tng)</th>
+                          <th className="px-6 py-4">Location</th>
                           <th className="px-6 py-4 text-right">Sheets</th>
                           <th className="px-6 py-4 text-right">Balance Qty</th>
                           <th className="px-6 py-4 text-right">Unit Price</th>
@@ -141,7 +142,6 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                             </td>
                             <td className="px-6 py-4">
                                <p className="font-black text-blue-600 text-xs uppercase">{product?.modelNo || item.id}</p>
-                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{item.storageBin}</p>
                             </td>
                             <td className="px-6 py-4">
                                 <p className="font-bold text-slate-700 text-xs uppercase">{item.name}</p>
@@ -155,6 +155,13 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                                 ) : (
                                     <span className="text-slate-300">-</span>
                                 )}
+                            </td>
+                            <td className="px-6 py-4">
+                              {item.storageBin && item.storageBin !== 'MAIN' ? (
+                                <span className="text-[10px] font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 uppercase">{item.storageBin}</span>
+                              ) : (
+                                <span className="text-[10px] text-slate-300">—</span>
+                              )}
                             </td>
                             <td className="px-6 py-4 text-right">
                               {sheetCount !== null ? (

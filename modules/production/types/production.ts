@@ -84,6 +84,12 @@ export interface Quotation {
   actualDeliveryDate?: string;
   delayReason?: string;
   delayCategory?: 'Internal' | 'Outsourcing' | 'Client' | '';
+  // Replacement order fields (post-delivery customer breakage)
+  orderType?: 'Standard' | 'Replacement';
+  originalOrderRef?: string;       // original quotation/SO ID
+  replacementReason?: string;      // 'Customer Breakage'
+  costBearer?: 'Customer' | 'GlassCo';
+
   // Wastage analysis decision (saved at quotation time)
   wastageDecision?: {
     actualWastagePct: number;

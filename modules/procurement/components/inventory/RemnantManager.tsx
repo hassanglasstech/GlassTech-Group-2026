@@ -391,9 +391,17 @@ const RemnantManager: React.FC = () => {
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-slate-400">Bin Location *</label>
-              <input type="text" className="sap-input w-full font-bold uppercase" placeholder="e.g. Bay-A Rack-3"
+              <input type="text" className="sap-input w-full font-bold uppercase" placeholder="e.g. A-01"
                 value={form.binLocation}
-                onChange={e => setForm(f => ({ ...f, binLocation: e.target.value }))}/>
+                onChange={e => setForm(f => ({ ...f, binLocation: e.target.value.toUpperCase() }))}
+                list="remnant-loc-list"
+                onBlur={() => { if (form.binLocation.trim()) InventoryService.ensureLocation(company, form.binLocation); }}
+              />
+              <datalist id="remnant-loc-list">
+                {InventoryService.getStockLocations(company).map(l => (
+                  <option key={l.id} value={l.code}>{l.description || l.code}</option>
+                ))}
+              </datalist>
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-slate-400">Est. Weight KG</label>

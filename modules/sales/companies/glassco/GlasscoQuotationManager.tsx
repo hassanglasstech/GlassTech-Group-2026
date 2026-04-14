@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { GlasscoPrintTemplate } from '@/modules/glassco/core/GlasscoPrintTemplate';
 import { GlasscoList } from '@/modules/glassco/core/GlasscoList';
 import { GlasscoEditor } from '@/modules/glassco/core/GlasscoEditor';
@@ -37,6 +37,34 @@ const GlasscoQuotationManager: React.FC = () => {
     handleImportJson,
     handleImportExcel
   } = useGlasscoQuotations();
+
+  // Pick up replacement order pre-fill from NCR module
+  useEffect(() => {
+    const raw = localStorage.getItem('gtk_replacement_prefill');
+    if (raw) {
+      try {
+        const prefill = JSON.parse(raw);
+        localStorage.removeItem('gtk_replacement_prefill');
+        setFormData({
+          id: undefined,
+          date: new Date().toISOString().split('T')[0],
+          dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          clientId: '',
+          projectName: prefill.projectName || '',
+          items: [],
+          status: 'Draft',
+          isAlreadyDispatched: false,
+          discountPercent: 0,
+          discountAmount: 0,
+          orderType: prefill.orderType || 'Replacement',
+          originalOrderRef: prefill.originalOrderRef || '',
+          replacementReason: prefill.replacementReason || 'Customer Breakage',
+          costBearer: prefill.costBearer || 'Customer',
+        } as any);
+        setIsEditorOpen(true);
+      } catch {}
+    }
+  }, []);
 
   const filteredQuotations = useMemo(() => {
     let result = [...quotations];

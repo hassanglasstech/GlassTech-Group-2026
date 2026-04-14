@@ -145,16 +145,23 @@ export const NCRService = {
     return repr;
   },
 
-  // When reproduction is done — link new piece, update NCR
-  completeReproduction: (reprId: string, newPieceId: string): void => {
+  // When reproduction is done — link new piece, update NCR, estimate material cost
+  completeReproduction: (reprId: string, newPieceId: string, materialRef?: string): void => {
     const reprs = NCRService.getReproductions();
     const repr = reprs.find(r => r.id === reprId);
     if (!repr) return;
 
+    // Estimate material cost from the original NCR's sqft & value
+    let materialCost = 0;
+    const ncr = NCRService.getNCREvents().find(e => e.id === repr.ncrId);
+    if (ncr && ncr.estimatedValue > 0) {
+      materialCost = ncr.estimatedValue; // same glass spec = approx same cost
+    }
+
     // Update reproduction
     const updatedReprs = reprs.map(r =>
       r.id === reprId
-        ? { ...r, status: 'Completed' as const, newPieceId, completedAt: new Date().toISOString() }
+        ? { ...r, status: 'Completed' as const, newPieceId, completedAt: new Date().toISOString(), materialCost, materialRef: materialRef || undefined }
         : r
     );
     NCRService.saveReproductions(updatedReprs);
@@ -162,7 +169,7 @@ export const NCRService = {
     // Update NCR
     NCRService.updateNCR(repr.ncrId, { status: 'Reproduce-Done' });
 
-    Logger.action('Production', 'REPR_COMPLETED', `Reproduction ${reprId} → Piece ${newPieceId}`);
+    Logger.action('Production', 'REPR_COMPLETED', `Reproduction ${reprId} → Piece ${newPieceId} — Material PKR ${materialCost}`);
   },
 
   // ── Vendor Claims ────────────────────────────────────────────────────
@@ -256,8 +263,13 @@ export const NCRService = {
   _postWriteOffGL: (ncr: NCREvent): void => {
     try {
       const company = ncr.company as any;
-      const accs = FinanceService.getAccounts().filter(a => a.company === company);
       const today = new Date().toISOString().split('T')[0];
+
+      // Production cost center for rework tagging
+      const productionCCs = FinanceService.getCostCenters().filter(
+        (cc: any) => cc.company === company && cc.category === 'F'
+      );
+      const prodCCId = productionCCs.length > 0 ? productionCCs[0].id : undefined;
 
       // Ensure write-off account exists
       const assets = FinanceService.ensureAccount(company, 'ASSETS', 1, null, 'Asset', '10');
@@ -269,6 +281,7 @@ export const NCRService = {
       const prodCost = FinanceService.ensureAccount(company, 'PRODUCTION COSTS', 2, expenses.id, 'Expense', '51');
       const breakageLoss = FinanceService.ensureAccount(company, 'GLASS BREAKAGE LOSS', 3, prodCost.id, 'Expense', '511');
 
+      const causeTag = ncr.cause.replace(/-/g, ' ');
       const all = FinanceService.getLedger();
       const entry = {
         id: `GL-NCR-${ncr.id}`,
@@ -276,11 +289,11 @@ export const NCRService = {
         docType: 'JV',
         docDate: today,
         date: today,
-        description: `Glass Breakage Write-off — ${ncr.id} — ${ncr.stage}`,
+        description: `Glass Breakage Write-off — ${ncr.id} — ${ncr.stage} — ${causeTag}`,
         referenceId: ncr.id,
         status: 'Posted',
         details: [
-          { accountId: breakageLoss.id, debit: ncr.estimatedValue, credit: 0, text: `Breakage: ${ncr.description}` },
+          { accountId: breakageLoss.id, debit: ncr.estimatedValue, credit: 0, text: `Breakage [${causeTag}]: ${ncr.description}`, costCenterId: prodCCId },
           { accountId: wip.id, debit: 0, credit: ncr.estimatedValue, text: `WIP reduction — ${ncr.sqftLost} sqft` },
         ],
       };

@@ -300,17 +300,22 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
           text: `Opening Balance Equity — Stock ${obDate}`,
         });
 
-        FinanceService.recordTransaction({
+        // Opening Balance bypasses MakerChecker — direct ledger save as system entry
+        // Remove any previous OB attempt for this ID to avoid duplicates
+        const allLedger = FinanceService.getLedger().filter((e: any) => e.id !== `GL-${obId}`);
+        allLedger.push({
           id: `GL-${obId}`,
           company: company as any,
-          docType: 'JV' as any,
+          docType: 'OB' as any,
           docDate: obDate,
           date: obDate,
           description: `Opening Balance — ${linesToPost.length} material(s) — PKR ${glTotal.toLocaleString()}`,
           referenceId: obId,
           status: 'Posted',
+          createdBy: 'system-auto',
           details: glDetails,
-        });
+        } as any);
+        FinanceService.saveLedger(allLedger);
       }
 
       toast.success(`Opening Balance posted: ${linesToPost.length} items, PKR ${glTotal.toLocaleString()}`);

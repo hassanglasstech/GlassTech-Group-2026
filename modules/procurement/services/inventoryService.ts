@@ -2,7 +2,7 @@ import {
   StoreItem, MaterialLedgerEntry, InspectionLot, Remnant, RemnantHistoryEntry,
   HandlingUnit, Requisition, PurchaseOrder, Vehicle, VehicleTrip, VehicleExpense,
   GRNSheetEntry, VendorDefectReport, CuttingSession, ManualCountSheet,
-  ScrapDisposal, VendorReview, PalletRateEntry, WeightMasterEntry,
+  ScrapDisposal, VendorReview, PalletRateEntry, WeightMasterEntry, StockLocation,
 } from '@/modules/procurement/types/inventory';
 import { initDB } from '@/modules/shared/services/db';
 import { bgSaveToIDB, safeParse, safeSave } from '@/modules/shared/services/utils';
@@ -70,6 +70,7 @@ const KEYS = {
   VENDOR_REVIEWS:          'gtk_erp_vendor_reviews',
   PALLET_RATES:            'gtk_erp_pallet_rates',
   WEIGHT_MASTER:           'gtk_erp_weight_master',
+  STOCK_LOCATIONS:         'gtk_erp_stock_locations',
 };
 
 // ── SCM-4: Moving Average Price update on GRN posting ─────────────────────
@@ -793,5 +794,33 @@ export const InventoryService = {
   deleteWeightEntry: (id: string) => {
     const all: WeightMasterEntry[] = safeParse(KEYS.WEIGHT_MASTER).filter((w: WeightMasterEntry) => w.id !== id);
     safeSave(KEYS.WEIGHT_MASTER, all);
+  },
+
+  // ── Stock Locations ───────────────────────────────────────────────────
+  getStockLocations: (company?: string): StockLocation[] => {
+    const all: StockLocation[] = safeParse(KEYS.STOCK_LOCATIONS);
+    return company ? all.filter(l => l.company === company && l.isActive) : all;
+  },
+  saveStockLocations: (data: StockLocation[]) => safeSave(KEYS.STOCK_LOCATIONS, data),
+  addStockLocation: (company: string, code: string, description?: string, zone?: string): StockLocation => {
+    const all: StockLocation[] = safeParse(KEYS.STOCK_LOCATIONS);
+    const existing = all.find(l => l.company === company && l.code.toUpperCase() === code.toUpperCase());
+    if (existing) return existing;
+    const loc: StockLocation = {
+      id: `LOC-${Date.now().toString().slice(-6)}`,
+      company: company as any,
+      code: code.toUpperCase(),
+      description: description || '',
+      zone: zone || '',
+      isActive: true,
+    };
+    all.push(loc);
+    safeSave(KEYS.STOCK_LOCATIONS, all);
+    return loc;
+  },
+  /** Ensure a location code exists — auto-creates if new */
+  ensureLocation: (company: string, code: string): StockLocation => {
+    if (!code || !code.trim()) return { id: '', company: company as any, code: '', isActive: true };
+    return InventoryService.addStockLocation(company, code.trim());
   },
 };

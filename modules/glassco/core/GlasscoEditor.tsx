@@ -254,6 +254,24 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                 </div>
             </div>
             
+            {/* Replacement Order Info Bar */}
+            {formData.orderType === 'Replacement' && (
+              <div className="shrink-0 bg-orange-50 border-b border-orange-200 px-6 py-2.5 flex items-center gap-4">
+                <span className="px-2.5 py-1 bg-orange-500 text-white text-[9px] font-black uppercase rounded tracking-wider">Replacement</span>
+                {formData.originalOrderRef && (
+                  <span className="text-xs font-bold text-orange-800">Original: <span className="font-black text-orange-900">{formData.originalOrderRef}</span></span>
+                )}
+                {formData.replacementReason && (
+                  <span className="text-xs font-bold text-orange-700">Reason: {formData.replacementReason}</span>
+                )}
+                {formData.costBearer && (
+                  <span className={`text-xs font-black px-2 py-0.5 rounded ${formData.costBearer === 'Customer' ? 'bg-blue-100 text-blue-700' : 'bg-rose-100 text-rose-700'}`}>
+                    Cost: {formData.costBearer}
+                  </span>
+                )}
+              </div>
+            )}
+
             <div className="flex-1 overflow-hidden p-6 bg-slate-50 flex flex-col">
                 <div className="flex space-x-1 mb-4 no-print">
                     <button 

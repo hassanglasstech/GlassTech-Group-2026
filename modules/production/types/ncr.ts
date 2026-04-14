@@ -120,8 +120,10 @@ export interface NCRReproduction {
   status: 'Queued' | 'In-Production' | 'Completed' | 'Cancelled';
   
   extraCost: number;               // additional material cost
+  materialCost?: number;           // actual material consumed (sqft * MAP) — set on completion
+  materialRef?: string;            // cutting session reference that consumed the sheet
   notes?: string;
-  
+
   createdAt: string;
   completedAt?: string;
 }

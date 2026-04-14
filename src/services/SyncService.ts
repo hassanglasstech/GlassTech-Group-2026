@@ -220,6 +220,10 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     service_charges: q.serviceCharges||[],
     manual_ref: q.manualRef||null,
     subject: q.subject||'',
+    order_type: q.orderType||q.order_type||'Standard',
+    original_order_ref: q.originalOrderRef||q.original_order_ref||null,
+    replacement_reason: q.replacementReason||q.replacement_reason||null,
+    cost_bearer: q.costBearer||q.cost_bearer||null,
     updated_at: q._updatedAt||q.updatedAt||new Date().toISOString(),
   }),
   production_pieces: (p: any) => ({
@@ -815,6 +819,10 @@ const TABLE_PULL: Record<string, (row: any) => any> = {
     serviceCharges: r.service_charges||[],
     manualRef: r.manual_ref,
     isAlreadyDispatched: r.is_already_dispatched,
+    orderType: r.order_type||'Standard',
+    originalOrderRef: r.original_order_ref||null,
+    replacementReason: r.replacement_reason||null,
+    costBearer: r.cost_bearer||null,
     items: r.items||[], status: r.status,
   }),
   production_pieces: (r: any) => ({

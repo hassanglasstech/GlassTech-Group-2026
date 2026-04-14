@@ -211,6 +211,9 @@ export interface GRNSheetEntry {
   // ── Undergauge / Custom Size ───────────────────────────────────
   isUndergauge?: boolean;         // sheet received smaller than standard
   actualSize?: string;            // actual WxH if different from standard e.g. "80x140"
+
+  // ── Storage Location ──────────────────────────────────────────
+  locationCode?: string;          // warehouse position code e.g. "A-01"
 }
 
 // ── Vendor Defect Report — formal report sent to vendor ───────────────────
@@ -651,4 +654,14 @@ export interface VehicleExpense {
   paidStatus: 'Unpaid' | 'Paid';
   glTxId?: string;
   month?: string;
+}
+
+// ── Stock Location — warehouse position registry ─────────────────────────
+export interface StockLocation {
+  id: string;                     // e.g. "LOC-001"
+  company: Company;
+  code: string;                   // user-entered: "A-01", "B-03", "RACK-7"
+  description?: string;           // "Bay A, Row 1 — Left side"
+  zone?: string;                  // optional grouping: "Bay A", "Bay B", "Yard"
+  isActive: boolean;
 }

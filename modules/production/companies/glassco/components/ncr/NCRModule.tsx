@@ -9,6 +9,7 @@
  *  - min-h-0 flex-1 scroll pattern for tablet/factory screens
  */
 import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useProductionContext } from '@/modules/production/components/ProductionContext';
 import { NCRService } from '@/modules/production/services/ncrService';
 import { SalesService } from '@/modules/sales/services/salesService';
@@ -361,6 +362,7 @@ const NCRDetail: React.FC<{
   onRefresh: () => void;
   company: string;
 }> = ({ ncr, reproductions, claims, onClose, onRefresh, company }) => {
+  const navigate = useNavigate();
   const ncrReprs = reproductions.filter(r => r.ncrId === ncr.id);
   const ncrClaim = claims.find(c => c.ncrId === ncr.id);
   const [showPrint, setShowPrint] = useState(false);
@@ -485,6 +487,30 @@ const NCRDetail: React.FC<{
                   </button>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Create Replacement Order — post-dispatch breakage only */}
+          {['Site', 'Loading', 'Tempering-Transit'].includes(ncr.stage) && ncr.status !== 'Closed' && (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-3">
+              <p className="text-[9px] font-black text-orange-500 uppercase mb-1">Post-Delivery Breakage</p>
+              <p className="text-xs text-orange-700 mb-2">Customer breakage after dispatch — create a replacement quotation linked to original order.</p>
+              <button
+                onClick={() => {
+                  localStorage.setItem('gtk_replacement_prefill', JSON.stringify({
+                    orderType: 'Replacement',
+                    originalOrderRef: ncr.jobOrderId || '',
+                    replacementReason: 'Customer Breakage',
+                    costBearer: 'Customer',
+                    projectName: `REPLACEMENT — ${ncr.id}`,
+                  }));
+                  navigate('/sales');
+                  onClose();
+                }}
+                className="flex items-center gap-1 bg-orange-600 text-white px-4 py-2 rounded-lg text-xs font-black hover:bg-orange-700"
+              >
+                <Plus size={14}/> Create Replacement Order
+              </button>
             </div>
           )}
 

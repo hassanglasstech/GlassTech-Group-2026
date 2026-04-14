@@ -104,12 +104,18 @@ export const GlasscoList: React.FC<GlasscoListProps> = ({
                                 // Determine if this is a draft (DRF/DFT) or formal quote (QT) based on ID prefix
                                 const refId = q.orderNo || q.id;
                                 const isDraft = refId.startsWith('DRF-') || refId.startsWith('DFT-');
+                                const isReplacement = (q as any).orderType === 'Replacement';
                                 const numericId = refId.split('-').filter(part => !part.includes('R') && !isNaN(parseInt(part))).pop() || '---';
 
                                 return (
                                     <tr key={q.id} className="hover:bg-slate-50 transition-colors">
                                         <td className="px-4 py-3">
-                                            {isDraft ? (
+                                            {isReplacement ? (
+                                                <div className="flex flex-col">
+                                                    <span className="font-black text-[9px] bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded border border-orange-200 uppercase tracking-wider w-fit mb-0.5">REPLACEMENT</span>
+                                                    <span className="font-black text-orange-700 text-sm">{numericId}</span>
+                                                </div>
+                                            ) : isDraft ? (
                                                 <div className="flex flex-col">
                                                     <span className="font-black text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200 uppercase tracking-wider w-fit mb-0.5">DRAFT</span>
                                                     <span className="font-black text-slate-500 text-sm">{numericId}</span>

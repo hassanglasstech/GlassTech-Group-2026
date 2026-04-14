@@ -74,6 +74,8 @@ interface GRNLine {
   customWidth: string;         // editable width in inches
   customHeight: string;        // editable height in inches
   showSizeEditor: boolean;     // toggle inline size editor
+  // ── Storage Location ──────────────────────────────────────────
+  locationCode: string;        // warehouse position e.g. "A-01"
 }
 
 interface SheetInspection {
@@ -112,6 +114,7 @@ function blankLine(): GRNLine {
     perSheetWeightKg: 0, perSqftWeightKg: 0,
     tagIds: [], sheetInspections: [], expanded: false,
     isUndergauge: false, customWidth: '', customHeight: '', showSizeEditor: false,
+    locationCode: '',
   };
 }
 
@@ -534,7 +537,7 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
           blockedQty: 0, reservedQty: 0, consignmentQty: 0,
           unit: 'SqFt', minLevel: 0, reorderPoint: 0,
           movingAveragePrice: line.ratePKR, totalValue: 0,
-          storageBin: 'MAIN', lastMovementDate: grnDate,
+          storageBin: line.locationCode || 'MAIN', lastMovementDate: grnDate,
           defectiveSheets: 0, defectiveQty: 0, defectiveSqft: 0,
           defectiveValue: 0, remnantCount: 0, remnantSqft: 0,
           scrapSqft: 0, scrapWeightKG: 0,
@@ -561,6 +564,10 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
       item.perSheetWeightKg = perSheetKg;
       item.perSqftWeightKg  = perSqftKg;
       item.lastMovementDate = grnDate;
+      if (line.locationCode) {
+        item.storageBin = line.locationCode;
+        InventoryService.ensureLocation(company, line.locationCode);
+      }
 
       if (itemIdx !== -1) allStore[itemIdx] = item; else allStore.push(item);
 
@@ -575,6 +582,7 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
         balanceAfter: item.quantity,
         referenceDoc: grnId, user: 'Store',
         remarks: `GRN ${grnId} — ${line.description}${line.isUndergauge ? ' [UNDERGAUGE ' + line.sheetSize + '"]' : ''}`,
+        storageBin: line.locationCode || 'MAIN',
         // GRN extended fields
         dcNo, biltyNo, vendorSoNo, vehicleNo, driverName, driverPhone,
         freightType, freightPKR,
@@ -623,6 +631,8 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
           isUndergauge: line.isUndergauge || undefined,
           actualSize: line.isUndergauge && line.customWidth && line.customHeight
             ? `${line.customWidth}x${line.customHeight}` : undefined,
+          // ── Storage Location ──
+          locationCode: line.locationCode || undefined,
         };
         grnSheetEntries.push(entry);
 
@@ -1139,11 +1149,32 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
                         </button>
                       </div>
 
-                      {/* Weight computed display */}
-                      {isFilled && line.weightKg > 0 && (
-                        <div className="px-3 pb-2 flex gap-4 text-[9px] font-bold text-slate-500">
-                          <span>Per sheet: <span className="text-slate-700">{line.perSheetWeightKg.toFixed(2)} kg</span></span>
-                          <span>Per sqft: <span className="text-slate-700">{line.perSqftWeightKg.toFixed(4)} kg</span></span>
+                      {/* Weight computed display + Location */}
+                      {isFilled && (
+                        <div className="px-3 pb-2 flex gap-4 items-center text-[9px] font-bold text-slate-500">
+                          {line.weightKg > 0 && (
+                            <>
+                              <span>Per sheet: <span className="text-slate-700">{line.perSheetWeightKg.toFixed(2)} kg</span></span>
+                              <span>Per sqft: <span className="text-slate-700">{line.perSqftWeightKg.toFixed(4)} kg</span></span>
+                              <div className="h-3 w-px bg-slate-200"/>
+                            </>
+                          )}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] font-black uppercase text-slate-400">Location:</span>
+                            <input
+                              type="text"
+                              className="w-24 px-2 py-0.5 border border-slate-200 rounded text-[10px] font-black uppercase bg-white outline-none focus:ring-1 focus:ring-blue-400"
+                              placeholder="e.g. A-01"
+                              value={line.locationCode || ''}
+                              onChange={e => updateLine(line.id, { locationCode: e.target.value.toUpperCase() })}
+                              list={`loc-list-${line.id}`}
+                            />
+                            <datalist id={`loc-list-${line.id}`}>
+                              {(InventoryService.getStockLocations(company) || []).map(l => (
+                                <option key={l.id} value={l.code}>{l.description || l.code}</option>
+                              ))}
+                            </datalist>
+                          </div>
                         </div>
                       )}
 
