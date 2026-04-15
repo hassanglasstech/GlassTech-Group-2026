@@ -51,6 +51,7 @@ const ProcurementHub   = React.lazy(() => import('./modules/procurement/pages/Pr
 const EventOSChatWidget = React.lazy(() => import('./modules/factory/components/eventOS/ChatWidget').catch(() => ({ default: () => null })));
 const TestSuite        = React.lazy(() => import('./modules/shared/pages/TestSuite'));
 const LoanFlowChart    = React.lazy(() => import('./modules/shared/pages/LoanFlowChart'));
+const GuidedTestFlows  = React.lazy(() => import('./modules/shared/pages/GuidedTestFlows'));
 
 // ── All nav items definition ─────────────────────────────────────────
 // ── Core nav — always visible (role-filtered) ───────────────────────
@@ -465,6 +466,7 @@ const App: React.FC = () => {
                   <Route path="/admin"         element={<ModuleErrorBoundary moduleName="Admin"><AdminSecurity /></ModuleErrorBoundary>} />
                   <Route path="/test-suite"    element={<ModuleErrorBoundary moduleName="UAT Test Suite"><TestSuite /></ModuleErrorBoundary>} />
                   <Route path="/loan-flow"     element={<ModuleErrorBoundary moduleName="Loan Flow Chart"><LoanFlowChart /></ModuleErrorBoundary>} />
+                  <Route path="/guided-tests"  element={<ModuleErrorBoundary moduleName="Guided Tests"><GuidedTestFlows /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />
                 </Routes>              </Suspense>
             </div>
