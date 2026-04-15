@@ -296,6 +296,22 @@ export const assertPOBudget = async (params: {
   }
 };
 
+// ── Supabase JSONB sync helper (fire-and-forget) ──────────────────
+// All procurement tables use { id, company, data JSONB } schema.
+// This helper maps any array of records to that structure and upserts.
+const _sbSync = (table: string, data: any[]): void => {
+  if (!data.length) return;
+  supabase
+    .from(table)
+    .upsert(
+      data.map((r: any) => ({ id: r.id, company: r.company ?? '', data: r })),
+      { onConflict: 'id' }
+    )
+    .then(({ error }) => {
+      if (error) console.error(`[InventoryService] ${table} sync error:`, error.message);
+    });
+};
+
 export const InventoryService = {
   // ── Store ──────────────────────────────────────────────────────────
   getStore: (): StoreItem[] => safeParse(KEYS.STORE),
@@ -462,11 +478,11 @@ export const InventoryService = {
 
   // ── Requisitions ───────────────────────────────────────────────────
   getRequisitions: (): Requisition[] => safeParse(KEYS.REQUISITIONS),
-  saveRequisitions: (data: Requisition[]) => safeSave(KEYS.REQUISITIONS, data),
+  saveRequisitions: (data: Requisition[]) => { safeSave(KEYS.REQUISITIONS, data); _sbSync('requisitions', data); },
 
   // ── Purchase Orders ────────────────────────────────────────────────
   getPurchaseOrders: (): PurchaseOrder[] => safeParse(KEYS.PURCHASE_ORDERS),
-  savePurchaseOrders: (data: PurchaseOrder[]) => safeSave(KEYS.PURCHASE_ORDERS, data),
+  savePurchaseOrders: (data: PurchaseOrder[]) => { safeSave(KEYS.PURCHASE_ORDERS, data); _sbSync('purchase_orders', data); },
 
   // ── Intercompany EDI: PO-to-SO Automation ─────────────────────────
   INTERNAL_COMPANIES: ['GTK', 'GTI', 'Glassco', 'GlassCo', 'Nippon', 'Factory'] as const,
@@ -533,19 +549,19 @@ export const InventoryService = {
 
   // ── Inspection Lots ────────────────────────────────────────────────
   getInspectionLots: (): InspectionLot[] => safeParse(KEYS.INSPECTION_LOTS),
-  saveInspectionLots: (data: InspectionLot[]) => safeSave(KEYS.INSPECTION_LOTS, data),
+  saveInspectionLots: (data: InspectionLot[]) => { safeSave(KEYS.INSPECTION_LOTS, data); _sbSync('inspection_lots', data); },
 
   // ── Handling Units ─────────────────────────────────────────────────
   getHandlingUnits: (): HandlingUnit[] => safeParse(KEYS.HANDLING_UNITS),
-  saveHandlingUnits: (data: HandlingUnit[]) => safeSave(KEYS.HANDLING_UNITS, data),
+  saveHandlingUnits: (data: HandlingUnit[]) => { safeSave(KEYS.HANDLING_UNITS, data); _sbSync('handling_units', data); },
 
   // ── Vehicle Fleet ──────────────────────────────────────────────────
   getVehicles: (): Vehicle[] => safeParse(KEYS.VEHICLES),
-  saveVehicles: (data: Vehicle[]) => safeSave(KEYS.VEHICLES, data),
+  saveVehicles: (data: Vehicle[]) => { safeSave(KEYS.VEHICLES, data); _sbSync('vehicles', data); },
   getVehicleTrips: (): VehicleTrip[] => safeParse(KEYS.VEHICLE_TRIPS),
-  saveVehicleTrips: (data: VehicleTrip[]) => safeSave(KEYS.VEHICLE_TRIPS, data),
+  saveVehicleTrips: (data: VehicleTrip[]) => { safeSave(KEYS.VEHICLE_TRIPS, data); _sbSync('vehicle_trips', data); },
   getVehicleExpenses: (): VehicleExpense[] => safeParse(KEYS.VEHICLE_EXPENSES),
-  saveVehicleExpenses: (data: VehicleExpense[]) => safeSave(KEYS.VEHICLE_EXPENSES, data),
+  saveVehicleExpenses: (data: VehicleExpense[]) => { safeSave(KEYS.VEHICLE_EXPENSES, data); _sbSync('vehicle_expenses', data); },
 
   // ── GRN Sheet Entries (Phase 1) ────────────────────────────────────
   getGRNSheetEntries: (): GRNSheetEntry[] => safeParse(KEYS.GRN_SHEET_ENTRIES),
@@ -553,7 +569,7 @@ export const InventoryService = {
     safeParse(KEYS.GRN_SHEET_ENTRIES).filter((e: GRNSheetEntry) => e.grnId === grnId),
   getGRNSheetEntryByTag: (tagId: string): GRNSheetEntry | undefined =>
     safeParse(KEYS.GRN_SHEET_ENTRIES).find((e: GRNSheetEntry) => e.tagId === tagId),
-  saveGRNSheetEntries: (data: GRNSheetEntry[]) => safeSave(KEYS.GRN_SHEET_ENTRIES, data),
+  saveGRNSheetEntries: (data: GRNSheetEntry[]) => { safeSave(KEYS.GRN_SHEET_ENTRIES, data); _sbSync('grn_sheet_entries', data); },
   upsertGRNSheetEntry: (entry: GRNSheetEntry) => {
     const all: GRNSheetEntry[] = safeParse(KEYS.GRN_SHEET_ENTRIES);
     const idx = all.findIndex(e => e.id === entry.id);
@@ -565,7 +581,7 @@ export const InventoryService = {
   getVendorDefectReports: (): VendorDefectReport[] => safeParse(KEYS.VENDOR_DEFECT_REPORTS),
   getVendorDefectReportsByGRN: (grnId: string): VendorDefectReport[] =>
     safeParse(KEYS.VENDOR_DEFECT_REPORTS).filter((r: VendorDefectReport) => r.grnId === grnId),
-  saveVendorDefectReports: (data: VendorDefectReport[]) => safeSave(KEYS.VENDOR_DEFECT_REPORTS, data),
+  saveVendorDefectReports: (data: VendorDefectReport[]) => { safeSave(KEYS.VENDOR_DEFECT_REPORTS, data); _sbSync('vendor_defect_reports', data); },
   upsertVendorDefectReport: (report: VendorDefectReport) => {
     const all: VendorDefectReport[] = safeParse(KEYS.VENDOR_DEFECT_REPORTS);
     const idx = all.findIndex(r => r.id === report.id);
@@ -597,7 +613,7 @@ export const InventoryService = {
              (r2w >= requiredWidthInch && r2h >= requiredHeightInch);
     });
   },
-  saveRemnants: (data: Remnant[]) => safeSave(KEYS.REMNANTS, data),
+  saveRemnants: (data: Remnant[]) => { safeSave(KEYS.REMNANTS, data); _sbSync('remnants', data); },
   upsertRemnant: (remnant: Remnant) => {
     const all: Remnant[] = safeParse(KEYS.REMNANTS);
     const idx = all.findIndex(r => r.id === remnant.id);
@@ -607,7 +623,7 @@ export const InventoryService = {
 
   // ── Remnant History (Phase 1) ─────────────────────────────────────
   getRemnantHistory: (): RemnantHistoryEntry[] => safeParse(KEYS.REMNANT_HISTORY),
-  saveRemnantHistory: (data: RemnantHistoryEntry[]) => safeSave(KEYS.REMNANT_HISTORY, data),
+  saveRemnantHistory: (data: RemnantHistoryEntry[]) => { safeSave(KEYS.REMNANT_HISTORY, data); _sbSync('remnant_history', data); },
   addRemnantHistoryEntry: (entry: RemnantHistoryEntry) => {
     const all: RemnantHistoryEntry[] = safeParse(KEYS.REMNANT_HISTORY);
     all.push(entry);
@@ -644,7 +660,7 @@ export const InventoryService = {
   getCuttingSessions: (): CuttingSession[] => safeParse(KEYS.CUTTING_SESSIONS),
   getCuttingSessionsByJob: (jobOrderId: string): CuttingSession[] =>
     safeParse(KEYS.CUTTING_SESSIONS).filter((s: CuttingSession) => s.jobOrderId === jobOrderId),
-  saveCuttingSessions: (data: CuttingSession[]) => safeSave(KEYS.CUTTING_SESSIONS, data),
+  saveCuttingSessions: (data: CuttingSession[]) => { safeSave(KEYS.CUTTING_SESSIONS, data); _sbSync('cutting_sessions', data); },
   upsertCuttingSession: (session: CuttingSession) => {
     const all: CuttingSession[] = safeParse(KEYS.CUTTING_SESSIONS);
     const idx = all.findIndex(s => s.id === session.id);
@@ -654,7 +670,7 @@ export const InventoryService = {
 
   // ── Manual Count Sheets (Phase 1) ─────────────────────────────────
   getManualCountSheets: (): ManualCountSheet[] => safeParse(KEYS.MANUAL_COUNT_SHEETS),
-  saveManualCountSheets: (data: ManualCountSheet[]) => safeSave(KEYS.MANUAL_COUNT_SHEETS, data),
+  saveManualCountSheets: (data: ManualCountSheet[]) => { safeSave(KEYS.MANUAL_COUNT_SHEETS, data); _sbSync('manual_count_sheets', data); },
   upsertManualCountSheet: (sheet: ManualCountSheet) => {
     const all: ManualCountSheet[] = safeParse(KEYS.MANUAL_COUNT_SHEETS);
     const idx = all.findIndex(s => s.id === sheet.id);
@@ -666,7 +682,7 @@ export const InventoryService = {
   getScrapDisposals: (): ScrapDisposal[] => safeParse(KEYS.SCRAP_DISPOSALS),
   getScrapDisposalsByCompany: (company: string): ScrapDisposal[] =>
     safeParse(KEYS.SCRAP_DISPOSALS).filter((d: ScrapDisposal) => d.company === company),
-  saveScrapDisposals: (data: ScrapDisposal[]) => safeSave(KEYS.SCRAP_DISPOSALS, data),
+  saveScrapDisposals: (data: ScrapDisposal[]) => { safeSave(KEYS.SCRAP_DISPOSALS, data); _sbSync('scrap_disposals', data); },
   upsertScrapDisposal: (disposal: ScrapDisposal) => {
     const all: ScrapDisposal[] = safeParse(KEYS.SCRAP_DISPOSALS);
     const idx = all.findIndex(d => d.id === disposal.id);
@@ -678,7 +694,7 @@ export const InventoryService = {
   getVendorReviews: (): VendorReview[] => safeParse(KEYS.VENDOR_REVIEWS),
   getVendorReviewsByVendor: (vendorId: string): VendorReview[] =>
     safeParse(KEYS.VENDOR_REVIEWS).filter((r: VendorReview) => r.vendorId === vendorId),
-  saveVendorReviews: (data: VendorReview[]) => safeSave(KEYS.VENDOR_REVIEWS, data),
+  saveVendorReviews: (data: VendorReview[]) => { safeSave(KEYS.VENDOR_REVIEWS, data); _sbSync('vendor_reviews', data); },
   upsertVendorReview: (review: VendorReview) => {
     const all: VendorReview[] = safeParse(KEYS.VENDOR_REVIEWS);
     const idx = all.findIndex(r => r.id === review.id);
@@ -766,7 +782,7 @@ export const InventoryService = {
       .filter((r: PalletRateEntry) => r.company === company)
       .sort((a: PalletRateEntry, b: PalletRateEntry) => b.date.localeCompare(a.date))
       .slice(0, limit),
-  savePalletRates: (data: PalletRateEntry[]) => safeSave(KEYS.PALLET_RATES, data),
+  savePalletRates: (data: PalletRateEntry[]) => { safeSave(KEYS.PALLET_RATES, data); _sbSync('pallet_rates', data); },
   addPalletRate: (entry: PalletRateEntry) => {
     const all: PalletRateEntry[] = safeParse(KEYS.PALLET_RATES);
     all.push(entry);
@@ -785,7 +801,7 @@ export const InventoryService = {
     safeParse(KEYS.WEIGHT_MASTER)
       .filter((w: WeightMasterEntry) => w.company === company && w.productId === productId)
       .sort((a: WeightMasterEntry, b: WeightMasterEntry) => b.date.localeCompare(a.date))[0],
-  saveWeightMaster: (data: WeightMasterEntry[]) => safeSave(KEYS.WEIGHT_MASTER, data),
+  saveWeightMaster: (data: WeightMasterEntry[]) => { safeSave(KEYS.WEIGHT_MASTER, data); _sbSync('weight_master', data); },
   addWeightEntry: (entry: WeightMasterEntry) => {
     const all: WeightMasterEntry[] = safeParse(KEYS.WEIGHT_MASTER);
     all.push(entry);
@@ -801,7 +817,7 @@ export const InventoryService = {
     const all: StockLocation[] = safeParse(KEYS.STOCK_LOCATIONS);
     return company ? all.filter(l => l.company === company && l.isActive) : all;
   },
-  saveStockLocations: (data: StockLocation[]) => safeSave(KEYS.STOCK_LOCATIONS, data),
+  saveStockLocations: (data: StockLocation[]) => { safeSave(KEYS.STOCK_LOCATIONS, data); _sbSync('stock_locations', data); },
   addStockLocation: (company: string, code: string, description?: string, zone?: string): StockLocation => {
     const all: StockLocation[] = safeParse(KEYS.STOCK_LOCATIONS);
     const existing = all.find(l => l.company === company && l.code.toUpperCase() === code.toUpperCase());
