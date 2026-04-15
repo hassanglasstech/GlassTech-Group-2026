@@ -119,6 +119,14 @@ RULES:
   return { type: 'query', answer, toolsUsed };
 };
 
+// ── UAT Test detection + execution ──────────────────────────────────
+import { isTestRequest, runTests as runUATTests } from '../components/agent/TestRunnerAgent';
+
+export const answerTestRequest = async (message: string): Promise<QueryResult> => {
+  const result = await runUATTests(message);
+  return { type: 'query', answer: result.summary, toolsUsed: ['run_uat_test'] };
+};
+
 // ── Step 1-4: Classify + Assemble ────────────────────────────────────
 export const processStaffMessage = async (
   message: string,

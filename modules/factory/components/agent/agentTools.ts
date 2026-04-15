@@ -355,6 +355,14 @@ export const TOOL_DEFINITIONS = [
       description: { type: 'string' },
     }, required: ['title','due_date'] },
   },
+
+  { name: 'run_uat_test',
+    description: 'Run UAT (User Acceptance Testing) on ERP workflows. Can test a single workflow (by ID like WF-S01), a module (finance/hr/sales/store/masters), or full suite. Returns pass/fail per workflow with per-check detail.',
+    input_schema: { type: 'object', properties: {
+      scope:  { type: 'string', enum: ['full','module','single'], description: 'Test scope: full=all workflows, module=one department, single=one workflow' },
+      target: { type: 'string', description: 'Workflow ID (e.g. WF-S01) for single, or module name (finance/hr/sales/store/masters) for module scope' },
+    }, required: ['scope'] },
+  },
 ];
 
 // ════════════════════════════════════════════════════════════════════
@@ -405,6 +413,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string; risk: 'l
   get_remnant_inventory: { label: 'Remnant Inventory',     icon: '🔷', risk: 'low'    },
   get_intercompany_balance:{ label: 'Intercompany Balance',icon: '🔄', risk: 'low'    },
   schedule_task:         { label: 'Schedule Task',         icon: '📅', risk: 'low'    },
+  run_uat_test:          { label: 'Run UAT Test',          icon: '🧪', risk: 'low'    },
 };
 
 // ════════════════════════════════════════════════════════════════════
@@ -776,6 +785,16 @@ export const executeTool = async (
       const { data, error } = await supabase.from('agent_tasks').insert({ title: params.title, description: params.description || null, assigned_to: params.assigned_to || null, priority: params.priority || 'Medium', due_date: params.due_date, status: 'Open', created_by: approvedBy, source: 'EventOS', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }).select('id').single();
       if (error) throw error;
       result = { task_id: data?.id, title: params.title, due_date: params.due_date, message: 'Task scheduled — Tasks mein nazar aayegi' };
+    }
+
+    // ── RUN UAT TEST ─────────────────────────────────────────────
+    else if (toolName === 'run_uat_test') {
+      const { runTests } = await import('./TestRunnerAgent');
+      const scope = params.scope || 'full';
+      const target = params.target || '';
+      const message = `run ${scope} test ${target}`;
+      const testResult = await runTests(message);
+      result = { summary: testResult.summary, detail: testResult.detail, emoji: testResult.emoji };
     }
 
     if (action?.id) { await supabase.from('agent_actions').update({ result, status: 'executed' }).eq('id', action.id); }

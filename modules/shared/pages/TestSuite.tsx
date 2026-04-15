@@ -1,4 +1,6 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { runWorkflow as aiRunWorkflow, runFullSuite as aiRunFullSuite, storeTestResults } from "@/modules/factory/services/testRunnerService";
+import { setWorkflows as setAgentWorkflows } from "@/modules/factory/components/agent/TestRunnerAgent";
 
 // ══════════════════════════════════════════════════════════════════════════════
 // GlassTech ERP — Auto-Discovered UAT Test Suite
@@ -39,7 +41,7 @@ function buildDependencyGraph(workflows) {
 // ── Auto-Discovered Workflow Definitions ────────────────────────────────────
 // Extracted from: TypeScript interfaces, Supabase .from() calls, VBA Sub names,
 // status enums, business rule constants, and FK relationships
-const WORKFLOWS = [
+export const WORKFLOWS = [
   // ═══════════════════════════════════════════════════════════════════════════
   // MODULE 1: MASTER DATA (6 workflows)
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1080,6 +1082,12 @@ export default function GlassTechTestSuiteAuto() {
   const [showLog, setShowLog] = useState(false);
   const [filterDept, setFilterDept] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
+  const [aiRunning, setAiRunning] = useState(false);
+  const [aiRunningWF, setAiRunningWF] = useState(null);
+  const [aiResults, setAiResults] = useState(null);
+
+  // Register workflows with TestRunnerAgent for EventOS integration
+  useEffect(() => { setAgentWorkflows(WORKFLOWS); }, []);
 
   const addLog = useCallback((msg, type="info") => {
     setLog(prev => [{time: new Date().toLocaleTimeString(), msg, type}, ...prev].slice(0,100));
@@ -1152,8 +1160,122 @@ export default function GlassTechTestSuiteAuto() {
     setTestState({});
     setActiveStep({});
     setActiveWF(null);
+    setAiResults(null);
     addLog("[RESET ALL] Full suite reset", "info");
   }, [addLog]);
+
+  // ── AI Auto-Test: Single Workflow ─────────────────────────────────
+  const aiTestWorkflow = useCallback(async (wfId) => {
+    const wf = WORKFLOWS.find(w => w.id === wfId);
+    if (!wf || aiRunning) return;
+    setAiRunningWF(wfId);
+    setAiRunning(true);
+    setActiveWF(wfId);
+    addLog(`[AI] Starting auto-test: ${wf.name}`, "info");
+
+    // Initialize all steps
+    setTestState(prev => ({
+      ...prev,
+      [wfId]: Object.fromEntries(
+        wf.steps.map((s, i) => [s.id, { status: i === 0 ? STATUS.running : STATUS.idle, inputs: {}, failedChecks: [] }])
+      )
+    }));
+    setActiveStep(prev => ({ ...prev, [wfId]: wf.steps[0].id }));
+
+    try {
+      const result = await aiRunWorkflow(wf, (stepResult, stepIndex) => {
+        const step = wf.steps[stepIndex];
+        const failedIndices = stepResult.checks.filter(c => !c.passed).map(c => c.checkIndex);
+        const stepStatus = stepResult.status === 'pass' ? STATUS.pass : STATUS.fail;
+
+        setTestState(prev => ({
+          ...prev,
+          [wfId]: {
+            ...prev[wfId],
+            [step.id]: { status: stepStatus, inputs: stepResult.inputs, failedChecks: failedIndices }
+          }
+        }));
+
+        // Block remaining if failed
+        if (stepResult.status === 'fail') {
+          wf.steps.slice(stepIndex + 1).forEach(s => {
+            setTestState(prev => ({
+              ...prev,
+              [wfId]: { ...prev[wfId], [s.id]: { status: STATUS.blocked, inputs: {}, failedChecks: [] } }
+            }));
+          });
+        }
+
+        // Advance active step
+        const next = wf.steps[stepIndex + 1];
+        if (next && stepResult.status === 'pass') {
+          setActiveStep(prev => ({ ...prev, [wfId]: next.id }));
+          setTestState(prev => ({
+            ...prev,
+            [wfId]: { ...prev[wfId], [next.id]: { ...(prev[wfId]?.[next.id] || { inputs: {}, failedChecks: [] }), status: STATUS.running } }
+          }));
+        }
+
+        const emoji = stepResult.status === 'pass' ? '[PASS]' : '[FAIL]';
+        const autoChecks = stepResult.checks.filter(c => c.method === 'auto').length;
+        const manualChecks = stepResult.checks.filter(c => c.method === 'manual').length;
+        addLog(`${emoji} AI: ${step.tab} — ${autoChecks} auto, ${manualChecks} manual checks`, stepResult.status === 'pass' ? 'pass' : 'fail');
+
+        // Log failed check details
+        stepResult.checks.filter(c => !c.passed).forEach(c => {
+          addLog(`  [DETAIL] ${c.checkText}: actual="${c.actual}" expected="${c.expected}"`, 'fail');
+        });
+      });
+
+      setAiResults(result);
+      await storeTestResults(result);
+      addLog(`[AI COMPLETE] ${wf.name}: ${result.passRate}% pass rate (${result.duration}ms)`, result.status === 'pass' ? 'pass' : 'fail');
+    } catch (err) {
+      addLog(`[AI ERROR] ${String(err)}`, 'fail');
+    } finally {
+      setAiRunning(false);
+      setAiRunningWF(null);
+    }
+  }, [aiRunning, addLog]);
+
+  // ── AI Auto-Test: Full Suite ──────────────────────────────────────
+  const aiTestFullSuite = useCallback(async () => {
+    if (aiRunning) return;
+    setAiRunning(true);
+    setShowLog(true);
+    addLog("[AI] Starting FULL SUITE auto-test...", "info");
+
+    try {
+      const result = await aiRunFullSuite(WORKFLOWS, (wfResult, index) => {
+        const wf = WORKFLOWS[index];
+        // Update test state for this workflow
+        setTestState(prev => ({
+          ...prev,
+          [wf.id]: Object.fromEntries(
+            wf.steps.map((s, i) => {
+              const stepResult = wfResult.steps[i];
+              if (!stepResult) return [s.id, { status: STATUS.idle, inputs: {}, failedChecks: [] }];
+              return [s.id, {
+                status: stepResult.status === 'pass' ? STATUS.pass : stepResult.status === 'fail' ? STATUS.fail : STATUS.blocked,
+                inputs: stepResult.inputs,
+                failedChecks: stepResult.checks.filter(c => !c.passed).map(c => c.checkIndex)
+              }];
+            })
+          )
+        }));
+        const emoji = wfResult.status === 'pass' ? '[PASS]' : wfResult.status === 'partial' ? '[PARTIAL]' : '[FAIL]';
+        addLog(`${emoji} AI: ${wf.id} ${wf.name} — ${wfResult.passRate}%`, wfResult.status === 'pass' ? 'pass' : 'fail');
+      });
+
+      setAiResults(result);
+      await storeTestResults(result);
+      addLog(`[AI SUITE COMPLETE] ${result.passRate}% pass rate | ${result.passed}P ${result.failed}F ${result.partial}W | ${(result.duration/1000).toFixed(1)}s`, result.passRate === 100 ? 'pass' : 'fail');
+    } catch (err) {
+      addLog(`[AI ERROR] ${String(err)}`, 'fail');
+    } finally {
+      setAiRunning(false);
+    }
+  }, [aiRunning, addLog]);
 
   const setStepStatus = useCallback((wfId, stepId, status) => {
     setTestState(prev => ({
@@ -1315,6 +1437,16 @@ export default function GlassTechTestSuiteAuto() {
             }}
           >RESET ALL</button>
           <button
+            onClick={aiTestFullSuite}
+            disabled={aiRunning}
+            style={{
+              padding:"5px 12px", borderRadius:8, border:"1px solid #9B59B644",
+              background: aiRunning ? "#1B2B3A" : "#9B59B622", color: aiRunning ? "#667788" : "#9B59B6", fontSize:10,
+              cursor: aiRunning ? "wait" : "pointer", fontWeight:700,
+              animation: aiRunning ? "pulse 1.5s infinite" : "none"
+            }}
+          >{aiRunning ? "AI Running..." : "AI Auto-Test All"}</button>
+          <button
             onClick={() => setShowLog(l => !l)}
             style={{
               padding:"5px 12px", borderRadius:8, border:"1px solid #2C3E50",
@@ -1429,13 +1561,13 @@ export default function GlassTechTestSuiteAuto() {
                   </div>
                 )}
 
-                <div style={{ display:"flex", gap:6, marginTop:8 }}>
+                <div style={{ display:"flex", gap:4, marginTop:8 }}>
                   {wfStatus === STATUS.idle ? (
                     <button
                       onClick={e => { e.stopPropagation(); startWorkflow(wf.id); }}
                       style={{
                         flex:1, padding:"5px", borderRadius:6, border:"none",
-                        background:dc.primary, color:"white", fontSize:10,
+                        background:dc.primary, color:"white", fontSize:9,
                         fontWeight:700, cursor:"pointer"
                       }}
                     >START</button>
@@ -1444,11 +1576,21 @@ export default function GlassTechTestSuiteAuto() {
                       onClick={e => { e.stopPropagation(); resetWorkflow(wf.id); }}
                       style={{
                         flex:1, padding:"5px", borderRadius:6, border:"none",
-                        background:"#E74C3C", color:"white", fontSize:10,
+                        background:"#E74C3C", color:"white", fontSize:9,
                         fontWeight:700, cursor:"pointer"
                       }}
                     >RESET</button>
                   )}
+                  <button
+                    onClick={e => { e.stopPropagation(); aiTestWorkflow(wf.id); }}
+                    disabled={aiRunning}
+                    style={{
+                      flex:1, padding:"5px", borderRadius:6, border:"none",
+                      background: aiRunningWF === wf.id ? "#9B59B6" : "#9B59B633",
+                      color: aiRunningWF === wf.id ? "white" : "#9B59B6", fontSize:9,
+                      fontWeight:700, cursor: aiRunning ? "wait" : "pointer"
+                    }}
+                  >{aiRunningWF === wf.id ? "Running..." : "AI Test"}</button>
                 </div>
               </div>
             );

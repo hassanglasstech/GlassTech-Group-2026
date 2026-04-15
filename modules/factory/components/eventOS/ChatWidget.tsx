@@ -4,7 +4,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, X, CheckCircle2, XCircle, Edit3, Loader2, AlertTriangle, Zap, Plus, Trash2, BookOpen, Undo2, Bell } from 'lucide-react';
-import { processStaffMessage, executeWorkflow, recordFeedback, reverseExecution, getPreExecutionDecision, recordDecisionFeedback, recordDecisionOutcome, getPendingOutcomes, getAgentAccuracyTrend, isDataQuery, isConversational, answerDataQuery, EventOSResult, QueryResult, DecisionRecommendation } from '../../services/eventOSService';
+import { processStaffMessage, executeWorkflow, recordFeedback, reverseExecution, getPreExecutionDecision, recordDecisionFeedback, recordDecisionOutcome, getPendingOutcomes, getAgentAccuracyTrend, isDataQuery, isConversational, answerDataQuery, answerTestRequest, EventOSResult, QueryResult, DecisionRecommendation } from '../../services/eventOSService';
 import { runAnomalyScan, acknowledgeAnomaly, Anomaly } from '../../services/anomalyDetectionService';
 import { runPredictions, PredictiveAlert } from '../../services/predictiveAlertService';
 import { saveNewPattern } from '../agent/EventClassifier';
@@ -80,7 +80,13 @@ const EventOSChatWidget: React.FC = () => {
     setState('classifying');
 
     try {
-      if (isConversational(text) || isDataQuery(text)) {
+      // Check for UAT test request first
+      const { isTestRequest } = await import('../../components/agent/TestRunnerAgent');
+      if (isTestRequest(text)) {
+        const qr = await answerTestRequest(text);
+        setQueryAnswer(qr);
+        setState('query_answer');
+      } else if (isConversational(text) || isDataQuery(text)) {
         const qr = await answerDataQuery(text);
         setQueryAnswer(qr);
         setState('query_answer');
