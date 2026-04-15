@@ -236,7 +236,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
     setFormData({
       docType: tx.docType, docDate: tx.docDate, postDate: tx.date,
       description: tx.description, referenceId: tx.referenceId,
-      details: tx.details.map(d => ({ ...d, debit: d.debit, credit: d.credit, text: d.text || '', costCenterId: d.costCenterId || '' })),
+      details: (tx.details||[]).map(d => ({ ...d, debit: d.debit, credit: d.credit, text: d.text || '', costCenterId: d.costCenterId || '' })),
     });
     setIsModalOpen(true);
   };
@@ -415,7 +415,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
                 </tr>
 
                 {/* Detail line rows */}
-                {tx.details.map((d, i) => (
+                {(tx.details||[]).map((d, i) => (
                   <tr key={`${tx.id}-${i}`} className="border-b border-slate-50 last:border-slate-200">
                     <td />
                     <td />
