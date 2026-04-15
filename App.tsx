@@ -61,6 +61,7 @@ const CORE_NAV = [
   { name: 'Procurement',       path: '/requisitions',     icon: Package,         key: 'requisitions'     },
   { name: 'Finance (FICO)',     path: '/accounts',         icon: Landmark,        key: 'accounts'         },
   { name: 'People (HCM)',       path: '/hr',               icon: Users,           key: 'hr'               },
+  { name: 'UAT Test Suite',    path: '/test-suite',       icon: ShieldCheck,     key: 'test-suite'       },
 ];
 
 // ── Role-specific nav — shown based on user role ─────────────────────
