@@ -52,6 +52,7 @@ const EventOSChatWidget = React.lazy(() => import('./modules/factory/components/
 const TestSuite        = React.lazy(() => import('./modules/shared/pages/TestSuite'));
 const LoanFlowChart    = React.lazy(() => import('./modules/shared/pages/LoanFlowChart'));
 const GuidedTestFlows  = React.lazy(() => import('./modules/shared/pages/GuidedTestFlows'));
+const E2EVerifier      = React.lazy(() => import('./modules/shared/pages/E2EVerifier'));
 
 // ── All nav items definition ─────────────────────────────────────────
 // ── Core nav — always visible (role-filtered) ───────────────────────
@@ -467,6 +468,7 @@ const App: React.FC = () => {
                   <Route path="/test-suite"    element={<ModuleErrorBoundary moduleName="UAT Test Suite"><TestSuite /></ModuleErrorBoundary>} />
                   <Route path="/loan-flow"     element={<ModuleErrorBoundary moduleName="Loan Flow Chart"><LoanFlowChart /></ModuleErrorBoundary>} />
                   <Route path="/guided-tests"  element={<ModuleErrorBoundary moduleName="Guided Tests"><GuidedTestFlows /></ModuleErrorBoundary>} />
+                  <Route path="/e2e-verify"    element={<ModuleErrorBoundary moduleName="E2E Verifier"><E2EVerifier /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />
                 </Routes>              </Suspense>
             </div>
