@@ -144,18 +144,20 @@ export const AsyncSalesService = {
         return safeParse(KEYS.QUOTATIONS);
       }
       if (data && data.length > 0) {
-        // Map snake_case to camelCase
-        const mapped = data.map((r: any) => ({
-          id: r.id, company: r.company, date: r.date,
-          dueDate: r.due_date, clientId: r.client_id,
-          projectName: r.project_name, subject: r.subject,
-          items: Array.isArray(r.items) ? r.items : (typeof r.items === 'string' ? (() => { try { return JSON.parse(r.items); } catch { return []; } })() : []),
-          serviceCharges: Array.isArray(r.service_charges) ? r.service_charges : [],
-          discountPercent: r.discount_percent, discountAmount: r.discount_amount,
-          status: r.status, orderNo: r.order_no,
-          isAlreadyDispatched: r.is_already_dispatched,
-          manualRef: r.manual_ref,
-        }));
+        // Restore full object from JSONB data column — no fields lost
+        const mapped = data.map((r: any) => {
+          const base = r.data && typeof r.data === 'object' ? r.data : {};
+          return {
+            ...base,
+            id:      r.id,
+            company: r.company,
+            // Merge back extra indexed columns (migrations 021 + 027)
+            orderType:        r.order_type        ?? base.orderType        ?? 'Standard',
+            originalOrderRef: r.original_order_ref ?? base.originalOrderRef ?? undefined,
+            replacementReason:r.replacement_reason ?? base.replacementReason ?? undefined,
+            costBearer:       r.cost_bearer        ?? base.costBearer        ?? undefined,
+          };
+        });
         safeSave(KEYS.QUOTATIONS, mapped);
         return mapped;
       }
@@ -167,41 +169,31 @@ export const AsyncSalesService = {
   },
   saveQuotations: async (data: Quotation[]): Promise<void> => {
     // SAL-1: server-side discount cap — last line of defence before DB write.
-    // Throws so the caller (handleSave) surfaces the error to the user.
     for (const q of data) {
-      const subTotal  = ((q as any).items ?? []).reduce((s: number, i: any) => s + (Number(i.amount) || 0), 0);
-      const discPct   = Number((q as any).discountPercent ?? 0);
-      const discAmt   = Number((q as any).discountAmount  ?? 0);
-      if (discPct > 99.99) {
+      const subTotal = ((q as any).items ?? []).reduce((s: number, i: any) => s + (Number(i.amount) || 0), 0);
+      const discPct  = Number((q as any).discountPercent ?? 0);
+      const discAmt  = Number((q as any).discountAmount  ?? 0);
+      if (discPct > 99.99)
         throw new Error(`SAL-1: Discount percent ${discPct}% exceeds 99.99% on quotation ${q.id}`);
-      }
-      if (subTotal > 0 && discAmt > subTotal) {
+      if (subTotal > 0 && discAmt > subTotal)
         throw new Error(`SAL-1: Discount amount PKR ${discAmt} exceeds subtotal PKR ${subTotal} on quotation ${q.id}`);
-      }
     }
 
     try {
-      // Map camelCase to snake_case for Supabase
+      // Save entire object in JSONB data column — ALL fields preserved, no mapping required.
+      // Extra columns (from migrations 021 + 027) also populated for server-side filtering/indexing.
       const mapped = data.map((q: any) => ({
-        id: q.id,
-        company: q.company,
-        date: q.date,
-        due_date: q.dueDate,
-        client_id: q.clientId,
-        project_name: q.projectName,
-        subject: q.subject,
-        items: q.items || [],
-        service_charges: q.serviceCharges || [],
-        discount_percent: q.discountPercent || 0,
-        discount_amount: q.discountAmount || 0,
-        status: q.status,
-        order_no: q.orderNo,
-        is_already_dispatched: q.isAlreadyDispatched || false,
-        manual_ref: q.manualRef || '',
+        id:                   q.id,
+        company:              q.company,
+        data:                 q,                           // ← full object, zero fields lost
+        order_type:           q.orderType           ?? 'Standard',
+        original_order_ref:   q.originalOrderRef    ?? null,
+        replacement_reason:   q.replacementReason   ?? null,
+        cost_bearer:          q.costBearer          ?? null,
       }));
 
       if (supabase) {
-        const { error } = await supabase.from('quotations').upsert(mapped);
+        const { error } = await supabase.from('quotations').upsert(mapped, { onConflict: 'id' });
         if (error) {
           console.error('[AsyncSalesService] Supabase Error:', error.message);
           toast.error('Cloud sync failed — saved locally.', { id: 'sync-err' });
@@ -209,8 +201,7 @@ export const AsyncSalesService = {
           toast.success('Synced to Cloud', { id: 'sync-success' });
         }
       }
-      
-      // Always save locally as backup
+
       safeSave(KEYS.QUOTATIONS, data);
     } catch (err: any) {
       console.error('[AsyncSalesService] saveQuotations exception:', err.message);
