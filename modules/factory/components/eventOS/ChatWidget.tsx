@@ -4,7 +4,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, X, CheckCircle2, XCircle, Edit3, Loader2, AlertTriangle, Zap, Plus, Trash2, BookOpen, Undo2, Bell } from 'lucide-react';
-import { processStaffMessage, executeWorkflow, recordFeedback, reverseExecution, getPreExecutionDecision, recordDecisionFeedback, recordDecisionOutcome, getPendingOutcomes, getAgentAccuracyTrend, isDataQuery, isConversational, answerDataQuery, answerTestRequest, EventOSResult, QueryResult, DecisionRecommendation } from '../../services/eventOSService';
+import { processStaffMessage, executeWorkflow, recordFeedback, reverseExecution, getPreExecutionDecision, recordDecisionFeedback, recordDecisionOutcome, getPendingOutcomes, getAgentAccuracyTrend, isDataQuery, isConversational, answerDataQuery, answerTestRequest, answerE2ERequest, isE2EAgentRequest, EventOSResult, QueryResult, DecisionRecommendation } from '../../services/eventOSService';
 import { runAnomalyScan, acknowledgeAnomaly, Anomaly } from '../../services/anomalyDetectionService';
 import { runPredictions, PredictiveAlert } from '../../services/predictiveAlertService';
 import { saveNewPattern } from '../agent/EventClassifier';
@@ -80,7 +80,13 @@ const EventOSChatWidget: React.FC = () => {
     setState('classifying');
 
     try {
-      // Check for UAT test request first
+      // 1. E2E Create & Verify ("req banao loan ki aur check karo")
+      if (isE2EAgentRequest(text)) {
+        const qr = await answerE2ERequest(text);
+        setQueryAnswer(qr);
+        setState('query_answer');
+      // 2. UAT test runner
+      } else {
       const { isTestRequest } = await import('../../components/agent/TestRunnerAgent');
       if (isTestRequest(text)) {
         const qr = await answerTestRequest(text);
@@ -114,6 +120,7 @@ const EventOSChatWidget: React.FC = () => {
           setState('review');
         }
       }
+      } // end E2E else block
     } catch { setState('error'); }
   };
 

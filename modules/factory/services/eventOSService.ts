@@ -127,6 +127,14 @@ export const answerTestRequest = async (message: string): Promise<QueryResult> =
   return { type: 'query', answer: result.summary, toolsUsed: ['run_uat_test'] };
 };
 
+// ── E2E Agent: "req banao + verify karo" ─────────────────────────────
+export { isE2EAgentRequest } from './e2eAgentService';
+export const answerE2ERequest = async (message: string): Promise<QueryResult> => {
+  const { runE2EAgentFlow } = await import('./e2eAgentService');
+  const answer = await runE2EAgentFlow(message);
+  return { type: 'query', answer, toolsUsed: ['e2e_create_verify'] };
+};
+
 // ── Step 1-4: Classify + Assemble ────────────────────────────────────
 export const processStaffMessage = async (
   message: string,
