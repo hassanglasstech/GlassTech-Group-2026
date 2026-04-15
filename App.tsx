@@ -65,6 +65,7 @@ const CORE_NAV = [
   { name: 'Finance (FICO)',     path: '/accounts',         icon: Landmark,        key: 'accounts'         },
   { name: 'People (HCM)',       path: '/hr',               icon: Users,           key: 'hr'               },
   { name: 'UAT Test Suite',    path: '/test-suite',       icon: ShieldCheck,     key: 'test-suite'       },
+  { name: 'E2E Verifier',      path: '/e2e-verify',       icon: ShieldCheck,     key: 'e2e-verify'       },
 ];
 
 // ── Role-specific nav — shown based on user role ─────────────────────
