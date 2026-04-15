@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -v \"^//\")",
+      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
+      "Bash(grep -rh \"export \\(const|type|enum|interface\\)\" modules/shared/constants.ts modules/*/types/ --include=\"*.ts\")",
+      "Bash(xargs grep:*)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(npx vercel:*)"
+    ]
+  }
+}
