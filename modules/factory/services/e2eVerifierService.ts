@@ -170,6 +170,7 @@ export const TEST_RECIPES: TestRecipe[] = [
       { key: 'requisitioner', label: 'Requisitioner',type: 'text',    placeholder: 'Ahmed Khan' },
     ],
     create: async (inputs) => {
+      const today   = new Date().toISOString().split('T')[0];
       const existing = InventoryService.getRequisitions();
       const id = AppService.generateSequenceID('REQ', inputs.company, existing);
       const newReq = {
@@ -238,6 +239,7 @@ export const TEST_RECIPES: TestRecipe[] = [
       { key: 'amount',  label: 'Total Amount PKR', type: 'number', placeholder: '252000' },
     ],
     create: async (inputs) => {
+      const today    = new Date().toISOString().split('T')[0];
       const existing = ls('gtk_erp_quotations');
       const id = AppService.generateSequenceID('QUT', inputs.company, existing);
       const newQuo = {
