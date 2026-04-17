@@ -208,7 +208,7 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     due_date: q.dueDate||q.due_date||null,
     client_id: q.clientId||q.client_id||'',
     project_name: q.projectName||q.project_name||'',
-    items: q.items||[], status: q.status||'Draft',
+    items: q.items||[], status: (q.status === 'Pending' ? 'Draft' : q.status)||'Draft',
     is_already_dispatched: q.isAlreadyDispatched||false,
     discount_percent: q.discountPercent||0,
     discount_amount: q.discountAmount||0,
@@ -1217,10 +1217,20 @@ const pushTable = async (table: string, localKey: string): Promise<boolean> => {
         });
         if (error) {
           // 400 = table/column mismatch — skip this table silently
-          if (error.code === 'PGRST204' || error.code === '42P01' || 
+          if (error.code === 'PGRST204' || error.code === '42P01' ||
               error.message?.includes('relation') || error.message?.includes('column') ||
               error.message?.includes('enum') || error.message?.includes('invalid input value')) {
             console.log(`[Sync] Skipping ${table} — schema mismatch: ${error.message}`);
+            return;
+          }
+          // 409 / 23503 = FK constraint violation — skip gracefully (referenced record exists)
+          if ((error as any).status === 409 || error.code === '23503') {
+            console.log(`[Sync] Skipping ${table} — FK constraint: ${error.message}`);
+            return;
+          }
+          // 401 / 403 / 42501 = auth or RLS — skip gracefully (session may not be ready yet)
+          if ((error as any).status === 401 || (error as any).status === 403 || error.code === '42501') {
+            console.log(`[Sync] Skipping ${table} — permission denied (will retry next sync): ${error.message}`);
             return;
           }
           throw error;
