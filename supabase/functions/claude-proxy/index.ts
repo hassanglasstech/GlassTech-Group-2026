@@ -47,9 +47,16 @@ async function requireAuth(req: Request): Promise<AuthResult> {
   const token      = authHeader.slice(7);
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   const cronSecret = Deno.env.get('CRON_SECRET') ?? '';
+  const anonKey    = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 
+  // Service key / cron secret → trusted internal call
   if ((serviceKey && token === serviceKey) || (cronSecret && token === cronSecret)) {
     return { ok: true, isCron: true, userId: null };
+  }
+
+  // Anon key → unauthenticated browser call (allow with anonymous userId)
+  if (anonKey && token === anonKey) {
+    return { ok: true, isCron: false, userId: 'anonymous' };
   }
 
   const supabase = createClient(
@@ -64,7 +71,7 @@ async function requireAuth(req: Request): Promise<AuthResult> {
       ok: false,
       response: new Response(
         JSON.stringify({ error: 'Invalid or expired token' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }  // Note: auth uses static corsHeaders as req not available here
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       ),
     };
   }
@@ -220,11 +227,11 @@ Deno.serve(async (req) => {
     }
 
     // ── Cap max tokens ──────────────────────────────────────────
-    body.max_tokens = Math.min(body.max_tokens || 1000, 1500);
+    body.max_tokens = Math.min(body.max_tokens || 1000, 4096);
 
     // ── Cap system prompt length ────────────────────────────────
-    if (body.system && typeof body.system === 'string' && body.system.length > 5000) {
-      body.system = body.system.slice(0, 5000);
+    if (body.system && typeof body.system === 'string' && body.system.length > 12000) {
+      body.system = body.system.slice(0, 12000);
     }
 
     // ── Strip unknown keys ──────────────────────────────────────
