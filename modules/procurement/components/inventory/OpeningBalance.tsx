@@ -188,22 +188,46 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
 
     try {
       const store = InventoryService.getStore();
-      const ledger = InventoryService.getStockLedger();
       const obId = `OB-${company}-${obDate.replace(/-/g, '')}`;
+
+      // ── De-duplicate: remove any previous OB ledger entries for this date ──
+      // (same pattern as GL: filter out old, then push new)
+      // Also capture old entries to REVERSE their stock impact on re-post
+      const allStoreLedger = InventoryService.getStockLedger();
+      const oldOBEntries = allStoreLedger.filter(l => l.referenceDoc === obId);
+      const ledger = allStoreLedger.filter(l => l.referenceDoc !== obId);
+
+      // Build reversal map: materialId → old qty + value to subtract before re-adding
+      const reversalMap: Record<string, { qty: number; value: number }> = {};
+      oldOBEntries.forEach(e => {
+        if (!reversalMap[e.materialId]) reversalMap[e.materialId] = { qty: 0, value: 0 };
+        reversalMap[e.materialId].qty   += e.qty;
+        reversalMap[e.materialId].value += (e.qty * (e.valuation || 0));
+      });
+
       let glTotal = 0;
 
       linesToPost.forEach((line, lineIdx) => {
-        // ── Find or create StoreItem ─────────────────────────────────
-        const materialId = line.productId || `MAT-${company}-${Date.now()}-${lineIdx}`;
-        let itemIdx = store.findIndex(s => s.id === materialId && s.company === company);
+        // ── Resolve material ID: prefer productId, else match by name ───
+        const newMaterialId = line.productId || `MAT-${company}-${obDate.replace(/-/g, '')}-${line.description.replace(/\s+/g, '_').slice(0, 20)}`;
+
+        // Find existing store item: by ID first, then by description (for manual items)
+        let itemIdx = store.findIndex(s => s.company === company && s.id === newMaterialId);
+        if (itemIdx === -1 && !line.productId) {
+          // Fallback: match by name so manual items don't create duplicates
+          itemIdx = store.findIndex(s => s.company === company &&
+            s.name.toLowerCase() === line.description.toLowerCase()
+          );
+        }
+
+        const effectiveMaterialId = itemIdx !== -1 ? store[itemIdx].id : newMaterialId;
         let item: StoreItem;
 
         if (itemIdx !== -1) {
           item = { ...store[itemIdx] };
         } else {
-          // Create new StoreItem
           item = {
-            id: materialId, company: company as any,
+            id: effectiveMaterialId, company: company as any,
             name: line.description,
             category: (line.category || 'Raw') as StoreItem['category'],
             quantity: 0, unrestrictedQty: 0, qiQty: 0,
@@ -218,17 +242,21 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
 
         // ── Update Stock Quantities ──────────────────────────────────
         const stockQty = line.totalSqft > 0 ? line.totalSqft : line.sheetCount;
-        item.quantity = (item.quantity || 0) + stockQty;
-        item.unrestrictedQty = (item.unrestrictedQty || 0) + stockQty;
-        item.totalValue = (item.totalValue || 0) + line.totalValue;
+        // If re-posting same OB date: subtract old OB contribution first
+        const reversal = reversalMap[effectiveMaterialId];
+        const prevQty   = reversal ? reversal.qty   : 0;
+        const prevValue = reversal ? reversal.value : 0;
+
+        item.quantity      = Math.max(0, (item.quantity      || 0) - prevQty   + stockQty);
+        item.unrestrictedQty = Math.max(0, (item.unrestrictedQty || 0) - prevQty + stockQty);
+        item.totalValue    = Math.max(0, (item.totalValue    || 0) - prevValue + line.totalValue);
         item.movingAveragePrice = item.quantity > 0
           ? Number((item.totalValue / item.quantity).toFixed(2))
           : line.rate;
         item.lastMovementDate = obDate;
-        // Weight data
         if (line.weightKg > 0) {
           item.perSheetWeightKg = line.sheetCount > 0 ? Number((line.weightKg / line.sheetCount).toFixed(3)) : 0;
-          item.perSqftWeightKg = stockQty > 0 ? Number((line.weightKg / stockQty).toFixed(4)) : 0;
+          item.perSqftWeightKg  = stockQty > 0 ? Number((line.weightKg / stockQty).toFixed(4)) : 0;
         }
 
         if (itemIdx !== -1) store[itemIdx] = item; else store.push(item);
@@ -237,18 +265,19 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
         const ledgerEntry: MaterialLedgerEntry = {
           id: `${obId}-L${lineIdx + 1}`,
           company: company as any,
-          materialId,
+          materialId: effectiveMaterialId,
           timestamp: new Date(obDate).toISOString(),
           mvmntCode: '561',
-          qty: line.totalSqft > 0 ? line.totalSqft : line.sheetCount,
+          qty: stockQty,
           uom: line.totalSqft > 0 ? 'SqFt' : (line.unit || 'SqFt'),
           valuation: line.rate,
           balanceAfter: item.quantity,
           referenceDoc: obId,
           user: 'Opening Balance',
           remarks: `Opening Balance — ${line.description} (${line.sheetCount} sheets${line.sheetSize ? ', ' + line.sheetSize + '"' : ''}${line.weightKg > 0 ? ', Own Wt: ' + line.weightKg + 'kg' : ''}${line.biltyWeightKg > 0 ? ', Bilty Wt: ' + line.biltyWeightKg + 'kg' : ''})${remarks ? ' | ' + remarks : ''}`,
-          sheetCount: line.sheetCount || undefined,
-          lineWeightKg: line.weightKg || undefined,
+          sheetCount:    line.sheetCount    || undefined,
+          lineWeightKg:  line.weightKg      || undefined,
+          biltyWeightKg: line.biltyWeightKg || undefined,
         };
         ledger.push(ledgerEntry);
         glTotal += line.totalValue;
@@ -649,8 +678,8 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                   </div>
                 </div>
 
-                {/* Second Row: Sheets, SqFt/Sheet, Total SqFt, Rate, Value */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                {/* Second Row: Sheets, Sheet Size, SqFt/Sheet, Total SqFt, Rate, Value */}
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                   <div>
                     <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Sheets *</label>
                     <input
@@ -666,9 +695,24 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                     />
                   </div>
                   <div>
+                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">
+                      Sheet Size (W×H)
+                      {!line.sheetSize && line.sheetCount > 0 && (
+                        <span className="ml-1 text-amber-500">⚠ needed for SqFt</span>
+                      )}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 84x144"
+                      value={line.sheetSize || ''}
+                      onChange={e => updateLine(idx, { sheetSize: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500 ${!line.sheetSize && line.sheetCount > 0 ? 'border-amber-400 bg-amber-50' : ''}`}
+                    />
+                  </div>
+                  <div>
                     <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">SqFt/Sheet</label>
                     <div className={`px-3 py-2 border rounded-lg text-xs font-black ${line.sqftPerSheet > 0 ? 'bg-blue-50 text-blue-700' : 'bg-slate-50 text-slate-300'}`}>
-                      {line.sqftPerSheet > 0 ? line.sqftPerSheet.toFixed(2) : line.sheetSize ? sqftOf(line.sheetSize).toFixed(2) : '—'}
+                      {line.sqftPerSheet > 0 ? line.sqftPerSheet.toFixed(2) : '—'}
                     </div>
                   </div>
                   <div>

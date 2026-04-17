@@ -150,7 +150,8 @@ export interface MaterialLedgerEntry {
   freightPKR?: number;            // Total freight for this GRN
   otherChargesPKR?: number;       // Other charges
   otherChargesDesc?: string;      // Description of other charges
-  lineWeightKg?: number;          // Total weight for this line item
+  lineWeightKg?: number;          // Total weight for this line item (our measurement)
+  biltyWeightKg?: number;         // Transporter bilty weight (includes packaging)
   perSheetWeightKg?: number;      // Calculated: lineWeightKg / sheetCount
   perSqftWeightKg?: number;       // Calculated: lineWeightKg / totalSqft
   vendorId?: string;
