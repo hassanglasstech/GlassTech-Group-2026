@@ -49,6 +49,7 @@ const MDDashboard       = React.lazy(() => import('./modules/md-dashboard/MDDash
 const FactoryInchargeModule = React.lazy(() => import('./modules/factory/pages/FactoryInchargeModule'));
 const ProcurementHub   = React.lazy(() => import('./modules/procurement/pages/ProcurementHub'));
 const EventOSChatWidget = React.lazy(() => import('./modules/factory/components/eventOS/ChatWidget').catch(() => ({ default: () => null })));
+const WazirLauncher     = React.lazy(() => import('./modules/wazir/components/WazirLauncher').catch(() => ({ default: () => null })));
 const TestSuite        = React.lazy(() => import('./modules/shared/pages/TestSuite'));
 const LoanFlowChart    = React.lazy(() => import('./modules/shared/pages/LoanFlowChart'));
 const GuidedTestFlows  = React.lazy(() => import('./modules/shared/pages/GuidedTestFlows'));
@@ -477,6 +478,7 @@ const App: React.FC = () => {
         </main>
         <BottomNav allowedModules={user?.allowedModules?.length ? user.allowedModules : null} />
         <Suspense fallback={null}><EventOSChatWidget /></Suspense>
+        <Suspense fallback={null}><WazirLauncher /></Suspense>
       </div>
       )}
     </HashRouter>
