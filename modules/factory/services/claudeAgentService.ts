@@ -140,6 +140,38 @@ const getAuthHeader = async (): Promise<string> => {
 };
 
 // ── Core: Send message to Claude via proxy ───────────────────────────────
+// ── Direct Anthropic API call (fallback when proxy not deployed) ─────────
+const callClaudeDirect = async (
+  body: Record<string, any>,
+  agentId: string,
+  model: string,
+): Promise<ClaudeResponse> => {
+  const directKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+  if (!directKey) {
+    throw new Error(
+      'Claude proxy not reachable and VITE_ANTHROPIC_API_KEY is not set. ' +
+      'Either deploy the claude-proxy Edge Function in Supabase, or add ' +
+      'VITE_ANTHROPIC_API_KEY=sk-ant-... to your .env file.'
+    );
+  }
+  const res = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type':      'application/json',
+      'x-api-key':         directKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`Claude direct API error (${res.status}): ${errBody}`);
+  }
+  const data = await res.json();
+  if (data.usage) trackUsage(agentId, model, data.usage.input_tokens || 0, data.usage.output_tokens || 0);
+  return data as ClaudeResponse;
+};
+
 export const callClaude = async (opts: ClaudeRequestOptions): Promise<ClaudeResponse> => {
   const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/claude-proxy`;
   const auth     = await getAuthHeader();
@@ -156,28 +188,42 @@ export const callClaude = async (opts: ClaudeRequestOptions): Promise<ClaudeResp
     body.tools = opts.tools.map(t => ({ type: 'custom' as const, ...t }));
   }
 
-  const res = await fetchWithRetry(proxyUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type':  'application/json',
-      'Authorization': auth,
-    },
-    body: JSON.stringify(body),
-  });
+  // ── Try proxy first ───────────────────────────────────────────────────
+  try {
+    const res = await fetchWithRetry(proxyUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': auth,
+      },
+      body: JSON.stringify(body),
+    });
 
-  if (!res.ok) {
-    const errBody = await res.text();
-    throw new Error(`Claude API error (${res.status}): ${errBody}`);
+    // 401/405 = proxy not deployed or anon key rejected → fall through to direct
+    if (res.status === 401 || res.status === 405) {
+      console.warn(`[Claude] Proxy returned ${res.status} — falling back to direct API`);
+      return callClaudeDirect(body, agentId, model);
+    }
+
+    if (!res.ok) {
+      const errBody = await res.text();
+      throw new Error(`Claude API error (${res.status}): ${errBody}`);
+    }
+
+    const data = await res.json();
+    if (data.usage) {
+      trackUsage(agentId, model, data.usage.input_tokens || 0, data.usage.output_tokens || 0);
+    }
+    return data as ClaudeResponse;
+
+  } catch (err: any) {
+    // Network error (proxy unreachable) → try direct
+    if (err?.message?.includes('fetch') || err?.name === 'TypeError') {
+      console.warn('[Claude] Proxy unreachable — falling back to direct API');
+      return callClaudeDirect(body, agentId, model);
+    }
+    throw err;
   }
-
-  const data = await res.json();
-
-  // Track token usage
-  if (data.usage) {
-    trackUsage(agentId, model, data.usage.input_tokens || 0, data.usage.output_tokens || 0);
-  }
-
-  return data as ClaudeResponse;
 };
 
 // ── Convenience: Get text response ───────────────────────────────────────
