@@ -171,13 +171,19 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
   // ══════════════════════════════════════════════════════════════════════
   // POST OPENING BALANCE
   // ══════════════════════════════════════════════════════════════════════
-  const postOpeningBalances = (linesToPost: OBLine[]) => {
-    // Validation
+  const postOpeningBalances = async (linesToPost: OBLine[]) => {
+    // ── Validation ────────────────────────────────────────────────────────
     const errors: string[] = [];
     linesToPost.forEach((l, i) => {
-      if (!l.description) errors.push(`Line ${i + 1}: Material description is required`);
-      if (l.sheetCount <= 0 && l.totalSqft <= 0) errors.push(`Line ${i + 1}: Sheet count or total sqft must be > 0`);
-      if (l.rate <= 0) errors.push(`Line ${i + 1}: Rate must be > 0`);
+      if (!l.description)
+        errors.push(`Line ${i + 1}: Material description is required`);
+      if (l.sheetCount <= 0 && l.totalSqft <= 0)
+        errors.push(`Line ${i + 1}: Sheet count or total sqft must be > 0`);
+      if (l.rate <= 0)
+        errors.push(`Line ${i + 1}: Rate must be > 0`);
+      // FIX 1: catch missing sheet size — would cause 0 totalValue & no GL entry
+      if (l.sheetCount > 0 && l.totalSqft <= 0)
+        errors.push(`Line ${i + 1}: Sheet size required (e.g. 84x144) — needed to compute SqFt & value`);
     });
     if (errors.length > 0) {
       errors.forEach(e => toast.error(e));
@@ -188,34 +194,40 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
 
     try {
       const store = InventoryService.getStore();
-      const obId = `OB-${company}-${obDate.replace(/-/g, '')}`;
+      const obId  = `OB-${company}-${obDate.replace(/-/g, '')}`;
 
-      // ── De-duplicate: remove any previous OB ledger entries for this date ──
-      // (same pattern as GL: filter out old, then push new)
-      // Also capture old entries to REVERSE their stock impact on re-post
-      const allStoreLedger = InventoryService.getStockLedger();
+      // FIX 2: use async read for de-duplication — avoids stale localStorage
+      // when >1000 movements have pushed old OB entries out of the local cache.
+      let allStoreLedger: MaterialLedgerEntry[];
+      try {
+        allStoreLedger = await InventoryService.getStockLedgerAsync();
+      } catch {
+        allStoreLedger = InventoryService.getStockLedger(); // graceful fallback
+      }
+
       const oldOBEntries = allStoreLedger.filter(l => l.referenceDoc === obId);
-      const ledger = allStoreLedger.filter(l => l.referenceDoc !== obId);
+      const ledger       = allStoreLedger.filter(l => l.referenceDoc !== obId);
 
-      // Build reversal map: materialId → old qty + value to subtract before re-adding
+      // Reversal map: materialId → { qty, value } to subtract before re-adding
       const reversalMap: Record<string, { qty: number; value: number }> = {};
       oldOBEntries.forEach(e => {
         if (!reversalMap[e.materialId]) reversalMap[e.materialId] = { qty: 0, value: 0 };
+        // Guard against same materialId appearing twice in prior OB (e.g. CSV duplicate)
         reversalMap[e.materialId].qty   += e.qty;
-        reversalMap[e.materialId].value += (e.qty * (e.valuation || 0));
+        reversalMap[e.materialId].value += e.qty * (e.valuation || 0);
       });
 
       let glTotal = 0;
 
       linesToPost.forEach((line, lineIdx) => {
-        // ── Resolve material ID: prefer productId, else match by name ───
-        const newMaterialId = line.productId || `MAT-${company}-${obDate.replace(/-/g, '')}-${line.description.replace(/\s+/g, '_').slice(0, 20)}`;
+        // ── Resolve material ID ──────────────────────────────────────
+        const newMaterialId = line.productId
+          || `MAT-${company}-${obDate.replace(/-/g, '')}-${line.description.replace(/\s+/g, '_').slice(0, 20)}`;
 
-        // Find existing store item: by ID first, then by description (for manual items)
         let itemIdx = store.findIndex(s => s.company === company && s.id === newMaterialId);
         if (itemIdx === -1 && !line.productId) {
-          // Fallback: match by name so manual items don't create duplicates
-          itemIdx = store.findIndex(s => s.company === company &&
+          itemIdx = store.findIndex(s =>
+            s.company === company &&
             s.name.toLowerCase() === line.description.toLowerCase()
           );
         }
@@ -240,114 +252,111 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
           };
         }
 
-        // ── Update Stock Quantities ──────────────────────────────────
-        const stockQty = line.totalSqft > 0 ? line.totalSqft : line.sheetCount;
-        // If re-posting same OB date: subtract old OB contribution first
-        const reversal = reversalMap[effectiveMaterialId];
-        const prevQty   = reversal ? reversal.qty   : 0;
-        const prevValue = reversal ? reversal.value : 0;
+        // ── Stock Quantities (REPLACE, not ADD, on re-post) ──────────
+        const stockQty  = line.totalSqft > 0 ? line.totalSqft : line.sheetCount;
+        const reversal  = reversalMap[effectiveMaterialId];
+        const prevQty   = reversal?.qty   ?? 0;
+        const prevValue = reversal?.value ?? 0;
 
-        item.quantity      = Math.max(0, (item.quantity      || 0) - prevQty   + stockQty);
-        item.unrestrictedQty = Math.max(0, (item.unrestrictedQty || 0) - prevQty + stockQty);
-        item.totalValue    = Math.max(0, (item.totalValue    || 0) - prevValue + line.totalValue);
+        item.quantity        = Math.max(0, (item.quantity        || 0) - prevQty   + stockQty);
+        item.unrestrictedQty = Math.max(0, (item.unrestrictedQty || 0) - prevQty   + stockQty);
+        item.totalValue      = Math.max(0, (item.totalValue      || 0) - prevValue + line.totalValue);
         item.movingAveragePrice = item.quantity > 0
           ? Number((item.totalValue / item.quantity).toFixed(2))
           : line.rate;
         item.lastMovementDate = obDate;
         if (line.weightKg > 0) {
-          item.perSheetWeightKg = line.sheetCount > 0 ? Number((line.weightKg / line.sheetCount).toFixed(3)) : 0;
-          item.perSqftWeightKg  = stockQty > 0 ? Number((line.weightKg / stockQty).toFixed(4)) : 0;
+          item.perSheetWeightKg = line.sheetCount > 0
+            ? Number((line.weightKg / line.sheetCount).toFixed(3)) : 0;
+          item.perSqftWeightKg  = stockQty > 0
+            ? Number((line.weightKg / stockQty).toFixed(4)) : 0;
         }
 
         if (itemIdx !== -1) store[itemIdx] = item; else store.push(item);
 
         // ── Material Ledger Entry ────────────────────────────────────
-        const ledgerEntry: MaterialLedgerEntry = {
-          id: `${obId}-L${lineIdx + 1}`,
-          company: company as any,
-          materialId: effectiveMaterialId,
-          timestamp: new Date(obDate).toISOString(),
-          mvmntCode: '561',
-          qty: stockQty,
-          uom: line.totalSqft > 0 ? 'SqFt' : (line.unit || 'SqFt'),
-          valuation: line.rate,
-          balanceAfter: item.quantity,
-          referenceDoc: obId,
-          user: 'Opening Balance',
-          remarks: `Opening Balance — ${line.description} (${line.sheetCount} sheets${line.sheetSize ? ', ' + line.sheetSize + '"' : ''}${line.weightKg > 0 ? ', Own Wt: ' + line.weightKg + 'kg' : ''}${line.biltyWeightKg > 0 ? ', Bilty Wt: ' + line.biltyWeightKg + 'kg' : ''})${remarks ? ' | ' + remarks : ''}`,
+        // FIX 3: use noon PKT (UTC+5) to prevent date showing as previous day
+        const obTimestamp = new Date(`${obDate}T12:00:00+05:00`).toISOString();
+        ledger.push({
+          id:            `${obId}-L${lineIdx + 1}`,
+          company:       company as any,
+          materialId:    effectiveMaterialId,
+          timestamp:     obTimestamp,
+          mvmntCode:     '561',
+          qty:           stockQty,
+          uom:           line.totalSqft > 0 ? 'SqFt' : (line.unit || 'SqFt'),
+          valuation:     line.rate,
+          balanceAfter:  item.quantity,
+          referenceDoc:  obId,
+          user:          'Opening Balance',
+          remarks:       `Opening Balance — ${line.description} (${line.sheetCount} sheets${line.sheetSize ? ', ' + line.sheetSize + '"' : ''}${line.weightKg > 0 ? ', Own Wt: ' + line.weightKg + 'kg' : ''}${line.biltyWeightKg > 0 ? ', Bilty Wt: ' + line.biltyWeightKg + 'kg' : ''})${remarks ? ' | ' + remarks : ''}`,
           sheetCount:    line.sheetCount    || undefined,
           lineWeightKg:  line.weightKg      || undefined,
           biltyWeightKg: line.biltyWeightKg || undefined,
-        };
-        ledger.push(ledgerEntry);
+        } as MaterialLedgerEntry);
+
         glTotal += line.totalValue;
       });
 
-      // ── Save Stock & Ledger ────────────────────────────────────────
-      InventoryService.saveStore(store);
-      InventoryService.saveStockLedger(ledger);
-
+      // FIX 4: GL FIRST — if _assertGLBalance throws, stock is NOT yet saved
       // ── GL Entry: Dr Inventory / Cr Opening Balance Equity ─────────
       if (glTotal > 0) {
-        // Ensure OB Equity account exists
         const obEquityAcc = FinanceService.ensureAccount(
-          company as any,
-          'Opening Balance Equity',
-          4, null, 'Equity',
-          OB_GL.OB_EQUITY
+          company as any, 'Opening Balance Equity', 4, null, 'Equity', OB_GL.OB_EQUITY
         );
 
-        // Group by inventory account
-        const invGroups: Record<string, number> = {};
+        // Group lines by inventory account code (one debit line per category)
+        const invGroups: Record<string, { amount: number; name: string; count: number }> = {};
         linesToPost.forEach(line => {
-          const invAcc = getInventoryAccount(line.category);
-          invGroups[invAcc.code] = (invGroups[invAcc.code] || 0) + line.totalValue;
+          const { code, name } = getInventoryAccount(line.category);
+          if (!invGroups[code]) invGroups[code] = { amount: 0, name, count: 0 };
+          invGroups[code].amount += line.totalValue;
+          invGroups[code].count  += 1;
         });
 
         const glDetails: any[] = [];
-        Object.entries(invGroups).forEach(([accCode, amount]) => {
+        Object.entries(invGroups).forEach(([accCode, { amount, name, count }]) => {
           const invAcc = FinanceService.ensureAccount(
-            company as any,
-            accCode === OB_GL.INVENTORY_GLASS ? 'Glass Inventory' :
-            accCode === OB_GL.INVENTORY_HW ? 'Hardware Inventory' :
-            accCode === OB_GL.INVENTORY_ALUM ? 'Aluminium/Profile Inventory' :
-            'Consumables Inventory',
-            4, null, 'Asset', accCode
+            company as any, name, 4, null, 'Asset', accCode
           );
           glDetails.push({
             accountId: invAcc.id,
-            debit: amount,
-            credit: 0,
-            text: `Opening Balance — Inventory (${linesToPost.length} items)`,
+            debit:     amount,
+            credit:    0,
+            text:      `Opening Balance — ${name} (${count} item${count > 1 ? 's' : ''})`,
           });
         });
 
         glDetails.push({
           accountId: obEquityAcc.id,
-          debit: 0,
-          credit: glTotal,
-          text: `Opening Balance Equity — Stock ${obDate}`,
+          debit:     0,
+          credit:    glTotal,
+          text:      `Opening Balance Equity — Stock ${obDate}`,
         });
 
-        // Opening Balance bypasses MakerChecker — direct ledger save as system entry
-        // Remove any previous OB attempt for this ID to avoid duplicates
-        const allLedger = FinanceService.getLedger().filter((e: any) => e.id !== `GL-${obId}`);
-        allLedger.push({
-          id: `GL-${obId}`,
-          company: company as any,
-          docType: 'OB' as any,
-          docDate: obDate,
-          date: obDate,
+        const allGLLedger = FinanceService.getLedger().filter((e: any) => e.id !== `GL-${obId}`);
+        allGLLedger.push({
+          id:          `GL-${obId}`,
+          company:     company as any,
+          docType:     'OB' as any,
+          docDate:     obDate,
+          date:        obDate,
           description: `Opening Balance — ${linesToPost.length} material(s) — PKR ${glTotal.toLocaleString()}`,
           referenceId: obId,
-          status: 'Posted',
-          createdBy: 'system-auto',
-          details: glDetails,
+          status:      'Posted',
+          createdBy:   'system-auto',
+          details:     glDetails,
         } as any);
-        FinanceService.saveLedger(allLedger);
+
+        // _assertGLBalance runs here — throws BEFORE stock save if imbalanced
+        FinanceService.saveLedger(allGLLedger);
       }
 
-      toast.success(`Opening Balance posted: ${linesToPost.length} items, PKR ${glTotal.toLocaleString()}`);
+      // Stock saves AFTER GL succeeds — maintains commit order integrity
+      InventoryService.saveStore(store);
+      InventoryService.saveStockLedger(ledger);
+
+      toast.success(`✅ Opening Balance posted: ${linesToPost.length} item(s) — PKR ${glTotal.toLocaleString()}`);
       setLines([emptyLine()]);
       setRemarks('');
       setParsedRows([]);
@@ -355,9 +364,10 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
       refreshData();
       setIsPosting(false);
       return true;
-    } catch (err) {
+
+    } catch (err: any) {
       console.error('[OB Post Error]', err);
-      toast.error('Failed to post opening balance. Check console.');
+      toast.error(`Failed to post: ${err?.message || 'Check console for details'}`);
       setIsPosting(false);
       return false;
     }
