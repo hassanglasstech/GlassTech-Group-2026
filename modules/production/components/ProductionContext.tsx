@@ -260,19 +260,23 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
             setDispatches(updatedDispatches);
 
             // ── Tempering GL on LAST piece received ─────────────────
+            // Rate is computed per-piece per-mm from vendor's price list.
+            // If dispatch has per-mm custom rates (rateOverrides), pass them in.
+            // Old flat chargesPerSqFt is no longer used — rates differ by mm.
             const allReceived = [...currentReceived, pieceId];
             const allPieceIds = inwardDispatch.pieceIds || [];
-            const isComplete = allPieceIds.every(id => allReceived.includes(id));
-            if (isComplete && (inwardDispatch.totalCharges || 0) > 0) {
+            const isComplete  = allPieceIds.every(id => allReceived.includes(id));
+            if (isComplete) {
               postTemperingInwardGL({
-                company: company as any,
-                dispatchId: activeInwardDispatchId,
-                totalSqft: inwardDispatch.totalSqFt || 0,
-                chargesPerSqft: inwardDispatch.chargesPerSqFt || 0,
-                totalCharges: inwardDispatch.totalCharges || 0,
-                vendorName: inwardDispatch.plantName || 'Tempering Vendor',
-                date: new Date().toISOString().split('T')[0],
-                pieceIds: allPieceIds,
+                company:       company as any,
+                dispatchId:    activeInwardDispatchId,
+                vendorName:    inwardDispatch.plantName || 'Tempering Vendor',
+                date:          new Date().toISOString().split('T')[0],
+                pieceIds:      allPieceIds,
+                // Use rates snapshotted at dispatch creation (dispatch.ratesByMm).
+                // Falls back to {} — getVendorRatesByMm() in GL service will then
+                // read the vendor's current live rates as fallback.
+                rateOverrides: inwardDispatch.ratesByMm ?? {},
               });
             }
         }

@@ -15,10 +15,12 @@ export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName }) =>
 
     const subTotal = quote.items.reduce((s, i) => s + i.amount, 0);
     const aptChargesTotal = quote.items.reduce((s, i) => s + ((i as any).aptCharges || 0), 0);
-    const discountAmount = quote.discountAmount !== undefined && quote.discountAmount > 0 
-        ? quote.discountAmount 
-        : (subTotal * (quote.discountPercent || 0)) / 100;
-    const netAmount = subTotal + aptChargesTotal - discountAmount;
+    const serviceChargesTotal = ((quote as any).serviceCharges || []).reduce((s: number, sc: any) => s + (sc.amount || 0), 0);
+    const grossBeforeDiscount = subTotal + aptChargesTotal + serviceChargesTotal;
+    const discountAmount = quote.discountAmount !== undefined && quote.discountAmount > 0
+        ? quote.discountAmount
+        : (grossBeforeDiscount * (quote.discountPercent || 0)) / 100;
+    const netAmount = grossBeforeDiscount - discountAmount;
     const displayId = quote.orderNo || quote.id;
     const isMM = quote.items.some(i => !i.isSection && (i.mmW || i.mmH));
 
@@ -155,6 +157,11 @@ export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName }) =>
                                 <span>APT Charges:</span><span>+ PKR {aptChargesTotal.toLocaleString()}</span>
                             </div>
                         )}
+                        {((quote as any).serviceCharges || []).map((sc: any, idx: number) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', fontWeight: 700, color: '#0369a1', textTransform: 'uppercase' }}>
+                                <span>{sc.description || 'Service Charge'}:</span><span>+ PKR {(sc.amount || 0).toLocaleString()}</span>
+                            </div>
+                        ))}
                         {(quote.discountAmount || quote.discountPercent) > 0 && (
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase' }}>
                                 <span>Disc:</span><span>- {(Number(discountAmount) || 0).toLocaleString()}</span>

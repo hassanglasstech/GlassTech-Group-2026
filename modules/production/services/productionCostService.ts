@@ -15,6 +15,7 @@
 import { ProductionMetric, DailyTarget } from '../types/production';
 import { LabourService }                  from './labourService';
 import { GeneratorService }               from './generatorService';
+import { HRService }                      from '@/modules/hr/services/hrService';
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -116,6 +117,91 @@ export const ProductionCostService = {
       actualSqFt:    0,   // populated by the caller once actuals are known
       remainingDays,
       pendingSqFt,
+    };
+  },
+
+  /**
+   * Internal Service Pool Rate — IAS 2 absorption costing.
+   *
+   * Formula (per month):
+   *   Pool Rate (PKR/sqft) = Production workers' total payroll ÷ Total sqft produced
+   *
+   * "Production workers" = employees whose work.department or work.designation
+   * contains 'production', 'cutting', 'polish', 'grind', 'operator', 'helper', 'factory'.
+   *
+   * This rate is then applied to every piece:
+   *   Internal Service Cost = piece.sqft × poolRate
+   *
+   * IAS 2.13 compliance:
+   *  • Variable conversion costs (semi-skilled wages) → absorbed at actual output
+   *  • Fixed costs (electricity, depreciation) → absorbed separately via overhead allocation
+   *  • This function covers the LABOUR component only.
+   *
+   * @param company  - Company tenant
+   * @param month    - "YYYY-MM"
+   */
+  getMonthlyServicePoolRate: async (
+    company: string,
+    month: string,
+  ): Promise<{
+    month: string;
+    totalProductionPayroll: number;    // PKR — sum of netSalary for production workers
+    totalSqftProduced: number;         // sqft — from cutter daily logs
+    totalSqmProduced: number;          // sqm  — totalSqft × 0.0929
+    poolRatePerSqft: number;           // PKR/sqft
+    poolRatePerSqm: number;            // PKR/sqm
+    workerCount: number;               // number of production workers included
+    warning?: string;
+  }> => {
+    // ── 1. Get production workers payroll for this month ──────────────
+    const employees   = HRService.getEmployees().filter((e: any) => e.company === company);
+    const allPayroll  = HRService.getPayroll();
+    const monthPayroll = allPayroll.filter(
+      (p: any) => p.month === month && (p as any).company === company,
+    );
+
+    // Identify production workers by department/designation heuristic
+    const PROD_KEYWORDS = ['production', 'cutting', 'polish', 'grind', 'operator', 'helper', 'factory', 'floor', 'processing'];
+    const isProductionWorker = (emp: any): boolean => {
+      const dept  = (emp?.work?.department  || '').toLowerCase();
+      const desig = (emp?.work?.designation || '').toLowerCase();
+      return PROD_KEYWORDS.some(k => dept.includes(k) || desig.includes(k));
+    };
+
+    const productionEmpIds = new Set(
+      employees.filter(isProductionWorker).map((e: any) => e.id),
+    );
+
+    let totalProductionPayroll = 0;
+    let workerCount = 0;
+    monthPayroll.forEach((p: any) => {
+      if (productionEmpIds.has(p.employeeId)) {
+        totalProductionPayroll += p.netSalary || 0;
+        workerCount++;
+      }
+    });
+
+    // ── 2. Get total sqft produced this month ─────────────────────────
+    const allLogs     = await LabourService.getLogs(company);
+    const monthLogs   = allLogs.filter(l => l.logDate.startsWith(month));
+    const totalSqftProduced = monthLogs.reduce((s, l) => s + l.sqftProduced, 0);
+    const totalSqmProduced  = round2(totalSqftProduced * 0.0929);
+
+    // ── 3. Compute pool rates ─────────────────────────────────────────
+    const poolRatePerSqft = totalSqftProduced > 0
+      ? round2(totalProductionPayroll / totalSqftProduced) : 0;
+    const poolRatePerSqm  = totalSqmProduced > 0
+      ? round2(totalProductionPayroll / totalSqmProduced) : 0;
+
+    const warning = workerCount === 0
+      ? 'No production workers found — check employee department/designation fields.'
+      : totalSqftProduced === 0
+      ? 'No sqft logged this month — check cutter daily logs.'
+      : undefined;
+
+    return {
+      month, totalProductionPayroll, totalSqftProduced, totalSqmProduced,
+      poolRatePerSqft, poolRatePerSqm, workerCount, warning,
     };
   },
 };

@@ -107,11 +107,35 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
         const newDispatches: TemperingDispatch[] = stops.map((stop) => {
             const chlId = AppService.generateSequenceID('CH', company, allDispatches);
             const matchedVendor = vendors.find(v => v.name.toUpperCase() === stop.plantName.toUpperCase());
-            const vendorRate = matchedVendor?.rates?.sort((a, b) => (b.effectiveDate || '').localeCompare(a.effectiveDate || ''))[0]?.rate || 0;
+
+            // ── Per-mm rate snapshot from vendor price list ────────────────────
+            // Snapshot at dispatch creation time so rate changes don't affect
+            // historical GL entries. ratesByMm is used by postTemperingInwardGL()
+            // to calculate exact cost per piece (each mm has different rate).
+            const ratesByMm: Record<string, number> = {};
+            // Sort by effectiveDate desc so most recent rate wins per mm
+            const sortedRates = [...(matchedVendor?.rates || [])].sort(
+                (a, b) => (b.effectiveDate || '').localeCompare(a.effectiveDate || ''),
+            );
+            sortedRates.forEach(r => {
+                const mm = String(r.thickness || '').replace(/[^0-9.]/g, '').trim();
+                if (mm && r.rate > 0 && !ratesByMm[mm]) {
+                    ratesByMm[mm] = r.rate; // first = most recent for this mm
+                }
+            });
+
+            // chargesPerSqFt kept as display fallback (most recent overall rate)
+            const vendorRate = sortedRates[0]?.rate || 0;
+
             return {
-                id: chlId, tripId: tripId, company, date: tripHeader.date, dispatchTime: tripHeader.time, originLocation: tripHeader.originLocation,
-                plantName: stop.plantName, pickLocation: stop.pickLocation, vehicleNo: vehiclePlate, driverName: driverName, serviceType: stop.serviceType,
-                pieceIds: [], totalSqFt: 0, status: initialStatus, chargesPerSqFt: vendorRate, totalCharges: 0, expectedReturnDate: stop.expectedReturnDate
+                id: chlId, tripId, company, date: tripHeader.date,
+                dispatchTime: tripHeader.time, originLocation: tripHeader.originLocation,
+                plantName: stop.plantName, pickLocation: stop.pickLocation,
+                vehicleNo: vehiclePlate, driverName: driverName, serviceType: stop.serviceType,
+                pieceIds: [], totalSqFt: 0, status: initialStatus,
+                chargesPerSqFt: vendorRate,
+                ratesByMm,             // per-mm rates for GL calculation
+                totalCharges: 0, expectedReturnDate: stop.expectedReturnDate,
             };
         });
 

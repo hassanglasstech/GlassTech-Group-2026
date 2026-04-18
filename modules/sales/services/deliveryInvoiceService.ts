@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 import { Company, Quotation, LedgerTransaction, Invoice } from '@/modules/shared/types';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { SalesService } from '@/modules/sales/services/salesService';
+import { postDeliveryCOGS } from '@/modules/procurement/services/glasscoGLService';
+import { ProductionService } from '@/modules/production/services/productionService';
 
 interface InvoiceResult {
   invoiceId: string;
@@ -243,6 +245,26 @@ export function generateDeliveryInvoice(
         : q
     )
   );
+
+  // ── COGS GL — raw glass + service labor ──────────────────────────
+  try {
+    const pieceIds = ProductionService.getProductionPieces()
+      .filter((p: any) => p.orderId === order.id || p.orderId === order.orderNo)
+      .map((p: any) => p.id);
+
+    if (pieceIds.length > 0) {
+      postDeliveryCOGS({
+        company,
+        invoiceId,
+        orderId: order.orderNo || order.id,
+        pieceIds,
+        date: today,
+        clientName,
+      });
+    }
+  } catch (e: any) {
+    console.warn('[Invoice] COGS GL skipped:', e?.message);
+  }
 
   return { invoiceId, finalAmount, gstAmount, grandTotal, alreadyInvoiced: false, clientName };
 }

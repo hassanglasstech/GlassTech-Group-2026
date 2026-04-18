@@ -15,6 +15,7 @@ import { SyncService } from '@/src/services/SyncService';
 import { Logger } from '@/modules/shared/services/logger';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/modules/auth/authStore';
+import { FinanceService } from '@/modules/finance/services/financeService';
 
 // ── Local cache keys (fallback + offline buffer) ────────────────────
 const KEYS = {
@@ -288,5 +289,124 @@ export const HRService = {
       SyncService.markDirty('payroll');
     }
     Logger.action('HR', 'SAVE_PAYROLL', `Payroll updated for ${data.length} records`);
+
+    // ── GL: post wages journal for newly-paid payroll records ────────
+    // Debit  : 51311 Wages — Cutting Dept  (production workers)
+    //          51312 Wages — Processing Dept (polish/grind/notch workers)
+    //          52111 Salaries — Admin & Management (admin/non-production)
+    // Credit : 21311 Salary Payable
+    //
+    // Triggered only for records where isSalaryPaid is being set true.
+    // Production workers identified by department/designation keyword.
+    //
+    // IAS 19: employee benefit costs recognised in the period incurred.
+    const PROD_KEYWORDS = ['production', 'cutting', 'polish', 'grind', 'operator', 'helper', 'factory', 'floor', 'processing'];
+    const isProductionWorker = (emp: any): boolean => {
+      const dept  = (emp?.work?.department  || '').toLowerCase();
+      const desig = (emp?.work?.designation || '').toLowerCase();
+      return PROD_KEYWORDS.some(k => dept.includes(k) || desig.includes(k));
+    };
+    const isCutter = (emp: any): boolean => {
+      const desig = (emp?.work?.designation || '').toLowerCase();
+      return desig.includes('cutter') || desig.includes('cutting');
+    };
+
+    // Group newly-paid records by company+month
+    const byCompanyMonth: Record<string, { company: string; month: string; records: (Payroll & { company?: string })[] }> = {};
+    data.filter(p => p.isSalaryPaid).forEach((p: any) => {
+      const key = `${p.company || 'Glassco'}_${p.month}`;
+      if (!byCompanyMonth[key]) byCompanyMonth[key] = { company: p.company || 'Glassco', month: p.month, records: [] };
+      byCompanyMonth[key].records.push(p);
+    });
+
+    Object.values(byCompanyMonth).forEach(({ company, month, records }) => {
+      const employees = HRService.getEmployees().filter((e: any) => e.company === company);
+      const empMap = new Map(employees.map((e: any) => [e.id, e]));
+
+      let cuttingWages    = 0;
+      let processingWages = 0;
+      let adminSalaries   = 0;
+
+      records.forEach((rec: any) => {
+        const emp  = empMap.get(rec.employeeId);
+        const net  = rec.netSalary || 0;
+        if (!emp) { adminSalaries += net; return; }
+        if (isCutter(emp))            cuttingWages    += net;
+        else if (isProductionWorker(emp)) processingWages += net;
+        else                              adminSalaries   += net;
+      });
+
+      const txId = `GL-PAY-${company}-${month}`;
+      // Guard: don't double-post
+      if (FinanceService.getLedger().some((t: any) => t.id === txId)) return;
+
+      const today = new Date().toISOString().split('T')[0];
+      const glDetails: any[] = [];
+
+      // ── Option B: Production wages → 11514 WIP — Direct Labour ────────
+      //
+      // IAS 2.10-12: Direct labour is a conversion cost of inventory.
+      // It must NOT be expensed at payroll time — it should flow through WIP
+      // and reach P&L only when the finished goods are delivered (COGS).
+      //
+      // Flow:
+      //   Payroll:  Dr 11514 WIP — Direct Labour  / Cr 21311 Salary Payable
+      //   Delivery: Dr 51311/51312 COGS Labour    / Cr 11514 WIP — Direct Labour
+      //
+      // Admin salaries remain a PERIOD cost (IAS 2.16) → Dr 52111 / Cr Payable.
+      const addProductionWipLine = (amount: number) => {
+        if (amount <= 0) return;
+        // Balance-sheet path: ASSETS > CURRENT ASSETS > INVENTORY > WIP-Direct-Labour
+        const assets    = FinanceService.ensureAccount(company, 'ASSETS',              1, null,       'Asset', '10');
+        const current   = FinanceService.ensureAccount(company, 'CURRENT ASSETS',      2, assets.id,  'Asset', '11');
+        const inv       = FinanceService.ensureAccount(company, 'INVENTORY',           3, current.id, 'Asset', '115');
+        const wipLabour = FinanceService.ensureAccount(company, 'WIP — Direct Labour', 4, inv.id,     'Asset', '11514');
+        glDetails.push({
+          accountId: wipLabour.id, debit: amount, credit: 0,
+          text: `Production wages → WIP Labour ${month}: Cutting PKR ${cuttingWages.toLocaleString()} + Processing PKR ${processingWages.toLocaleString()}`,
+        });
+      };
+
+      const addAdminLine = (amount: number) => {
+        if (amount <= 0) return;
+        // Period cost: Admin salaries go directly to P&L (IAS 2.16 — not COGS)
+        const revParent  = FinanceService.ensureAccount(company, 'EXPENSES',           1, null,          'Expense', '50');
+        const opex       = FinanceService.ensureAccount(company, 'OPERATING EXPENSES', 2, revParent.id,  'Expense', '52');
+        const staffCosts = FinanceService.ensureAccount(company, 'STAFF COSTS',        3, opex.id,       'Expense', '521');
+        const salaries   = FinanceService.ensureAccount(company, 'SALARIES',           4, staffCosts.id, 'Expense', '5211');
+        const adminAcc   = FinanceService.ensureAccount(company, 'Salaries — Admin & Management', 5, salaries.id, 'Expense', '52111');
+        glDetails.push({
+          accountId: adminAcc.id, debit: amount, credit: 0,
+          text: `Admin salaries ${month}: PKR ${amount.toLocaleString()}`,
+        });
+      };
+
+      // All production workers (cutters + processing) → single WIP-Labour debit
+      addProductionWipLine(cuttingWages + processingWages);
+      addAdminLine(adminSalaries);
+
+      if (glDetails.length === 0) return;
+
+      // Credit: Salary Payable
+      const liab      = FinanceService.ensureAccount(company, 'LIABILITIES', 1, null, 'Liability', '20');
+      const currLiab  = FinanceService.ensureAccount(company, 'CURRENT LIABILITIES', 2, liab.id, 'Liability', '22');
+      const empLiab   = FinanceService.ensureAccount(company, 'EMPLOYEE LIABILITIES', 3, currLiab.id, 'Liability', '213');
+      const payroll2  = FinanceService.ensureAccount(company, 'PAYROLL', 4, empLiab.id, 'Liability', '2131');
+      const salPayable = FinanceService.ensureAccount(company, 'Salary Payable', 5, payroll2.id, 'Liability', '21311');
+      const totalWages = cuttingWages + processingWages + adminSalaries;
+      glDetails.push({ accountId: salPayable.id, debit: 0, credit: totalWages, text: `Salary payable ${month}: PKR ${totalWages.toLocaleString()}` });
+
+      try {
+        FinanceService.recordTransaction({
+          id: txId, company, docType: 'JV',
+          docDate: today, date: today,
+          description: `Payroll Journal — ${company} — ${month} | Cutting PKR ${cuttingWages.toLocaleString()} | Processing PKR ${processingWages.toLocaleString()} | Admin PKR ${adminSalaries.toLocaleString()}`,
+          referenceId: month, status: 'Posted',
+          details: glDetails,
+        } as any);
+      } catch (e: any) {
+        console.warn('[HRService] Payroll GL posting failed:', e?.message);
+      }
+    });
   },
 };

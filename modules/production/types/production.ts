@@ -115,6 +115,17 @@ export interface PieceFault {
   costImpact?: number;
 }
 
+// ── Service Log — one entry per service performed on a piece ────────
+export interface ServiceLogEntry {
+  serviceNick: string;      // 'Polishing' | 'Grinding' | 'Notching' | 'Holes' | 'T/G' etc.
+  workerId?: string;
+  workerName: string;
+  sqft: number;             // sqft processed by this worker for this service on this piece
+  costRatePerSqft: number;  // PKR/sqft standard cost (from Product Master or standard rates)
+  totalCost: number;        // sqft × costRatePerSqft
+  completedAt: string;      // ISO timestamp
+}
+
 export interface ProductionPiece {
   id: string;
   orderId: string;
@@ -129,6 +140,8 @@ export interface ProductionPiece {
   pendingServices?: string[];
   isRevised?: boolean;
   revisionNote?: string;
+  sqft?: number;            // area of this piece (sqft) — populated at creation from quotation item
+  serviceLog?: ServiceLogEntry[]; // history of services performed + worker + cost
   // ── Barcode / QR (Task 4 — Phase 9) ─────────────────────────────
   /**
    * Barcode / QR string printed on the job card and the physical glass sticker.
@@ -183,10 +196,12 @@ export interface TemperingDispatch {
   pieceIds: string[]; 
   totalSqFt: number; 
   status: TemperingDispatchStatus; 
-  chargesPerSqFt: number; 
-  totalCharges: number; 
-  expectedReturnDate?: string; 
-  receivedPieceIds?: string[]; 
+  chargesPerSqFt: number;              // flat display / fallback value
+  ratesByMm?: Record<string, number>;  // per-mm rates snapshotted from vendor price list at dispatch time
+                                       // e.g. { '6': 55, '8': 65, '10': 75, '12': 85 }
+  totalCharges: number;
+  expectedReturnDate?: string;
+  receivedPieceIds?: string[];
 }
 
 export interface ProductionMetric {

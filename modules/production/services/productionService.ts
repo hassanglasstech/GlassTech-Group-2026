@@ -11,6 +11,7 @@ const KEYS = {
   WAREHOUSE_SPOTS: 'gtk_erp_warehouse_spots',
   GATE_PASS: 'gtk_erp_gate_pass',
   QUOTATIONS: 'gtk_erp_quotations',
+  FLOOR_STAFF: 'gtk_erp_floor_staff',
 };
 
 import { bgSaveToIDB, safeParse, safeSave, safeAsync } from '../../shared/services/utils';
@@ -206,6 +207,8 @@ export const ProductionService = {
         status: p.status || 'Cut',
         last_updated: (p as any).lastUpdated || new Date().toISOString(),
         cost_center_id: (p as any).costCenterId ?? null,
+        sqft: (p as any).sqft ?? null,
+        service_log: (p as any).serviceLog ?? null,  // JSONB — worker-to-service history
       }));
     if (mapped.length > 0) {
       supabase.from('production_pieces').upsert(mapped, { onConflict: 'id' })
@@ -214,6 +217,26 @@ export const ProductionService = {
   },
   getTemperingDispatches: (): TemperingDispatch[] => safeParse(KEYS.TEMPERING_DISPATCHES),
   saveTemperingDispatches: (data: TemperingDispatch[]) => safeSave(KEYS.TEMPERING_DISPATCHES, data),
+
+  // ── Floor Staff — production workers with role assignments ─────────
+  // Used by ServiceFloorView and DailyFloorPlan for role-filtered dropdowns.
+  // Roles: Cutter | Polish Operator | Machine Operator | Helper | Supervisor
+  getFloorStaff: (company?: string) => {
+    const all = safeParse(KEYS.FLOOR_STAFF);
+    return company ? all.filter((s: any) => s.company === company) : all;
+  },
+  saveFloorStaff: (data: any[]) => {
+    safeSave(KEYS.FLOOR_STAFF, data);
+    // Supabase JSONB pattern — same as other tables
+    if (data.length > 0) {
+      supabase.from('floor_staff')
+        .upsert(
+          data.map((s: any) => ({ id: s.id, company: s.company ?? '', data: s })),
+          { onConflict: 'id' },
+        )
+        .then(({ error }) => { if (error) console.warn('[FloorStaff] Supabase push:', error.message); });
+    }
+  },
   getWarehouseSpots: (): WarehouseSpot[] => safeParse(KEYS.WAREHOUSE_SPOTS),
   saveWarehouseSpots: (data: WarehouseSpot[]) => safeSave(KEYS.WAREHOUSE_SPOTS, data),
 
