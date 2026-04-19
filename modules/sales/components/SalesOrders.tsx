@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Company, Quotation, Client, ProductionPiece, TemperingDispatch, PurchaseOrder, PettyCashEntry, Product, Vendor } from '../../shared/types';
 import { SalesService } from '../services/salesService';
+import { generateDeliveryInvoice } from '../services/deliveryInvoiceService';
 import { ProductionService } from '../../production/services/productionService';
 import { InventoryService } from '../../procurement/services/inventoryService';
 import { 
@@ -238,6 +239,21 @@ const SalesOrders: React.FC = () => {
         const next = all.map(q => q.id === selectedOrder.id ? updatedOrder : q);
         SalesService.saveQuotations(next);
         setSelectedOrder(updatedOrder);
+
+        // Auto-generate invoice on delivery if not already invoiced
+        const alreadyInvoiced = SalesService.getInvoices().some((i: any) => i.orderId === updatedOrder.id);
+        const deliveryMarked = !!detailForm.deliveryDate;
+        if (deliveryMarked && !alreadyInvoiced) {
+            try {
+                const result = generateDeliveryInvoice(updatedOrder as any, company, 0);
+                if (!result.alreadyInvoiced) {
+                    toast.success(`Invoice ${result.invoiceId} generated — PKR ${result.grandTotal.toLocaleString('en-PK')}`);
+                }
+            } catch (err: any) {
+                toast.error(`Invoice generation failed: ${err?.message || 'unknown error'}`);
+            }
+        }
+
         refreshData();
         toast.success("Industrial Update: Payment and Logistics data saved.");
     };

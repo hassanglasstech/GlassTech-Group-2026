@@ -72,6 +72,20 @@ export const useGlasscoQuotations = () => {
   const handleSaveQuotation = async (action: 'draft' | 'save' | 'approve', directData?: Quotation) => {
     const dataToSave = directData || formData;
     if (!dataToSave.clientId) { toast.error("Client is required.", { duration: 4000 }); return; }
+
+    // Validation: formal save/approve requires non-empty items + positive total
+    if (action === 'save' || action === 'approve') {
+      const nonSectionItems = (dataToSave.items || []).filter((i: any) => !i.isSection);
+      if (nonSectionItems.length === 0) {
+        toast.error("At least one line item is required before saving.", { duration: 4000 });
+        return;
+      }
+      const totalAmount = nonSectionItems.reduce((s: number, i: any) => s + (Number(i.amount) || 0), 0);
+      if (totalAmount <= 0) {
+        toast.error("Quotation total must be greater than 0.", { duration: 4000 });
+        return;
+      }
+    }
     
     // Refresh all quotations to get the absolute latest serial for this company
     const all = (await AsyncSalesService.getQuotations()).filter(q => q.company === company);

@@ -120,22 +120,22 @@ const QuotationManager: React.FC = () => {
         {/* Form Fields */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="space-y-2">
-            <label className="text-xs font-black text-slate-400 uppercase flex items-center"><Calendar size={14} className="mr-1"/> Date</label>
+            <label className="text-xs font-black text-slate-400 uppercase flex items-center"><Calendar size={14} className="mr-1"/> Date <span className="text-red-500 ml-1">*</span></label>
             <input disabled={isLocked} type="date" className="sap-input w-full" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
           </div>
           <div className="space-y-2">
-            <label className="text-xs font-black text-slate-400 uppercase flex items-center"><Calendar size={14} className="mr-1"/> Valid Till</label>
+            <label className="text-xs font-black text-slate-400 uppercase flex items-center"><Calendar size={14} className="mr-1"/> Valid Till <span className="text-red-500 ml-1">*</span></label>
             <input disabled={isLocked} type="date" className="sap-input w-full" value={formData.dueDate} onChange={e => setFormData({...formData, dueDate: e.target.value})} />
           </div>
           <div className="space-y-2">
-            <label className="text-xs font-black text-slate-400 uppercase flex items-center"><Info size={14} className="mr-1"/> Client</label>
+            <label className="text-xs font-black text-slate-400 uppercase flex items-center"><Info size={14} className="mr-1"/> Client <span className="text-red-500 ml-1">*</span></label>
             <select disabled={isLocked} className="sap-input w-full" value={formData.clientId} onChange={e => setFormData({...formData, clientId: e.target.value})}>
               <option value="">Select Client...</option>
               {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div className="space-y-2 md:col-span-3">
-            <label className="text-xs font-black text-slate-400 uppercase flex items-center"><Layers size={14} className="mr-1"/> Project / Store Name</label>
+            <label className="text-xs font-black text-slate-400 uppercase flex items-center"><Layers size={14} className="mr-1"/> Project / Store Name <span className="text-red-500 ml-1">*</span></label>
             <input disabled={isLocked} type="text" className="sap-input w-full" placeholder="e.g. Emporium Mall Outlet" value={formData.projectName} onChange={e => setFormData({...formData, projectName: e.target.value})} />
           </div>
 

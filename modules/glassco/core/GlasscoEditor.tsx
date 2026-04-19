@@ -20,7 +20,7 @@ interface GlasscoEditorProps {
     onAddSection: () => void;
     onDuplicateItem: (idx: number) => void;
     onRemoveItem: (idx: number) => void;
-    onSave: (action: 'draft' | 'save' | 'approve') => void;
+    onSave: (action: 'draft' | 'save' | 'approve') => void | Promise<any>;
     onSaveWastageDecision?: (decision: any) => void;
 }
 
@@ -40,8 +40,16 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
 
     const [activeTab, setActiveTab] = useState<'items' | 'wastage'>('items');
     const [isDirty, setIsDirty] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
     const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; idx: number } | null>(null);
     const tableRef = useRef<HTMLDivElement>(null);
+
+    const handleSaveClick = async (action: 'draft' | 'save' | 'approve') => {
+      if (isSaving) return;
+      setIsSaving(true);
+      try { await onSave(action); }
+      finally { setIsSaving(false); }
+    };
 
     // Auto-scroll to bottom only when rows exceed 7
     useEffect(() => {
@@ -60,14 +68,14 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
     // Keyboard shortcuts
     useEffect(() => {
       const handler = (e: KeyboardEvent) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); onSave('save'); }
-        if ((e.ctrlKey || e.metaKey) && e.key === 'd') { e.preventDefault(); onSave('draft'); }
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); onSave('approve'); }
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); handleSaveClick('save'); }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'd') { e.preventDefault(); handleSaveClick('draft'); }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); handleSaveClick('approve'); }
         if (e.key === 'Escape') { setCtxMenu(null); }
       };
       window.addEventListener('keydown', handler);
       return () => window.removeEventListener('keydown', handler);
-    }, [onSave]);
+    }, [onSave, isSaving]);
 
     // Unsaved changes warning
     useEffect(() => {
@@ -216,29 +224,32 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                     <div className="h-4 w-px bg-slate-700" />
 
                     <button
-                      onClick={() => onSave('draft')}
+                      onClick={() => handleSaveClick('draft')}
+                      disabled={isSaving}
                       title="Ctrl+D"
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase bg-slate-700 hover:bg-slate-600 text-slate-200 transition-all"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase bg-slate-700 hover:bg-slate-600 text-slate-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <Save size={13}/> Draft
+                      <Save size={13}/> {isSaving ? 'Saving…' : 'Draft'}
                       <span className="text-[9px] text-slate-500 font-normal hidden lg:block">Ctrl+D</span>
                     </button>
 
                     <button
-                      onClick={() => onSave('save')}
+                      onClick={() => handleSaveClick('save')}
+                      disabled={isSaving}
                       title="Ctrl+S"
-                      className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[11px] font-bold uppercase bg-amber-500 hover:bg-amber-600 text-white transition-all shadow-lg"
+                      className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[11px] font-bold uppercase bg-amber-500 hover:bg-amber-600 text-white transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <FileText size={13}/> Save Quotation
+                      <FileText size={13}/> {isSaving ? 'Saving…' : 'Save Quotation'}
                       <span className="text-[9px] text-amber-200 font-normal hidden lg:block">Ctrl+S</span>
                     </button>
 
                     <button
-                      onClick={() => onSave('approve')}
+                      onClick={() => handleSaveClick('approve')}
+                      disabled={isSaving}
                       title="Ctrl+Enter"
-                      className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[11px] font-bold uppercase bg-emerald-500 hover:bg-emerald-600 text-white transition-all shadow-lg"
+                      className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[11px] font-bold uppercase bg-emerald-500 hover:bg-emerald-600 text-white transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <CheckCircle2 size={13}/> Approve & Order
+                      <CheckCircle2 size={13}/> {isSaving ? 'Saving…' : 'Approve & Order'}
                       <span className="text-[9px] text-emerald-200 font-normal hidden lg:block">Ctrl+↵</span>
                     </button>
 

@@ -13,6 +13,8 @@ const ClientMaster: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
   const [clients, setClients] = useState<Client[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statementClient, setStatementClient] = useState<Client | null>(null);
   
@@ -40,25 +42,59 @@ const ClientMaster: React.FC = () => {
     setClients(all.filter(c => c.company === company));
   };
 
+  const handleEdit = (client: Client) => {
+    setFormData({
+      name: client.name,
+      contactPerson: client.contactPerson,
+      email: client.email,
+      phone: client.phone,
+      address: client.address,
+      ntn: client.ntn,
+      creditLimit: client.creditLimit,
+      status: client.status,
+    });
+    setEditingId(client.id);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingId(null);
+    setFormData(initialForm);
+  };
+
   const handleSave = async () => {
-    if (!formData.name || !formData.phone) {
+    if (!formData.name?.trim() || !formData.phone?.trim()) {
       toast.error("Business Partner Name and Phone are required.");
       return;
     }
-
-    const newClient: Client = {
-      ...(formData as Client),
-      id: `BP-${Date.now().toString().slice(-6)}`,
-      company,
-      createdAt: new Date().toISOString()
-    };
-
-    const all = await AsyncSalesService.getClients();
-    await AsyncSalesService.saveClients([...all, newClient]);
-    toast.success("Business Partner created and synced to cloud.");
-    refreshData();
-    setIsModalOpen(false);
-    setFormData(initialForm);
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      const all = await AsyncSalesService.getClients();
+      if (editingId) {
+        const updated = all.map(c => c.id === editingId
+          ? { ...c, ...formData, company } as Client
+          : c);
+        await AsyncSalesService.saveClients(updated);
+        toast.success("Business Partner updated.");
+      } else {
+        const newClient: Client = {
+          ...(formData as Client),
+          id: `BP-${Date.now().toString().slice(-6)}`,
+          company,
+          createdAt: new Date().toISOString()
+        };
+        await AsyncSalesService.saveClients([...all, newClient]);
+        toast.success("Business Partner created.");
+      }
+      refreshData();
+      closeModal();
+    } catch (err) {
+      toast.error(`Save failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -70,9 +106,9 @@ const ClientMaster: React.FC = () => {
     }
   };
 
-  const filtered = clients.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.ntn.includes(searchTerm)
+  const filtered = clients.filter(c =>
+    (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (c.ntn || '').includes(searchTerm)
   );
 
   return (
@@ -139,7 +175,7 @@ const ClientMaster: React.FC = () => {
                 </td>
                 <td className="px-4 py-3 text-center">
                   <div className="flex justify-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button className="text-slate-400 hover:text-blue-600"><Edit2 size={14} /></button>
+                    <button onClick={() => handleEdit(client)} className="text-slate-400 hover:text-blue-600" title="Edit"><Edit2 size={14} /></button>
                     <button onClick={() => handleDelete(client.id)} className="text-slate-400 hover:text-red-600"><Trash2 size={14} /></button>
                     <button onClick={() => setStatementClient(client)} className="text-slate-400 hover:text-blue-600" title="AR Statement"><FileText size={14} /></button>
                   </div>
@@ -168,7 +204,7 @@ const ClientMaster: React.FC = () => {
           <div className="space-y-6">
             <h4 className="text-xs font-bold uppercase text-slate-500 tracking-widest border-b pb-2">General Data</h4>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-500">Partner Name / Company</label>
+              <label className="text-[10px] font-bold uppercase text-slate-500">Partner Name / Company <span className="text-red-500">*</span></label>
               <input type="text" className="sap-input w-full font-bold uppercase" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
             </div>
             <div className="space-y-1">
@@ -177,7 +213,7 @@ const ClientMaster: React.FC = () => {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-500">Phone</label>
+                <label className="text-[10px] font-bold uppercase text-slate-500">Phone <span className="text-red-500">*</span></label>
                 <input type="text" className="sap-input w-full font-bold" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
               </div>
               <div className="space-y-1">
@@ -203,8 +239,8 @@ const ClientMaster: React.FC = () => {
           </div>
         </div>
         <div className="px-8 py-4 bg-white border-t flex justify-end space-x-3">
-          <button onClick={() => setIsModalOpen(false)} className="sap-btn-ghost">Discard</button>
-          <button onClick={handleSave} className="sap-btn-primary flex items-center space-x-2"><Save size={14} /><span>Create Partner</span></button>
+          <button onClick={closeModal} className="sap-btn-ghost" disabled={isSaving}>Discard</button>
+          <button onClick={handleSave} disabled={isSaving} className="sap-btn-primary flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"><Save size={14} /><span>{isSaving ? 'Saving…' : editingId ? 'Update Partner' : 'Create Partner'}</span></button>
         </div>
       </div></div>)}
     </div>

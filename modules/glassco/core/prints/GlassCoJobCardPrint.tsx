@@ -9,12 +9,14 @@ interface Props {
 }
 
 export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces, products }) => {
+    if (!quote) return <div className="p-8 text-slate-500 italic">No quotation data available to print.</div>;
     const safeItems: any[] = Array.isArray(quote.items)
         ? quote.items
         : (typeof quote.items === 'string' ? (() => { try { return JSON.parse(quote.items as any); } catch { return []; } })() : []);
     quote = { ...quote, items: safeItems };
+    const safePieces = Array.isArray(pieces) ? pieces : [];
 
-    let jobPieces = pieces.filter(p => p.orderId === quote.orderNo || p.orderId === quote.id);
+    let jobPieces = safePieces.filter(p => p.orderId === quote.orderNo || p.orderId === quote.id);
     jobPieces.sort((a, b) => {
         const getNum = (id: string) => parseInt((id.split('/').pop() || '0').replace(/[^0-9]/g, '')) || 0;
         return getNum(a.id) - getNum(b.id);

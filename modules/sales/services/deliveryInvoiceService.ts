@@ -23,27 +23,36 @@ interface InvoiceResult {
   clientName: string;
 }
 
-// ── Sequential invoice number ─────────────────────────────────────────
-const getNextInvoiceNumber = (company: Company): string => {
+// ── Sequential invoice number (collision-safe) ────────────────────────
+const buildInvoiceNumber = (company: Company, seq: number): string => {
   const now = new Date();
   const year = now.getFullYear();
   const prefix = company.substring(0, 3).toUpperCase();
-
   if (company === 'Glassco') {
-    // Glassco: GT-INV-GLS-MMYY-XXXX
     const mmyy = `${(now.getMonth() + 1).toString().padStart(2, '0')}${year.toString().slice(-2)}`;
-    const key = `gtk_erp_inv_seq_${company}_${year}`;
-    const current = parseInt(localStorage.getItem(key) || '0', 10);
-    const next = current + 1;
-    localStorage.setItem(key, String(next));
-    return `GT-INV-GLS-${mmyy}-${String(next).padStart(4, '0')}`;
+    return `GT-INV-GLS-${mmyy}-${String(seq).padStart(4, '0')}`;
   }
+  return `INV-${prefix}-${year}-${String(seq).padStart(4, '0')}`;
+};
 
+const getNextInvoiceNumber = (company: Company): string => {
+  const year = new Date().getFullYear();
   const key = `gtk_erp_inv_seq_${company}_${year}`;
-  const current = parseInt(localStorage.getItem(key) || '0', 10);
-  const next = current + 1;
-  localStorage.setItem(key, String(next));
-  return `INV-${prefix}-${year}-${String(next).padStart(4, '0')}`;
+  const existingIds = new Set(SalesService.getInvoices().map((i: Invoice) => i.id));
+
+  // Atomic-ish read-modify-write with collision retry
+  let candidate = '';
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const current = parseInt(localStorage.getItem(key) || '0', 10);
+    const next = current + 1 + attempt;
+    candidate = buildInvoiceNumber(company, next);
+    if (!existingIds.has(candidate)) {
+      localStorage.setItem(key, String(next));
+      return candidate;
+    }
+  }
+  // Fallback: suffix with timestamp to guarantee uniqueness
+  return `${candidate}-${Date.now().toString().slice(-4)}`;
 };
 
 export function generateDeliveryInvoice(
@@ -51,6 +60,19 @@ export function generateDeliveryInvoice(
   company: Company,
   gstPercent: number = 0
 ): InvoiceResult {
+  // ── Validation guards (P1) ────────────────────────────────────────
+  if (!order || !order.id) {
+    throw new Error('Invoice generation: order is missing.');
+  }
+  if (!order.clientId) {
+    throw new Error('Invoice generation: client is required.');
+  }
+  const items = order.items || [];
+  const serviceChargesArr = order.serviceCharges || [];
+  if (items.length === 0 && serviceChargesArr.length === 0) {
+    throw new Error('Invoice generation: at least one line item or service charge required.');
+  }
+
   // ── Guard: already invoiced? ──────────────────────────────────────
   const existing = SalesService.getInvoices().find(
     (i: Invoice) => i.orderId === order.id
@@ -71,11 +93,29 @@ export function generateDeliveryInvoice(
   const client = clients.find((c: any) => c.id === order.clientId);
   const clientName = client?.name || order.clientId || 'Walk-in';
 
-  const totalRevenue = (order.items || []).reduce(
-    (s: number, i: any) => s + (i.amount || 0), 0
+  // ── Apply wastage decision if override/review ─────────────────────
+  const wDec: any = (order as any).wastageDecision;
+  const applyWastage =
+    wDec &&
+    (wDec.decision === 'review' || wDec.decision === 'override') &&
+    Number(wDec.suggestedNewRatePerSqft) > 0;
+
+  const effectiveItems = applyWastage
+    ? items.map((i: any) => {
+        if (i.isSection) return i;
+        const newRate = Number(wDec.suggestedNewRatePerSqft);
+        const currentRate = Number(i.pricePerUnit) || 0;
+        if (newRate <= currentRate) return i;
+        const sqft = Number(i.totalSqFt) || 0;
+        return { ...i, pricePerUnit: newRate, amount: Math.round(sqft * newRate) };
+      })
+    : items;
+
+  const totalRevenue = effectiveItems.reduce(
+    (s: number, i: any) => s + (Number(i.amount) || 0), 0
   );
-  const serviceCharges = (order.serviceCharges || []).reduce(
-    (s: number, sc: any) => s + (sc.amount || 0), 0
+  const serviceCharges = serviceChargesArr.reduce(
+    (s: number, sc: any) => s + (Number(sc.amount) || 0), 0
   );
   const subtotal = totalRevenue + serviceCharges;
   const discount = order.discountAmount ||
@@ -83,6 +123,11 @@ export function generateDeliveryInvoice(
   const finalAmount = subtotal - discount;
   const gstAmount = gstPercent > 0 ? Math.round(finalAmount * (gstPercent / 100)) : 0;
   const grandTotal = finalAmount + gstAmount;
+
+  // ── Amount guard: reject zero/negative invoices ───────────────────
+  if (finalAmount <= 0 || grandTotal <= 0) {
+    throw new Error(`Invoice generation: grand total must be > 0 (got PKR ${grandTotal}).`);
+  }
 
   // ── Credit Limit Check ────────────────────────────────────────────
   if (client) {
@@ -231,9 +276,10 @@ export function generateDeliveryInvoice(
     glTxId: txId,
     payments: [],
     projectName: order.projectName || '',
-    items: order.items || [],
+    items: effectiveItems,
     serviceCharges: order.serviceCharges || [],
     discountAmount: discount,
+    wastageApplied: applyWastage,
   };
   SalesService.saveInvoices([...SalesService.getInvoices(), invoice]);
 
@@ -261,9 +307,17 @@ export function generateDeliveryInvoice(
         date: today,
         clientName,
       });
+    } else {
+      // No production pieces linked — GP will be overstated until COGS posted.
+      toast.warning(
+        `Invoice ${invoiceId}: No production pieces found. COGS skipped — Gross Profit will look inflated. Link production pieces to post COGS.`,
+        { duration: 8000 }
+      );
+      console.warn('[Invoice COGS] Skipped — no production pieces for order', order.id);
     }
   } catch (e: any) {
     console.warn('[Invoice] COGS GL skipped:', e?.message);
+    toast.error(`COGS posting failed for ${invoiceId}: ${e?.message || 'unknown error'}`);
   }
 
   return { invoiceId, finalAmount, gstAmount, grandTotal, alreadyInvoiced: false, clientName };

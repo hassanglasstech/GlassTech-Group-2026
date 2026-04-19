@@ -8,6 +8,7 @@ import DesignStudio from '../../production/pages/DesignStudio';
 import SalesOrders from '../components/SalesOrders';
 import SalesPipeline from '../components/SalesPipeline';
 import BillingHub from '../../finance/components/BillingHub';
+import CustomerComplaintModule from '../components/CustomerComplaintModule';
 import { Users, FileSignature, Layout, ShoppingCart, BarChart3, Receipt } from 'lucide-react';
 import { useAppStore } from '../../shared/store/appStore';
 

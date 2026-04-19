@@ -80,7 +80,8 @@ export const GlasscoPrintTemplate: React.FC<GlasscoPrintTemplateProps> = ({
         if (!pieces && printMode === 'JobCard') {
             const orderId = printingQuote.orderNo || printingQuote.id;
             supabase.from('production_pieces').select('*').or(`order_id.eq.${orderId}`)
-                .then(({ data }) => {
+                .then(({ data, error }) => {
+                    if (error) { console.warn('[GlasscoPrint] production_pieces fetch failed:', error.message); return; }
                     if (data && data.length > 0) {
                         setFetchedPieces(data.map((r: any) => ({
                             id: r.id, orderId: r.order_id, itemIndex: Number(r.item_index || 0),
@@ -88,20 +89,24 @@ export const GlasscoPrintTemplate: React.FC<GlasscoPrintTemplateProps> = ({
                             lastUpdated: r.last_updated || new Date().toISOString(),
                         })) as ProductionPiece[]);
                     }
-                });
+                })
+                .then(undefined, (err) => console.warn('[GlasscoPrint] pieces promise rejected:', err));
         }
         if (!products) {
-            supabase.from('products').select('*').then(({ data }) => {
-                if (data && data.length > 0) {
-                    setFetchedProducts(data.map((r: any) => ({
-                        ...r, serviceNick: r.service_nick, profileCode: r.profile_code,
-                        sheetSize: r.sheet_size, costPrice: r.cost_price, basePrice: r.base_price,
-                        glassType: r.glass_type, subCategory: r.sub_category, temperingPrice: r.tempering_price,
-                        mainCategory: r.main_category, finishColor: r.finish_color,
-                        modelNo: r.model_no, variants: r.variants || [],
-                    })).filter((p: any) => p.company === 'Glassco' || p.company === 'GlassCo'));
-                }
-            });
+            supabase.from('products').select('*')
+                .then(({ data, error }) => {
+                    if (error) { console.warn('[GlasscoPrint] products fetch failed:', error.message); return; }
+                    if (data && data.length > 0) {
+                        setFetchedProducts(data.map((r: any) => ({
+                            ...r, serviceNick: r.service_nick, profileCode: r.profile_code,
+                            sheetSize: r.sheet_size, costPrice: r.cost_price, basePrice: r.base_price,
+                            glassType: r.glass_type, subCategory: r.sub_category, temperingPrice: r.tempering_price,
+                            mainCategory: r.main_category, finishColor: r.finish_color,
+                            modelNo: r.model_no, variants: r.variants || [],
+                        })).filter((p: any) => (p.company || '').toLowerCase() === 'glassco'));
+                    }
+                })
+                .then(undefined, (err) => console.warn('[GlasscoPrint] products promise rejected:', err));
         }
     }, [printingQuote.id, printMode]);
 
