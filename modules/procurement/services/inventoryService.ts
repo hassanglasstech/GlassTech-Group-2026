@@ -374,6 +374,8 @@ export const InventoryService = {
       total_value: s.totalValue||0, storage_bin: s.storageBin||'',
       last_movement_date: s.lastMovementDate||'',
       min_level: s.minLevel||0, reorder_point: s.reorderPoint||0,
+      per_sheet_weight_kg: (s as any).perSheetWeightKg||0,
+      per_sqft_weight_kg:  (s as any).perSqftWeightKg||0,
     }));
     supabase.from('store_items').upsert(rows).then(({ error }) => {
       if (error) console.error('[InventoryService] saveStore Supabase error:', error.message);

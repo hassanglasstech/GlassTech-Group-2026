@@ -138,70 +138,24 @@ const LoginPage: React.FC = () => {
     tryAutoLogin();
   }, []);
 
-  // ── STEP: Google OAuth ───────────────────────────────────────────────
-  const handleGoogleLogin = async () => {
+  // ── STEP: Email OTP — send code ─────────────────────────────────────
+  const [email, setEmail] = useState('');
+
+  const handleSendOtp = async () => {
+    if (!email.includes('@')) return setError('Valid email daalo.');
     setBusy(true);
     setError('');
-    const { error: oauthErr } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin + '/',
-        queryParams: { prompt: 'select_account' },
-      },
+    const { error: otpErr } = await supabase.auth.signInWithOtp({
+      email: email.toLowerCase().trim(),
+      options: { shouldCreateUser: false },
     });
-    if (oauthErr) {
-      setError('Google sign-in failed. Try again.');
+    if (otpErr) {
+      setError('OTP nahi bheja. Email check karo ya admin se raabt karo.');
       setBusy(false);
-    }
-    // If successful, Supabase redirects back — useEffect below handles it
-  };
-
-  // ── Handle OAuth redirect callback ──────────────────────────────────
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
-          await handlePostAuth(session.user.id, session.user.email || '');
-        }
-      }
-    );
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // ── After Google auth: check profile + time + send OTP ──────────────
-  const handlePostAuth = async (userId: string, email: string) => {
-    setBusy(true);
-    setError('');
-
-    // 1. Check profile exists and is active
-    const profile = await fetchProfile(userId, email);
-    if (!profile) {
-      // Check if table exists and profile issue
-      const { data: check } = await supabase.from('user_profiles').select('count').single();
-      Logger.info('Auth', 'Profile table check: ' + JSON.stringify(check));
-      setError('Access not configured yet. Please contact Hassan (Admin) to get access.');
-      await supabase.auth.signOut();
-      setBusy(false);
-      setStep('google');
       return;
     }
-
-    // 2. Time restriction check
-    if (profile.timeRestricted && !isOfficeHours()) {
-      setError('Access restricted to office hours (Mon–Sat 9am–6pm PKT).');
-      await supabase.auth.signOut();
-      setBusy(false);
-      setStep('google');
-      return;
-    }
-
-    // Skip OTP — Google auth is sufficient verification
-    // Go directly to device setup
-    if (!hasDeviceRegistered() && !hasRememberToken()) {
-      setStep('device_choice');
-    } else {
-      setStep('biometric');
-    }
+    setPendingEmail(email.toLowerCase().trim());
+    setStep('otp');
     setBusy(false);
   };
 
@@ -404,27 +358,31 @@ const LoginPage: React.FC = () => {
           <p className="text-[11px] text-slate-500 font-bold uppercase tracking-widest mt-1">2026 — Secure Access Portal</p>
         </div>
 
-        {/* ── STEP: Google Login ─────────────────────────────────────── */}
+        {/* ── STEP: Email Login ─────────────────────────────────────── */}
         {step === 'google' && (
           <Card>
             <div className="space-y-5">
               <div>
                 <p className="text-white font-black text-base">Sign In</p>
-                <p className="text-slate-400 text-xs mt-1">Use your company Google account</p>
+                <p className="text-slate-400 text-xs mt-1">Apna email daalo — OTP bheja jayega</p>
               </div>
               {error && <ErrBox msg={error} />}
-              <button onClick={handleGoogleLogin} disabled={busy}
-                className="w-full flex items-center justify-center space-x-3 bg-white hover:bg-slate-100 text-slate-800 font-bold py-3 rounded-xl transition-all shadow-lg disabled:opacity-50">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase text-slate-500 tracking-widest">Email Address</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSendOtp()}
+                  placeholder="email@example.com"
+                  className="w-full bg-[#0f1923] border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30 transition-all"
+                  autoFocus
+                />
+              </div>
+              <button onClick={handleSendOtp} disabled={busy || !email.includes('@')}
+                className="w-full flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/30 text-white font-black uppercase tracking-widest py-3 rounded-xl transition-all shadow-lg">
                 {busy ? <Loader2 size={18} className="animate-spin" /> : (
-                  <>
-                    <svg width="18" height="18" viewBox="0 0 48 48">
-                      <path fill="#FFC107" d="M43.6 20H24v8h11.3C33.7 33.1 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.5 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c11 0 20-9 20-20 0-1.3-.1-2.7-.4-4z"/>
-                      <path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.6 15.1 19 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.5 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
-                      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-1.9 13.5-5l-6.2-5.2C29.4 35.6 26.8 36 24 36c-5.2 0-9.7-2.9-11.9-7.2l-6.6 5.1C9.5 39.6 16.3 44 24 44z"/>
-                      <path fill="#1565C0" d="M43.6 20H24v8h11.3c-1 2.7-2.8 4.9-5.1 6.4l6.2 5.2C40.1 36.1 44 30.5 44 24c0-1.3-.1-2.7-.4-4z"/>
-                    </svg>
-                    <span>Continue with Google</span>
-                  </>
+                  <><Mail size={16} /><span>Send OTP</span></>
                 )}
               </button>
               <p className="text-center text-[10px] text-slate-600">Internal use only — unauthorized access prohibited</p>
@@ -542,7 +500,7 @@ const LoginPage: React.FC = () => {
                   : <><Fingerprint size={18} /><span>{hasDeviceRegistered() ? 'Authenticate' : 'Continue'}</span></>
                 }
               </button>
-              <button onClick={() => { clearDeviceAuth(); setStep('google'); setError(''); }}
+              <button onClick={() => { clearDeviceAuth(); setStep('google'); setError(''); setEmail(''); }}
                 className="w-full text-slate-500 hover:text-slate-300 text-xs font-bold uppercase transition-colors">
                 Sign in with different account
               </button>
