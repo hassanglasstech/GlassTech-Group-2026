@@ -54,15 +54,34 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
         const displaySize = isMM 
             ? `${item.mmW || 0} x ${item.mmH || 0}`
             : `${item.inchW || 0}.${item.sootW || 0} x ${item.inchH || 0}.${item.sootH || 0}`;
+        const holes = Array.isArray(item.holes) ? item.holes : [];
+        const holesSummary = holes.length > 0
+            ? holes.map((h: any, i: number) => {
+                const posKey = (() => {
+                    // reverse-map x,y to TL/TC/TR etc.
+                    const POS: Array<[string, number, number]> = [
+                        ['TL',8,8],['TC',50,8],['TR',92,8],
+                        ['ML',8,50],['MC',50,50],['MR',92,50],
+                        ['BL',8,92],['BC',50,92],['BR',92,92],
+                    ];
+                    const found = POS.find(p => p[1] === h.x && p[2] === h.y);
+                    return found ? found[0] : `${h.x}%,${h.y}%`;
+                })();
+                const sz = h.type === 'Hole' ? `Ø${h.diameter}mm` : `${h.width}×${h.height}mm`;
+                return `#${i+1} ${h.type}@${posKey}(${sz})`;
+              }).join(' · ')
+            : '';
         itemPieces.forEach(p => {
             printableItems.push({
                 isPiece: true, pId: p.id, displaySize,
                 materialSpec: (p.specs || '').replace('undefined', '').replace('Plain', 'Clear').trim(),
                 itemDescription: item.description,
-                services: item?.selectedServices?.join(' + ') || 'NONE'
+                services: item?.selectedServices?.join(' + ') || 'NONE',
+                holesSummary,
             });
         });
     });
+    const quoteAttachments: string[] = Array.isArray((quote as any).attachments) ? (quote as any).attachments : [];
 
     let serialCounter = 0;
 
@@ -118,7 +137,14 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
                                 <td style={{ padding: '6px', border: '2px solid black', fontWeight: 900, fontSize: '13px', textAlign: 'center' }}>{item.displaySize}</td>
                                 <td style={{ padding: '6px', border: '2px solid black', fontWeight: 700, textTransform: 'uppercase' }}>{item.materialSpec}</td>
                                 <td style={{ padding: '6px', border: '2px solid black', fontWeight: 700, textTransform: 'uppercase' }}>{item.itemDescription}</td>
-                                <td style={{ padding: '6px', border: '2px solid black', fontWeight: 700, fontSize: '9px', textTransform: 'uppercase' }}>{item.services}</td>
+                                <td style={{ padding: '6px', border: '2px solid black', fontWeight: 700, fontSize: '9px', textTransform: 'uppercase' }}>
+                                    {item.services}
+                                    {item.holesSummary && (
+                                        <div style={{ marginTop: '3px', fontSize: '8px', fontWeight: 900, color: '#dc2626', letterSpacing: '0.02em' }}>
+                                            ⚠ {item.holesSummary}
+                                        </div>
+                                    )}
+                                </td>
                             </tr>
                         );
                     })}
@@ -129,6 +155,27 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
                 <div style={{ borderTop: '2px solid black', paddingTop: '8px', textAlign: 'center', fontSize: '9px', fontWeight: 900, textTransform: 'uppercase' }}>Quality Control</div>
                 <div style={{ borderTop: '2px solid black', paddingTop: '8px', textAlign: 'center', fontSize: '9px', fontWeight: 900, textTransform: 'uppercase' }}>Shift Incharge</div>
             </div>
+
+            {/* ATTACHMENTS pages — client reference images */}
+            {quoteAttachments.length > 0 && (
+                <div style={{ pageBreakBefore: 'always', padding: '10mm 8mm' }}>
+                    <div style={{ borderBottom: '2px solid black', paddingBottom: '6px', marginBottom: '12px' }}>
+                        <div style={{ fontSize: '14px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Client Reference Attachments</div>
+                        <div style={{ fontSize: '8px', fontWeight: 700, color: '#475569' }}>Job Ref: {displayId} · Client: {clientName}</div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        {quoteAttachments.map((src, idx) => (
+                            <div key={idx} style={{ border: '2px solid black', padding: '4px', pageBreakInside: 'avoid' }}>
+                                {/* eslint-disable-next-line jsx-a11y/img-redundant-alt */}
+                                <img src={src} alt={`Reference ${idx + 1}`} style={{ width: '100%', maxHeight: '130mm', objectFit: 'contain', display: 'block' }} />
+                                <div style={{ fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', color: '#1e293b', textAlign: 'center', marginTop: '4px', letterSpacing: '0.1em' }}>
+                                    Reference #{idx + 1}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

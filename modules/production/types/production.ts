@@ -48,6 +48,8 @@ export interface QuotationItem {
   isManualSqFt?: boolean; 
   glassColor?: string;
   aptCharges?: number;
+  notchCharges?: number;
+  drawingNote?: string;
 }
 
 export interface GlassServiceCharge {

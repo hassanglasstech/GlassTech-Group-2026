@@ -1,9 +1,11 @@
-import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Quotation, Client, Product } from '../../shared/types';
-import { ArrowLeft, Building2, ArrowRightLeft, Trash2, Copy, Plus, Layers, Hash, Save, FileText, CheckCircle2, AlertTriangle, Calculator } from 'lucide-react';
+import { ArrowLeft, Building2, ArrowRightLeft, Trash2, Copy, Plus, Layers, Hash, Save, FileText, CheckCircle2, AlertTriangle, Calculator, Circle as CircleIcon, Paperclip } from 'lucide-react';
 import { PrintSummary } from './GlasscoPrintTemplate';
 import { WastageCalculator } from './WastageCalculator';
 import QuotationWastageTab, { useQuotationWastage } from '@/modules/glassco/core/QuotationWastageTab';
+import NotchHoleDrawingTab from '@/modules/glassco/core/NotchHoleDrawingTab';
+import AttachmentsTab from '@/modules/glassco/core/AttachmentsTab';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
@@ -38,7 +40,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
         sheetSizeLabel: ''
     });
 
-    const [activeTab, setActiveTab] = useState<'items' | 'wastage'>('items');
+    const [activeTab, setActiveTab] = useState<'items' | 'drawing' | 'attachments' | 'wastage'>('items');
     const [isDirty, setIsDirty] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; idx: number } | null>(null);
@@ -94,6 +96,17 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
     }, []);
     const company = useAppStore(s => s.selectedCompany);
     const { isTriggered: wastageTriggered, usagePct: wastageUsagePct } = useQuotationWastage(formData.items || [], company);
+
+    const notchItemCount = useMemo(() => {
+        return (formData.items || []).filter(i => !i.isSection && (i.selectedServices || []).some(s => String(s).toLowerCase() === 'notch')).length;
+    }, [formData.items]);
+    const attachmentCount = (formData.attachments || []).length;
+    const totalNotchCharges = useMemo(() => {
+        return (formData.items || []).reduce((s, i) => s + ((i as any).notchCharges || 0), 0);
+    }, [formData.items]);
+    const totalAptCharges = useMemo(() => {
+        return (formData.items || []).reduce((s, i) => s + ((i as any).aptCharges || 0), 0);
+    }, [formData.items]);
 
     const glassMaster = useMemo(() => products.filter(p => p.category === 'Glass'), [products]);
     const categories = ['Plain', 'Color', 'Mirror', 'Fluted'];
@@ -285,13 +298,31 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
 
             <div className="flex-1 overflow-hidden p-6 bg-slate-50 flex flex-col">
                 <div className="flex space-x-1 mb-4 no-print">
-                    <button 
+                    <button
                         onClick={() => setActiveTab('items')}
                         className={`px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'items' ? 'bg-blue-600 text-white shadow-lg' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-50'}`}
                     >
                         <Hash size={14}/> Line Items
                     </button>
-                    <button 
+                    <button
+                        onClick={() => setActiveTab('drawing')}
+                        className={`px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 relative ${activeTab === 'drawing' ? 'bg-blue-600 text-white shadow-lg' : notchItemCount > 0 ? 'bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-50'}`}
+                    >
+                        <CircleIcon size={14}/> Notch / Hole Drawing
+                        {notchItemCount > 0 && activeTab !== 'drawing' && (
+                            <span className="ml-1 px-1.5 py-0.5 bg-rose-500 text-white text-[8px] font-black rounded-full">{notchItemCount}</span>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('attachments')}
+                        className={`px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 relative ${activeTab === 'attachments' ? 'bg-blue-600 text-white shadow-lg' : attachmentCount > 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-50'}`}
+                    >
+                        <Paperclip size={14}/> Attachments
+                        {attachmentCount > 0 && activeTab !== 'attachments' && (
+                            <span className="ml-1 px-1.5 py-0.5 bg-emerald-500 text-white text-[8px] font-black rounded-full">{attachmentCount}</span>
+                        )}
+                    </button>
+                    <button
                         onClick={() => setActiveTab('wastage')}
                         className={`px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 relative ${activeTab === 'wastage' ? 'bg-blue-600 text-white shadow-lg' : wastageTriggered ? 'bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-50'}`}
                     >
@@ -438,7 +469,12 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                                                     </>
                                                 )}
                                                 <td className="align-middle px-1">
-                                                    <input type="number" className={`${stdInputClass} w-16 bg-amber-50 border-amber-200 text-amber-900`} value={item.qty} onChange={e => handleUpdateItemWithLogic(idx, 'qty', e.target.value)}/>
+                                                    <div className="flex flex-col items-center gap-0.5">
+                                                        <input type="number" className={`${stdInputClass} w-16 bg-amber-50 border-amber-200 text-amber-900`} value={item.qty} onChange={e => handleUpdateItemWithLogic(idx, 'qty', e.target.value)}/>
+                                                        {item.selectedServices?.some(s => s === 'D/G' || s === 'Double Glaze' || s === 'Double Glazing') && !item.isSection && (
+                                                            <span className="text-[8px] font-black uppercase text-indigo-600 bg-indigo-50 border border-indigo-200 px-1 rounded">SET (2 pcs)</span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td className="text-center font-bold text-slate-500 align-middle text-xs relative group/sqft">
                                                     {item.isSection ? '' : item.totalSqFt}
@@ -467,6 +503,21 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                     <button onClick={onAddSection} className="px-6 py-2.5 bg-white border border-slate-300 rounded-xl shadow-sm text-xs font-bold uppercase text-slate-600 hover:bg-slate-100 transition-all flex items-center gap-2"><Layers size={16}/> Insert Heading</button>
                 </div>
             </div>
+            ) : activeTab === 'drawing' ? (
+                <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <NotchHoleDrawingTab
+                        items={formData.items || []}
+                        products={products}
+                        onUpdateItem={(idx, field, val) => { onUpdateItem(idx, field, val); setIsDirty(true); }}
+                    />
+                </div>
+            ) : activeTab === 'attachments' ? (
+                <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <AttachmentsTab
+                        attachments={formData.attachments || []}
+                        onUpdate={(atts) => { onUpdateItem(-1, 'attachments', atts); setIsDirty(true); }}
+                    />
+                </div>
             ) : (
                 <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <QuotationWastageTab items={formData.items || []} onSaveDecision={onSaveWastageDecision} />
@@ -475,20 +526,32 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
         </div>
             
             <div className="px-10 py-5 bg-slate-900 text-white flex justify-between items-center shrink-0 border-t-4 border-blue-600">
-               <div className="flex flex-col md:flex-row md:space-x-12 items-center">
+               <div className="flex flex-col md:flex-row md:space-x-10 items-center">
                    <div>
                        <p className="text-xs font-bold uppercase text-slate-400 tracking-[0.2em]">Gross Subtotal</p>
                        <p className="text-3xl font-bold tracking-tight">PKR {totalAmount.toLocaleString()}</p>
                    </div>
+                   {totalNotchCharges > 0 && (
+                     <div>
+                         <p className="text-xs font-bold uppercase text-rose-400 tracking-[0.2em]">Notch Charges</p>
+                         <p className="text-xl font-bold text-rose-400">+ PKR {totalNotchCharges.toLocaleString()}</p>
+                     </div>
+                   )}
+                   {totalAptCharges > 0 && (
+                     <div>
+                         <p className="text-xs font-bold uppercase text-purple-400 tracking-[0.2em]">APT Charges</p>
+                         <p className="text-xl font-bold text-purple-400">+ PKR {totalAptCharges.toLocaleString()}</p>
+                     </div>
+                   )}
                    <div className="h-10 w-px bg-slate-700 hidden md:block"></div>
                    <div>
                        <p className="text-xs font-bold uppercase text-blue-400 tracking-[0.2em]">Net Contract Value</p>
-                       <p className="text-2xl font-bold text-blue-400">PKR {(totalAmount - (formData.discountAmount || 0)).toLocaleString()}</p>
+                       <p className="text-2xl font-bold text-blue-400">PKR {(totalAmount + totalAptCharges - (formData.discountAmount || 0)).toLocaleString()}</p>
                    </div>
                    <div className="h-10 w-px bg-slate-700 hidden md:block"></div>
                    <div>
                        <p className="text-xs font-bold uppercase text-blue-400 tracking-[0.2em]">Advance Required</p>
-                       <p className="text-2xl font-bold text-blue-400">PKR {Math.round((totalAmount - (formData.discountAmount || 0)) * 0.5).toLocaleString()}</p>
+                       <p className="text-2xl font-bold text-blue-400">PKR {Math.round((totalAmount + totalAptCharges - (formData.discountAmount || 0)) * 0.5).toLocaleString()}</p>
                    </div>
                </div>
                <button onClick={onAddItem} className="px-6 py-2 text-blue-400 font-bold uppercase text-xs tracking-widest hover:text-white transition-colors flex items-center gap-1"><Plus size={14}/> Add Row</button>

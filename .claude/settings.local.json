@@ -48,7 +48,8 @@
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Name:', d.get\\('name',''\\)\\); print\\('Deps:', list\\(d.get\\('dependencies',{}\\).keys\\(\\)\\)\\)\")",
       "Bash(xargs cat *)",
       "Bash(vercel --version)",
-      "Bash(gh --version)"
+      "Bash(gh --version)",
+      "Bash(npm install *)"
     ]
   }
 }

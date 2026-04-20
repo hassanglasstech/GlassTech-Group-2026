@@ -13,10 +13,13 @@ export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName }) =>
         : (typeof quote.items === 'string' ? (() => { try { return JSON.parse(quote.items as any); } catch { return []; } })() : []);
     quote = { ...quote, items: safeItems };
 
-    const subTotal = quote.items.reduce((s, i) => s + i.amount, 0);
+    const notchChargesTotal = quote.items.reduce((s, i) => s + ((i as any).notchCharges || 0), 0);
+    // Glass subtotal = item.amount minus notch (which is shown as its own line)
+    const subTotal = quote.items.reduce((s, i) => s + (i.amount - ((i as any).notchCharges || 0)), 0);
     const aptChargesTotal = quote.items.reduce((s, i) => s + ((i as any).aptCharges || 0), 0);
     const serviceChargesTotal = ((quote as any).serviceCharges || []).reduce((s: number, sc: any) => s + (sc.amount || 0), 0);
-    const grossBeforeDiscount = subTotal + aptChargesTotal + serviceChargesTotal;
+    const grossBeforeDiscount = subTotal + notchChargesTotal + aptChargesTotal + serviceChargesTotal;
+    const attachments: string[] = Array.isArray((quote as any).attachments) ? (quote as any).attachments : [];
     const discountAmount = quote.discountAmount !== undefined && quote.discountAmount > 0
         ? quote.discountAmount
         : (grossBeforeDiscount * (quote.discountPercent || 0)) / 100;
@@ -125,6 +128,11 @@ export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName }) =>
                                 <td style={{ padding: '6px', borderRight: '1px solid #f1f5f9' }}>
                                     <div style={{ fontWeight: 900, color: '#1e293b', textTransform: 'uppercase', lineHeight: 1.2, fontSize: '9px' }}>{description}</div>
                                     <div style={{ fontSize: '6px', fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', marginTop: '2px', letterSpacing: '-0.02em' }}>{servicesList}</div>
+                                    {Array.isArray(item.holes) && item.holes.length > 0 && (
+                                        <div style={{ fontSize: '6px', fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', marginTop: '1px' }}>
+                                            ● {item.holes.length} Notch/Hole(s): {item.holes.map(h => `${h.type[0]}${(h as any).diameter || (h as any).width || ''}`).join(', ')}
+                                        </div>
+                                    )}
                                 </td>
                                 <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700, color: '#334155', fontSize: '7px', borderRight: '1px solid #f1f5f9' }}>{displaySize}</td>
                                 <td style={{ padding: '6px', textAlign: 'center', fontWeight: 900, color: '#0f172a', fontSize: '9px', borderRight: '1px solid #f1f5f9' }}>{qtyDisplay}</td>
@@ -152,6 +160,11 @@ export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName }) =>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
                             <span>Gross:</span><span>PKR {(Number(subTotal) || 0).toLocaleString()}</span>
                         </div>
+                        {notchChargesTotal > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', fontWeight: 700, color: '#dc2626', textTransform: 'uppercase' }}>
+                                <span>Notch Charges:</span><span>+ PKR {notchChargesTotal.toLocaleString()}</span>
+                            </div>
+                        )}
                         {aptChargesTotal > 0 && (
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase' }}>
                                 <span>APT Charges:</span><span>+ PKR {aptChargesTotal.toLocaleString()}</span>
@@ -183,6 +196,27 @@ export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName }) =>
                     </p>
                 </div>
             </div>
+
+            {/* ATTACHMENTS — printed on following pages */}
+            {attachments.length > 0 && (
+                <div style={{ pageBreakBefore: 'always', padding: '10mm 8mm' }}>
+                    <div style={{ borderBottom: '2px solid #0f172a', paddingBottom: '6px', marginBottom: '12px' }}>
+                        <div style={{ fontSize: '14px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Reference Attachments</div>
+                        <div style={{ fontSize: '8px', fontWeight: 700, color: '#64748b' }}>Ref: {displayId} · Client: {clientName}</div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        {attachments.map((src, idx) => (
+                            <div key={idx} style={{ border: '1px solid #cbd5e1', borderRadius: '4px', padding: '4px', pageBreakInside: 'avoid' }}>
+                                {/* eslint-disable-next-line jsx-a11y/img-redundant-alt */}
+                                <img src={src} alt={`Attachment ${idx + 1}`} style={{ width: '100%', maxHeight: '140mm', objectFit: 'contain', display: 'block' }} />
+                                <div style={{ fontSize: '7px', fontWeight: 900, textTransform: 'uppercase', color: '#475569', textAlign: 'center', marginTop: '3px' }}>
+                                    Attachment #{idx + 1}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
