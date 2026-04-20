@@ -1,103 +1,92 @@
 -- ============================================================
--- Glassco: Seed Notch + R/D (Rough Dhar) service products
+-- Glassco: Seed Notch + R/D (Rough Dhar) + APT service products
 --
 -- Run in Supabase SQL Editor.
 -- Idempotent — safe to run multiple times.
 --
--- Rates below are PLACEHOLDERS. Update them to actual Glassco
--- rates before go-live using UPDATE statements at the bottom.
+-- Rates below are PLACEHOLDERS. Update via UPDATE statements at bottom.
+--
+-- NOTE: products table uses flat snake_case columns (not data JSONB).
+-- Matches asyncSalesService.ts mapping.
 -- ============================================================
 
 -- ── Notch (per-count charge — NOT per sqft) ──
--- Logic: holes.length × basePrice × qty, applied at line item
-INSERT INTO products (id, company, data, updated_at, created_at)
+-- Logic: holes.length × base_price × qty, applied at line item
+INSERT INTO products (
+  id, company, category, description, service_nick,
+  thickness, unit, base_price, cost_price
+)
 VALUES (
-  'PRD-GLS-SVC-NOTCH',
-  'Glassco',
-  jsonb_build_object(
-    'id', 'PRD-GLS-SVC-NOTCH',
-    'company', 'Glassco',
-    'name', 'Notch Cutting',
-    'category', 'Service',
-    'serviceNick', 'Notch',
-    'thickness', 'all',
-    'unit', 'per count',
-    'basePrice', 500,
-    'active', true,
-    'description', 'Per-notch charge (charged based on count placed on 2D drawing tab)'
-  ),
-  now(), now()
+  'PRD-GLS-SVC-NOTCH', 'Glassco', 'Service',
+  'Per-notch charge (charged based on count placed on 2D drawing tab)',
+  'Notch', 'all', 'per count', 500, 0
 )
 ON CONFLICT (id) DO UPDATE SET
-  data = products.data || EXCLUDED.data,
-  updated_at = now();
+  category      = EXCLUDED.category,
+  description   = EXCLUDED.description,
+  service_nick  = EXCLUDED.service_nick,
+  thickness     = EXCLUDED.thickness,
+  unit          = EXCLUDED.unit,
+  base_price    = EXCLUDED.base_price,
+  updated_at    = now();
 
 -- ── R/D (Rough Dhar — per sqft charge) ──
 -- Logic: included in pricePerUnit via calculateAutoRate → sqft × rate
-INSERT INTO products (id, company, data, updated_at, created_at)
+INSERT INTO products (
+  id, company, category, description, service_nick,
+  thickness, unit, base_price, cost_price
+)
 VALUES (
-  'PRD-GLS-SVC-RD',
-  'Glassco',
-  jsonb_build_object(
-    'id', 'PRD-GLS-SVC-RD',
-    'company', 'Glassco',
-    'name', 'Rough Dhar (R/D)',
-    'category', 'Service',
-    'serviceNick', 'R/D',
-    'thickness', 'all',
-    'unit', 'per sqft',
-    'basePrice', 80,
-    'active', true,
-    'description', 'Rough edge finish — per sqft, disabled for tempered glass'
-  ),
-  now(), now()
+  'PRD-GLS-SVC-RD', 'Glassco', 'Service',
+  'Rough edge finish — per sqft, disabled for tempered glass',
+  'R/D', 'all', 'per sqft', 80, 0
 )
 ON CONFLICT (id) DO UPDATE SET
-  data = products.data || EXCLUDED.data,
-  updated_at = now();
+  category      = EXCLUDED.category,
+  description   = EXCLUDED.description,
+  service_nick  = EXCLUDED.service_nick,
+  thickness     = EXCLUDED.thickness,
+  unit          = EXCLUDED.unit,
+  base_price    = EXCLUDED.base_price,
+  updated_at    = now();
 
--- ── APT (for reference — verify existing record) ──
--- Logic: per sqft for non-Mirror glass; Mirror glass = Rs 1000/piece flat (handled in code)
-INSERT INTO products (id, company, data, updated_at, created_at)
+-- ── APT (Anti-Piercing Treatment) ──
+-- Logic: per sqft for non-Mirror glass; Mirror glass = Rs 1000/piece flat (handled in GlasscoUtils.ts)
+INSERT INTO products (
+  id, company, category, description, service_nick,
+  thickness, unit, base_price, cost_price
+)
 VALUES (
-  'PRD-GLS-SVC-APT',
-  'Glassco',
-  jsonb_build_object(
-    'id', 'PRD-GLS-SVC-APT',
-    'company', 'Glassco',
-    'name', 'Anti-Piercing Treatment (APT)',
-    'category', 'Service',
-    'serviceNick', 'APT',
-    'thickness', 'all',
-    'unit', 'per sqft (Mirror: Rs 1000/piece flat)',
-    'basePrice', 150,
-    'active', true,
-    'description', 'APT: per sqft on normal glass; Mirror = Rs 1000 per piece flat (overrides per-sqft rate)'
-  ),
-  now(), now()
+  'PRD-GLS-SVC-APT', 'Glassco', 'Service',
+  'APT: per sqft on normal glass; Mirror = Rs 1000 per piece flat (overrides per-sqft rate)',
+  'APT', 'all', 'per sqft (Mirror: Rs 1000/piece flat)', 150, 0
 )
 ON CONFLICT (id) DO UPDATE SET
-  data = products.data || EXCLUDED.data,
-  updated_at = now();
+  category      = EXCLUDED.category,
+  description   = EXCLUDED.description,
+  service_nick  = EXCLUDED.service_nick,
+  thickness     = EXCLUDED.thickness,
+  unit          = EXCLUDED.unit,
+  base_price    = EXCLUDED.base_price,
+  updated_at    = now();
 
 -- ── Verify ──
 SELECT
   id,
-  data->>'name' AS name,
-  data->>'serviceNick' AS service_nick,
-  data->>'unit' AS unit,
-  (data->>'basePrice')::numeric AS rate_pkr,
-  data->>'active' AS active
+  service_nick,
+  category,
+  unit,
+  base_price AS rate_pkr,
+  description
 FROM products
 WHERE company = 'Glassco'
-  AND data->>'category' = 'Service'
-  AND data->>'serviceNick' IN ('Notch', 'R/D', 'APT')
-ORDER BY data->>'serviceNick';
+  AND category = 'Service'
+  AND service_nick IN ('Notch', 'R/D', 'APT')
+ORDER BY service_nick;
 
 -- ============================================================
--- TO UPDATE RATES AFTER SEED (example):
+-- TO UPDATE RATES LATER (examples):
 -- ============================================================
--- UPDATE products SET data = jsonb_set(data, '{basePrice}', '600'::jsonb)
---   WHERE id = 'PRD-GLS-SVC-NOTCH';
--- UPDATE products SET data = jsonb_set(data, '{basePrice}', '100'::jsonb)
---   WHERE id = 'PRD-GLS-SVC-RD';
+-- UPDATE products SET base_price = 600 WHERE id = 'PRD-GLS-SVC-NOTCH';
+-- UPDATE products SET base_price = 100 WHERE id = 'PRD-GLS-SVC-RD';
+-- UPDATE products SET base_price = 175 WHERE id = 'PRD-GLS-SVC-APT';
