@@ -138,7 +138,7 @@ const LoginPage: React.FC = () => {
     tryAutoLogin();
   }, []);
 
-  // ── STEP: Email OTP — send code ─────────────────────────────────────
+  // ── STEP: Email OTP — send magic link ──────────────────────────────
   const [email, setEmail] = useState('');
 
   const handleSendOtp = async () => {
@@ -147,17 +147,47 @@ const LoginPage: React.FC = () => {
     setError('');
     const { error: otpErr } = await supabase.auth.signInWithOtp({
       email: email.toLowerCase().trim(),
-      options: { shouldCreateUser: false },
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: window.location.origin + '/',
+      },
     });
     if (otpErr) {
-      setError('OTP nahi bheja. Email check karo ya admin se raabt karo.');
+      setError('Magic link nahi bheja. Email check karo ya admin se raabt karo.');
       setBusy(false);
       return;
     }
     setPendingEmail(email.toLowerCase().trim());
+    setError('');
     setStep('otp');
     setBusy(false);
   };
+
+  // ── Handle magic link redirect from email ────────────────────────────
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+          const profile = await fetchProfile(session.user.id, session.user.email || '');
+          if (profile) {
+            if (profile.timeRestricted && !isOfficeHours()) {
+              setError('Access restricted to office hours (Mon–Sat 9am–6pm PKT).');
+              await supabase.auth.signOut();
+              setBusy(false);
+              setStep('google');
+              return;
+            }
+            if (!hasDeviceRegistered() && !hasRememberToken()) {
+              setStep('device_choice');
+            } else {
+              setStep('biometric');
+            }
+          }
+        }
+      }
+    );
+    return () => subscription.unsubscribe();
+  }, []);
 
   // ── STEP: Verify OTP ─────────────────────────────────────────────────
   const handleVerifyOtp = async () => {
@@ -390,36 +420,29 @@ const LoginPage: React.FC = () => {
           </Card>
         )}
 
-        {/* ── STEP: OTP ─────────────────────────────────────────────── */}
+        {/* ── STEP: OTP — Magic Link ────────────────────────────────── */}
         {step === 'otp' && (
           <Card>
             <div className="space-y-5">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center shrink-0">
-                  <Mail size={18} className="text-blue-400" />
+              <div className="text-center">
+                <div className="w-16 h-16 bg-blue-500/20 rounded-xl flex items-center justify-center mx-auto mb-3 animate-pulse">
+                  <Mail size={28} className="text-blue-400" />
                 </div>
-                <div>
-                  <p className="text-white font-black text-sm">Check Your Email</p>
-                  <p className="text-slate-400 text-xs mt-0.5">OTP sent to <span className="text-blue-400">{pendingEmail}</span></p>
-                </div>
+                <p className="text-white font-black text-base">Check Your Email</p>
+                <p className="text-slate-400 text-xs mt-2">
+                  Magic link bhej di. <span className="text-blue-400 font-semibold">{pendingEmail}</span> check karo.
+                </p>
               </div>
               {error && <ErrBox msg={error} />}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase text-slate-500 tracking-widest">6-Digit OTP</label>
-                <input
-                  type="text" inputMode="numeric" maxLength={6}
-                  value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
-                  onKeyDown={e => e.key === 'Enter' && handleVerifyOtp()}
-                  placeholder="000000"
-                  className="w-full bg-[#0f1923] border border-white/10 rounded-xl py-3 px-4 text-2xl text-white text-center font-black tracking-[0.5em] focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30 transition-all"
-                  autoFocus
-                />
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
+                <p className="text-xs text-slate-300">
+                  📧 Email mein "Log In" button par click karo — seedha app mein login ho jayega.
+                </p>
               </div>
-              <button onClick={handleVerifyOtp} disabled={busy || otp.length < 6}
-                className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/30 text-white font-black uppercase tracking-widest py-3 rounded-xl transition-all flex items-center justify-center space-x-2">
-                {busy ? <Loader2 size={16} className="animate-spin" /> : <><Key size={15}/><span>Verify OTP</span></>}
-              </button>
-              <button onClick={() => { setStep('google'); setOtp(''); setError(''); }}
+              <p className="text-center text-[11px] text-slate-500">
+                Link 24 ghantay mein expire ho jayega
+              </p>
+              <button onClick={() => { setStep('google'); setError(''); setEmail(''); }}
                 className="w-full text-slate-500 hover:text-slate-300 text-xs font-bold uppercase transition-colors">
                 ← Back
               </button>
