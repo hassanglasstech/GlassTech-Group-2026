@@ -112,26 +112,56 @@ export const AsyncSalesService = {
   },
   saveProducts: async (data: Product[]): Promise<void> => {
     const mapped = data.map((p: any) => ({
-      id: p.id, company: p.company, category: p.category, description: p.description,
-      service_nick: p.serviceNick ?? '', profile_code: p.profileCode ?? '',
-      thickness: p.thickness ?? '', sheet_size: p.sheetSize ?? '',
-      cost_price: p.costPrice ?? 0, base_price: p.basePrice ?? 0,
-      unit: p.unit ?? 'PCS', variants: p.variants ?? [],
-      model_no: p.modelNo ?? '', brand: p.brand ?? '',
-      main_category: p.mainCategory ?? '', sub_category: p.sub_category ?? '',
-      finish_color: p.finishColor ?? '', material: p.material ?? '',
-      direction: p.direction ?? '', tongue_length: p.tongueLength ?? '',
-      spindle_length: p.spindle_length ?? '', image_url: p.imageUrl ?? '',
-      hs_code: p.hs_code ?? '', is_set: p.isSet ?? false,
-      set_components: p.setComponents ?? [], technical_specs: p.technicalSpecs ?? {},
-      width: p.width ?? 0, height: p.height ?? 0,
-      frame_color: p.frameColor ?? '', mesh_color: p.meshColor ?? '',
+      // ── Core ──────────────────────────────────────────────────────────
+      id:               p.id,
+      company:          p.company,
+      category:         p.category,
+      description:      p.description,
+      unit:             p.unit             ?? 'PCS',
+      base_price:       p.basePrice        ?? 0,
+      cost_price:       p.costPrice        ?? 0,
+      variants:         p.variants         ?? [],
+      price_history:    p.priceHistory     ?? [],
+      // ── Glass ─────────────────────────────────────────────────────────
+      glass_type:       p.glassType        ?? p.glass_type       ?? '',
+      sub_category:     p.subCategory      ?? p.sub_category     ?? '',
+      thickness:        p.thickness        ?? '',
+      sheet_size:       p.sheetSize        ?? p.sheet_size       ?? '',
+      finish_color:     p.finishColor      ?? p.finish_color     ?? '',
+      tempering_price:  p.temperingPrice   ?? p.tempering_price  ?? 0,
+      width:            p.width            ?? 0,
+      height:           p.height           ?? 0,
+      // ── Profile / Hardware ────────────────────────────────────────────
+      service_nick:     p.serviceNick      ?? p.service_nick     ?? '',
+      profile_code:     p.profileCode      ?? p.profile_code     ?? '',
+      main_category:    p.mainCategory     ?? p.main_category    ?? '',
+      model_no:         p.modelNo          ?? p.model_no         ?? '',
+      brand:            p.brand            ?? '',
+      material:         p.material         ?? '',
+      image_url:        p.imageUrl         ?? p.image_url        ?? '',
+
+      direction:        p.direction        ?? '',
+      tongue_length:    p.tongueLength     ?? p.tongue_length    ?? '',
+      spindle_length:   p.spindleLength    ?? p.spindle_length   ?? '',
+      frame_color:      p.frameColor       ?? p.frame_color      ?? '',
+      mesh_color:       p.meshColor        ?? p.mesh_color       ?? '',
+      // ── Trade / Sets ──────────────────────────────────────────────────
+      hs_code:          p.hsCode           ?? p.hs_code          ?? '',
+      is_set:           p.isSet            ?? false,
+      set_components:   p.setComponents    ?? [],
+      technical_specs:  p.technicalSpecs   ?? p.technical_specs  ?? {},
     }));
-    const { error } = await supabase.from('products').upsert(mapped);
+
+    // Strip any keys we accidentally set to undefined
+    const clean = mapped.map(row =>
+      Object.fromEntries(Object.entries(row).filter(([, v]) => v !== undefined))
+    );
+
+    const { error } = await supabase.from('products').upsert(clean);
     if (error) {
       Logger.error('Sales', 'saveProducts failed', error);
-      console.error('[AsyncSalesService] saveProducts:', error.message);
-      toast.error('Cloud save failed — data saved locally.', { id: 'save-products', duration: 3000 });
+      console.error('[AsyncSalesService] saveProducts Supabase error:', error.message, error.details);
+      toast.error(`Products cloud sync failed: ${error.message}`, { id: 'save-products', duration: 6000 });
     }
   },
   
