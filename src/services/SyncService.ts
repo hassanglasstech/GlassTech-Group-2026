@@ -756,18 +756,34 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     source_grn: r.sourceGrn||r.source_grn||'',
     updated_at: r._updatedAt||r.updatedAt||new Date().toISOString(),
   }),
-  stock_ledger: (s: any) => ({
-    id: s.id, company: s.company||'',
-    material_id: s.materialId||s.material_id||'',
-    movement_type: s.movementType||s.movement_type||'',
-    quantity: s.quantity||0, uom: s.uom||'',
-    posting_date: s.postingDate||s.posting_date||'',
-    document_no: s.documentNo||s.document_no||'',
-    reference: s.reference||'', plant: s.plant||'',
-    storage_loc: s.storageLoc||s.storage_loc||'',
-    value: s.value||0, moving_avg_price: s.movingAvgPrice||s.moving_avg_price||0,
-    updated_at: s._updatedAt||s.updatedAt||new Date().toISOString(),
-  }),
+  stock_ledger: (s: any) => {
+    // MaterialLedgerEntry uses: timestamp, mvmntCode, qty, valuation, referenceDoc, storageBin
+    // SyncService used SAP aliases (postingDate, movementType, quantity, documentNo, storageLoc)
+    // that don't exist on the object → empty string → "invalid input syntax for type date"
+    // Fix: read from actual MaterialLedgerEntry fields, fallback to SAP aliases
+    const rawDate = s.timestamp || s.postingDate || s.posting_date || null;
+    // Convert to valid date string (YYYY-MM-DD) or null — never send empty string to date col
+    let postingDate: string | null = null;
+    if (rawDate) {
+      try { postingDate = new Date(rawDate).toISOString().slice(0, 10); } catch { postingDate = null; }
+    }
+    return {
+      id: s.id,
+      company: s.company || '',
+      material_id: s.materialId || s.material_id || '',
+      movement_type: s.mvmntCode || s.movementType || s.movement_type || '',
+      quantity: s.qty ?? s.quantity ?? 0,
+      uom: s.uom || '',
+      posting_date: postingDate,           // null-safe — never empty string
+      document_no: s.referenceDoc || s.documentNo || s.document_no || '',
+      reference: s.referenceDoc || s.reference || '',
+      plant: s.plant || '',
+      storage_loc: s.storageBin || s.storageLoc || s.storage_loc || '',
+      value: s.valuation ?? s.value ?? 0,
+      moving_avg_price: s.balanceAfter ?? s.movingAvgPrice ?? s.moving_avg_price ?? 0,
+      updated_at: s._updatedAt || s.updatedAt || new Date().toISOString(),
+    };
+  },
 
   // ── Production / Sales ────────────────────────────────────────────
   job_orders: (j: any) => ({
