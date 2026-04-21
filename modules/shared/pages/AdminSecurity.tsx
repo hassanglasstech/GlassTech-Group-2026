@@ -6,7 +6,7 @@ import { AppService } from '../services/appService';
 import {
   ShieldCheck, Database, FileUp, Download,
   History, Users, X, Info, Activity, Filter, RefreshCw, BarChart2,
-  AlertTriangle, Trash2, Archive, ShieldAlert
+  AlertTriangle, Trash2, Archive, ShieldAlert, Zap, CheckCircle2, Loader2
 } from 'lucide-react';
 
 import { useAppStore } from '../store/appStore';
@@ -28,6 +28,12 @@ const AdminSecurity: React.FC = () => {
 
   const [backupHistory, setBackupHistory] = useState<any[]>([]);
   const [backupLoading, setBackupLoading] = useState(false);
+
+  // ── NUCLEAR WIPE STATE ──────────────────────────────────────────────
+  const [nukeLoading, setNukeLoading] = useState(false);
+  const [nukeLog, setNukeLog] = useState<{ table: string; ok: boolean; msg: string }[]>([]);
+  const [nukeConfirmText, setNukeConfirmText] = useState('');
+  const [nukePhase, setNukePhase] = useState<'idle' | 'running' | 'done'>('idle');
 
   const refreshLogs = async () => {
     const allLogs = await AppService.getActivityLogsAsync();
@@ -80,6 +86,93 @@ const AdminSecurity: React.FC = () => {
     if (confirm("CRITICAL WARNING: This action will PERMANENTLY DELETE ALL DATA for ALL COMPANIES (GTK, GTI, GlassCo, etc.) stored in this browser.\n\nThis includes Employees, Inventory, Orders, and Financial Records.\n\nAre you sure you want to perform a Factory Reset?")) {
       localStorage.clear();
       window.location.reload();
+    }
+  };
+
+  // ── NUCLEAR WIPE: localStorage + Supabase ────────────────────────────
+  // ⚠ TESTING ONLY — Remove this button before go-live
+  const ALL_APP_TABLES = [
+    // Finance
+    'ledger', 'accounts', 'cost_centers', 'petty_cash', 'recurring_expenses',
+    'financial_events', 'mapping_rules', 'gl_config', 'budgets',
+    // Sales
+    'clients', 'quotations', 'invoices', 'payment_receipts', 'credit_notes', 'projects',
+    // HR
+    'employees', 'attendance', 'loans', 'payroll', 'leave_applications',
+    'leave_types', 'holidays', 'overtimes', 'advance_salaries', 'gratuity_balances',
+    'employee_documents', 'employee_qualifications', 'employee_licenses',
+    'performance_reviews', 'disciplinary_actions', 'exit_interviews',
+    'shift_master', 'bypass_logs', 'departments', 'tag_master',
+    // Procurement / Inventory
+    'store_items', 'stock_ledger', 'requisitions', 'purchase_orders',
+    'grn_sheet_entries', 'vendor_defect_reports', 'inspection_lots',
+    'remnants', 'remnant_history', 'handling_units', 'scrap_disposals',
+    'manual_count_sheets', 'vendor_reviews', 'pallet_rates', 'weight_master',
+    'stock_locations', 'cutting_sessions',
+    // Vendors
+    'vendors', 'products',
+    // Production
+    'production_pieces', 'job_orders', 'gate_passes', 'warehouse_spots',
+    'ncr_events', 'ncr_reproductions', 'ncr_claims', 'ncr_remnants',
+    'tempering_dispatches', 'cutter_daily_logs',
+    // Logistics
+    'vehicles', 'vehicle_trips', 'vehicle_expenses',
+    // Logs / Config
+    'activity_logs', 'erp_config', 'assets',
+  ];
+
+  const handleNuclearWipe = async () => {
+    if (nukeConfirmText !== 'DELETE ALL') {
+      toast.error('Type "DELETE ALL" exactly to confirm.');
+      return;
+    }
+    const confirmed = await confirmModal(
+      '☢ NUCLEAR RESET: This will permanently delete ALL ERP data from localStorage AND Supabase.\n\nUser profiles and login accounts will be preserved.\n\nThis CANNOT be undone. Proceed?'
+    );
+    if (!confirmed) return;
+
+    setNukePhase('running');
+    setNukeLoading(true);
+    setNukeLog([]);
+    const log = (table: string, ok: boolean, msg: string) =>
+      setNukeLog(prev => [...prev, { table, ok, msg }]);
+
+    try {
+      const { supabase } = await import('@/src/services/supabaseClient');
+
+      // 1. Wipe Supabase tables one by one
+      for (const table of ALL_APP_TABLES) {
+        try {
+          const { error } = await supabase.from(table).delete().gt('created_at', '1900-01-01');
+          if (error) log(table, false, error.message);
+          else log(table, true, 'cleared');
+        } catch (e: unknown) {
+          log(table, false, e instanceof Error ? e.message : 'unknown error');
+        }
+      }
+
+      // 2. Wipe localStorage (keep Supabase auth tokens)
+      const keysToKeep: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('sb-') || key.includes('supabase.auth'))) {
+          keysToKeep.push(key);
+        }
+      }
+      const savedVals: Record<string, string> = {};
+      keysToKeep.forEach(k => { savedVals[k] = localStorage.getItem(k) ?? ''; });
+      localStorage.clear();
+      keysToKeep.forEach(k => localStorage.setItem(k, savedVals[k]));
+
+      log('localStorage', true, 'all ERP keys cleared (auth preserved)');
+      setNukePhase('done');
+      toast.success('☢ Nuclear Wipe Complete — reloading in 3s…', { duration: 3000 });
+      setTimeout(() => window.location.reload(), 3000);
+    } catch (e: unknown) {
+      toast.error('Nuclear wipe failed: ' + (e instanceof Error ? e.message : String(e)));
+      setNukePhase('idle');
+    } finally {
+      setNukeLoading(false);
     }
   };
 
@@ -252,8 +345,76 @@ const AdminSecurity: React.FC = () => {
           </div>
         )}
       {activeTab === 'data_reset' && (
-          <div className="p-6">
+          <div className="p-6 space-y-6">
             <GlasscoDataWiper />
+
+            {/* ── ☢ NUCLEAR WIPE — TESTING ONLY ─────────────────────────────── */}
+            {/* TODO: Remove this entire block before go-live */}
+            <div className="border-2 border-red-500 rounded-2xl overflow-hidden">
+              <div className="bg-red-600 px-6 py-4 flex items-center gap-3">
+                <Zap size={20} className="text-yellow-300 animate-pulse" />
+                <div>
+                  <p className="text-white font-black text-sm uppercase tracking-widest">☢ Nuclear Reset</p>
+                  <p className="text-red-200 text-[10px] font-medium mt-0.5">TESTING ONLY — Remove before go-live</p>
+                </div>
+              </div>
+
+              <div className="bg-red-50 p-6 space-y-4">
+                <p className="text-red-800 text-xs font-semibold">
+                  Permanently deletes ALL data from <span className="font-black">localStorage</span> + <span className="font-black">Supabase</span>.
+                  Auth accounts and user profiles are preserved.
+                </p>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    value={nukeConfirmText}
+                    onChange={e => setNukeConfirmText(e.target.value)}
+                    placeholder='Type "DELETE ALL" to unlock'
+                    className="flex-1 border-2 border-red-300 rounded-lg px-4 py-2 text-sm font-mono bg-white focus:outline-none focus:border-red-600"
+                    disabled={nukeLoading}
+                  />
+                  <button
+                    onClick={handleNuclearWipe}
+                    disabled={nukeLoading || nukeConfirmText !== 'DELETE ALL'}
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-lg font-black text-xs uppercase tracking-widest text-white transition-all
+                      bg-red-600 hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed shadow-lg"
+                  >
+                    {nukeLoading
+                      ? <><Loader2 size={14} className="animate-spin" /> Wiping…</>
+                      : <><Trash2 size={14} /> Nuke Everything</>
+                    }
+                  </button>
+                </div>
+
+                {/* Progress log */}
+                {nukeLog.length > 0 && (
+                  <div className="bg-slate-900 rounded-xl p-4 max-h-64 overflow-y-auto font-mono text-[10px] space-y-0.5">
+                    {nukeLog.map((entry, i) => (
+                      <div key={i} className={`flex items-center gap-2 ${entry.ok ? 'text-green-400' : 'text-red-400'}`}>
+                        {entry.ok
+                          ? <CheckCircle2 size={10} className="shrink-0" />
+                          : <X size={10} className="shrink-0" />
+                        }
+                        <span className="text-slate-400 w-40 shrink-0">{entry.table}</span>
+                        <span>{entry.msg}</span>
+                      </div>
+                    ))}
+                    {nukePhase === 'running' && (
+                      <div className="flex items-center gap-2 text-yellow-400 mt-1">
+                        <Loader2 size={10} className="animate-spin shrink-0" />
+                        <span>Processing…</span>
+                      </div>
+                    )}
+                    {nukePhase === 'done' && (
+                      <div className="text-green-300 font-bold mt-2">☢ WIPE COMPLETE — reloading…</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            {/* ── END NUCLEAR WIPE ─────────────────────────────────────────── */}
+
           </div>
         )}
         {activeTab === 'users' && (
