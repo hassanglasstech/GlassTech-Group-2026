@@ -124,7 +124,7 @@ export const AsyncSalesService = {
         base_price:      p.basePrice     ?? 0,
         cost_price:      p.costPrice     ?? 0,
         variants:        p.variants      ?? [],
-        price_history:   p.priceHistory  ?? [],
+        // price_history omitted — column added by migration 20260421, may not exist yet
         model_no:        p.modelNo       ?? p.model_no    ?? '',
         brand:           p.brand         ?? '',
         image_url:       p.imageUrl      ?? p.image_url   ?? '',
