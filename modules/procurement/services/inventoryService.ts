@@ -8,6 +8,27 @@ import { initDB } from '@/modules/shared/services/db';
 import { bgSaveToIDB, safeParse, safeSave } from '@/modules/shared/services/utils';
 import { supabase } from '../../../src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
+import { toast } from 'sonner';
+
+// ── Visible Supabase upsert — never silent, surfaces schema/permission errors to user ──
+const _inventoryUpsert = async (table: string, rows: any[], label: string): Promise<void> => {
+  try {
+    const { error } = await supabase.from(table).upsert(rows);
+    if (error) {
+      console.error(`[InventoryService] ${label} upsert failed:`, error.message, error);
+      toast.error(`Cloud sync failed (${label}): ${error.message}`, {
+        id: `inv-sync-${table}`, duration: 8000,
+      });
+    } else {
+      console.log(`[InventoryService] ${label} upsert OK — ${rows.length} row(s)`);
+    }
+  } catch (err: any) {
+    console.error(`[InventoryService] ${label} exception:`, err);
+    toast.error(`Cloud sync error (${label}): ${err?.message || 'unknown'}`, {
+      id: `inv-err-${table}`, duration: 8000,
+    });
+  }
+};
 
 // ── SCM-3: Insufficient stock error ──────────────────────────────────────
 // Thrown by assertSufficientStock() before any issue or transfer movement.
@@ -377,9 +398,7 @@ export const InventoryService = {
       per_sheet_weight_kg: (s as any).perSheetWeightKg||0,
       per_sqft_weight_kg:  (s as any).perSqftWeightKg||0,
     }));
-    supabase.from('store_items').upsert(rows).then(({ error }) => {
-      if (error) console.error('[InventoryService] saveStore Supabase error:', error.message);
-    });
+    _inventoryUpsert('store_items', rows, 'store_items');
   },
 
   // ── Stock Ledger ───────────────────────────────────────────────────
@@ -475,9 +494,7 @@ export const InventoryService = {
       is_reversal: e.isReversal || false,
       reversal_reason: e.reversalReason || null,
     }));
-    supabase.from('stock_ledger').upsert(rows).then(({ error }) => {
-      if (error) console.error('[InventoryService] saveStockLedger Supabase error:', error.message);
-    });
+    _inventoryUpsert('stock_ledger', rows, 'stock_ledger');
   },
 
   // ── Requisitions ───────────────────────────────────────────────────

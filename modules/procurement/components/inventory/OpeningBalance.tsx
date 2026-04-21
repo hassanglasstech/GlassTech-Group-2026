@@ -93,6 +93,43 @@ function sqftOf(size: string): number {
   return w && h ? Number(((w * h) / 144).toFixed(3)) : 0;
 }
 
+/**
+ * Parse glass attributes from free-text description.
+ * Examples:
+ *   "6mm Clear Plain"      → { thickness: '6mm', color: 'Clear', glassType: 'Plain' }
+ *   "8 mm Tinted Green"    → { thickness: '8mm', color: 'Green', glassType: 'Tinted' }
+ *   "5mm Mirror Bronze"    → { thickness: '5mm', color: 'Bronze', glassType: 'Mirror' }
+ *   "Fluted 4mm"           → { thickness: '4mm', color: 'Clear', glassType: 'Fluted' }
+ */
+function parseGlassAttrs(desc: string): { thickness: string; color: string; glassType: string } {
+  const text = (desc || '').trim();
+
+  // Thickness: "4mm", "6 mm", "10MM" → "6mm"
+  const tMatch = text.match(/(\d{1,2})\s*mm/i);
+  const thickness = tMatch ? `${parseInt(tMatch[1])}mm` : '';
+
+  // Glass type keywords
+  const lower = text.toLowerCase();
+  let glassType = 'Plain';
+  if (lower.includes('mirror')) glassType = 'Mirror';
+  else if (lower.includes('fluted') || lower.includes('flute')) glassType = 'Fluted';
+  else if (lower.includes('tinted') || lower.includes('tint')) glassType = 'Tinted';
+  else if (lower.includes('color') || lower.includes('colour')) glassType = 'Color';
+  else if (lower.includes('reflect')) glassType = 'Reflective';
+
+  // Color keywords (common glass colors)
+  let color = 'Clear';
+  const colorWords = ['clear', 'green', 'bronze', 'blue', 'grey', 'gray', 'black', 'white', 'brown', 'golden', 'gold', 'pink', 'amber'];
+  for (const c of colorWords) {
+    if (lower.includes(c)) {
+      color = c.charAt(0).toUpperCase() + c.slice(1);
+      break;
+    }
+  }
+
+  return { thickness, color, glassType };
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // COMPONENT
 // ══════════════════════════════════════════════════════════════════════════
@@ -432,17 +469,15 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
         // Check if this product already exists
         const alreadyExists = existingProducts.some(p => p.id === newMaterialId);
         if (!alreadyExists) {
-          // Create new product entry for this material
-          // FIX 8: Set proper glassType for Glassco so Order Configurator can find it
-          const isGlassProduct = line.category === 'Raw' || line.category === 'Glass';
-          const glassTypeMap: Record<string, any> = {
-            'Plain': 'Plain',
-            'Clear': 'Clear',
-            'Color': 'Color',
-            'Fluted': 'Fluted',
-            'Mirror': 'Mirror',
-            'Tinted': 'Tinted',
-          };
+          // FIX 9: Auto-parse thickness, color, glassType from description when user
+          // typed description manually (no product-suggestion pick). Without this,
+          // GlasscoEditor MM dropdown stays empty because p.thickness is undefined.
+          const parsed = parseGlassAttrs(line.description);
+          const isGlassProduct = line.category === 'Raw' || line.category === 'Glass' || !!parsed.thickness;
+
+          const resolvedThickness = line.thickness || parsed.thickness || '';
+          const resolvedColor     = parsed.color || 'Clear';
+          const resolvedGlassType = parsed.glassType || 'Plain';
 
           const newProduct: Product = {
             id: newMaterialId,
@@ -452,16 +487,17 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
             basePrice: line.rate || 0,
             unit: (line.unit || 'SqFt') as any,
             variants: [],
-            thickness: line.thickness,
+            thickness: resolvedThickness,
             sheetSize: line.sheetSize,
             modelNo: '',
             // For glass products, set glassType and subCategory so GlasscoEditor can find them
             ...(isGlassProduct && {
-              glassType: 'Plain' as any,  // Default to Plain if not specified
+              glassType: resolvedGlassType as any,
               subCategory: 'Standard' as any,
-              finishColor: 'Clear',
+              finishColor: resolvedColor,
             }),
           };
+          console.log(`[OB Product Sync] id=${newMaterialId} desc="${line.description}" → thickness="${resolvedThickness}", glassType="${resolvedGlassType}", color="${resolvedColor}"`);
           updatedProducts.push(newProduct);
           productsAdded++;
         }

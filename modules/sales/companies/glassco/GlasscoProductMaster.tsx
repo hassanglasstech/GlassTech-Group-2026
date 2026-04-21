@@ -34,6 +34,25 @@ const GlasscoProductMaster: React.FC = () => {
     refreshData();
   }, [company, activeTab]);
 
+  // FIX: Auto-refresh when products/store changed by other modules (e.g., Opening Balance posting)
+  // Without this, newly-created materials via OB show up in stock but not Material Library
+  // until user manually switches company/tab.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'gtk_erp_products' || e.key === 'gtk_erp_store') {
+        refreshData();
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    // Also poll once after 1s in same tab (storage event doesn't fire in same tab)
+    const t = setInterval(refreshData, 3000);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [company]);
+
   const refreshData = () => {
     const allProds = SalesService.getProducts().filter(p => p.company === company);
     const allStore = InventoryService.getStore().filter(s => s.company === company);

@@ -84,6 +84,9 @@ export const SalesService = {
   },
 
   // ── Warm Cache (app start — pull latest from Supabase) ─────────────
+  // CRITICAL: Only overwrite localStorage if Supabase returned non-empty data.
+  // Otherwise unsynced local entries (e.g. recent opening-balance posts that
+  // failed Supabase upsert) get wiped on next login, making data "disappear".
   warmCache: async (): Promise<void> => {
     try {
       const [clients, products, quotations, vendors, invoices, receipts] = await Promise.all([
@@ -94,12 +97,21 @@ export const SalesService = {
         AsyncSalesService.getInvoices(),
         AsyncSalesService.getPaymentReceipts(),
       ]);
-      safeSave(KEYS.CLIENTS,          clients);
-      safeSave(KEYS.PRODUCTS,         products);
-      safeSave(KEYS.QUOTATIONS,       quotations);
-      safeSave(KEYS.VENDORS,          vendors);
-      safeSave(KEYS.INVOICES,         invoices);
-      safeSave(KEYS.PAYMENT_RECEIPTS, receipts);
+      // Guard against empty cloud → don't wipe local unsaved data
+      const saveIfNonEmpty = (key: string, data: any[]) => {
+        if (Array.isArray(data) && data.length > 0) safeSave(key, data);
+        else {
+          const existing = safeParse(key);
+          if (!existing || existing.length === 0) safeSave(key, data || []);
+          // else: keep local data (cloud is empty but local has unsynced entries)
+        }
+      };
+      saveIfNonEmpty(KEYS.CLIENTS,          clients);
+      saveIfNonEmpty(KEYS.PRODUCTS,         products);
+      saveIfNonEmpty(KEYS.QUOTATIONS,       quotations);
+      saveIfNonEmpty(KEYS.VENDORS,          vendors);
+      saveIfNonEmpty(KEYS.INVOICES,         invoices);
+      saveIfNonEmpty(KEYS.PAYMENT_RECEIPTS, receipts);
     } catch (err: any) {
       Logger.warn('Sales', 'warmCache failed — using local data', err);
     }

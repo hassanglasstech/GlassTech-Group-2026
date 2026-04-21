@@ -25,7 +25,16 @@ export const GlasscoEditorMM: React.FC<Props> = ({
     const totalAmount = (formData.items || []).reduce((s, i) => s + i.amount, 0);
     const [manualSqFtModal, setManualSqFtModal] = useState({ isOpen: false, idx: -1, val: 0 });
 
-    const glassMaster = useMemo(() => products.filter(p => (p.category || '').toLowerCase() === 'glass'), [products]);
+    // FIX: Backfill thickness from description for legacy products that were created
+    // without explicit thickness (e.g. OB entries before parseGlassAttrs fix).
+    const glassMaster = useMemo(() => {
+        const raw = products.filter(p => (p.category || '').toLowerCase() === 'glass');
+        return raw.map(p => {
+            if (p.thickness) return p;
+            const m = (p.description || '').match(/(\d{1,2})\s*mm/i);
+            return m ? { ...p, thickness: `${parseInt(m[1])}mm` } : p;
+        });
+    }, [products]);
     
     const categories = useMemo(() => {
         const types = Array.from(new Set(glassMaster.map(p => p.glassType).filter(Boolean))) as string[];
