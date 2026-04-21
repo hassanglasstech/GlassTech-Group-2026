@@ -210,7 +210,8 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                 <div className="flex items-center gap-3">
                     <button
                       onClick={async () => {
-                        if (isDirty && !await confirmModal('Unsaved changes hain — wapas jayen?')) return;
+                        if (!isDirty) { onClose(); return; }
+                        if (!await confirmModal('Unsaved changes hain — wapas jayen?')) return;
                         onClose();
                       }}
                       className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest px-2 py-1.5 rounded-lg hover:bg-slate-800"
@@ -268,7 +269,8 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
 
                     <button
                       onClick={async () => {
-                        if (isDirty && !await confirmModal('Unsaved changes hain — discard karen?')) return;
+                        if (!isDirty) { onClose(); return; }
+                        if (!await confirmModal('Unsaved changes hain — discard karen?')) return;
                         onClose();
                       }}
                       className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-all"

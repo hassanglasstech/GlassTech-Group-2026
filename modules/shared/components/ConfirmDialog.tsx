@@ -107,7 +107,7 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
     <>
       {children}
       {state.open && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="cd-title" aria-describedby="cd-msg">
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="cd-title" aria-describedby="cd-msg">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => close(false)} />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md animate-in zoom-in overflow-hidden">
             <button onClick={() => close(false)} className="absolute top-3 right-3 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors" aria-label="Close"><X size={18} /></button>
