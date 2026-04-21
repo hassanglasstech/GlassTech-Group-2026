@@ -67,64 +67,70 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
     vendor: ''
   });
 
-  // Initialize Form Data
+  // Track previous open state — init form ONLY when modal transitions closed→open.
+  // FIX: existingNicks was in deps causing re-init on every parent render → thickness reset to 5mm.
+  const wasOpenRef = React.useRef(false);
+
   useEffect(() => {
-    if (isOpen) {
-        if (editingProduct) {
-            if (editingProduct.category === 'Glass') {
-                setItemMode('Glass');
-                const [w, h] = editingProduct.sheetSize ? editingProduct.sheetSize.split('x').map(Number) : [0, 0];
-                setGlassForm({
-                    type: (editingProduct.glassType as any) || 'Plain',
-                    subType: editingProduct.subCategory || 'Standard',
-                    thickness: editingProduct.thickness || '5mm',
-                    color: editingProduct.finishColor || 'Clear',
-                    width: w || 0,
-                    height: h || 0,
-                    costPrice: editingProduct.costPrice || 0,
-                    salesPrice: editingProduct.basePrice,
-                    temperingPrice: editingProduct.temperingPrice || ''
-                });
-            } else if (['Hardware', 'Consumable', 'Raw'].includes(editingProduct.category)) {
-                setItemMode('General');
-                setGeneralForm({
-                    name: editingProduct.description,
-                    category: (editingProduct.category as any) || 'Hardware',
-                    subCategory: editingProduct.subCategory || '',
-                    unit: editingProduct.unit,
-                    minLevel: 0,
-                    costPrice: editingProduct.costPrice || 0,
-                    salesPrice: editingProduct.basePrice,
-                    brand: editingProduct.brand || '',
-                    modelNo: editingProduct.modelNo || '',
-                    finishColor: editingProduct.finishColor || '',
-                    material: editingProduct.material || '',
-                    imageUrl: editingProduct.imageUrl || ''
-                });
-            } else if (editingProduct.category === 'Service') {
-                const isNickStandard = existingNicks.includes(editingProduct.serviceNick || '');
-                setIsCustomNick(editingProduct.serviceNick ? !isNickStandard : false);
-                setServiceForm({
-                    description: editingProduct.description,
-                    nick: editingProduct.serviceNick || '',
-                    thickness: editingProduct.thickness || '5mm',
-                    unit: editingProduct.unit as string,
-                    costPrice: editingProduct.costPrice || 0,
-                    salesPrice: editingProduct.basePrice,
-                    vendor: editingProduct.brand || ''
-                });
-            }
-        } else {
-            // Default to General for Nippon
-            setItemMode(company === 'Nippon' ? 'General' : 'Glass');
-            setGlassForm({ type: 'Plain', subType: 'Standard', thickness: '5mm', color: 'Clear', width: 0, height: 0, costPrice: '', salesPrice: '', temperingPrice: '' });
-            setCustomW(''); setCustomH('');
-            setGeneralForm({ name: '', category: 'Hardware', subCategory: '', unit: 'Pcs', minLevel: 50, costPrice: '', salesPrice: '', brand: '', modelNo: '', finishColor: '', material: '', imageUrl: '' });
-            setServiceForm({ description: '', nick: '', thickness: '5mm', unit: 'SqFt', costPrice: 0, salesPrice: 0, vendor: '' });
-            setIsCustomNick(false);
+    const justOpened = isOpen && !wasOpenRef.current;
+    wasOpenRef.current = isOpen;
+
+    if (!justOpened) return;   // ← only run on open, never on mid-session re-renders
+
+    if (editingProduct) {
+        if (editingProduct.category === 'Glass') {
+            setItemMode('Glass');
+            const [w, h] = editingProduct.sheetSize ? editingProduct.sheetSize.split('x').map(Number) : [0, 0];
+            setGlassForm({
+                type: (editingProduct.glassType as any) || 'Plain',
+                subType: editingProduct.subCategory || 'Standard',
+                thickness: editingProduct.thickness || '5mm',
+                color: editingProduct.finishColor || 'Clear',
+                width: w || 0,
+                height: h || 0,
+                costPrice: editingProduct.costPrice || 0,
+                salesPrice: editingProduct.basePrice,
+                temperingPrice: editingProduct.temperingPrice || ''
+            });
+        } else if (['Hardware', 'Consumable', 'Raw'].includes(editingProduct.category)) {
+            setItemMode('General');
+            setGeneralForm({
+                name: editingProduct.description,
+                category: (editingProduct.category as any) || 'Hardware',
+                subCategory: editingProduct.subCategory || '',
+                unit: editingProduct.unit,
+                minLevel: 0,
+                costPrice: editingProduct.costPrice || 0,
+                salesPrice: editingProduct.basePrice,
+                brand: editingProduct.brand || '',
+                modelNo: editingProduct.modelNo || '',
+                finishColor: editingProduct.finishColor || '',
+                material: editingProduct.material || '',
+                imageUrl: editingProduct.imageUrl || ''
+            });
+        } else if (editingProduct.category === 'Service') {
+            const isNickStandard = existingNicks.includes(editingProduct.serviceNick || '');
+            setIsCustomNick(editingProduct.serviceNick ? !isNickStandard : false);
+            setServiceForm({
+                description: editingProduct.description,
+                nick: editingProduct.serviceNick || '',
+                thickness: editingProduct.thickness || '5mm',
+                unit: editingProduct.unit as string,
+                costPrice: editingProduct.costPrice || 0,
+                salesPrice: editingProduct.basePrice,
+                vendor: editingProduct.brand || ''
+            });
         }
+    } else {
+        // New item — reset to defaults
+        setItemMode(company === 'Nippon' ? 'General' : 'Glass');
+        setGlassForm({ type: 'Plain', subType: 'Standard', thickness: '5mm', color: 'Clear', width: 0, height: 0, costPrice: '', salesPrice: '', temperingPrice: '' });
+        setCustomW(''); setCustomH('');
+        setGeneralForm({ name: '', category: 'Hardware', subCategory: '', unit: 'Pcs', minLevel: 50, costPrice: '', salesPrice: '', brand: '', modelNo: '', finishColor: '', material: '', imageUrl: '' });
+        setServiceForm({ description: '', nick: '', thickness: '5mm', unit: 'SqFt', costPrice: 0, salesPrice: 0, vendor: '' });
+        setIsCustomNick(false);
     }
-  }, [isOpen, editingProduct, existingNicks, company]);
+  }, [isOpen, editingProduct]);  // existingNicks & company intentionally excluded — they don't trigger reset
 
   if (!isOpen) return null;
 
