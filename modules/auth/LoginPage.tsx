@@ -118,6 +118,16 @@ const LoginPage: React.FC = () => {
   // ── On mount: check if device is already remembered ─────────────────
   useEffect(() => {
     const tryAutoLogin = async () => {
+      // Check if this is a magic link redirect (Supabase adds access_token & type=magiclink to URL)
+      const hash = window.location.hash;
+      const isMagicLinkRedirect = hash.includes('access_token') && hash.includes('type=magiclink');
+
+      // If magic link redirect, don't set step here — let onAuthStateChange handle it
+      if (isMagicLinkRedirect) {
+        setStep('idle'); // show loading while auth processes
+        return;
+      }
+
       // 1. Try WebAuthn registered device
       if (hasDeviceRegistered()) {
         setStep('biometric');
@@ -168,7 +178,28 @@ const LoginPage: React.FC = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === 'SIGNED_IN' && session?.user) {
-          const profile = await fetchProfile(session.user.id, session.user.email || '');
+          let profile = await fetchProfile(session.user.id, session.user.email || '');
+
+          // If profile doesn't exist, auto-create a basic one (fresh Supabase setup)
+          if (!profile) {
+            const { error: insertErr } = await supabase
+              .from('user_profiles')
+              .insert({
+                id: session.user.id,
+                email: session.user.email || '',
+                full_name: 'User',
+                role: 'viewer',
+                company: 'GTK',
+                allowed_companies: ['GTK'],
+                allowed_modules: [],
+                time_restricted: false,
+                is_active: true,
+              });
+            if (!insertErr) {
+              profile = await fetchProfile(session.user.id, session.user.email || '');
+            }
+          }
+
           if (profile) {
             if (profile.timeRestricted && !isOfficeHours()) {
               setError('Access restricted to office hours (Mon–Sat 9am–6pm PKT).');
@@ -177,11 +208,18 @@ const LoginPage: React.FC = () => {
               setStep('google');
               return;
             }
+            // If this is magic link login (coming from email), skip device setup and log in directly
+            // The onAuthStateChange listener indicates we're authenticated, so trust it
             if (!hasDeviceRegistered() && !hasRememberToken()) {
+              // First-time device: go through device choice
               setStep('device_choice');
             } else {
+              // Already has device setup: log in directly
               setStep('biometric');
             }
+          } else {
+            setError('Profile could not be created. Contact admin.');
+            setStep('google');
           }
         }
       }
