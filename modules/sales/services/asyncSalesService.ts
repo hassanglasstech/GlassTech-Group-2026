@@ -111,53 +111,66 @@ export const AsyncSalesService = {
     }
   },
   saveProducts: async (data: Product[]): Promise<void> => {
-    const mapped = data.map((p: any) => ({
-      // ── Core ──────────────────────────────────────────────────────────
-      id:               p.id,
-      company:          p.company,
-      category:         p.category,
-      description:      p.description,
-      unit:             p.unit             ?? 'PCS',
-      base_price:       p.basePrice        ?? 0,
-      cost_price:       p.costPrice        ?? 0,
-      variants:         p.variants         ?? [],
-      price_history:    p.priceHistory     ?? [],
-      // ── Glass ─────────────────────────────────────────────────────────
-      glass_type:       p.glassType        ?? p.glass_type       ?? '',
-      sub_category:     p.subCategory      ?? p.sub_category     ?? '',
-      thickness:        p.thickness        ?? '',
-      sheet_size:       p.sheetSize        ?? p.sheet_size       ?? '',
-      finish_color:     p.finishColor      ?? p.finish_color     ?? '',
-      tempering_price:  p.temperingPrice   ?? p.tempering_price  ?? 0,
-      width:            p.width            ?? 0,
-      height:           p.height           ?? 0,
-      // ── Profile / Hardware ────────────────────────────────────────────
-      service_nick:     p.serviceNick      ?? p.service_nick     ?? '',
-      profile_code:     p.profileCode      ?? p.profile_code     ?? '',
-      main_category:    p.mainCategory     ?? p.main_category    ?? '',
-      model_no:         p.modelNo          ?? p.model_no         ?? '',
-      brand:            p.brand            ?? '',
-      material:         p.material         ?? '',
-      image_url:        p.imageUrl         ?? p.image_url        ?? '',
+    const mapped = data.map((p: any) => {
+      const isNippon = p.company === 'Nippon';
 
-      direction:        p.direction        ?? '',
-      tongue_length:    p.tongueLength     ?? p.tongue_length    ?? '',
-      spindle_length:   p.spindleLength    ?? p.spindle_length   ?? '',
-      frame_color:      p.frameColor       ?? p.frame_color      ?? '',
-      mesh_color:       p.meshColor        ?? p.mesh_color       ?? '',
-      // ── Trade / Sets ──────────────────────────────────────────────────
-      hs_code:          p.hsCode           ?? p.hs_code          ?? '',
-      is_set:           p.isSet            ?? false,
-      set_components:   p.setComponents    ?? [],
-      technical_specs:  p.technicalSpecs   ?? p.technical_specs  ?? {},
-    }));
+      // ── Core (every company) ───────────────────────────────────────────
+      const row: Record<string, unknown> = {
+        id:              p.id,
+        company:         p.company,
+        category:        p.category,
+        description:     p.description,
+        unit:            p.unit          ?? 'PCS',
+        base_price:      p.basePrice     ?? 0,
+        cost_price:      p.costPrice     ?? 0,
+        variants:        p.variants      ?? [],
+        price_history:   p.priceHistory  ?? [],
+        model_no:        p.modelNo       ?? p.model_no    ?? '',
+        brand:           p.brand         ?? '',
+        image_url:       p.imageUrl      ?? p.image_url   ?? '',
+        sub_category:    p.subCategory   ?? p.sub_category ?? '',
+      };
 
-    // Strip any keys we accidentally set to undefined
-    const clean = mapped.map(row =>
-      Object.fromEntries(Object.entries(row).filter(([, v]) => v !== undefined))
-    );
+      // ── Glass / Glassco columns ────────────────────────────────────────
+      if (p.category === 'Glass' || p.company === 'Glassco') {
+        row.glass_type      = p.glassType      ?? p.glass_type      ?? '';
+        row.thickness       = p.thickness      ?? '';
+        row.sheet_size      = p.sheetSize      ?? p.sheet_size      ?? '';
+        row.finish_color    = p.finishColor    ?? p.finish_color    ?? '';
+        row.tempering_price = p.temperingPrice ?? p.tempering_price ?? 0;
+        row.width           = p.width          ?? 0;
+        row.height          = p.height         ?? 0;
+      }
 
-    const { error } = await supabase.from('products').upsert(clean);
+      // ── Service nick (Glassco services) ───────────────────────────────
+      if (p.category === 'Service') {
+        row.service_nick = p.serviceNick ?? p.service_nick ?? '';
+      }
+
+      // ── Aluminium profile columns (GTK / GTI) ─────────────────────────
+      if (p.company === 'GTK' || p.company === 'GTI') {
+        row.profile_code  = p.profileCode  ?? p.profile_code  ?? '';
+        row.main_category = p.mainCategory ?? p.main_category ?? '';
+      }
+
+      // ── Nippon-only hardware columns ───────────────────────────────────
+      if (isNippon) {
+        row.direction      = p.direction     ?? '';
+        row.tongue_length  = p.tongueLength  ?? p.tongue_length  ?? '';
+        row.spindle_length = p.spindleLength ?? p.spindle_length ?? '';
+        row.frame_color    = p.frameColor    ?? p.frame_color    ?? '';
+        row.mesh_color     = p.meshColor     ?? p.mesh_color     ?? '';
+        row.material       = p.material      ?? '';
+        row.hs_code        = p.hsCode        ?? p.hs_code        ?? '';
+        row.is_set         = p.isSet         ?? false;
+        row.set_components = p.setComponents ?? [];
+        row.technical_specs = p.technicalSpecs ?? p.technical_specs ?? {};
+      }
+
+      return row;
+    });
+
+    const { error } = await supabase.from('products').upsert(mapped);
     if (error) {
       Logger.error('Sales', 'saveProducts failed', error);
       console.error('[AsyncSalesService] saveProducts Supabase error:', error.message, error.details);
