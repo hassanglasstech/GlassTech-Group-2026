@@ -27,11 +27,20 @@ import {
 
 // ── GL Account for Opening Balance Equity ─────────────────────────────────
 const OB_GL = {
-  // Inventory accounts per company type
-  INVENTORY_GLASS:  '11511',   // Float Glass inventory
+  // Inventory accounts per THICKNESS for Glassco (per-thickness tracking)
+  INVENTORY_GLASS_4MM:   '115111',  // 4mm Glass inventory
+  INVENTORY_GLASS_6MM:   '115112',  // 6mm Glass inventory
+  INVENTORY_GLASS_8MM:   '115113',  // 8mm Glass inventory
+  INVENTORY_GLASS_10MM:  '115114',  // 10mm Glass inventory
+  INVENTORY_GLASS_12MM:  '115115',  // 12mm Glass inventory
+  INVENTORY_GLASS_OTHER: '115119',  // Other thickness Glass inventory
+
+  // Generic inventory for non-Glassco companies
+  INVENTORY_GLASS:  '11511',   // Float Glass inventory (default)
   INVENTORY_HW:     '11512',   // Hardware inventory
   INVENTORY_ALUM:   '11513',   // Aluminium inventory (GTK/GTI)
   INVENTORY_CONS:   '11514',   // Consumables
+
   // Opening Balance Equity — will auto-create if not exists
   OB_EQUITY:        '31901',   // Opening Balance Equity
 };
@@ -158,18 +167,48 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
     setLines(prev => prev.filter((_, i) => i !== idx));
   };
 
-  // ── Resolve Inventory GL Account ───────────────────────────────────────
-  const getInventoryAccount = (category: string) => {
+  // ── Resolve Inventory GL Account by THICKNESS (Glassco) or CATEGORY (others) ───────
+  const getInventoryAccount = (category: string, thickness?: string) => {
     const isGlass = company === 'Glassco' || company === 'GlassCo';
     const isAlum = company === 'GTK' || company === 'GTI';
     let result;
-    if (category === 'Hardware') result = { code: OB_GL.INVENTORY_HW, name: 'Hardware Inventory' };
-    else if (category === 'Consumable') result = { code: OB_GL.INVENTORY_CONS, name: 'Consumables Inventory' };
-    else if (isAlum || category === 'Profile') result = { code: OB_GL.INVENTORY_ALUM, name: 'Aluminium / Profile Inventory' };
-    else result = { code: OB_GL.INVENTORY_GLASS, name: 'Glass Inventory' };
 
-    // FIX 6: Log category mapping to debug GL posting
-    console.log(`[OB Category Mapping] category="${category}" → accountCode="${result.code}" (${result.name})`);
+    // For Glassco, use per-thickness accounts
+    if (isGlass && (category === 'Raw' || category === 'Glass')) {
+      // Extract thickness (e.g. "6mm" → 6, "6" → 6)
+      const thicknessNum = thickness ? parseInt(thickness) : null;
+
+      switch (thicknessNum) {
+        case 4:
+          result = { code: OB_GL.INVENTORY_GLASS_4MM, name: 'Glass Inventory — 4mm' };
+          break;
+        case 6:
+          result = { code: OB_GL.INVENTORY_GLASS_6MM, name: 'Glass Inventory — 6mm' };
+          break;
+        case 8:
+          result = { code: OB_GL.INVENTORY_GLASS_8MM, name: 'Glass Inventory — 8mm' };
+          break;
+        case 10:
+          result = { code: OB_GL.INVENTORY_GLASS_10MM, name: 'Glass Inventory — 10mm' };
+          break;
+        case 12:
+          result = { code: OB_GL.INVENTORY_GLASS_12MM, name: 'Glass Inventory — 12mm' };
+          break;
+        default:
+          result = { code: OB_GL.INVENTORY_GLASS_OTHER, name: 'Glass Inventory — Other' };
+      }
+    } else if (category === 'Hardware') {
+      result = { code: OB_GL.INVENTORY_HW, name: 'Hardware Inventory' };
+    } else if (category === 'Consumable') {
+      result = { code: OB_GL.INVENTORY_CONS, name: 'Consumables Inventory' };
+    } else if (isAlum || category === 'Profile') {
+      result = { code: OB_GL.INVENTORY_ALUM, name: 'Aluminium / Profile Inventory' };
+    } else {
+      result = { code: OB_GL.INVENTORY_GLASS, name: 'Glass Inventory' };
+    }
+
+    // FIX 7: Log thickness-based mapping to debug GL posting
+    console.log(`[OB Account Resolution] category="${category}", thickness="${thickness}" → accountCode="${result.code}" (${result.name})`);
     return result;
   };
 
@@ -243,10 +282,12 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
         if (itemIdx !== -1) {
           item = { ...store[itemIdx] };
         } else {
+          // FIX 8b: For glass products, ensure category is set as 'Glass' so they appear in GlasscoEditor
+          const itemCategory = (line.category || 'Raw') === 'Raw' ? 'Glass' : (line.category || 'Raw');
           item = {
             id: effectiveMaterialId, company: company as any,
             name: line.description,
-            category: (line.category || 'Raw') as StoreItem['category'],
+            category: itemCategory as StoreItem['category'],
             quantity: 0, unrestrictedQty: 0, qiQty: 0,
             blockedQty: 0, reservedQty: 0, consignmentQty: 0,
             unit: line.unit || 'SqFt',
@@ -306,59 +347,72 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
       // FIX 4: GL FIRST — if _assertGLBalance throws, stock is NOT yet saved
       // ── GL Entry: Dr Inventory / Cr Opening Balance Equity ─────────
       if (glTotal > 0) {
-        const obEquityAcc = FinanceService.ensureAccount(
-          company as any, 'Opening Balance Equity', 4, null, 'Equity', OB_GL.OB_EQUITY
-        );
-
-        // Group lines by inventory account code (one debit line per category)
-        const invGroups: Record<string, { amount: number; name: string; count: number }> = {};
-        linesToPost.forEach(line => {
-          const { code, name } = getInventoryAccount(line.category);
-          if (!invGroups[code]) invGroups[code] = { amount: 0, name, count: 0 };
-          invGroups[code].amount += line.totalValue;
-          invGroups[code].count  += 1;
-        });
-
-        const glDetails: any[] = [];
-        Object.entries(invGroups).forEach(([accCode, { amount, name, count }]) => {
-          const invAcc = FinanceService.ensureAccount(
-            company as any, name, 4, null, 'Asset', accCode
+        try {
+          const obEquityAcc = FinanceService.ensureAccount(
+            company as any, 'Opening Balance Equity', 4, null, 'Equity', OB_GL.OB_EQUITY
           );
-          // FIX 6: LOG account details to verify correct GL accounts are being used
-          console.log(`[OB GL Debug] Inventory Account: code=${accCode}, name=${name}, type=Asset, accountId=${invAcc.id}, debit=${amount}`);
-          glDetails.push({
-            accountId: invAcc.id,
-            debit:     amount,
-            credit:    0,
-            text:      `Opening Balance — ${name} (${count} item${count > 1 ? 's' : ''})`,
+
+          // Group lines by inventory account code (one debit line per category+thickness combo for Glassco)
+          const invGroups: Record<string, { amount: number; name: string; count: number }> = {};
+          linesToPost.forEach(line => {
+            const { code, name } = getInventoryAccount(line.category, line.thickness);
+            if (!invGroups[code]) invGroups[code] = { amount: 0, name, count: 0 };
+            invGroups[code].amount += line.totalValue;
+            invGroups[code].count  += 1;
           });
-        });
 
-        // FIX 6: LOG equity account to verify correct GL structure
-        console.log(`[OB GL Debug] OB Equity Account: code=${OB_GL.OB_EQUITY}, name=Opening Balance Equity, type=Equity, accountId=${obEquityAcc.id}, credit=${glTotal}`);
-        glDetails.push({
-          accountId: obEquityAcc.id,
-          debit:     0,
-          credit:    glTotal,
-          text:      `Opening Balance Equity — Stock ${obDate}`,
-        });
+          const glDetails: any[] = [];
+          let totalDebits = 0;
+          Object.entries(invGroups).forEach(([accCode, { amount, name, count }]) => {
+            const invAcc = FinanceService.ensureAccount(
+              company as any, name, 4, null, 'Asset', accCode
+            );
+            // FIX 7: LOG account details to verify correct GL accounts are being used
+            console.log(`[OB GL Debug] Inventory Account: code=${accCode}, name=${name}, type=Asset, accountId=${invAcc.id}, debit=${amount}`);
+            totalDebits += amount;
+            glDetails.push({
+              accountId: invAcc.id,
+              debit:     amount,
+              credit:    0,
+              text:      `Opening Balance — ${name} (${count} item${count > 1 ? 's' : ''})`,
+            });
+          });
 
-        const allGLLedger = FinanceService.getLedger().filter((e: any) => e.id !== `GL-${obId}`);
-        allGLLedger.push({
-          id:          `GL-${obId}`,
-          company:     company as any,
-          docType:     'OB' as any,
-          docDate:     obDate,
-          date:        obDate,
-          description: `Opening Balance — ${linesToPost.length} material(s) — PKR ${glTotal.toLocaleString()}`,
-          referenceId: obId,
-          status:      'Posted',
-          createdBy:   'system-auto',
-          details:     glDetails,
-        } as any);
+          // FIX 7: LOG equity account and GL balance check
+          console.log(`[OB GL Debug] OB Equity Account: code=${OB_GL.OB_EQUITY}, name=Opening Balance Equity, type=Equity, accountId=${obEquityAcc.id}, credit=${glTotal}`);
+          console.log(`[OB GL Balance] Total Debits=${totalDebits.toFixed(2)}, Total Credits=${glTotal.toFixed(2)}, Balanced=${Math.abs(totalDebits - glTotal) < 0.01}`);
 
-        // _assertGLBalance runs here — throws BEFORE stock save if imbalanced
-        FinanceService.saveLedger(allGLLedger);
+          glDetails.push({
+            accountId: obEquityAcc.id,
+            debit:     0,
+            credit:    glTotal,
+            text:      `Opening Balance Equity — Stock ${obDate}`,
+          });
+
+          const allGLLedger = FinanceService.getLedger().filter((e: any) => e.id !== `GL-${obId}`);
+          const glEntry = {
+            id:          `GL-${obId}`,
+            company:     company as any,
+            docType:     'OB' as any,
+            docDate:     obDate,
+            date:        obDate,
+            description: `Opening Balance — ${linesToPost.length} material(s) — PKR ${glTotal.toLocaleString()}`,
+            referenceId: obId,
+            status:      'Posted',
+            createdBy:   'system-auto',
+            details:     glDetails,
+          } as any;
+
+          allGLLedger.push(glEntry);
+
+          // _assertGLBalance runs here — throws LedgerImbalanceError BEFORE stock save if imbalanced
+          console.log(`[OB GL Save] Saving GL entry ${glEntry.id} with ${glDetails.length} detail lines`);
+          FinanceService.saveLedger(allGLLedger);
+          console.log(`[OB GL Success] GL entry posted successfully`);
+        } catch (glError: any) {
+          console.error('[OB GL Error]', glError);
+          throw glError; // Re-throw to be caught by outer try-catch
+        }
       }
 
       // Stock saves AFTER GL succeeds — maintains commit order integrity
@@ -379,17 +433,34 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
         const alreadyExists = existingProducts.some(p => p.id === newMaterialId);
         if (!alreadyExists) {
           // Create new product entry for this material
+          // FIX 8: Set proper glassType for Glassco so Order Configurator can find it
+          const isGlassProduct = line.category === 'Raw' || line.category === 'Glass';
+          const glassTypeMap: Record<string, any> = {
+            'Plain': 'Plain',
+            'Clear': 'Clear',
+            'Color': 'Color',
+            'Fluted': 'Fluted',
+            'Mirror': 'Mirror',
+            'Tinted': 'Tinted',
+          };
+
           const newProduct: Product = {
             id: newMaterialId,
             company: company as any,
             description: line.description,
-            category: (line.category || 'Raw') as any,
+            category: isGlassProduct ? 'Glass' : (line.category as any),
             basePrice: line.rate || 0,
             unit: (line.unit || 'SqFt') as any,
             variants: [],
             thickness: line.thickness,
             sheetSize: line.sheetSize,
             modelNo: '',
+            // For glass products, set glassType and subCategory so GlasscoEditor can find them
+            ...(isGlassProduct && {
+              glassType: 'Plain' as any,  // Default to Plain if not specified
+              subCategory: 'Standard' as any,
+              finishColor: 'Clear',
+            }),
           };
           updatedProducts.push(newProduct);
           productsAdded++;
