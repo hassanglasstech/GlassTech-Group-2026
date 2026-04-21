@@ -147,31 +147,33 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
         let storeItemData: any = {};
 
         if (itemMode === 'Glass') {
-            if (!glassForm.thickness || glassForm.width <= 0 || glassForm.height <= 0) return alert("Dimensions required for Glass.");
+            // Dimensions are optional — material can be saved without a specific sheet size
+            if (!glassForm.thickness) return alert("Thickness is required for Glass.");
+            const hasDimensions = glassForm.width > 0 && glassForm.height > 0;
             const desc = generateGlassDescription();
             const finalCost = Number(glassForm.costPrice) || 0;
-            
+
             productData = {
                 id: editingProduct ? editingProduct.id : `GLS-${Date.now()}`,
-                company, 
-                category: 'Glass', 
+                company,
+                category: 'Glass',
                 description: desc.toUpperCase(),
-                basePrice: Number(glassForm.salesPrice) || 0, 
+                basePrice: Number(glassForm.salesPrice) || 0,
                 temperingPrice: (glassForm.type === 'Mirror' || glassForm.subType === 'One Side') ? undefined : (Number(glassForm.temperingPrice) || undefined),
-                costPrice: finalCost, 
+                costPrice: finalCost,
                 unit: 'SqFt',
-                variants: [], 
-                glassType: glassForm.type, 
-                subCategory: (glassForm.type === 'Plain' || glassForm.type === 'Fluted') ? 'Standard' : glassForm.subType, 
-                thickness: glassForm.thickness, 
+                variants: [],
+                glassType: glassForm.type,
+                subCategory: (glassForm.type === 'Plain' || glassForm.type === 'Fluted') ? 'Standard' : glassForm.subType,
+                thickness: glassForm.thickness,
                 finishColor: (glassForm.type === 'Mirror' || glassForm.type === 'Plain' || glassForm.type === 'Fluted') ? 'N/A' : glassForm.color,
-                sheetSize: `${glassForm.width}x${glassForm.height}`
+                ...(hasDimensions && { sheetSize: `${glassForm.width}x${glassForm.height}` }),
             };
-            
+
             storeItemData = {
-                category: 'Raw', 
-                unit: 'SqFt', 
-                conversionFactor: Number(((glassForm.width * glassForm.height)/144).toFixed(2))
+                category: 'Raw',
+                unit: 'SqFt',
+                conversionFactor: hasDimensions ? Number(((glassForm.width * glassForm.height)/144).toFixed(2)) : 0
             };
 
         } else {
