@@ -162,10 +162,15 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
   const getInventoryAccount = (category: string) => {
     const isGlass = company === 'Glassco' || company === 'GlassCo';
     const isAlum = company === 'GTK' || company === 'GTI';
-    if (category === 'Hardware') return { code: OB_GL.INVENTORY_HW, name: 'Hardware Inventory' };
-    if (category === 'Consumable') return { code: OB_GL.INVENTORY_CONS, name: 'Consumables Inventory' };
-    if (isAlum || category === 'Profile') return { code: OB_GL.INVENTORY_ALUM, name: 'Aluminium / Profile Inventory' };
-    return { code: OB_GL.INVENTORY_GLASS, name: 'Glass Inventory' };
+    let result;
+    if (category === 'Hardware') result = { code: OB_GL.INVENTORY_HW, name: 'Hardware Inventory' };
+    else if (category === 'Consumable') result = { code: OB_GL.INVENTORY_CONS, name: 'Consumables Inventory' };
+    else if (isAlum || category === 'Profile') result = { code: OB_GL.INVENTORY_ALUM, name: 'Aluminium / Profile Inventory' };
+    else result = { code: OB_GL.INVENTORY_GLASS, name: 'Glass Inventory' };
+
+    // FIX 6: Log category mapping to debug GL posting
+    console.log(`[OB Category Mapping] category="${category}" → accountCode="${result.code}" (${result.name})`);
+    return result;
   };
 
   // ══════════════════════════════════════════════════════════════════════
@@ -319,6 +324,8 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
           const invAcc = FinanceService.ensureAccount(
             company as any, name, 4, null, 'Asset', accCode
           );
+          // FIX 6: LOG account details to verify correct GL accounts are being used
+          console.log(`[OB GL Debug] Inventory Account: code=${accCode}, name=${name}, type=Asset, accountId=${invAcc.id}, debit=${amount}`);
           glDetails.push({
             accountId: invAcc.id,
             debit:     amount,
@@ -327,6 +334,8 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
           });
         });
 
+        // FIX 6: LOG equity account to verify correct GL structure
+        console.log(`[OB GL Debug] OB Equity Account: code=${OB_GL.OB_EQUITY}, name=Opening Balance Equity, type=Equity, accountId=${obEquityAcc.id}, credit=${glTotal}`);
         glDetails.push({
           accountId: obEquityAcc.id,
           debit:     0,
@@ -356,7 +365,43 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
       InventoryService.saveStore(store);
       InventoryService.saveStockLedger(ledger);
 
-      toast.success(`✅ Opening Balance posted: ${linesToPost.length} item(s) — PKR ${glTotal.toLocaleString()}`);
+      // FIX 5: SYNC TO PRODUCTS — newly created materials must be added to products list
+      // so they appear in Material Master, GlasscoEditor, and Order Configurator
+      const existingProducts = SalesService.getProducts();
+      const updatedProducts = [...existingProducts];
+      let productsAdded = 0;
+
+      linesToPost.forEach((line, idx) => {
+        const newMaterialId = line.productId
+          || `MAT-${company}-${obDate.replace(/-/g, '')}-${line.description.replace(/\s+/g, '_').slice(0, 20)}`;
+
+        // Check if this product already exists
+        const alreadyExists = existingProducts.some(p => p.id === newMaterialId);
+        if (!alreadyExists) {
+          // Create new product entry for this material
+          const newProduct: Product = {
+            id: newMaterialId,
+            company: company as any,
+            description: line.description,
+            category: (line.category || 'Raw') as any,
+            basePrice: line.rate || 0,
+            unit: (line.unit || 'SqFt') as any,
+            variants: [],
+            thickness: line.thickness,
+            sheetSize: line.sheetSize,
+            modelNo: '',
+          };
+          updatedProducts.push(newProduct);
+          productsAdded++;
+        }
+      });
+
+      // Save updated products list if any new products were added
+      if (productsAdded > 0) {
+        SalesService.saveProducts(updatedProducts);
+      }
+
+      toast.success(`✅ Opening Balance posted: ${linesToPost.length} item(s) — PKR ${glTotal.toLocaleString()}${productsAdded > 0 ? ` (${productsAdded} added to Material Master)` : ''}`);
       setLines([emptyLine()]);
       setRemarks('');
       setParsedRows([]);
