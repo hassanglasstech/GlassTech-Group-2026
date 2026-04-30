@@ -10,6 +10,7 @@
  */
 
 import React from 'react';
+import QrTag from '@/modules/glassco/core/QrTag';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 export interface SheetTagData {
@@ -86,26 +87,32 @@ const SheetTag: React.FC<{ tag: SheetTagData; index: number }> = ({ tag, index }
         </div>
       </div>
 
-      {/* Tag ID — large, dominant */}
+      {/* Tag ID + scannable QR — Phase-4 (4.3) ── */}
       <div style={{
         flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
+        display: 'grid',
+        gridTemplateColumns: '1fr 18mm',
+        gap: '2mm',
         padding: '2mm 3mm',
         borderBottom: '1px solid #e2e8f0',
+        alignItems: 'center',
       }}>
-        <div style={{ fontSize: '5.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '1mm' }}>
-          Tag ID
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <div style={{ fontSize: '5.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.6mm' }}>
+            Tag ID
+          </div>
+          {/* Batch prefix */}
+          <div style={{ fontSize: '7px', fontWeight: 700, color: '#475569', letterSpacing: '0.04em', fontFamily: 'Courier, monospace', wordBreak: 'break-all' }}>
+            {batchPart}
+          </div>
+          {/* Serial — biggest */}
+          <div style={{ fontSize: '22px', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.05em', lineHeight: 1, fontFamily: 'Courier, monospace' }}>
+            -{serial}
+          </div>
         </div>
-        {/* Batch prefix */}
-        <div style={{ fontSize: '8px', fontWeight: 700, color: '#475569', letterSpacing: '0.05em', fontFamily: 'Courier, monospace' }}>
-          {batchPart}
-        </div>
-        {/* Serial — biggest */}
-        <div style={{ fontSize: '26px', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.05em', lineHeight: 1, fontFamily: 'Courier, monospace' }}>
-          -{serial}
+        {/* Scannable QR — encodes the full tag id */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+          <QrTag value={tag.tagId} sizeMm={16} ecLevel="M" />
         </div>
       </div>
 
@@ -197,11 +204,24 @@ const RemnantTag: React.FC<{ tag: RemnantTagData; index: number }> = ({ tag, ind
         </div>
       </div>
 
-      {/* Remnant ID */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '2mm 3mm', borderBottom: '1px solid #d1fae5' }}>
-        <div style={{ fontSize: '5.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '1mm' }}>Remnant ID</div>
-        <div style={{ fontSize: '11px', fontWeight: 900, color: '#065f46', fontFamily: 'Courier, monospace', textAlign: 'center' }}>{tag.tagId}</div>
-        <div style={{ fontSize: '8px', fontWeight: 700, color: '#475569', marginTop: '1mm' }}>{dimText}</div>
+      {/* Remnant ID + scannable QR — Phase-4 (4.3) ── */}
+      <div style={{
+        flex: 1,
+        display: 'grid',
+        gridTemplateColumns: '1fr 16mm',
+        gap: '2mm',
+        padding: '2mm 3mm',
+        borderBottom: '1px solid #d1fae5',
+        alignItems: 'center',
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <div style={{ fontSize: '5.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.6mm' }}>Remnant ID</div>
+          <div style={{ fontSize: '10px', fontWeight: 900, color: '#065f46', fontFamily: 'Courier, monospace', wordBreak: 'break-all', lineHeight: 1.1 }}>{tag.tagId}</div>
+          <div style={{ fontSize: '7.5px', fontWeight: 700, color: '#475569', marginTop: '0.8mm' }}>{dimText}</div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+          <QrTag value={tag.tagId} sizeMm={14} ecLevel="M" />
+        </div>
       </div>
 
       {/* Specs */}

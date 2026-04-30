@@ -1,5 +1,6 @@
 import React from 'react';
 import { Quotation, ProductionPiece, Product } from '@/modules/shared/types';
+import QrTag from '@/modules/glassco/core/QrTag';
 
 interface Props {
     quote: Quotation;
@@ -91,15 +92,20 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
                 <thead>
                     <tr>
                         <th colSpan={6} style={{ padding: '0', fontWeight: 'normal' }}>
-                            <div style={{ borderBottom: '4px solid black', paddingBottom: '8px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                            <div style={{ borderBottom: '4px solid black', paddingBottom: '8px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '16px' }}>
                                 <div>
                                     <div style={{ fontSize: '28px', fontWeight: 900, textTransform: 'uppercase' }}>{quote.orderNo || displayId}</div>
                                     <div style={{ fontSize: '18px', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase' }}>{quote.projectName || clientName}</div>
                                     <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', marginTop: '4px' }}>INTERNAL JOB CARD - PRODUCTION COPY</div>
                                 </div>
-                                <div style={{ textAlign: 'right' }}>
-                                    <div style={{ fontSize: '16px', fontWeight: 900, color: '#1d4ed8' }}>REF: {displayId}</div>
-                                    <div style={{ fontSize: '11px', fontWeight: 700 }}>CLIENT: {clientName}</div>
+                                <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <div>
+                                        <div style={{ fontSize: '16px', fontWeight: 900, color: '#1d4ed8' }}>REF: {displayId}</div>
+                                        <div style={{ fontSize: '11px', fontWeight: 700 }}>CLIENT: {clientName}</div>
+                                        <div style={{ fontSize: '8px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginTop: '2px' }}>Scan to open job</div>
+                                    </div>
+                                    {/* Phase-4 (4.4) — job-level QR for fast scan-to-open */}
+                                    <QrTag value={`JOB:${displayId}`} sizeMm={22} ecLevel="M" />
                                 </div>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '16px', marginBottom: '16px', background: '#f8fafc', padding: '12px', borderRadius: '4px', border: '2px solid black' }}>
@@ -133,7 +139,13 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
                         return (
                             <tr key={`piece-${idx}`} style={{ pageBreakInside: 'avoid' }}>
                                 <td style={{ padding: '6px', border: '2px solid black', textAlign: 'center', fontWeight: 700 }}>{serialCounter}</td>
-                                <td style={{ padding: '6px', border: '2px solid black', fontWeight: 900, color: '#1d4ed8' }}>{item.pId}</td>
+                                <td style={{ padding: '6px', border: '2px solid black', fontWeight: 900, color: '#1d4ed8' }}>
+                                    {/* Phase-4 (4.4) — per-piece QR for QC / Dispatch scan stations */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <QrTag value={`PIECE:${item.pId}`} sizeMm={11} ecLevel="L" />
+                                        <span>{item.pId}</span>
+                                    </div>
+                                </td>
                                 <td style={{ padding: '6px', border: '2px solid black', fontWeight: 900, fontSize: '13px', textAlign: 'center' }}>{item.displaySize}</td>
                                 <td style={{ padding: '6px', border: '2px solid black', fontWeight: 700, textTransform: 'uppercase' }}>{item.materialSpec}</td>
                                 <td style={{ padding: '6px', border: '2px solid black', fontWeight: 700, textTransform: 'uppercase' }}>{item.itemDescription}</td>

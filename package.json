@@ -15,9 +15,11 @@
   "dependencies": {
     "@google/genai": "^1.44.0",
     "@supabase/supabase-js": "^2.99.0",
+    "@types/qrcode": "^1.5.6",
     "idb": "8.0.0",
     "lucide-react": "^0.562.0",
     "pdfjs-dist": "^3.11.174",
+    "qrcode": "^1.5.4",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-router-dom": "^7.11.0",

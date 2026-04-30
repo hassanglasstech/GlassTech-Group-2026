@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useProductionContext } from '@/modules/production/components/ProductionContext';
 import AnalyticsView from '@/modules/production/components/AnalyticsView';
-import { ShieldAlert, PackageCheck, Ban, BarChart3, ChevronLeft, User, LayoutGrid, X, AlertTriangle } from 'lucide-react';
+import QCCheckPanel from '@/modules/glassco/core/QCCheckPanel';                     // Phase-4 (4.2)
+import { ShieldAlert, PackageCheck, Ban, BarChart3, ChevronLeft, User, LayoutGrid, X, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { NCRService } from '@/modules/production/services/ncrService';
+import { ProductionService } from '@/modules/production/services/productionService';
 import { toast } from 'sonner';
 
 // ── QC Fail Codes ────────────────────────────────────────────────────
@@ -108,7 +110,7 @@ const DispatchView: React.FC = () => {
     openBinModal
   } = useProductionContext();
 
-  const [activeSubTab, setActiveSubTab] = React.useState<'qc' | 'finished_goods' | 'faults' | 'analytics'>('qc');
+  const [activeSubTab, setActiveSubTab] = React.useState<'qc' | 'blind_qc' | 'finished_goods' | 'faults' | 'analytics'>('qc');
 
   // ── BA-03: Delivery Acknowledgment ─────────────────────────────────────
   const [ackingDispatchId, setAckingDispatchId] = React.useState<string | null>(null);
@@ -250,6 +252,8 @@ const DispatchView: React.FC = () => {
     <div className="space-y-6">
         <div className="flex space-x-1 bg-white p-1 rounded-2xl border shadow-sm w-fit overflow-x-auto no-print">
             <button onClick={() => setActiveSubTab('qc')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'qc' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><ShieldAlert size={16} className="inline mr-2"/> Quality Hub</button>
+            {/* Phase-4 (4.2) — Blind QC: random 10% mandatory + cutter assessment hidden until submit */}
+            <button onClick={() => setActiveSubTab('blind_qc')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'blind_qc' ? 'bg-emerald-700 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><ShieldCheck size={16} className="inline mr-2"/> Blind QC</button>
             <button onClick={() => setActiveSubTab('finished_goods')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'finished_goods' ? 'bg-emerald-800 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><PackageCheck size={16} className="inline mr-2"/> Finished Goods</button>
             <button onClick={() => setActiveSubTab('faults')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'faults' ? 'bg-rose-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Ban size={16} className="inline mr-2"/> Fault Ledger</button>
             <button onClick={() => setActiveSubTab('analytics')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'analytics' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><BarChart3 size={16} className="inline mr-2"/> Analytics</button>
@@ -267,6 +271,19 @@ const DispatchView: React.FC = () => {
                         </div>
                     )
                 )}
+            </div>
+        )}
+
+        {/* Phase-4 (4.2) — Blind QC panel: random 10% mandatory + defective-sheet pieces */}
+        {activeSubTab === 'blind_qc' && (
+            <div className="animate-in fade-in slide-in-from-right duration-300">
+                <QCCheckPanel
+                    pieces={pieces}
+                    jobOrders={jobOrders}
+                    handleUpdatePieceStatus={(id, status, extra) =>
+                        handleUpdatePieceStatus(id, status as any, extra)
+                    }
+                />
             </div>
         )}
 

@@ -4,7 +4,8 @@ import { useProductionContext } from '@/modules/production/components/Production
 import JobRegistryView from '@/modules/production/components/JobRegistryView';
 import ServiceFloorView from '@/modules/production/components/ServiceFloorView';
 import SheetSelector from '@/modules/glassco/core/SheetSelector';
-import { ClipboardCheck, Scissors, Sparkles, Check, ChevronLeft, User, LayoutGrid, Printer, Sun, Moon, AlertTriangle, Layers } from 'lucide-react';
+import CutterScanPanel from '@/modules/glassco/core/CutterScanPanel';                  // Phase-4 (4.1)
+import { ClipboardCheck, Scissors, Sparkles, Check, ChevronLeft, User, LayoutGrid, Printer, Sun, Moon, AlertTriangle, Layers, ScanLine } from 'lucide-react';
 import JobCard from '@/modules/production/components/sub/JobCard';
 import { GlasscoPrintTemplate } from '@/modules/glassco/core/GlasscoPrintTemplate';
 import { Quotation } from '@/modules/shared/types';
@@ -17,7 +18,7 @@ const FabricationView: React.FC = () => {
     handleCuttingOutput, openBinModal
   } = useProductionContext();
 
-  const [activeSubTab, setActiveSubTab] = useState<'jobs' | 'queue' | 'services'>('jobs');
+  const [activeSubTab, setActiveSubTab] = useState<'jobs' | 'queue' | 'scan' | 'services'>('jobs');
   const [printingJob, setPrintingJob] = useState<Quotation | null>(null);
   const [showCuttingDiagram, setShowCuttingDiagram] = useState(false);
   const [selectedSheetSize, setSelectedSheetSize] = useState<{ width: number; height: number }>({ width: 84, height: 144 });
@@ -262,6 +263,8 @@ const FabricationView: React.FC = () => {
         <div className="flex space-x-1 bg-white p-1 rounded-2xl border w-fit shadow-sm">
             <button onClick={() => setActiveSubTab('jobs')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${activeSubTab === 'jobs' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><ClipboardCheck size={16} className="inline mr-2"/> Registry</button>
             <button onClick={() => setActiveSubTab('queue')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${activeSubTab === 'queue' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Scissors size={16} className="inline mr-2"/> Cutting</button>
+            {/* Phase-4 (4.1) — Cutter scan station: scan sheet tag → log session → auto NCR on missed/late */}
+            <button onClick={() => setActiveSubTab('scan')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${activeSubTab === 'scan' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><ScanLine size={16} className="inline mr-2"/> Scan Station</button>
             <button onClick={() => setActiveSubTab('services')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${activeSubTab === 'services' ? 'bg-indigo-500 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Sparkles size={16} className="inline mr-2"/> Services</button>
         </div>
 
@@ -320,6 +323,13 @@ const FabricationView: React.FC = () => {
                     </>
                 )}
                 {renderJobGrid()}
+            </div>
+        )}
+
+        {/* Phase-4 (4.1) — Cutter scan workstation (live sheet scan + NCR auto-gen) */}
+        {activeSubTab === 'scan' && (
+            <div className="animate-in fade-in slide-in-from-right duration-300">
+                <CutterScanPanel />
             </div>
         )}
 
