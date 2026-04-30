@@ -29,6 +29,11 @@ const KEYS = {
   INVOICES: 'gtk_erp_invoices',
   PAYMENT_RECEIPTS: 'gtk_erp_payment_receipts',
   CUSTOMER_COMPLAINTS: 'gtk_erp_customer_complaints',  // Phase-3 (3.8) — unified key
+  // Phase-6
+  PRICE_LISTS:        'gtk_erp_price_lists',           // Phase-6 (6.4)
+  PRICE_LIST_ITEMS:   'gtk_erp_price_list_items',      // Phase-6 (6.4)
+  WORK_ORDERS:        'gtk_erp_work_orders',           // Phase-6 (6.2)
+  LEADS:              'gtk_erp_leads',                 // Phase-6 (6.3)
 };
 
 // ── Phase-2 (2.6): per-row merge save helper ──────────────────────────
@@ -733,5 +738,226 @@ export const AsyncSalesService = {
 
   deleteCustomerComplaint: async (id: string): Promise<void> => {
     await _deleteRow('customer_complaints', KEYS.CUSTOMER_COMPLAINTS, id);
+  },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Phase-6 (6.4) — Customer-tier price lists
+  // ─────────────────────────────────────────────────────────────────────
+  getPriceLists: async (): Promise<any[]> => {
+    const company = useAuthStore.getState().profile?.company ?? '';
+    try {
+      const { data, error } = await supabase.from('price_lists').select('*').eq('company', company);
+      if (error || !data) return safeParse(KEYS.PRICE_LISTS);
+      const mapped = data.map((r: any) => ({
+        id: r.id, company: r.company, name: r.name,
+        description: r.description ?? '',
+        effectiveFrom: r.effective_from ?? '',
+        effectiveTo:   r.effective_to ?? '',
+        isActive:      r.is_active !== false,
+        createdBy:     r.created_by ?? '',
+        createdAt:     r.created_at ?? '',
+      }));
+      safeSave(KEYS.PRICE_LISTS, mapped);
+      return mapped;
+    } catch { return safeParse(KEYS.PRICE_LISTS); }
+  },
+  savePriceLists: async (data: any[]): Promise<void> => {
+    _mergeIntoLocal<any>(KEYS.PRICE_LISTS, data);
+    try {
+      const rows = data.map((p: any) => ({
+        id: p.id, company: p.company, name: p.name,
+        description: p.description ?? null,
+        effective_from: p.effectiveFrom || null,
+        effective_to:   p.effectiveTo   || null,
+        is_active: p.isActive !== false,
+        created_by: p.createdBy ?? _currentUser(),
+        created_at: p.createdAt ?? new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        data: p,
+      }));
+      if (rows.length > 0) {
+        const { error } = await supabase.from('price_lists').upsert(rows, { onConflict: 'id' });
+        if (error) { Logger.error('Sales', 'savePriceLists failed', error); _queueRetry('price_lists'); }
+      }
+    } catch (err: any) { Logger.error('Sales', 'savePriceLists exception', err); _queueRetry('price_lists'); }
+  },
+  deletePriceList: async (id: string): Promise<void> => {
+    await _deleteRow('price_lists', KEYS.PRICE_LISTS, id);
+  },
+
+  getPriceListItems: async (): Promise<any[]> => {
+    const company = useAuthStore.getState().profile?.company ?? '';
+    try {
+      const { data, error } = await supabase.from('price_list_items').select('*').eq('company', company);
+      if (error || !data) return safeParse(KEYS.PRICE_LIST_ITEMS);
+      const mapped = data.map((r: any) => ({
+        id: r.id, company: r.company,
+        priceListId:  r.price_list_id,
+        glassType:    r.glass_type ?? '',
+        thickness:    r.thickness ?? '',
+        subCategory:  r.sub_category ?? '',
+        serviceNick:  r.service_nick ?? '',
+        rate:         Number(r.rate ?? 0),
+        uom:          r.uom ?? 'sqft',
+        notes:        r.notes ?? '',
+      }));
+      safeSave(KEYS.PRICE_LIST_ITEMS, mapped);
+      return mapped;
+    } catch { return safeParse(KEYS.PRICE_LIST_ITEMS); }
+  },
+  savePriceListItems: async (data: any[]): Promise<void> => {
+    _mergeIntoLocal<any>(KEYS.PRICE_LIST_ITEMS, data);
+    try {
+      const rows = data.map((p: any) => ({
+        id: p.id, price_list_id: p.priceListId, company: p.company,
+        glass_type: p.glassType || null,
+        thickness:  p.thickness || null,
+        sub_category: p.subCategory || null,
+        service_nick: p.serviceNick || null,
+        rate: Number(p.rate || 0),
+        uom: p.uom || 'sqft',
+        notes: p.notes || null,
+        updated_at: new Date().toISOString(),
+      }));
+      if (rows.length > 0) {
+        const { error } = await supabase.from('price_list_items').upsert(rows, { onConflict: 'id' });
+        if (error) { Logger.error('Sales', 'savePriceListItems failed', error); _queueRetry('price_list_items'); }
+      }
+    } catch (err: any) { Logger.error('Sales', 'savePriceListItems exception', err); _queueRetry('price_list_items'); }
+  },
+  deletePriceListItem: async (id: string): Promise<void> => {
+    await _deleteRow('price_list_items', KEYS.PRICE_LIST_ITEMS, id);
+  },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Phase-6 (6.2) — Work Orders
+  // ─────────────────────────────────────────────────────────────────────
+  getWorkOrders: async (): Promise<any[]> => {
+    const company = useAuthStore.getState().profile?.company ?? '';
+    try {
+      const { data, error } = await supabase.from('work_orders').select('*').eq('company', company);
+      if (error || !data) return safeParse(KEYS.WORK_ORDERS);
+      const mapped = data.map((r: any) => ({
+        id: r.id, company: r.company,
+        salesOrderId: r.sales_order_id ?? '',
+        clientId:     r.client_id ?? '',
+        clientName:   r.client_name ?? '',
+        projectName:  r.project_name ?? '',
+        description:  r.description ?? '',
+        status:       r.status ?? 'Open',
+        priority:     r.priority ?? 'Normal',
+        plannedStart: r.planned_start ?? '',
+        plannedEnd:   r.planned_end ?? '',
+        actualStart:  r.actual_start ?? '',
+        actualEnd:    r.actual_end ?? '',
+        piecesTotal:  Number(r.pieces_total || 0),
+        piecesDone:   Number(r.pieces_done || 0),
+        notes:        r.notes ?? '',
+        createdBy:    r.created_by ?? '',
+        createdAt:    r.created_at ?? '',
+      }));
+      safeSave(KEYS.WORK_ORDERS, mapped);
+      return mapped;
+    } catch { return safeParse(KEYS.WORK_ORDERS); }
+  },
+  saveWorkOrders: async (data: any[]): Promise<void> => {
+    _mergeIntoLocal<any>(KEYS.WORK_ORDERS, data);
+    try {
+      const rows = data.map((w: any) => ({
+        id: w.id, company: w.company,
+        sales_order_id: w.salesOrderId || null,
+        client_id:      w.clientId || null,
+        client_name:    w.clientName || null,
+        project_name:   w.projectName || null,
+        description:    w.description || null,
+        status:         w.status || 'Open',
+        priority:       w.priority || 'Normal',
+        planned_start:  w.plannedStart || null,
+        planned_end:    w.plannedEnd || null,
+        actual_start:   w.actualStart || null,
+        actual_end:     w.actualEnd || null,
+        pieces_total:   Number(w.piecesTotal || 0),
+        pieces_done:    Number(w.piecesDone || 0),
+        notes:          w.notes || null,
+        created_by:     w.createdBy ?? _currentUser(),
+        created_at:     w.createdAt ?? new Date().toISOString(),
+        updated_at:     new Date().toISOString(),
+        data:           w,
+      }));
+      if (rows.length > 0) {
+        const { error } = await supabase.from('work_orders').upsert(rows, { onConflict: 'id' });
+        if (error) { Logger.error('Sales', 'saveWorkOrders failed', error); _queueRetry('work_orders'); }
+      }
+    } catch (err: any) { Logger.error('Sales', 'saveWorkOrders exception', err); _queueRetry('work_orders'); }
+  },
+  deleteWorkOrder: async (id: string): Promise<void> => {
+    await _deleteRow('work_orders', KEYS.WORK_ORDERS, id);
+  },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Phase-6 (6.3) — Leads
+  // ─────────────────────────────────────────────────────────────────────
+  getLeads: async (): Promise<any[]> => {
+    const company = useAuthStore.getState().profile?.company ?? '';
+    try {
+      const { data, error } = await supabase.from('leads').select('*').eq('company', company);
+      if (error || !data) return safeParse(KEYS.LEADS);
+      const mapped = data.map((r: any) => ({
+        id: r.id, company: r.company, name: r.name,
+        contactPerson: r.contact_person ?? '',
+        phone:         r.phone ?? '',
+        email:         r.email ?? '',
+        source:        r.source ?? '',
+        estimatedValue: Number(r.estimated_value || 0),
+        stage:         r.stage ?? 'New',
+        priority:      r.priority ?? 'Normal',
+        nextAction:    r.next_action ?? '',
+        nextActionDate:r.next_action_date ?? '',
+        notes:         r.notes ?? '',
+        clientId:      r.client_id ?? '',
+        convertedQuotationId: r.converted_quotation_id ?? '',
+        lostReason:    r.lost_reason ?? '',
+        assignedTo:    r.assigned_to ?? '',
+        createdBy:     r.created_by ?? '',
+        createdAt:     r.created_at ?? '',
+        stageChangedAt:r.stage_changed_at ?? '',
+      }));
+      safeSave(KEYS.LEADS, mapped);
+      return mapped;
+    } catch { return safeParse(KEYS.LEADS); }
+  },
+  saveLeads: async (data: any[]): Promise<void> => {
+    _mergeIntoLocal<any>(KEYS.LEADS, data);
+    try {
+      const rows = data.map((l: any) => ({
+        id: l.id, company: l.company, name: l.name,
+        contact_person: l.contactPerson || null,
+        phone: l.phone || null,
+        email: l.email || null,
+        source: l.source || null,
+        estimated_value: Number(l.estimatedValue || 0),
+        stage: l.stage || 'New',
+        priority: l.priority || 'Normal',
+        next_action: l.nextAction || null,
+        next_action_date: l.nextActionDate || null,
+        notes: l.notes || null,
+        client_id: l.clientId || null,
+        converted_quotation_id: l.convertedQuotationId || null,
+        lost_reason: l.lostReason || null,
+        assigned_to: l.assignedTo || null,
+        created_by: l.createdBy ?? _currentUser(),
+        created_at: l.createdAt ?? new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        stage_changed_at: l.stageChangedAt || new Date().toISOString(),
+        data: l,
+      }));
+      if (rows.length > 0) {
+        const { error } = await supabase.from('leads').upsert(rows, { onConflict: 'id' });
+        if (error) { Logger.error('Sales', 'saveLeads failed', error); _queueRetry('leads'); }
+      }
+    } catch (err: any) { Logger.error('Sales', 'saveLeads exception', err); _queueRetry('leads'); }
+  },
+  deleteLead: async (id: string): Promise<void> => {
+    await _deleteRow('leads', KEYS.LEADS, id);
   },
 };

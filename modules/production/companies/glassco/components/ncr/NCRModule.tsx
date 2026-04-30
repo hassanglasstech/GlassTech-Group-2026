@@ -19,8 +19,9 @@ import { toast } from 'sonner';
 import {
   AlertTriangle, Plus, X, CheckCircle2, Clock, RefreshCw,
   FileText, TrendingDown, Package, ChevronRight, Banknote,
-  BarChart3, Eye, Send, ShieldCheck, Trash2, Printer
+  BarChart3, Eye, Send, ShieldCheck, Trash2, Printer, FileSpreadsheet
 } from 'lucide-react';
+import { exportNCRRegister } from '@/modules/production/services/productionExporter';   // Phase-6 (6.7)
 import type { NCREvent, NCRStage, NCRCause, NCRAction, NCRReproduction, NCRVendorClaim } from '@/modules/production/types/ncr';
 import { NCR_CAUSE_LABELS, NCR_STAGE_LABELS } from '@/modules/production/types/ncr';
 import { CompactPageHeader } from '@/modules/shared/components/CompactPageHeader';
@@ -649,6 +650,16 @@ const NCRModule: React.FC = () => {
             icon: <Plus size={12} />,
             onClick: () => setShowForm(true),
             variant: 'danger',
+          },
+          {
+            // Phase-6 (6.7) — Excel export of the visible NCR register
+            label: 'Export Excel',
+            icon: <FileSpreadsheet size={12} />,
+            onClick: () => {
+              try { exportNCRRegister(ncrs as any[]); toast.success(`Exported ${ncrs.length} NCR(s).`); }
+              catch (e: any) { toast.error(e?.message || 'Export failed.'); }
+            },
+            variant: 'secondary',
           },
           {
             label: 'Refresh',

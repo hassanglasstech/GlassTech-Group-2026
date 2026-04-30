@@ -103,6 +103,11 @@ const TABLE_MAP: Record<string, string> = {
   payment_receipts:   'gtk_erp_payment_receipts',
   credit_notes:       'gtk_erp_credit_notes',           // Phase-1 (migration 032)
   customer_complaints:'gtk_erp_customer_complaints',    // Phase-3 (migration 034)
+  // ── Phase-6 (migration 036) ──
+  price_lists:        'gtk_erp_price_lists',
+  price_list_items:   'gtk_erp_price_list_items',
+  work_orders:        'gtk_erp_work_orders',
+  leads:              'gtk_erp_leads',
   // ── Inventory / Procurement ──
   products:           'gtk_erp_products',
   vendors:            'gtk_erp_vendors',
@@ -452,6 +457,68 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     created_at:  c.createdAt||c.created_at||new Date().toISOString(),
     updated_at:  c._updatedAt||c.updatedAt||new Date().toISOString(),
     data: c,
+  }),
+  // ── Phase-6 (migration 036) ──
+  price_lists: (p: any) => ({
+    id: p.id, company: p.company||'', name: p.name||'',
+    description: p.description||null,
+    effective_from: p.effectiveFrom||null,
+    effective_to:   p.effectiveTo||null,
+    is_active: p.isActive !== false,
+    created_by: p.createdBy||'',
+    created_at: p.createdAt||new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    data: p,
+  }),
+  price_list_items: (i: any) => ({
+    id: i.id, price_list_id: i.priceListId, company: i.company||'',
+    glass_type:  i.glassType||null,
+    thickness:   i.thickness||null,
+    sub_category:i.subCategory||null,
+    service_nick:i.serviceNick||null,
+    rate: Number(i.rate||0), uom: i.uom||'sqft',
+    notes: i.notes||null,
+    updated_at: new Date().toISOString(),
+  }),
+  work_orders: (w: any) => ({
+    id: w.id, company: w.company||'',
+    sales_order_id: w.salesOrderId||null,
+    client_id:      w.clientId||null,
+    client_name:    w.clientName||null,
+    project_name:   w.projectName||null,
+    description:    w.description||null,
+    status: w.status||'Open', priority: w.priority||'Normal',
+    planned_start: w.plannedStart||null,
+    planned_end:   w.plannedEnd||null,
+    actual_start:  w.actualStart||null,
+    actual_end:    w.actualEnd||null,
+    pieces_total:  Number(w.piecesTotal||0),
+    pieces_done:   Number(w.piecesDone||0),
+    notes: w.notes||null,
+    created_by: w.createdBy||'',
+    created_at: w.createdAt||new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    data: w,
+  }),
+  leads: (l: any) => ({
+    id: l.id, company: l.company||'', name: l.name||'',
+    contact_person: l.contactPerson||null,
+    phone: l.phone||null, email: l.email||null,
+    source: l.source||null,
+    estimated_value: Number(l.estimatedValue||0),
+    stage: l.stage||'New', priority: l.priority||'Normal',
+    next_action: l.nextAction||null,
+    next_action_date: l.nextActionDate||null,
+    notes: l.notes||null,
+    client_id: l.clientId||null,
+    converted_quotation_id: l.convertedQuotationId||null,
+    lost_reason: l.lostReason||null,
+    assigned_to: l.assignedTo||null,
+    created_by: l.createdBy||'',
+    created_at: l.createdAt||new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    stage_changed_at: l.stageChangedAt||new Date().toISOString(),
+    data: l,
   }),
   ncr_events: (e: any) => ({
     id: e.id, company: e.company||'',
@@ -1069,6 +1136,61 @@ const TABLE_PULL: Record<string, (row: any) => any> = {
       resolvedBy: r.resolved_by ?? base.resolvedBy,
       createdBy:  r.created_by  ?? base.createdBy,
       createdAt:  r.created_at  ?? base.createdAt,
+    };
+  },
+  // ── Phase-6 (migration 036) ──
+  price_lists: (r: any) => {
+    const base = r.data && typeof r.data === 'object' ? r.data : {};
+    return {
+      ...base, ...r, data: undefined,
+      effectiveFrom: r.effective_from ?? base.effectiveFrom,
+      effectiveTo:   r.effective_to   ?? base.effectiveTo,
+      isActive:      r.is_active      ?? base.isActive,
+      createdBy:     r.created_by     ?? base.createdBy,
+      createdAt:     r.created_at     ?? base.createdAt,
+    };
+  },
+  price_list_items: (r: any) => ({
+    ...r,
+    priceListId: r.price_list_id,
+    glassType:   r.glass_type,
+    subCategory: r.sub_category,
+    serviceNick: r.service_nick,
+    rate:        Number(r.rate || 0),
+  }),
+  work_orders: (r: any) => {
+    const base = r.data && typeof r.data === 'object' ? r.data : {};
+    return {
+      ...base, ...r, data: undefined,
+      salesOrderId: r.sales_order_id ?? base.salesOrderId,
+      clientId:     r.client_id      ?? base.clientId,
+      clientName:   r.client_name    ?? base.clientName,
+      projectName:  r.project_name   ?? base.projectName,
+      plannedStart: r.planned_start  ?? base.plannedStart,
+      plannedEnd:   r.planned_end    ?? base.plannedEnd,
+      actualStart:  r.actual_start   ?? base.actualStart,
+      actualEnd:    r.actual_end     ?? base.actualEnd,
+      piecesTotal:  Number(r.pieces_total || 0),
+      piecesDone:   Number(r.pieces_done  || 0),
+      createdBy:    r.created_by     ?? base.createdBy,
+      createdAt:    r.created_at     ?? base.createdAt,
+    };
+  },
+  leads: (r: any) => {
+    const base = r.data && typeof r.data === 'object' ? r.data : {};
+    return {
+      ...base, ...r, data: undefined,
+      contactPerson:  r.contact_person ?? base.contactPerson,
+      estimatedValue: Number(r.estimated_value || 0),
+      nextAction:     r.next_action      ?? base.nextAction,
+      nextActionDate: r.next_action_date ?? base.nextActionDate,
+      clientId:       r.client_id        ?? base.clientId,
+      convertedQuotationId: r.converted_quotation_id ?? base.convertedQuotationId,
+      lostReason:     r.lost_reason      ?? base.lostReason,
+      assignedTo:     r.assigned_to      ?? base.assignedTo,
+      createdBy:      r.created_by       ?? base.createdBy,
+      createdAt:      r.created_at       ?? base.createdAt,
+      stageChangedAt: r.stage_changed_at ?? base.stageChangedAt,
     };
   },
   ncr_events: (r: any) => ({

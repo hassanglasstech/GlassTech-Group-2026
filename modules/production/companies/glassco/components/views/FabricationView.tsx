@@ -5,7 +5,9 @@ import JobRegistryView from '@/modules/production/components/JobRegistryView';
 import ServiceFloorView from '@/modules/production/components/ServiceFloorView';
 import SheetSelector from '@/modules/glassco/core/SheetSelector';
 import CutterScanPanel from '@/modules/glassco/core/CutterScanPanel';                  // Phase-4 (4.1)
-import { ClipboardCheck, Scissors, Sparkles, Check, ChevronLeft, User, LayoutGrid, Printer, Sun, Moon, AlertTriangle, Layers, ScanLine } from 'lucide-react';
+import { exportProductionPieces } from '@/modules/production/services/productionExporter';  // Phase-6 (6.7)
+import { toast } from 'sonner';
+import { ClipboardCheck, Scissors, Sparkles, Check, ChevronLeft, User, LayoutGrid, Printer, Sun, Moon, AlertTriangle, Layers, ScanLine, FileSpreadsheet } from 'lucide-react';
 import JobCard from '@/modules/production/components/sub/JobCard';
 import { GlasscoPrintTemplate } from '@/modules/glassco/core/GlasscoPrintTemplate';
 import { Quotation } from '@/modules/shared/types';
@@ -56,6 +58,18 @@ const FabricationView: React.FC = () => {
       return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
     });
   }, [pieces, jobOrders]);
+
+  // Phase-6 (6.7) — export the visible cutting-queue pieces
+  const handleExportPieces = () => {
+    try {
+      const cutPieces = pieces.filter(p => p.status === 'Cut');
+      if (cutPieces.length === 0) { toast.error('No pieces in cutting queue to export.'); return; }
+      exportProductionPieces(cutPieces, jobOrders, clients, 'cutting-queue');
+      toast.success(`Exported ${cutPieces.length} pieces.`);
+    } catch (e: any) {
+      toast.error(e?.message || 'Export failed.');
+    }
+  };
 
   const handlePrintJobCard = (e: React.MouseEvent, jobId: string) => {
       e.stopPropagation();
@@ -260,12 +274,20 @@ const FabricationView: React.FC = () => {
             />
         )}
 
-        <div className="flex space-x-1 bg-white p-1 rounded-2xl border w-fit shadow-sm">
-            <button onClick={() => setActiveSubTab('jobs')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${activeSubTab === 'jobs' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><ClipboardCheck size={16} className="inline mr-2"/> Registry</button>
-            <button onClick={() => setActiveSubTab('queue')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${activeSubTab === 'queue' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Scissors size={16} className="inline mr-2"/> Cutting</button>
-            {/* Phase-4 (4.1) — Cutter scan station: scan sheet tag → log session → auto NCR on missed/late */}
-            <button onClick={() => setActiveSubTab('scan')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${activeSubTab === 'scan' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><ScanLine size={16} className="inline mr-2"/> Scan Station</button>
-            <button onClick={() => setActiveSubTab('services')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${activeSubTab === 'services' ? 'bg-indigo-500 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Sparkles size={16} className="inline mr-2"/> Services</button>
+        <div className="flex justify-between items-center">
+            <div className="flex space-x-1 bg-white p-1 rounded-2xl border w-fit shadow-sm">
+                <button onClick={() => setActiveSubTab('jobs')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${activeSubTab === 'jobs' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><ClipboardCheck size={16} className="inline mr-2"/> Registry</button>
+                <button onClick={() => setActiveSubTab('queue')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${activeSubTab === 'queue' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Scissors size={16} className="inline mr-2"/> Cutting</button>
+                {/* Phase-4 (4.1) — Cutter scan station: scan sheet tag → log session → auto NCR on missed/late */}
+                <button onClick={() => setActiveSubTab('scan')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${activeSubTab === 'scan' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><ScanLine size={16} className="inline mr-2"/> Scan Station</button>
+                <button onClick={() => setActiveSubTab('services')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${activeSubTab === 'services' ? 'bg-indigo-500 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Sparkles size={16} className="inline mr-2"/> Services</button>
+            </div>
+            {/* Phase-6 (6.7) — Excel export for cutting queue */}
+            {activeSubTab === 'queue' && (
+                <button onClick={handleExportPieces} className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-emerald-700 flex items-center gap-2 shadow-sm">
+                    <FileSpreadsheet size={14}/> Export Cutting Queue
+                </button>
+            )}
         </div>
 
         {activeSubTab === 'jobs' && (

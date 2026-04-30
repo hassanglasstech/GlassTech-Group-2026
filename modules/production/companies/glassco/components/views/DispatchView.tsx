@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useProductionContext } from '@/modules/production/components/ProductionContext';
 import AnalyticsView from '@/modules/production/components/AnalyticsView';
 import QCCheckPanel from '@/modules/glassco/core/QCCheckPanel';                     // Phase-4 (4.2)
-import { ShieldAlert, PackageCheck, Ban, BarChart3, ChevronLeft, User, LayoutGrid, X, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { exportTemperingDispatches, exportProductionPieces } from '@/modules/production/services/productionExporter';  // Phase-6 (6.7)
+import { ShieldAlert, PackageCheck, Ban, BarChart3, ChevronLeft, User, LayoutGrid, X, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import { NCRService } from '@/modules/production/services/ncrService';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { toast } from 'sonner';
@@ -103,12 +104,30 @@ const QCFailModal: React.FC<{
 };
 
 const DispatchView: React.FC = () => {
-  const { 
-    pieces, jobOrders, spots, company,
+  const {
+    pieces, jobOrders, spots, company, clients, dispatches,
     selectedJobId, setSelectedJobId, getJobDetails,
     handleUpdatePieceStatus, setSelectedPieceForFault, analyticsData,
     openBinModal
   } = useProductionContext();
+
+  // Phase-6 (6.7) — Excel export handlers
+  const handleExportFinishedGoods = () => {
+    try {
+      const fg = pieces.filter(p => p.status === 'Ready to Dispatch' || p.status === 'Delivered');
+      if (fg.length === 0) { toast.error('No finished-goods pieces to export.'); return; }
+      exportProductionPieces(fg, jobOrders, clients, 'finished-goods');
+      toast.success(`Exported ${fg.length} pieces.`);
+    } catch (e: any) { toast.error(e?.message || 'Export failed.'); }
+  };
+  const handleExportDispatches = () => {
+    try {
+      const list = (dispatches || []).filter((d: any) => d.company === company || d.company === 'Factory');
+      if (list.length === 0) { toast.error('No dispatches to export.'); return; }
+      exportTemperingDispatches(list, pieces);
+      toast.success(`Exported ${list.length} dispatches.`);
+    } catch (e: any) { toast.error(e?.message || 'Export failed.'); }
+  };
 
   const [activeSubTab, setActiveSubTab] = React.useState<'qc' | 'blind_qc' | 'finished_goods' | 'faults' | 'analytics'>('qc');
 
@@ -250,13 +269,26 @@ const DispatchView: React.FC = () => {
 
   return (
     <div className="space-y-6">
-        <div className="flex space-x-1 bg-white p-1 rounded-2xl border shadow-sm w-fit overflow-x-auto no-print">
-            <button onClick={() => setActiveSubTab('qc')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'qc' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><ShieldAlert size={16} className="inline mr-2"/> Quality Hub</button>
-            {/* Phase-4 (4.2) — Blind QC: random 10% mandatory + cutter assessment hidden until submit */}
-            <button onClick={() => setActiveSubTab('blind_qc')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'blind_qc' ? 'bg-emerald-700 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><ShieldCheck size={16} className="inline mr-2"/> Blind QC</button>
-            <button onClick={() => setActiveSubTab('finished_goods')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'finished_goods' ? 'bg-emerald-800 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><PackageCheck size={16} className="inline mr-2"/> Finished Goods</button>
-            <button onClick={() => setActiveSubTab('faults')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'faults' ? 'bg-rose-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Ban size={16} className="inline mr-2"/> Fault Ledger</button>
-            <button onClick={() => setActiveSubTab('analytics')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'analytics' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><BarChart3 size={16} className="inline mr-2"/> Analytics</button>
+        <div className="flex justify-between items-center gap-3 no-print">
+            <div className="flex space-x-1 bg-white p-1 rounded-2xl border shadow-sm w-fit overflow-x-auto">
+                <button onClick={() => setActiveSubTab('qc')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'qc' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><ShieldAlert size={16} className="inline mr-2"/> Quality Hub</button>
+                {/* Phase-4 (4.2) — Blind QC: random 10% mandatory + cutter assessment hidden until submit */}
+                <button onClick={() => setActiveSubTab('blind_qc')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'blind_qc' ? 'bg-emerald-700 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><ShieldCheck size={16} className="inline mr-2"/> Blind QC</button>
+                <button onClick={() => setActiveSubTab('finished_goods')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'finished_goods' ? 'bg-emerald-800 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><PackageCheck size={16} className="inline mr-2"/> Finished Goods</button>
+                <button onClick={() => setActiveSubTab('faults')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'faults' ? 'bg-rose-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><Ban size={16} className="inline mr-2"/> Fault Ledger</button>
+                <button onClick={() => setActiveSubTab('analytics')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap ${activeSubTab === 'analytics' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><BarChart3 size={16} className="inline mr-2"/> Analytics</button>
+            </div>
+            {/* Phase-6 (6.7) — Excel exports */}
+            <div className="flex gap-2">
+                {activeSubTab === 'finished_goods' && (
+                    <button onClick={handleExportFinishedGoods} className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-emerald-700 flex items-center gap-2 shadow-sm" title="Export Finished Goods to Excel">
+                        <FileSpreadsheet size={14}/> Export FG
+                    </button>
+                )}
+                <button onClick={handleExportDispatches} className="bg-slate-700 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-slate-900 flex items-center gap-2 shadow-sm" title="Export Tempering Dispatch Register">
+                    <FileSpreadsheet size={14}/> Dispatch Register
+                </button>
+            </div>
         </div>
 
         {activeSubTab === 'qc' && (

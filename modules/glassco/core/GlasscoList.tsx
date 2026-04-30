@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { Quotation, Client } from '../../shared/types';
-import { Search, Plus, Edit2, Printer, FileCheck, Trash2, FileSpreadsheet, FileJson, FileUp, Filter, FileText } from 'lucide-react';
+import { Search, Plus, Edit2, Printer, FileCheck, Trash2, FileSpreadsheet, FileJson, FileUp, Filter, FileText, Send, XCircle, MinusCircle, RotateCcw } from 'lucide-react';
 
 interface GlasscoListProps {
     quotations: Quotation[];
@@ -21,12 +21,31 @@ interface GlasscoListProps {
     onBulkExportExcel: () => void;
     onImportJson: (file: File) => void;
     onImportExcel: (file: File) => void;
+    // Phase-6 (6.6) — status state machine actions
+    onMarkSent?: (q: Quotation) => void;
+    onReject?: (q: Quotation) => void;
+    onMarkLost?: (q: Quotation) => void;
+    onReopen?: (q: Quotation) => void;
 }
 
-export const GlasscoList: React.FC<GlasscoListProps> = ({ 
+// Phase-6 (6.6) — status pill colours used in row badge
+const STATUS_PILL: Record<string, string> = {
+    Draft:           'bg-slate-100 text-slate-500 border-slate-200',
+    Sent:            'bg-indigo-50 text-indigo-700 border-indigo-200',
+    Approved:        'bg-emerald-50 text-emerald-700 border-emerald-200',
+    Rejected:        'bg-rose-50 text-rose-700 border-rose-200',
+    Lost:            'bg-rose-100 text-rose-600 border-rose-200',
+    Expired:         'bg-amber-50 text-amber-700 border-amber-200',
+    Invoiced:        'bg-blue-50 text-blue-700 border-blue-200',
+    'Partial Payment':'bg-blue-100 text-blue-800 border-blue-200',
+    Paid:            'bg-emerald-100 text-emerald-800 border-emerald-200',
+};
+
+export const GlasscoList: React.FC<GlasscoListProps> = ({
     quotations, clients, searchTerm, setSearchTerm, sortType, setSortType,
     onNew, onEdit, onPrint, onPrintJobCard, onApprove, onDelete, onExport,
-    onExportJson, onBulkExportJson, onBulkExportExcel, onImportJson, onImportExcel
+    onExportJson, onBulkExportJson, onBulkExportExcel, onImportJson, onImportExcel,
+    onMarkSent, onReject, onMarkLost, onReopen,
 }) => {
     const jsonInputRef = useRef<HTMLInputElement>(null);
     const excelInputRef = useRef<HTMLInputElement>(null);
@@ -128,7 +147,13 @@ export const GlasscoList: React.FC<GlasscoListProps> = ({
                                             )}
                                         </td>
                                         <td className="px-4 py-3">
-                                            <p className="font-black text-slate-800 uppercase text-xs leading-tight">{q.projectName ? q.projectName : clientName}</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="font-black text-slate-800 uppercase text-xs leading-tight">{q.projectName ? q.projectName : clientName}</p>
+                                                {/* Phase-6 (6.6) — status pill */}
+                                                <span className={`text-[8px] font-black px-1.5 py-0.5 rounded border uppercase tracking-wider ${STATUS_PILL[(q.status as any) || 'Draft'] || STATUS_PILL.Draft}`}>
+                                                  {q.status || 'Draft'}
+                                                </span>
+                                            </div>
                                             {q.projectName && <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">{clientName}</p>}
                                         </td>
                                         <td className="px-4 py-3 font-bold text-slate-500 text-[10px]">{q.date}</td>
@@ -138,7 +163,20 @@ export const GlasscoList: React.FC<GlasscoListProps> = ({
                                             <div className="flex items-center justify-end space-x-1">
                                                 <button onClick={() => onEdit(q)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Edit"><Edit2 size={14}/></button>
                                                 <button onClick={() => onPrint(q)} className="p-1.5 text-slate-600 hover:bg-slate-100 rounded" title="Print Estimate/Order"><Printer size={14}/></button>
-                                                {q.status !== 'Approved' && (
+                                                {/* Phase-6 (6.6) — state machine actions */}
+                                                {q.status === 'Draft' && onMarkSent && (
+                                                    <button onClick={() => onMarkSent(q)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded" title="Mark as Sent to Client"><Send size={14}/></button>
+                                                )}
+                                                {q.status !== 'Approved' && q.status !== 'Invoiced' && q.status !== 'Paid' && q.status !== 'Rejected' && q.status !== 'Lost' && onReject && (
+                                                    <button onClick={() => onReject(q)} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded" title="Reject"><XCircle size={14}/></button>
+                                                )}
+                                                {q.status !== 'Approved' && q.status !== 'Invoiced' && q.status !== 'Paid' && q.status !== 'Lost' && onMarkLost && (
+                                                    <button onClick={() => onMarkLost(q)} className="p-1.5 text-rose-400 hover:bg-rose-50 rounded" title="Mark as Lost"><MinusCircle size={14}/></button>
+                                                )}
+                                                {(q.status === 'Rejected' || q.status === 'Lost' || q.status === 'Expired') && onReopen && (
+                                                    <button onClick={() => onReopen(q)} className="p-1.5 text-amber-600 hover:bg-amber-50 rounded" title="Reopen → Draft"><RotateCcw size={14}/></button>
+                                                )}
+                                                {q.status !== 'Approved' && q.status !== 'Rejected' && q.status !== 'Lost' && q.status !== 'Expired' && (
                                                     <button onClick={() => onApprove(q)} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded" title="Approve & Generate SO"><FileCheck size={14}/></button>
                                                 )}
                                                 {q.status === 'Approved' && (

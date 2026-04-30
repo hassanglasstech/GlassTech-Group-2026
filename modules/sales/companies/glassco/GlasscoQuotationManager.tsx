@@ -43,7 +43,12 @@ const GlasscoQuotationManager: React.FC = () => {
     handleBulkExportJson,
     handleBulkExportExcel,
     handleImportJson,
-    handleImportExcel
+    handleImportExcel,
+    // Phase-6 (6.6) — quotation state machine handlers
+    handleMarkSent,
+    handleReject,
+    handleMarkLost,
+    handleReopen,
   } = useGlasscoQuotations();
 
   // Open a quotation produced by the agent in the manual editor
@@ -200,6 +205,10 @@ const GlasscoQuotationManager: React.FC = () => {
               onBulkExportExcel={handleBulkExportExcel}
               onImportJson={handleImportJson}
               onImportExcel={handleImportExcel}
+              onMarkSent={handleMarkSent}
+              onReject={handleReject}
+              onMarkLost={handleMarkLost}
+              onReopen={handleReopen}
             />
           </div>
         ) : null}

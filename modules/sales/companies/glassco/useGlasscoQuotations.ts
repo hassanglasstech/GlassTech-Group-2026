@@ -62,12 +62,16 @@ export const useGlasscoQuotations = () => {
         return true;
     });
     setQuotations(drafts);
-    
+
     const allClients = await AsyncSalesService.getClients();
     setClients(allClients.filter(c => c.company === company));
-    
+
     const allProducts = await AsyncSalesService.getProducts();
     setProducts(allProducts.filter(p => p.company === company));
+
+    // Phase-6 (6.6): auto-expire any Draft/Sent quotation past dueDate.
+    // Fire-and-forget so refresh isn't blocked.
+    _autoExpire(all).catch(() => { /* silent */ });
   };
 
   const handleSaveQuotation = async (action: 'draft' | 'save' | 'approve', directData?: Quotation) => {
@@ -401,6 +405,77 @@ export const useGlasscoQuotations = () => {
       }
   };
 
+  // ── Phase-6 (6.6): Quotation status state machine ─────────────────────
+  // Audit B6: status type allowed Sent / Rejected / Lost / Expired but UI
+  // never set them. Pipeline analytics (win rate, conversion, sent vs lost)
+  // were unmeasurable. These handlers + GlasscoList buttons close the loop.
+  // Per-row save (2.6 pattern) — never overwrite the full table.
+  const _transitionStatus = async (q: Quotation, next: 'Sent' | 'Rejected' | 'Lost' | 'Draft' | 'Expired', reason?: string) => {
+    const updated: any = { ...q, status: next };
+    if (reason) updated.statusReason = reason;
+    updated.statusChangedAt = new Date().toISOString();
+    try {
+      await AsyncSalesService.saveQuotations([updated]);
+      toast.success(`${q.id} → ${next}`, { duration: 3000 });
+      await refreshData();
+    } catch (e: any) {
+      toast.error(`Status update failed: ${e?.message || 'unknown error'}`);
+    }
+  };
+
+  const handleMarkSent = (q: Quotation) => {
+    if (q.status !== 'Draft') { toast.error("Only Draft quotations can be marked Sent."); return; }
+    return _transitionStatus(q, 'Sent');
+  };
+
+  const handleReject = (q: Quotation) => {
+    if (q.status === 'Approved' || q.status === 'Invoiced') {
+      toast.error("Approved / Invoiced quotations cannot be rejected — issue Credit Note or Void instead.");
+      return;
+    }
+    const reason = prompt('Reject reason (optional):') || '';
+    return _transitionStatus(q, 'Rejected', reason);
+  };
+
+  const handleMarkLost = (q: Quotation) => {
+    if (q.status === 'Approved' || q.status === 'Invoiced' || q.status === 'Paid') {
+      toast.error("Won / Invoiced / Paid quotations cannot be marked Lost.");
+      return;
+    }
+    const reason = prompt('Lost reason (e.g. price, competitor, project cancelled):') || '';
+    return _transitionStatus(q, 'Lost', reason);
+  };
+
+  const handleReopen = (q: Quotation) => {
+    if (q.status !== 'Rejected' && q.status !== 'Lost' && q.status !== 'Expired') {
+      toast.error("Only Rejected / Lost / Expired quotations can be reopened to Draft.");
+      return;
+    }
+    return _transitionStatus(q, 'Draft');
+  };
+
+  // Auto-expire: any non-terminal quotation past dueDate gets flipped to Expired.
+  // Runs once per refreshData. Idempotent — only touches Draft/Sent rows.
+  const _autoExpire = async (all: Quotation[]) => {
+    const today = new Date().toISOString().split('T')[0];
+    const candidates = all.filter(q =>
+      q.company === company &&
+      (q.status === 'Draft' || q.status === 'Sent') &&
+      q.dueDate && q.dueDate < today
+    );
+    if (candidates.length === 0) return;
+    const expired = candidates.map(q => ({
+      ...(q as any),
+      status: 'Expired',
+      statusReason: 'Auto-expired (dueDate passed)',
+      statusChangedAt: new Date().toISOString(),
+    }));
+    try {
+      await AsyncSalesService.saveQuotations(expired);
+      toast.info(`${expired.length} quotation(s) auto-expired (past due date).`, { duration: 5000 });
+    } catch (e) { /* silent — ops can always manually mark expired */ }
+  };
+
   const handleExportExcel = (q: Quotation) => {
     const clientName = clients.find(c => c.id === q.clientId)?.name || 'Unknown';
     
@@ -630,6 +705,11 @@ export const useGlasscoQuotations = () => {
     handleBulkExportJson,
     handleBulkExportExcel,
     handleImportJson,
-    handleImportExcel
+    handleImportExcel,
+    // Phase-6 (6.6) — quotation state machine
+    handleMarkSent,
+    handleReject,
+    handleMarkLost,
+    handleReopen,
   };
 };

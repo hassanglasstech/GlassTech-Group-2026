@@ -12,9 +12,10 @@ import { runMRP, MRPResult, MRPRequirement, MRPSchedule } from '@/modules/procur
 import {
   RefreshCw, AlertTriangle, CheckCircle2, TrendingDown,
   Layers, CalendarDays, Clock, Package, ChevronDown, ChevronUp,
-  AlertCircle, BarChart2
+  AlertCircle, BarChart2, FileSpreadsheet
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { exportMRPResults } from '@/modules/production/services/productionExporter';   // Phase-6 (6.7)
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -275,16 +276,31 @@ const GlasscoMRP: React.FC = () => {
               {company} · Glass stock vs open orders · Backward scheduling
             </p>
           </div>
-          <button
-            onClick={handleRun}
-            disabled={running}
-            className={`flex items-center space-x-2 px-6 py-3 rounded-2xl text-sm font-black uppercase transition-all ${
-              running ? 'bg-white/10 text-slate-400' : 'bg-white text-slate-900 hover:bg-slate-100 shadow-lg'
-            }`}
-          >
-            <RefreshCw size={14} className={running ? 'animate-spin' : ''} />
-            <span>{running ? 'Running…' : 'Run MRP'}</span>
-          </button>
+          <div className="flex gap-2">
+            {/* Phase-6 (6.7) — Excel export of MRP requirements */}
+            {result && (
+                <button
+                    onClick={() => {
+                        try { exportMRPResults(result.requirements as any[], 'requirements'); toast.success(`Exported ${result.requirements.length} requirement rows.`); }
+                        catch (e: any) { toast.error(e?.message || 'Export failed.'); }
+                    }}
+                    className="flex items-center space-x-2 px-5 py-3 rounded-2xl text-xs font-black uppercase bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg"
+                    title="Export Material Requirements to Excel"
+                >
+                    <FileSpreadsheet size={13}/> <span>Export</span>
+                </button>
+            )}
+            <button
+                onClick={handleRun}
+                disabled={running}
+                className={`flex items-center space-x-2 px-6 py-3 rounded-2xl text-sm font-black uppercase transition-all ${
+                    running ? 'bg-white/10 text-slate-400' : 'bg-white text-slate-900 hover:bg-slate-100 shadow-lg'
+                }`}
+            >
+                <RefreshCw size={14} className={running ? 'animate-spin' : ''} />
+                <span>{running ? 'Running…' : 'Run MRP'}</span>
+            </button>
+          </div>
         </div>
 
         {result && (

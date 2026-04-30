@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ProductionProvider } from '@/modules/production/components/ProductionContext';
-import { 
-  Scissors, Truck, ShieldCheck, Flame, BarChart3, AlertTriangle, 
+import {
+  Scissors, Truck, ShieldCheck, Flame, BarChart3, AlertTriangle,
   Zap, Users, Upload, Award, TrendingUp, LayoutGrid, Brain,
-  Building2, ChevronDown, User
+  Building2, ChevronDown, User, Activity, Layers, Tag, Wrench, Target
 } from 'lucide-react';
 import NCRModule from './components/ncr/NCRModule';
 import GeneratorLogModule from '@/modules/production/components/GeneratorLog';
@@ -15,16 +15,22 @@ import ProductionFloorPlanner from './components/ProductionFloorPlanner';
 import CuttingIntelligenceHub from './components/CuttingIntelligenceHub';
 import AIFloorPlanAdvisor from '@/modules/production/components/AIFloorPlanAdvisor';
 import CrossCompanyStatusBoard from '@/modules/production/components/CrossCompanyStatusBoard';
-import FabricationView from './components/views/FabricationView'; 
+import FabricationView from './components/views/FabricationView';
 import ProcessingView from './components/views/ProcessingView';
 import DispatchView from './components/views/DispatchView';
 import DashboardView from './components/views/DashboardView';
+import GlasscoOpsDashboard from '@/modules/glassco/core/GlasscoOpsDashboard';   // Phase-6 (6.5)
+import GlasscoBomMaster from '@/modules/glassco/core/GlasscoBomMaster';         // Phase-6 (6.1)
+import GlasscoPriceLists from '@/modules/glassco/core/GlasscoPriceLists';       // Phase-6 (6.4)
+import GlasscoWorkOrders from '@/modules/glassco/core/GlasscoWorkOrders';       // Phase-6 (6.2)
+import GlasscoLeadKanban from '@/modules/glassco/core/GlasscoLeadKanban';       // Phase-6 (6.3)
 import { useAuthStore, UserRole } from '@/modules/auth/authStore';
 
-type ActiveView = 
+type ActiveView =
   'dashboard' | 'floorplan' | 'cutting' | 'ai_plan' | 'cross_company' |
-  'fabrication' | 'processing' | 'dispatch' | 'ncr' | 'energy' | 
-  'labour' | 'import' | 'performance' | 'finance';
+  'fabrication' | 'processing' | 'dispatch' | 'ncr' | 'energy' |
+  'labour' | 'import' | 'performance' | 'finance' | 'ops_dashboard' |
+  'bom_master' | 'price_lists' | 'work_orders' | 'lead_kanban';
 
 // ── Role → which tabs are visible ─────────────────────────────────────
 //
@@ -67,10 +73,18 @@ const PRIMARY_TABS: { id: ActiveView; label: string; icon: React.ReactNode }[] =
 
 // Full access — More dropdown tabs (management/planning)
 const MORE_TABS: { id: ActiveView; label: string; icon: React.ReactNode; group: string }[] = [
+  // Phase-6 (6.5) — Combined sales + production KPIs in one place
+  { id: 'ops_dashboard', label: 'Glassco Ops',       icon: <Activity size={14}/>,    group: 'Planning' },
   { id: 'floorplan',     label: 'Floor Planner',    icon: <LayoutGrid size={14}/>,  group: 'Planning' },
   { id: 'ai_plan',       label: 'AI Plan',           icon: <Zap size={14}/>,         group: 'Planning' },
   { id: 'cutting',       label: 'Cutting Intel',     icon: <Brain size={14}/>,       group: 'Planning' },
   { id: 'cross_company', label: 'GTK / GTI Orders',  icon: <Building2 size={14}/>,   group: 'Planning' },
+  // Phase-6 — new entities
+  { id: 'lead_kanban',   label: 'Sales Pipeline',    icon: <Target size={14}/>,      group: 'Sales' },
+  { id: 'work_orders',   label: 'Work Orders',       icon: <Wrench size={14}/>,      group: 'Sales' },
+  { id: 'price_lists',   label: 'Price Lists',       icon: <Tag size={14}/>,         group: 'Master Data' },
+  { id: 'bom_master',    label: 'BOM Master',        icon: <Layers size={14}/>,      group: 'Master Data' },
+  // Existing management
   { id: 'performance',   label: 'Cutter Performance',icon: <Award size={14}/>,       group: 'Management' },
   { id: 'energy',        label: 'Energy / Generator',icon: <Zap size={14}/>,         group: 'Management' },
   { id: 'labour',        label: 'Labour Log',        icon: <Users size={14}/>,       group: 'Management' },
@@ -266,6 +280,11 @@ const ViewRenderer: React.FC<{ view: ActiveView }> = ({ view }) => (
     {view === 'labour'        && <LabourLogModule />}
     {view === 'finance'       && <FinancialIntelligenceHub />}
     {view === 'import'        && <DataImportTool />}
+    {view === 'ops_dashboard' && <GlasscoOpsDashboard />}
+    {view === 'bom_master'    && <GlasscoBomMaster />}
+    {view === 'price_lists'   && <GlasscoPriceLists />}
+    {view === 'work_orders'   && <GlasscoWorkOrders />}
+    {view === 'lead_kanban'   && <GlasscoLeadKanban />}
   </>
 );
 
