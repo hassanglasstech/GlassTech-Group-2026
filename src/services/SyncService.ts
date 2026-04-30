@@ -101,6 +101,7 @@ const TABLE_MAP: Record<string, string> = {
   projects:           'gtk_erp_projects',
   invoices:           'gtk_erp_invoices',
   payment_receipts:   'gtk_erp_payment_receipts',
+  credit_notes:       'gtk_erp_credit_notes',     // Phase-1 (migration 032)
   // ── Inventory / Procurement ──
   products:           'gtk_erp_products',
   vendors:            'gtk_erp_vendors',
@@ -204,7 +205,7 @@ const filterColumns = (table: string, data: any[]): any[] => {
 // ── Push mappers: app object → Supabase flat row ─────────────────────
 const TABLE_PUSH: Record<string, (item: any) => any> = {
   quotations: (q: any) => ({
-    id: q.id, company: q.company||'', date: q.date||'',
+    id: q.id, company: q.company||'', date: q.date||null,
     due_date: q.dueDate||q.due_date||null,
     client_id: q.clientId||q.client_id||'',
     project_name: q.projectName||q.project_name||'',
@@ -224,6 +225,7 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     original_order_ref: q.originalOrderRef||q.original_order_ref||null,
     replacement_reason: q.replacementReason||q.replacement_reason||null,
     cost_bearer: q.costBearer||q.cost_bearer||null,
+    data: q,                                  // D7: full object preserved (zero fields lost)
     updated_at: q._updatedAt||q.updatedAt||new Date().toISOString(),
   }),
   production_pieces: (p: any) => ({
@@ -241,6 +243,8 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     address: c.address||'', ntn: c.ntn||'',
     credit_limit: c.creditLimit||c.credit_limit||0,
     status: c.status||'Active',
+    data: c,                                  // forward-compat blob
+    updated_at: c._updatedAt||c.updatedAt||new Date().toISOString(),
   }),
   vendors: (v: any) => ({
     id: v.id, company: v.company||'', name: v.name||'',
@@ -378,24 +382,53 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     order_no: i.orderNo||i.order_no||'',
     client_id: i.clientId||i.client_id||'',
     client_name: i.clientName||i.client_name||'',
-    date: i.date||'', due_date: i.dueDate||i.due_date||'',
+    date: i.date||null, due_date: i.dueDate||i.due_date||null,
     total_amount: i.totalAmount||i.total_amount||0,
     received_amount: i.receivedAmount||i.received_amount||0,
     balance: i.balance||0,
     status: i.status||'Outstanding',
     gl_tx_id: i.glTxId||i.gl_tx_id||'',
     payments: i.payments||[],
+    items: i.items||[],
+    service_charges: i.serviceCharges||i.service_charges||[],
+    project_name: i.projectName||i.project_name||'',
+    discount_amount: i.discountAmount||i.discount_amount||0,
+    gst_percent: i.gstPercent||i.gst_percent||0,
+    gst_amount: i.gstAmount||i.gst_amount||0,
+    voided_by: i.voidedBy||i.voided_by||null,
+    voided_at: i.voidedAt||i.voided_at||null,
+    reverted_status: i.revertedStatus||i.reverted_status||null,
+    data: i,                                  // forward-compat blob
     updated_at: i._updatedAt||i.updatedAt||new Date().toISOString(),
   }),
   payment_receipts: (r: any) => ({
     id: r.id,
+    company: r.company||'',
     invoice_id: r.invoiceId||r.invoice_id||'',
-    date: r.date||'',
+    date: r.date||null,
     amount: r.amount||0,
     method: r.method||'Bank Transfer',
     reference: r.reference||'',
     gl_tx_id: r.glTxId||r.gl_tx_id||'',
     updated_at: r._updatedAt||r.updatedAt||new Date().toISOString(),
+  }),
+  // ── Credit Notes (Phase-1, migration 032) ─────────────────────────
+  credit_notes: (c: any) => ({
+    id: c.id,
+    company: c.company||'',
+    invoice_id: c.invoiceId||c.invoice_id||null,
+    invoice_no: c.invoiceNo||c.invoice_no||null,
+    client_id:  c.clientId||c.client_id||null,
+    client_name:c.clientName||c.client_name||null,
+    date: c.date||null,
+    reason: c.reason||'',
+    amount: Number(c.amount||0),
+    gl_tx_id: c.glTxId||c.gl_tx_id||null,
+    status: c.status||'Posted',
+    created_by: c.createdBy||c.created_by||'',
+    created_at: c.createdAt||c.created_at||new Date().toISOString(),
+    updated_at: c._updatedAt||c.updatedAt||new Date().toISOString(),
+    data: c,                                  // forward-compat blob
   }),
   ncr_events: (e: any) => ({
     id: e.id, company: e.company||'',
@@ -824,34 +857,50 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
 
 // ── Pull mappers: Supabase row → app object ───────────────────────────
 const TABLE_PULL: Record<string, (row: any) => any> = {
-  quotations: (r: any) => ({
-    ...r,
-    clientId: r.client_id, projectName: r.project_name,
-    dueDate: r.due_date, discountPercent: r.discount_percent,
-    discountAmount: r.discount_amount, manualSerial: r.manual_serial,
-    orderNo: r.order_no, revisedFields: r.revised_fields,
-    receivedAmount: r.received_amount,
-    actualDeliveryDate: r.actual_delivery_date,
-    serviceCharges: r.service_charges||[],
-    manualRef: r.manual_ref,
-    isAlreadyDispatched: r.is_already_dispatched,
-    orderType: r.order_type||'Standard',
-    originalOrderRef: r.original_order_ref||null,
-    replacementReason: r.replacement_reason||null,
-    costBearer: r.cost_bearer||null,
-    items: r.items||[], status: r.status,
-  }),
+  quotations: (r: any) => {
+    // D7: merge JSONB `data` blob (full object preservation) with flat columns
+    const base = r.data && typeof r.data === 'object' ? r.data : {};
+    return {
+      ...base,
+      ...r,
+      data: undefined,                                  // strip raw blob from result
+      clientId: r.client_id ?? base.clientId,
+      projectName: r.project_name ?? base.projectName,
+      dueDate: r.due_date ?? base.dueDate,
+      discountPercent: r.discount_percent ?? base.discountPercent,
+      discountAmount: r.discount_amount ?? base.discountAmount,
+      manualSerial: r.manual_serial ?? base.manualSerial,
+      orderNo: r.order_no ?? base.orderNo,
+      revisedFields: r.revised_fields ?? base.revisedFields,
+      receivedAmount: r.received_amount ?? base.receivedAmount,
+      actualDeliveryDate: r.actual_delivery_date ?? base.actualDeliveryDate,
+      serviceCharges: r.service_charges ?? base.serviceCharges ?? [],
+      manualRef: r.manual_ref ?? base.manualRef,
+      isAlreadyDispatched: r.is_already_dispatched ?? base.isAlreadyDispatched,
+      orderType: r.order_type ?? base.orderType ?? 'Standard',
+      originalOrderRef: r.original_order_ref ?? base.originalOrderRef ?? null,
+      replacementReason: r.replacement_reason ?? base.replacementReason ?? null,
+      costBearer: r.cost_bearer ?? base.costBearer ?? null,
+      items: (Array.isArray(r.items) && r.items.length > 0) ? r.items : (base.items ?? []),
+      status: r.status ?? base.status,
+    };
+  },
   production_pieces: (r: any) => ({
     ...r,
     orderId: r.order_id,
     itemIndex: Number(r.item_index||0),
     lastUpdated: r.last_updated,
   }),
-  clients: (r: any) => ({
-    ...r,
-    contactPerson: r.contact_person,
-    creditLimit: r.credit_limit,
-  }),
+  clients: (r: any) => {
+    const base = r.data && typeof r.data === 'object' ? r.data : {};
+    return {
+      ...base,
+      ...r,
+      data: undefined,
+      contactPerson: r.contact_person ?? base.contactPerson,
+      creditLimit: r.credit_limit ?? base.creditLimit,
+    };
+  },
   vendors: (r: any) => ({
     ...r,
     nickName: r.nick_name,
@@ -938,18 +987,49 @@ const TABLE_PULL: Record<string, (row: any) => any> = {
     fromCompany: r.from_company, toVendor: r.to_vendor,
     totalAmount: r.total_amount,
   }),
-  invoices: (r: any) => ({
-    ...r,
-    orderId: r.order_id, orderNo: r.order_no,
-    clientId: r.client_id, clientName: r.client_name,
-    dueDate: r.due_date, totalAmount: r.total_amount,
-    receivedAmount: r.received_amount,
-    glTxId: r.gl_tx_id, payments: r.payments||[],
-  }),
+  invoices: (r: any) => {
+    const base = r.data && typeof r.data === 'object' ? r.data : {};
+    return {
+      ...base,
+      ...r,
+      data: undefined,
+      orderId: r.order_id ?? base.orderId, orderNo: r.order_no ?? base.orderNo,
+      clientId: r.client_id ?? base.clientId, clientName: r.client_name ?? base.clientName,
+      dueDate: r.due_date ?? base.dueDate, totalAmount: r.total_amount ?? base.totalAmount,
+      receivedAmount: r.received_amount ?? base.receivedAmount,
+      glTxId: r.gl_tx_id ?? base.glTxId, payments: r.payments ?? base.payments ?? [],
+      items: r.items ?? base.items ?? [],
+      serviceCharges: r.service_charges ?? base.serviceCharges ?? [],
+      projectName: r.project_name ?? base.projectName,
+      discountAmount: r.discount_amount ?? base.discountAmount,
+      gstPercent: r.gst_percent ?? base.gstPercent,
+      gstAmount: r.gst_amount ?? base.gstAmount,
+      voidedBy: r.voided_by ?? base.voidedBy,
+      voidedAt: r.voided_at ?? base.voidedAt,
+      revertedStatus: r.reverted_status ?? base.revertedStatus,
+    };
+  },
   payment_receipts: (r: any) => ({
     ...r,
     invoiceId: r.invoice_id, glTxId: r.gl_tx_id,
   }),
+  // ── Credit Notes (Phase-1, migration 032) ─────────────────────────
+  credit_notes: (r: any) => {
+    const base = r.data && typeof r.data === 'object' ? r.data : {};
+    return {
+      ...base,
+      ...r,
+      data: undefined,
+      invoiceId:  r.invoice_id  ?? base.invoiceId,
+      invoiceNo:  r.invoice_no  ?? base.invoiceNo,
+      clientId:   r.client_id   ?? base.clientId,
+      clientName: r.client_name ?? base.clientName,
+      glTxId:     r.gl_tx_id    ?? base.glTxId,
+      createdBy:  r.created_by  ?? base.createdBy,
+      createdAt:  r.created_at  ?? base.createdAt,
+      amount:     Number(r.amount ?? base.amount ?? 0),
+    };
+  },
   ncr_events: (r: any) => ({
     ...r,
     pieceId: r.piece_id, jobOrderId: r.job_order_id,

@@ -7,6 +7,12 @@
  * GL pattern (mirror of deliveryInvoiceService):
  *   Credit Note: Dr Revenue  / Cr AR  (reduce both)
  *   Invoice Void: same as credit note for full amount + status → Voided
+ *
+ * Phase-1 hardening (migration 032):
+ *   • Credit notes now persisted to Supabase `credit_notes` table
+ *     (was localStorage-only — refunds invisible across devices).
+ *   • voidInvoice preserves the prior invoice status in
+ *     `revertedStatus` so a Partial-Payment invoice can be restored.
  */
 
 import { Company } from '@/modules/shared/types/core';
@@ -41,15 +47,34 @@ const getNextCNNumber = (company: Company): string => {
   return `CN-${company.substring(0, 3).toUpperCase()}-${year}-${String(next).padStart(4, '0')}`;
 };
 
-// ── localStorage helpers ──────────────────────────────────────────────────────
+// ── localStorage helpers (kept for legacy reads — Supabase is source of truth) ──
 const CN_KEY = (company: Company) => `gtk_erp_credit_notes_${company}`;
 
 export const getCreditNotes = (company: Company): CreditNote[] => {
-  try { return JSON.parse(localStorage.getItem(CN_KEY(company)) || '[]'); } catch { return []; }
+  // Legacy per-company key first, then unified key written by AsyncSalesService.
+  try {
+    const legacy = JSON.parse(localStorage.getItem(CN_KEY(company)) || '[]') as CreditNote[];
+    const unified = JSON.parse(localStorage.getItem('gtk_erp_credit_notes') || '[]') as CreditNote[];
+    const filteredUnified = unified.filter(c => c.company === company);
+    // De-duplicate by id, prefer unified (more recent)
+    const map = new Map<string, CreditNote>();
+    for (const c of legacy)          map.set(c.id, c);
+    for (const c of filteredUnified) map.set(c.id, c);
+    return Array.from(map.values());
+  } catch { return []; }
 };
 
-const saveCreditNotes = (company: Company, data: CreditNote[]) => {
-  localStorage.setItem(CN_KEY(company), JSON.stringify(data));
+const persistCreditNote = (company: Company, cn: CreditNote): void => {
+  // 1) Legacy per-company key (back-compat with anything still reading it)
+  const legacy = (() => { try { return JSON.parse(localStorage.getItem(CN_KEY(company)) || '[]'); } catch { return []; } })();
+  localStorage.setItem(CN_KEY(company), JSON.stringify([...legacy, cn]));
+
+  // 2) Unified key + Supabase push (new in migration 032)
+  const unified = (() => { try { return JSON.parse(localStorage.getItem('gtk_erp_credit_notes') || '[]'); } catch { return []; } })();
+  const next = [...unified.filter((c: CreditNote) => c.id !== cn.id), cn];
+  localStorage.setItem('gtk_erp_credit_notes', JSON.stringify(next));
+  // Fire-and-forget cloud push (queues for retry on failure via _queueRetry inside)
+  AsyncSalesService.saveCreditNotes(next).catch(() => { /* queued for retry */ });
 };
 
 // ── Issue Credit Note ─────────────────────────────────────────────────────────
@@ -107,7 +132,7 @@ export function issueCreditNote(params: {
     )
   );
 
-  // ── Persist CN record ─────────────────────────────────────────────────────
+  // ── Persist CN record (Supabase + localStorage) ──────────────────────────
   const cn: CreditNote = {
     id: cnId, company,
     invoiceId:  invoice.id,
@@ -120,7 +145,7 @@ export function issueCreditNote(params: {
     createdBy,
     createdAt: new Date().toISOString(),
   };
-  saveCreditNotes(company, [...getCreditNotes(company), cn]);
+  persistCreditNote(company, cn);
 
   // ── Financial Event ───────────────────────────────────────────────────────
   FinanceService.saveFinancialEvents([
@@ -172,12 +197,19 @@ export async function voidInvoice(params: {
     });
   }
 
-  // ── Mark invoice Voided ───────────────────────────────────────────────────
+  // ── Mark invoice Voided (preserve prior status for restore) ──────────────
   const allInvoices = await AsyncSalesService.getInvoices() as any[];
   await AsyncSalesService.saveInvoices(
     allInvoices.map(i =>
       i.id === invoice.id
-        ? { ...i, status: 'Voided', balance: 0, voidedBy, voidedAt: today }
+        ? {
+            ...i,
+            revertedStatus: i.status,         // preserve prior (Partial / Outstanding)
+            status: 'Voided',
+            balance: 0,
+            voidedBy,
+            voidedAt: today,
+          }
         : i
     )
   );
