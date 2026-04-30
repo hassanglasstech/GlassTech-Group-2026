@@ -28,6 +28,7 @@ const KEYS = {
   CREDIT_NOTES: 'gtk_erp_credit_notes',
   INVOICES: 'gtk_erp_invoices',
   PAYMENT_RECEIPTS: 'gtk_erp_payment_receipts',
+  CUSTOMER_COMPLAINTS: 'gtk_erp_customer_complaints',  // Phase-3 (3.8) — unified key
 };
 
 // ── Phase-2 (2.6): per-row merge save helper ──────────────────────────
@@ -656,5 +657,81 @@ export const AsyncSalesService = {
 
   deleteCreditNote: async (id: string): Promise<void> => {
     await _deleteRow('credit_notes', KEYS.CREDIT_NOTES, id);
+  },
+
+  // ── Customer Complaints (Phase-3 / 3.8 — was localStorage-only) ───────
+  getCustomerComplaints: async (): Promise<any[]> => {
+    const company = useAuthStore.getState().profile?.company ?? '';
+    try {
+      const { data, error } = await supabase
+        .from('customer_complaints').select('*').eq('company', company);
+      if (error || !data || data.length === 0) return safeParse(KEYS.CUSTOMER_COMPLAINTS);
+      const mapped = data.map((r: any) => {
+        const base = r.data && typeof r.data === 'object' ? r.data : {};
+        return {
+          ...base,
+          id:          r.id,
+          company:     r.company,
+          date:        r.date           ?? base.date           ?? '',
+          clientId:    r.client_id      ?? base.clientId       ?? '',
+          clientName:  r.client_name    ?? base.clientName     ?? '',
+          invoiceId:   r.invoice_id     ?? base.invoiceId      ?? undefined,
+          orderNo:     r.order_no       ?? base.orderNo        ?? undefined,
+          category:    r.category       ?? base.category       ?? 'Other',
+          description: r.description    ?? base.description    ?? '',
+          status:      r.status         ?? base.status         ?? 'Open',
+          priority:    r.priority       ?? base.priority       ?? 'Medium',
+          assignedTo:  r.assigned_to    ?? base.assignedTo     ?? undefined,
+          resolution:  r.resolution     ?? base.resolution     ?? undefined,
+          resolvedAt:  r.resolved_at    ?? base.resolvedAt     ?? undefined,
+          resolvedBy:  r.resolved_by    ?? base.resolvedBy     ?? undefined,
+          createdBy:   r.created_by     ?? base.createdBy      ?? '',
+          createdAt:   r.created_at     ?? base.createdAt      ?? '',
+        };
+      });
+      safeSave(KEYS.CUSTOMER_COMPLAINTS, mapped);
+      return mapped;
+    } catch {
+      return safeParse(KEYS.CUSTOMER_COMPLAINTS);
+    }
+  },
+
+  saveCustomerComplaints: async (data: any[]): Promise<void> => {
+    // Phase-3 (2.6 pattern): per-row merge save (preserves siblings)
+    _mergeIntoLocal<any>(KEYS.CUSTOMER_COMPLAINTS, data);
+    try {
+      const rows = data.map((c: any) => ({
+        id:           c.id,
+        company:      c.company,
+        date:         c.date         || null,
+        client_id:    c.clientId     ?? c.client_id    ?? null,
+        client_name:  c.clientName   ?? c.client_name  ?? null,
+        invoice_id:   c.invoiceId    ?? c.invoice_id   ?? null,
+        order_no:     c.orderNo      ?? c.order_no     ?? null,
+        category:     c.category     ?? 'Other',
+        description:  c.description  ?? '',
+        status:       c.status       ?? 'Open',
+        priority:     c.priority     ?? 'Medium',
+        assigned_to:  c.assignedTo   ?? c.assigned_to  ?? null,
+        resolution:   c.resolution   ?? null,
+        resolved_at:  c.resolvedAt   ?? c.resolved_at  ?? null,
+        resolved_by:  c.resolvedBy   ?? c.resolved_by  ?? null,
+        created_by:   c.createdBy    ?? c.created_by   ?? _currentUser(),
+        created_at:   c.createdAt    ?? c.created_at   ?? new Date().toISOString(),
+        updated_at:   new Date().toISOString(),
+        data:         c,
+      }));
+      if (rows.length > 0) {
+        const { error } = await supabase.from('customer_complaints').upsert(rows, { onConflict: 'id' });
+        if (error) { Logger.error('Sales', 'saveCustomerComplaints failed', error); _queueRetry('customer_complaints'); }
+      }
+    } catch (err: any) {
+      Logger.error('Sales', 'saveCustomerComplaints exception', err);
+      _queueRetry('customer_complaints');
+    }
+  },
+
+  deleteCustomerComplaint: async (id: string): Promise<void> => {
+    await _deleteRow('customer_complaints', KEYS.CUSTOMER_COMPLAINTS, id);
   },
 };

@@ -532,7 +532,9 @@ export function postDeliveryCOGS(params: {
     id: txId, company, docType: 'SA',
     docDate: date, date,
     description: `COGS: ${orderId} → ${clientName} — ${totalSqft.toFixed(1)} sqft | Glass PKR ${rawGlassCOGS.toLocaleString()} | Labour PKR ${(totalCuttingCost + totalProcessingCost).toLocaleString()}`,
-    referenceId: invoiceId, status: 'Parked',
+    // Phase-3 (3.4): COGS now Posts directly. Audit I4: previously 'Parked'
+    // meant gross margin / P&L was wrong until a manual bulk-post happened.
+    referenceId: invoiceId, status: 'Posted',
     details: glDetails,
   } as any);
 }
@@ -540,6 +542,114 @@ export function postDeliveryCOGS(params: {
 // ── Convenience: check if COGS already posted for an invoice ──────
 export function isCOGSPosted(invoiceId: string): boolean {
   return FinanceService.getLedger().some((t: any) => t.id === `GL-COGS-${invoiceId}`);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// D. CREDIT NOTE / VOID  →  Reverse delivery COGS proportionally
+//
+// Phase-3 (3.6): when a credit note is issued OR an invoice is voided,
+// the original COGS posted at delivery time must be reversed in step
+// with the revenue reversal so gross margin is not overstated.
+//
+// Behaviour:
+//   • Looks up the original `GL-COGS-${invoiceId}` ledger entry.
+//   • Creates a reversing GL transaction with debits/credits swapped
+//     and scaled by the reversal proportion (CN amount / invoice
+//     grand total), so a 30% credit note reverses 30% of COGS.
+//   • Restores the inventory store value proportionally for the
+//     materials that were deducted at delivery.
+//   • Idempotent: if a reversal entry for the same (invoice, txn)
+//     already exists, no-op.
+//
+// Inventory restoration:
+//   The original delivery deducted store.totalValue by `rawGlassCOGS`.
+//   We reverse the inventory portion proportionally — the GL entry's
+//   credit-Inventory line indicates how much value was relieved, and
+//   we add back `proportion × that value` to the store item.
+// ══════════════════════════════════════════════════════════════════
+
+export function reverseDeliveryCOGS(params: {
+  company: Company;
+  invoiceId: string;
+  reversalAmount: number;     // CN amount or full invoice for void
+  invoiceGrandTotal: number;  // denominator for proportion
+  date: string;
+  reason: string;             // 'Credit Note CN-xxx' / 'Void INV-xxx'
+  reversalSuffix?: string;    // unique suffix to allow multiple partial CNs
+}): void {
+  const { company, invoiceId, reversalAmount, invoiceGrandTotal, date, reason, reversalSuffix } = params;
+  if (reversalAmount <= 0 || invoiceGrandTotal <= 0) return;
+
+  const cogsTxId     = `GL-COGS-${invoiceId}`;
+  const reversalTxId = `GL-COGS-REV-${invoiceId}-${reversalSuffix || Date.now()}`;
+  const ledger       = FinanceService.getLedger();
+  const cogsTx: any  = ledger.find((t: any) => t.id === cogsTxId);
+  if (!cogsTx) {
+    console.warn(`[reverseDeliveryCOGS] No COGS entry found for ${invoiceId} — nothing to reverse.`);
+    return;
+  }
+  if (ledger.some((t: any) => t.id === reversalTxId)) return; // idempotent
+
+  const proportion = Math.min(1, Math.max(0, reversalAmount / invoiceGrandTotal));
+  if (proportion <= 0) return;
+
+  // Build reversing details: swap debit ↔ credit and scale by proportion.
+  // Each Math.round preserves PKR-precision; tiny rounding is acceptable.
+  const reversingDetails = (cogsTx.details || []).map((d: any) => ({
+    accountId: d.accountId,
+    debit:  Math.round((Number(d.credit) || 0) * proportion),
+    credit: Math.round((Number(d.debit)  || 0) * proportion),
+    text:   `REVERSAL (${reason}): ${d.text}`,
+  })).filter((d: any) => d.debit > 0 || d.credit > 0);
+
+  if (reversingDetails.length === 0) return;
+
+  FinanceService.recordTransaction({
+    id: reversalTxId, company, docType: 'SA',
+    docDate: date, date,
+    description: `COGS REVERSAL (${reason}): invoice ${invoiceId} — ${(proportion * 100).toFixed(1)}% (PKR ${reversalAmount.toLocaleString('en-PK')})`,
+    referenceId: invoiceId, status: 'Posted',
+    details: reversingDetails,
+  } as any);
+
+  // ── Inventory restoration ──
+  // The original delivery deducted store.totalValue by rawGlassCOGS for
+  // each contributing material. We can't recover the per-material split
+  // without the original `materialDeductions` map, so we use the GL line
+  // to identify the credit-Inventory amount and restore proportionally
+  // across raw store items (totalValue weighted).
+  try {
+    const accs = glassAccounts(company);
+    const invCreditLine = (cogsTx.details || []).find(
+      (d: any) => d.accountId === accs.glassInv.id && (Number(d.credit) || 0) > 0
+    );
+    const inventoryRelieved = Number(invCreditLine?.credit) || 0;
+    const restoreAmount     = Math.round(inventoryRelieved * proportion);
+    if (restoreAmount > 0) {
+      const store    = InventoryService.getStore();
+      const rawItems = store.filter((s: any) => s.company === company && s.category === 'Raw');
+      const totalRawValue = rawItems.reduce((sum: number, s: any) => sum + (Number(s.totalValue) || 0), 0);
+      // Weighted distribution; if total is zero, dump on the first raw item.
+      const updated = store.map((item: any) => {
+        if (item.company !== company || item.category !== 'Raw') return item;
+        let share = 0;
+        if (totalRawValue > 0) {
+          share = Math.round(((Number(item.totalValue) || 0) / totalRawValue) * restoreAmount);
+        } else if (rawItems[0]?.id === item.id) {
+          share = restoreAmount;
+        }
+        if (share === 0) return item;
+        return {
+          ...item,
+          totalValue: (Number(item.totalValue) || 0) + share,
+          lastMovementDate: date,
+        };
+      });
+      InventoryService.saveStore(updated);
+    }
+  } catch (err: any) {
+    console.warn('[reverseDeliveryCOGS] inventory restoration skipped:', err?.message);
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════

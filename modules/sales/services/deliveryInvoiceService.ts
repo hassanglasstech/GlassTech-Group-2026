@@ -290,13 +290,25 @@ export async function generateDeliveryInvoice(
   SalesService.saveInvoices([...SalesService.getInvoices(), invoice]);
 
   // ── Update Quotation status → Invoiced ───────────────────────────
-  SalesService.saveQuotations(
-    SalesService.getQuotations().map((q: Quotation) =>
-      q.id === order.id
-        ? { ...q, status: 'Invoiced' as any, invoiceNo: invoiceId }
-        : q
-    )
-  );
+  // Phase-3 (3.10): when wastage was applied, push the adjusted items
+  // (with the higher rate / amount) back to the quotation so the printed
+  // quotation matches the invoice. Audit I11: previously the rate
+  // increment lived only on the invoice — customer reconciliation gap.
+  // Phase-2 (2.6): per-row save instead of read-modify-write-all.
+  const orderRow = SalesService.getQuotations().find((q: Quotation) => q.id === order.id);
+  if (orderRow) {
+    const updated: any = {
+      ...orderRow,
+      status: 'Invoiced',
+      invoiceNo: invoiceId,
+    };
+    if (applyWastage) {
+      updated.items = effectiveItems;
+      updated.wastageAppliedAt = today;
+      updated.wastageAppliedInvoiceId = invoiceId;
+    }
+    SalesService.saveQuotations([updated]);
+  }
 
   // ── COGS GL — raw glass + service labor ──────────────────────────
   try {

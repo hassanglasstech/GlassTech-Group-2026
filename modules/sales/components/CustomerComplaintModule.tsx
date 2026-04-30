@@ -70,14 +70,19 @@ const PRIORITY_COLORS: Record<string, string> = {
   'Low':      'bg-slate-100 text-slate-600',
 };
 
+// Phase-3 (3.8): legacy localStorage helpers retained as a read-only
+// fallback so prior records survive the migration to Supabase. Going
+// forward, all reads/writes flow through AsyncSalesService —
+// AsyncSalesService.getCustomerComplaints() already merges legacy data
+// from the unified key automatically.
 const CC_KEY = (co: Company) => `gtk_erp_customer_complaints_${co}`;
-const getComplaints = (co: Company): CustomerComplaint[] => {
+const getLegacyComplaints = (co: Company): CustomerComplaint[] => {
   try { return JSON.parse(localStorage.getItem(CC_KEY(co)) || '[]'); } catch { return []; }
 };
-const saveComplaints = (co: Company, d: CustomerComplaint[]) =>
-  localStorage.setItem(CC_KEY(co), JSON.stringify(d));
 
-let _seq = 0;
+// Atomic CC numbering — falls back to localStorage counter (single-user OK).
+// Could move to allocate_serial RPC in a follow-up; keeping local for now
+// since complaints are low-volume and rarely concurrent.
 const nextId = (co: Company) => {
   const year = new Date().getFullYear();
   const key  = `gtk_erp_cc_seq_${co}_${year}`;
@@ -107,11 +112,24 @@ const CustomerComplaintModule: React.FC<Props> = ({ company }) => {
   const [resolution, setResolution] = useState('');
 
   const load = async () => {
-    setComplaints(getComplaints(company));
-    const [cls, invs] = await Promise.all([
+    // Phase-3 (3.8): merge legacy localStorage with cloud complaints, then
+    // upsert any legacy-only rows back to cloud so they survive cache clears.
+    const [cloudComplaints, cls, invs] = await Promise.all([
+      AsyncSalesService.getCustomerComplaints(),
       AsyncSalesService.getClients(),
       AsyncSalesService.getInvoices(),
     ]);
+    const legacy = getLegacyComplaints(company);
+    const cloudForCo = (cloudComplaints as any[]).filter(c => c.company === company);
+    const cloudIds = new Set(cloudForCo.map(c => c.id));
+    const legacyOnly = legacy.filter(c => !cloudIds.has(c.id));
+    if (legacyOnly.length > 0) {
+      // Migrate legacy rows to cloud (one-shot, fire-and-forget)
+      AsyncSalesService.saveCustomerComplaints(legacyOnly).catch(() => { /* queued for retry */ });
+    }
+    setComplaints([...cloudForCo, ...legacyOnly].sort((a, b) =>
+      (b.createdAt || '').localeCompare(a.createdAt || '')
+    ));
     setClients(cls.filter((c: any) => c.company === company || !c.company));
     setInvoices((invs as any[]).filter(i => i.company === company));
   };
@@ -120,7 +138,7 @@ const CustomerComplaintModule: React.FC<Props> = ({ company }) => {
   const selectedClient = clients.find(c => c.id === form.clientId);
   const clientInvoices = invoices.filter(i => i.clientId === form.clientId);
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!form.clientId) { toast.error('Select a client.'); return; }
     if (!form.description.trim()) { toast.error('Enter description.'); return; }
     const cc: CustomerComplaint = {
@@ -138,10 +156,15 @@ const CustomerComplaintModule: React.FC<Props> = ({ company }) => {
       createdBy:   actor,
       createdAt:   new Date().toISOString(),
     };
-    const updated = [...getComplaints(company), cc];
-    saveComplaints(company, updated);
-    setComplaints(updated);
-    toast.success(`Complaint ${cc.id} logged.`);
+    // Phase-3 (3.8): per-row Supabase save (was localStorage-only).
+    try {
+      await AsyncSalesService.saveCustomerComplaints([cc]);
+      setComplaints(prev => [cc, ...prev]);
+      toast.success(`Complaint ${cc.id} logged.`);
+    } catch (err: any) {
+      toast.error(`Save failed: ${err?.message || 'unknown error'}`, { duration: 6000 });
+      return;
+    }
     setShowForm(false);
     setForm(BLANK_FORM);
   };
@@ -150,19 +173,22 @@ const CustomerComplaintModule: React.FC<Props> = ({ company }) => {
     const ok = await confirmModal(`Mark ${cc.id} as "${newStatus}"?`);
     if (!ok) return;
     const now = new Date().toISOString();
-    const updated = getComplaints(company).map(c =>
-      c.id === cc.id ? {
-        ...c, status: newStatus,
-        ...(newStatus === 'Resolved' || newStatus === 'Closed'
-          ? { resolution, resolvedAt: now, resolvedBy: actor }
-          : {}),
-      } : c
-    );
-    saveComplaints(company, updated);
-    setComplaints(updated);
-    setSelected(null);
-    setResolution('');
-    toast.success(`Complaint updated → ${newStatus}`);
+    const updatedRow: CustomerComplaint = {
+      ...cc,
+      status: newStatus,
+      ...(newStatus === 'Resolved' || newStatus === 'Closed'
+        ? { resolution, resolvedAt: now, resolvedBy: actor }
+        : {}),
+    };
+    try {
+      await AsyncSalesService.saveCustomerComplaints([updatedRow]);
+      setComplaints(prev => prev.map(c => (c.id === cc.id ? updatedRow : c)));
+      setSelected(null);
+      setResolution('');
+      toast.success(`Complaint updated → ${newStatus}`);
+    } catch (err: any) {
+      toast.error(`Update failed: ${err?.message || 'unknown error'}`, { duration: 6000 });
+    }
   };
 
   const visible = complaints.filter(c =>

@@ -101,7 +101,8 @@ const TABLE_MAP: Record<string, string> = {
   projects:           'gtk_erp_projects',
   invoices:           'gtk_erp_invoices',
   payment_receipts:   'gtk_erp_payment_receipts',
-  credit_notes:       'gtk_erp_credit_notes',     // Phase-1 (migration 032)
+  credit_notes:       'gtk_erp_credit_notes',           // Phase-1 (migration 032)
+  customer_complaints:'gtk_erp_customer_complaints',    // Phase-3 (migration 034)
   // ── Inventory / Procurement ──
   products:           'gtk_erp_products',
   vendors:            'gtk_erp_vendors',
@@ -429,6 +430,28 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     created_at: c.createdAt||c.created_at||new Date().toISOString(),
     updated_at: c._updatedAt||c.updatedAt||new Date().toISOString(),
     data: c,                                  // forward-compat blob
+  }),
+  // ── Customer Complaints (Phase-3, migration 034) ─────────────────
+  customer_complaints: (c: any) => ({
+    id: c.id,
+    company: c.company||'',
+    date: c.date||null,
+    client_id:   c.clientId||c.client_id||null,
+    client_name: c.clientName||c.client_name||null,
+    invoice_id:  c.invoiceId||c.invoice_id||null,
+    order_no:    c.orderNo||c.order_no||null,
+    category:    c.category||'Other',
+    description: c.description||'',
+    status:      c.status||'Open',
+    priority:    c.priority||'Medium',
+    assigned_to: c.assignedTo||c.assigned_to||null,
+    resolution:  c.resolution||null,
+    resolved_at: c.resolvedAt||c.resolved_at||null,
+    resolved_by: c.resolvedBy||c.resolved_by||null,
+    created_by:  c.createdBy||c.created_by||'',
+    created_at:  c.createdAt||c.created_at||new Date().toISOString(),
+    updated_at:  c._updatedAt||c.updatedAt||new Date().toISOString(),
+    data: c,
   }),
   ncr_events: (e: any) => ({
     id: e.id, company: e.company||'',
@@ -1028,6 +1051,24 @@ const TABLE_PULL: Record<string, (row: any) => any> = {
       createdBy:  r.created_by  ?? base.createdBy,
       createdAt:  r.created_at  ?? base.createdAt,
       amount:     Number(r.amount ?? base.amount ?? 0),
+    };
+  },
+  // ── Customer Complaints (Phase-3, migration 034) ─────────────────
+  customer_complaints: (r: any) => {
+    const base = r.data && typeof r.data === 'object' ? r.data : {};
+    return {
+      ...base,
+      ...r,
+      data: undefined,
+      clientId:   r.client_id   ?? base.clientId,
+      clientName: r.client_name ?? base.clientName,
+      invoiceId:  r.invoice_id  ?? base.invoiceId,
+      orderNo:    r.order_no    ?? base.orderNo,
+      assignedTo: r.assigned_to ?? base.assignedTo,
+      resolvedAt: r.resolved_at ?? base.resolvedAt,
+      resolvedBy: r.resolved_by ?? base.resolvedBy,
+      createdBy:  r.created_by  ?? base.createdBy,
+      createdAt:  r.created_at  ?? base.createdAt,
     };
   },
   ncr_events: (r: any) => ({

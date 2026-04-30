@@ -60,7 +60,8 @@ const SalesOrders: React.FC = () => {
     const [printingReceipt, setPrintingReceipt] = useState<{data: PettyCashEntry, client: string} | null>(null);
     
     // Service Order Logic
-    const [serviceOrderBatches, setServiceOrderBatches] = useState<{vendor: string, pendingSqFt: number, thickness: string}[]>([]);
+    // Phase-3 (3.2): batch carries glassType so vendor rate lookup can match by color.
+    const [serviceOrderBatches, setServiceOrderBatches] = useState<{vendor: string, pendingSqFt: number, thickness: string, glassType?: string}[]>([]);
     const [printingServiceOrder, setPrintingServiceOrder] = useState<PurchaseOrder | null>(null);
 
     // Detail Form State
@@ -236,21 +237,58 @@ const SalesOrders: React.FC = () => {
 
     const handleUpdateOrderDetails = async () => {
         if (!selectedOrder) return;
+
+        // ── Phase-3 (3.5): deliveryDate ISO validation ───────────────────
+        // Audit I5: previously `!!detailForm.deliveryDate` triggered auto-
+        // invoice on ANY non-empty string ("Delivered", "TBD", garbage).
+        // Accept either YYYY-MM-DD (HTML date) or DD-MM-YYYY (Pakistani
+        // convention shown in the placeholder). Anything else is rejected
+        // and the auto-invoice path is skipped (the order still saves).
+        const rawDate = (detailForm.deliveryDate || '').trim();
+        const parseDeliveryDate = (s: string): string | null => {
+            if (!s) return null;
+            // YYYY-MM-DD
+            const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+            if (ymd) {
+                const d = new Date(`${ymd[1]}-${ymd[2]}-${ymd[3]}T00:00:00`);
+                return Number.isFinite(d.getTime()) ? `${ymd[1]}-${ymd[2]}-${ymd[3]}` : null;
+            }
+            // DD-MM-YYYY (or D-M-YYYY)
+            const dmy = /^(\d{1,2})-(\d{1,2})-(\d{4})$/.exec(s);
+            if (dmy) {
+                const dd = dmy[1].padStart(2, '0');
+                const mm = dmy[2].padStart(2, '0');
+                const yyyy = dmy[3];
+                const d = new Date(`${yyyy}-${mm}-${dd}T00:00:00`);
+                return Number.isFinite(d.getTime()) ? `${yyyy}-${mm}-${dd}` : null;
+            }
+            return null;
+        };
+        const validIsoDate = parseDeliveryDate(rawDate);
+        const deliveryFieldFilledButInvalid = !!rawDate && !validIsoDate;
+
         const updatedOrder = {
             ...selectedOrder,
             receivedAmount: Number(detailForm.receivedAmount),
-            actualDeliveryDate: detailForm.deliveryDate,
+            // Store the normalised ISO date when valid; otherwise keep the raw
+            // string so users can still record notes like "Held by client".
+            actualDeliveryDate: validIsoDate ?? rawDate,
             delayReason: detailForm.delayReason,
             delayCategory: detailForm.delayCategory
         };
         // Phase-2 (2.6): per-row save instead of read-modify-write-all
-        SalesService.saveQuotations([updatedOrder]);
-        setSelectedOrder(updatedOrder);
+        SalesService.saveQuotations([updatedOrder as any]);
+        setSelectedOrder(updatedOrder as any);
 
-        // Auto-generate invoice on delivery if not already invoiced
+        // Auto-generate invoice ONLY when we have a real ISO date, the order
+        // isn't already invoiced, and the field isn't garbage.
         const alreadyInvoiced = SalesService.getInvoices().some((i: any) => i.orderId === updatedOrder.id);
-        const deliveryMarked = !!detailForm.deliveryDate;
-        if (deliveryMarked && !alreadyInvoiced) {
+        if (deliveryFieldFilledButInvalid) {
+            toast.warning(
+                `Delivery date "${rawDate}" is not a valid date — order saved but invoice was NOT generated. Use YYYY-MM-DD or DD-MM-YYYY.`,
+                { duration: 8000 }
+            );
+        } else if (validIsoDate && !alreadyInvoiced) {
             try {
                 const result = await generateDeliveryInvoice(updatedOrder as any, company, 0);
                 if (!result.alreadyInvoiced) {
@@ -336,7 +374,11 @@ const SalesOrders: React.FC = () => {
 
         setPostingPayment(true);
         try {
-            const receiptId = `REC-${Date.now().toString().slice(-6)}`;
+            // Phase-3 (3.9): collision-safe receipt id. Audit I10: previous
+            // 6-char timestamp slice could collide on rapid double-click.
+            // Now: full ms timestamp + 4 random hex chars (~16M combinations).
+            const _rand4 = Math.floor(Math.random() * 0xffff).toString(16).padStart(4, '0');
+            const receiptId = `REC-${Date.now()}-${_rand4}`;
             const txId      = `GL-${receiptId}`;
 
             // ── Cash/Bank account by method ──
@@ -539,23 +581,51 @@ const SalesOrders: React.FC = () => {
         const pendingBatches: {vendor: string, pendingSqFt: number, thickness: string}[] = [];
         const dispatchMap: Record<string, Record<string, number>> = {};
         
+        // Phase-3 (3.1 + 3.2): track sqft + glass color/type per (vendor, thickness)
+        // so we charge tempering vendors on RAW sqft (width×height in feet) not the
+        // 6"/12" billing-rounded sqft, and so we look up the right per-color rate.
+        // Audit I1: Glassco was over-paying vendors ~5–10% per dispatch using
+        // billing sqft. Audit I2: Tinted/Mirror were silently billed at Clear rate.
+        const dispatchSqftMap: Record<string, Record<string, number>> = {};
+        const dispatchTypeMap: Record<string, Record<string, string>> = {};
+
         dispatchedPieces.forEach(p => {
             const trip = challans.find(c => c.id === p.dispatchId);
             const vendor = trip?.plantName || 'Unknown';
-            const item = orderContext.items[p.itemIndex];
-            const thick = item?.glassSize || '12mm'; 
-            const sqFt = item?.totalSqFt / (item?.qty || 1); 
+            const item: any = orderContext.items[p.itemIndex];
+            const thick = item?.glassSize || '12mm';
+            // 3.1: raw sqft from real dimensions (inches → ft²) — never billing.
+            const rawWidthIn  = Number(item?.width)  || 0;
+            const rawHeightIn = Number(item?.height) || 0;
+            const rawSqFtPerPiece = (rawWidthIn * rawHeightIn) / 144;
+            const sqFt = rawSqFtPerPiece > 0
+                ? rawSqFtPerPiece
+                : ((Number(item?.totalSqFt) || 0) / Math.max(1, Number(item?.qty) || 1));   // safety fallback
 
-            if (!dispatchMap[vendor]) dispatchMap[vendor] = {};
-            dispatchMap[vendor][thick] = (dispatchMap[vendor][thick] || 0) + sqFt;
+            // 3.2: capture glass type/color so confirmIssueServiceOrder can match the
+            // vendor rate row for Tinted / Mirror / Reflective separately from Clear.
+            const glassType = (item?.glassType || 'Plain').toString();
+            const glassColor = (item?.glassColor || '').toString();
+            const typeKey = glassColor || glassType;
+
+            if (!dispatchSqftMap[vendor]) dispatchSqftMap[vendor] = {};
+            if (!dispatchTypeMap[vendor]) dispatchTypeMap[vendor] = {};
+            dispatchSqftMap[vendor][thick] = (dispatchSqftMap[vendor][thick] || 0) + sqFt;
+            // First non-empty wins — typically a vendor batch is single-color.
+            if (!dispatchTypeMap[vendor][thick]) dispatchTypeMap[vendor][thick] = typeKey;
         });
 
-        Object.entries(dispatchMap).forEach(([vendor, thickMap]) => {
+        Object.entries(dispatchSqftMap).forEach(([vendor, thickMap]) => {
             Object.entries(thickMap).forEach(([thick, totalSqFt]) => {
                 const billed = billedMap[vendor]?.[thick] || 0;
                 const pending = totalSqFt - billed;
-                if (pending > 0.1) { 
-                    pendingBatches.push({ vendor, thickness: thick, pendingSqFt: pending });
+                if (pending > 0.1) {
+                    pendingBatches.push({
+                        vendor,
+                        thickness: thick,
+                        pendingSqFt: pending,
+                        glassType: dispatchTypeMap[vendor]?.[thick] || 'Plain',
+                    } as any);
                 }
             });
         });
@@ -574,26 +644,46 @@ const SalesOrders: React.FC = () => {
         setIsServiceOrderModalOpen(true);
     };
 
-    const confirmIssueServiceOrder = (batch: {vendor: string, pendingSqFt: number, thickness: string}) => {
+    const confirmIssueServiceOrder = (batch: {vendor: string, pendingSqFt: number, thickness: string, glassType?: string}) => {
         // Updated Logic: Find Latest Effective Rate
         const vendor = vendors.find(v => v.name === batch.vendor);
-        
+
         if (!vendor) {
             toast.error(`Vendor "${batch.vendor}" not found in Vendor Registry.`);
             return;
         }
-        
-        const validRates = (vendor.rates || []).filter(r => 
-            r.thickness === batch.thickness && 
-            (r.type === 'All' || r.type === 'Clear')
-        );
+
+        // ── Phase-3 (3.2): rate lookup respects glass color/type ──
+        // Audit I2: previously every dispatch used Clear/All rate even for
+        // Tinted/Mirror/Reflective — silent vendor over- or under-billing.
+        // New tier: try exact-match (glassType / color) → 'All' → 'Clear' fallback.
+        const dispatchType = (batch.glassType || 'Plain').toLowerCase();
+        const sameThickness = (vendor.rates || []).filter(r => r.thickness === batch.thickness);
+        const matchByType = (rType: string) => {
+            const t = (rType || '').toLowerCase();
+            if (t === 'all') return true;
+            if (!dispatchType) return t === 'clear';
+            // Direct color/type match (e.g. "Tinted" / "Mirror" / "Reflective" / "Plain")
+            if (t === dispatchType) return true;
+            // Plain ↔ Clear synonyms
+            if ((t === 'clear' || t === 'plain') && (dispatchType === 'clear' || dispatchType === 'plain')) return true;
+            return false;
+        };
+        let validRates = sameThickness.filter(r => matchByType(r.type));
+        // Fallback: no exact-color rate → fall back to All/Clear so the SO still issues
+        if (validRates.length === 0) {
+            validRates = sameThickness.filter(r => {
+                const t = (r.type || '').toLowerCase();
+                return t === 'all' || t === 'clear' || t === 'plain';
+            });
+        }
 
         validRates.sort((a,b) => new Date(b.effectiveDate || '2000-01-01').getTime() - new Date(a.effectiveDate || '2000-01-01').getTime());
-        
-        const rateObj = validRates[0]; 
-        
+
+        const rateObj = validRates[0];
+
         if (!rateObj || !rateObj.rate) {
-            toast.error(`Rate for ${batch.thickness} is missing in Vendor ${batch.vendor}'s Rate Card. \n\nPlease go to Vendor Network > Registry > Rates to add it.`);
+            toast.error(`Rate for ${batch.thickness} ${batch.glassType || ''} is missing in Vendor ${batch.vendor}'s Rate Card. \n\nPlease go to Vendor Network > Registry > Rates to add it.`);
             return;
         }
 
@@ -1027,11 +1117,13 @@ const SalesOrders: React.FC = () => {
                                 <div key={idx} className="bg-white p-4 rounded-xl border hover:border-rose-300 cursor-pointer shadow-sm flex justify-between items-center" onClick={() => confirmIssueServiceOrder(batch)}>
                                     <div>
                                         <h4 className="font-black text-slate-800 uppercase">{batch.vendor}</h4>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase">{batch.thickness} Tempering</p>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase">
+                                          {batch.thickness} {batch.glassType ? `· ${batch.glassType}` : ''} Tempering
+                                        </p>
                                     </div>
                                     <div className="text-right">
                                         <p className="text-lg font-black text-rose-600">{batch.pendingSqFt.toFixed(2)}</p>
-                                        <p className="text-[9px] font-black text-slate-300 uppercase">Unbilled Sq.Ft</p>
+                                        <p className="text-[9px] font-black text-slate-300 uppercase">Raw Sq.Ft (unbilled)</p>
                                     </div>
                                 </div>
                             ))}

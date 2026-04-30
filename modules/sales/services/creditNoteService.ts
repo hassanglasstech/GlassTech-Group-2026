@@ -21,6 +21,7 @@ import { FinanceService } from '@/modules/finance/services/financeService';
 import { SalesService }   from '@/modules/sales/services/salesService';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { allocateSerial } from '@/modules/sales/services/serialAllocator';
+import { reverseDeliveryCOGS } from '@/modules/procurement/services/glasscoGLService';
 
 // ── CreditNote record type ────────────────────────────────────────────────────
 export interface CreditNote {
@@ -148,6 +149,24 @@ export async function issueCreditNote(params: {
   };
   persistCreditNote(company, cn);
 
+  // ── Phase-3 (3.6): reverse COGS proportionally to the CN amount ──
+  // Audit I6: previously gross profit was overstated forever after a CN
+  // because the COGS posted at delivery was never wound back. Now we
+  // also restore inventory value proportionally.
+  try {
+    reverseDeliveryCOGS({
+      company,
+      invoiceId: invoice.id,
+      reversalAmount: amount,
+      invoiceGrandTotal: Number(invoice.totalAmount) || amount,
+      date: today,
+      reason: `CN ${cnId}`,
+      reversalSuffix: cnId,
+    });
+  } catch (e: any) {
+    console.warn(`[issueCreditNote] COGS reversal skipped for ${cnId}: ${e?.message}`);
+  }
+
   // ── Financial Event ───────────────────────────────────────────────────────
   FinanceService.saveFinancialEvents([
     ...FinanceService.getFinancialEvents(),
@@ -196,6 +215,21 @@ export async function voidInvoice(params: {
         text:   `VOID ${d.text}`,
       })),
     });
+  }
+
+  // ── Phase-3 (3.6): also reverse the COGS entry (full 100%) ──
+  try {
+    reverseDeliveryCOGS({
+      company,
+      invoiceId: invoice.id,
+      reversalAmount: Number(invoice.totalAmount) || 0,
+      invoiceGrandTotal: Number(invoice.totalAmount) || 1,
+      date: today,
+      reason: `Void by ${voidedBy}`,
+      reversalSuffix: voidId,
+    });
+  } catch (e: any) {
+    console.warn(`[voidInvoice] COGS reversal skipped for ${invoice.id}: ${e?.message}`);
   }
 
   // ── Mark invoice Voided (preserve prior status for restore) ──────────────

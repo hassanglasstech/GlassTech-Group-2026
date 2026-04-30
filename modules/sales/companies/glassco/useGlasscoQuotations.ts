@@ -201,24 +201,80 @@ export const useGlasscoQuotations = () => {
         const numericOnly = orderRef.replace(/[^0-9]/g, '');
         const numericPart = numericOnly.slice(-4) || orderRef.slice(-4) || '0000';
 
-        const newPieces: ProductionPiece[] = [];
-        let globalSerialCounter = 1;
-        finalQuo.items.forEach((item, idx) => {
-            if (item.isSection) return;
-            for (let i = 0; i < item.qty; i++) {
-                newPieces.push({
-                    id: `${numericPart}/${globalSerialCounter}`,
-                    orderId: finalOrderNo!,
-                    itemIndex: idx,
-                    specs: `${item.width}x${item.height} ${item.glassSize || '5mm'} ${item.glassType || 'Plain'}`,
-                    status: (finalQuo.isAlreadyDispatched ? 'Delivered' : 'Cut') as any,
-                    lastUpdated: new Date().toISOString(), isRevised: false
-                });
-                globalSerialCounter++;
-            }
+        // ── Phase-3 (3.7): company-scoped piece-id prefix ──
+        // Audit I7: previously `${numericPart}/${n}` shared the 4-digit
+        // tail with other companies' SOs. A Glassco re-approve with the
+        // same last-4 digits would NUKE another company's pieces.
+        const piecePrefix = `GLS-${numericPart}`;
+
+        // ── Phase-3 (3.3): preserve in-progress pieces on re-approve ──
+        // Audit I3: previous `currentPieces.filter(p => !p.id.startsWith(...))`
+        // wiped Tempered / Delivered / QC-Passed pieces. Now: scoped by
+        // orderId (canonical), preserve non-Cut pieces first, fill the
+        // shortfall with new Cut pieces.
+        const piecesForThisOrder = currentPieces.filter(p => (p as any).orderId === finalOrderNo);
+        const otherOrderPieces  = currentPieces.filter(p => (p as any).orderId !== finalOrderNo);
+
+        const existingByIdx: Record<number, ProductionPiece[]> = {};
+        piecesForThisOrder.forEach(p => {
+          const idx = Number((p as any).itemIndex ?? 0);
+          (existingByIdx[idx] ||= []).push(p);
         });
-        const others = currentPieces.filter(p => !p.id.startsWith(`${numericPart}/`));
-        await ProductionService.saveProductionPieces([...others, ...newPieces]);
+
+        const newOrderPieces: ProductionPiece[] = [];
+        let globalSerialCounter = 1;
+
+        finalQuo.items.forEach((item, idx) => {
+          if (item.isSection) return;
+          const desired = Number(item.qty) || 0;
+
+          // Sort: non-Cut (in-progress, valuable) first → consumed first
+          const existing = (existingByIdx[idx] || []).slice().sort((a, b) => {
+            const aIsCut = a.status === 'Cut';
+            const bIsCut = b.status === 'Cut';
+            return aIsCut === bIsCut ? 0 : (aIsCut ? 1 : -1);
+          });
+
+          // Preserve up to `desired` existing pieces (priority: in-progress)
+          const preserved = existing.slice(0, desired);
+          preserved.forEach(p => {
+            newOrderPieces.push(p);
+            // Track highest serial so new pieces don't collide
+            const m = (p.id || '').match(/\/(\d+)$/);
+            if (m) {
+              const n = parseInt(m[1], 10);
+              if (Number.isFinite(n) && n >= globalSerialCounter) globalSerialCounter = n + 1;
+            }
+          });
+
+          // Create new Cut pieces for the shortfall
+          const shortfall = Math.max(0, desired - preserved.length);
+          for (let i = 0; i < shortfall; i++) {
+            newOrderPieces.push({
+              id: `${piecePrefix}/${globalSerialCounter}`,
+              orderId: finalOrderNo!,
+              itemIndex: idx,
+              specs: `${item.width}x${item.height} ${item.glassSize || '5mm'} ${item.glassType || 'Plain'}`,
+              status: (finalQuo.isAlreadyDispatched ? 'Delivered' : 'Cut') as any,
+              lastUpdated: new Date().toISOString(), isRevised: false
+            });
+            globalSerialCounter++;
+          }
+        });
+
+        // Detect orphaned pieces (item removed or qty reduced) — preserve them
+        // and warn the user, never silently delete production work in flight.
+        const keptIds = new Set(newOrderPieces.map(p => p.id));
+        const orphaned = piecesForThisOrder.filter(p => !keptIds.has(p.id));
+        if (orphaned.length > 0) {
+          toast.warning(
+            `${orphaned.length} production piece(s) for ${finalOrderNo} no longer match the quotation (item removed or qty reduced). Preserved — review in Production module.`,
+            { duration: 9000 }
+          );
+          newOrderPieces.push(...orphaned);
+        }
+
+        await ProductionService.saveProductionPieces([...otherOrderPieces, ...newOrderPieces]);
       } catch (pieceErr: any) {
         // Roll back: revert the order to Draft so the user can fix and retry.
         toast.error(
