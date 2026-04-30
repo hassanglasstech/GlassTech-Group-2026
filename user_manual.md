@@ -666,6 +666,180 @@ BUSINESS RULES:
 
 ---
 
-**Total Features Documented: 28**
+## 11. PHASE 1–4 CHANGED FLOWS (April 2026 update)
+
+> **Read me first.** Yeh section sirf un flows pe focus karta hai jo Phase 1–4 update mein BADAL gaye hain. Agar aap pichli release use kar rahay thay, please yeh section parh lo go-live se pehle. Detailed go-live runbook for ops: `docs/PHASE5_GO_LIVE_RUNBOOK.md`.
+
+### FEATURE: GlassCo Quotation Approval — New Behaviour
+MODULE: Sales → Quotations
+COMPANIES: GlassCo
+NAVIGATION: Sales & Orders → Quotations → Approve
+
+**KYA BADLA HAI:**
+- **Atomic serial numbers (Phase-2)** — Serial allocation ab Postgres `allocate_serial(...)` RPC se hota hai. Do users ek waqt par approve karein to bhi same orderNo nahi banega (pehle race-condition tha).
+- **Credit limit hard block (Phase-2)** — Agar client ka outstanding AR + new order total > creditLimit, to Approve **block** ho jayega. Pehle silent `console.warn` thi.
+- **Save quotation FIRST, then pieces (Phase-2)** — Production pieces ab quotation save hone ke BAAD generate hoti hain. Pehle "ghost order" race condition mein pieces silently lost ho jati thin.
+- **Re-approve preserves in-progress pieces (Phase-3)** — Agar SO already approved hai aur aap edit karke phir Approve karte ho, Tempered/Delivered/QC-Passed pieces **preserve** hoti hain. Pehle wipe ho jati thin.
+- **Piece IDs ab company-prefix se start hote hain** — `GLS-1234/1` instead of bare `1234/1`. Cross-company collision khatam.
+
+**STEPS (changed):**
+1. Quotation banao normal way
+2. Approve dabao
+3. Agar credit limit exceed: red toast aayega — Client Master mein limit barhao ya outstanding clear karwao
+4. Approve hone par toast: `Approved as GT-SO-GLS-MMYY-XXXX`
+5. Pieces auto-create: `GLS-XXXX/1, GLS-XXXX/2, ...`
+
+**COMMON ISSUES:**
+- Toast `Credit limit exceeded` aaya = client ka credit limit barhao ya pehle paisay collect karo
+- `Order rolled back to Draft` toast = quotation save ho gaya magar pieces save fail. Production se check karo.
+
+---
+
+### FEATURE: Inline Receipt Posting (Sales Orders Panel)
+MODULE: Sales → Sales Orders → [Open Order]
+COMPANIES: All
+
+**KYA BADLA HAI (Phase-2 — F7 fix):**
+- Pehle "Print Receipt" button sirf print karta tha — actual payment record nahi hota tha. Cash leak ka risk tha.
+- **Ab button** Payment record karta hai + GL entry post karta hai + Receipt print karta hai — sab atomic.
+- New fields: Method (Cash / Bank Transfer / Cheque / Online) + Reference (cheque/txn no.)
+- Button label: **"Record + Print Receipt"** (was "Print Receipt")
+
+**STEPS:**
+1. Sales Orders → order kholo
+2. Received Payment field mein cumulative amount dalo (e.g. agar pehle 50k receive ho chuke aur ab 30k aur le rahe ho, total 80k likho)
+3. Method select karo (default Cash)
+4. Reference dalo (cheque no, txn id — Cash ke liye optional)
+5. **Record + Print Receipt** dabao
+
+**KYA HOTA HAI:**
+- Sirf DELTA amount (new payment) post hoti hai. e.g. pehle 50k tha, ab 80k → sirf 30k post hoga.
+- GL entry: `Dr Cash/Bank — Cr AR` (agar invoice exist karta hai) ya `Dr Cash — Cr Customer Advance Liability` (agar advance hai before invoice)
+- Atomic balance update via `process_payment_receipt` RPC
+- Cash receipts ke liye Petty Cash entry bhi automatically banti hai
+- Receipt print ho jata hai
+
+**COMMON MISTAKES:**
+- Received Amount NA barhana — agar same value rahegi to "nothing to post" toast aayega
+- Invoice balance se zyada amount = "exceeds invoice balance" error → use Credit Note for over-payments
+
+---
+
+### FEATURE: Auto-invoice on Delivery — Date Validation
+MODULE: Sales → Sales Orders
+COMPANIES: GlassCo
+
+**KYA BADLA HAI (Phase-3 — I5 fix):**
+- Pehle Confirm Delivery Date mein "Delivered", "TBD", garbage type karo to invoice silently ban jati thi.
+- **Ab sirf valid date format** acceptable hai: `YYYY-MM-DD` (e.g. `2026-05-30`) ya `DD-MM-YYYY` (e.g. `30-05-2026`)
+- Invalid date = order save ho jata hai magar invoice generate NAHI hoti, warning toast aata hai
+
+**STEPS:**
+1. Sales Order kholo
+2. Confirm Delivery Date mein date type karo (correct format)
+3. Update Order Records dabao
+4. Agar valid: `Invoice GT-INV-GLS-MMYY-XXXX generated` toast
+5. Agar invalid: warning aayega, invoice nahi banegi
+
+---
+
+### FEATURE: Credit Note + COGS Reversal
+MODULE: Finance → Credit Notes
+COMPANIES: All
+
+**KYA BADLA HAI (Phase-3 — I6 fix):**
+- Pehle CN issue karne par sirf Revenue/AR reverse hoti thi. COGS posted at delivery wahi rehta tha — gross profit overstated rehta tha forever.
+- **Ab CN issue par COGS bhi proportionally reverse hoti hai** + inventory store value bhi proportionally restore hoti hai.
+- Same logic Void Invoice par bhi (full 100% reversal).
+- CN serial ab Postgres `allocate_serial` RPC se issue hoti hai (pehle local counter — collision risk).
+
+**STEPS:** (no UI change — backend behavior change hai)
+1. Finance → Credit Notes → Issue against invoice
+2. Amount + Reason + Confirm
+3. ✅ Original GL: `Dr Revenue / Cr AR` reverse → `Dr Revenue (reversed) / Cr AR (reduced)`
+4. ✅ Naya COGS reversal GL: `Dr Inventory / Cr COGS — proportional`
+5. ✅ Inventory store value restored proportionally
+
+---
+
+### FEATURE: Service Order — Vendor Billing (Tempering)
+MODULE: Sales → Sales Orders → Issue Service Order
+COMPANIES: GlassCo
+
+**KYA BADLA HAI (Phase-3 — I1 + I2 fix):**
+- **Raw sqft (I1):** Pehle service order vendor ko BILLING sqft pe charge karti thi (jo 6"/12" rounding aur D/G ×2 multiplier ke saath bigger hota hai). Glassco vendor ko 5–10% extra pay kar rahi thi har dispatch par.
+  - **Ab raw sqft** use hoti hai: `width × height ÷ 144` (real area in feet²).
+- **Glass color match (I2):** Pehle Tinted/Mirror/Reflective glass ko silent Clear/All rate par charge kiya jata tha vendor.
+  - **Ab glass color/type** ke saath rate match hoti hai. Tier: exact color → All → Clear fallback.
+
+**STEPS:** (no UI change — sirf modal label aur PO total badle hain)
+1. Sales Order → Issue Service Order
+2. Modal mein ab **"Raw Sq.Ft (unbilled)"** dikhega (pehle "Unbilled Sq.Ft")
+3. Glass type bhi label par dikhega (e.g. "12mm · Tinted Tempering")
+4. Confirm karo → PO correct rate par banegi
+
+**SETUP REQUIRED:** Vendor → Rate Card mein har glass color ke liye separate row banao (Plain, Tinted, Mirror, Reflective) for each thickness. Agar sirf "All"/"Clear" wali row hai to fallback se kaam chalega magar accuracy kam.
+
+---
+
+### FEATURE: Cutter Scan Station (NEW)
+MODULE: Production → Fabrication → Scan Station
+COMPANIES: GlassCo
+
+**KYA NAYA HAI (Phase-4 — 4.1 wiring):**
+- Yeh module Phase 5 release mein build hua tha lekin kabhi UI mein mount nahi tha. Ab **Fabrication tab ke andar "Scan Station" sub-tab** mein available hai.
+- Cutter sheet tag scan karta hai cut karne se PEHLE → late/missed scan par **NCR-CUT** automatic raise hoti hai.
+- Defective sheet scan ho jaye to per-piece defect assessment prompt aata hai.
+
+**STEPS:**
+1. Production → Fabrication → **Scan Station**
+2. Job order select karo
+3. **Start Cutting Session** dabao
+4. Sheet tag scan karo (barcode reader ya keyboard se type)
+5. Agar cutting kar di bina scan kiye → **Log piece (no scan)** dabao → automatic NCR-CUT raise
+6. Session khatam hone par **Close Session** + scrap sqft + scrap weight enter karo
+
+**REQUIRED:** Sheet tags QR codes ke saath print hoti hain (Phase-4 4.3) — `Procurement → GRN → Print Tags` se scannable QR mil jata hai.
+
+---
+
+### FEATURE: Blind QC (NEW)
+MODULE: Production → QC & Dispatch → Blind QC
+COMPANIES: GlassCo
+
+**KYA NAYA HAI (Phase-4 — 4.2 wiring):**
+- Yeh module bhi pehle build tha lekin orphan code tha. Ab **QC & Dispatch tab ke andar "Blind QC" sub-tab** par mil jayega.
+- **Blind check:** QC walay ko cutter ka defect assessment NAHI dikhta until QC apna decision submit kare. Bias kam hota hai.
+- **Random 10% mandatory:** System randomly 10% pieces ko mandatory check karne ke liye flag karta hai.
+- **Cutter conflict NCR:** Agar cutter ne piece OK marked kiya magar QC ne defect find kiya — DOUBLE NCR (cutter + QC dono ke liye).
+
+**STEPS:**
+1. Production → QC & Dispatch → **Blind QC**
+2. Pending pieces ki list aayegi (mandatory pieces flagged)
+3. Each piece: Pass / Fail decision
+4. Fail karne par defect code (QC-01 to QC-07) + comment
+5. Hole/Notch pieces ke liye actual measurement enter karo
+6. **Submit QC Decision**
+7. Cutter ka assessment ab visible hoga (agar conflict → NCR raise)
+
+---
+
+### FEATURE: QR Codes on Prints
+MODULE: All prints (Sheet Tag, Job Card, Remnant Tag)
+COMPANIES: GlassCo
+
+**KYA NAYA HAI (Phase-4 — 4.3 + 4.4):**
+- **Sheet Tag print** par 16 mm ka scannable QR (encodes full tag id e.g. `GLS-5MM-0326-001-01`)
+- **Remnant Tag print** par 14 mm QR
+- **Job Card print:**
+  - Top-right corner par 22 mm job-level QR (`JOB:<id>`) — supervisor scan karke job kholay
+  - Har piece row ke saath 11 mm per-piece QR (`PIECE:<id>`) — QC/dispatch scan station ke liye
+
+**USAGE:** Mobile camera se scan karo — QR raw text return karta hai. Future enhancement: deep-link `app://piece/PIECE:<id>` style routing.
+
+---
+
+**Total Features Documented: 36**
 **Modules Covered: 10**
 **Companies Covered: 5 (GlassCo, GTK, GTI, Nippon, Factory)**
+**Last Update: April 2026 — Phase 5 (go-live)**
