@@ -1,7 +1,10 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Company, Quotation, Client, ProductionPiece, TemperingDispatch, PurchaseOrder, PettyCashEntry, Product, Vendor } from '../../shared/types';
+import { Company, Quotation, Client, ProductionPiece, TemperingDispatch, PurchaseOrder, PettyCashEntry, Product, Vendor, LedgerTransaction } from '../../shared/types';
+import { PaymentReceipt } from '../../finance/types/finance';
 import { SalesService } from '../services/salesService';
+import { AsyncSalesService } from '../services/asyncSalesService';
+import { FinanceService } from '../../finance/services/financeService';
 import { generateDeliveryInvoice } from '../services/deliveryInvoiceService';
 import { ProductionService } from '../../production/services/productionService';
 import { InventoryService } from '../../procurement/services/inventoryService';
@@ -67,6 +70,11 @@ const SalesOrders: React.FC = () => {
         delayReason: '',
         delayCategory: '' as 'Internal' | 'Outsourcing' | 'Client' | ''
     });
+
+    // Phase-2 (2.3): payment posting state — was missing, button only printed.
+    const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Bank Transfer' | 'Cheque' | 'Online'>('Cash');
+    const [paymentReference, setPaymentReference] = useState('');
+    const [postingPayment, setPostingPayment] = useState(false);
 
     const [nipponPrintType, setNipponPrintType] = useState<'KinLong' | 'Glasstech' | 'General'>('Glasstech');
 
@@ -226,9 +234,8 @@ const SalesOrders: React.FC = () => {
         });
     };
 
-    const handleUpdateOrderDetails = () => {
+    const handleUpdateOrderDetails = async () => {
         if (!selectedOrder) return;
-        const all = SalesService.getQuotations();
         const updatedOrder = {
             ...selectedOrder,
             receivedAmount: Number(detailForm.receivedAmount),
@@ -236,8 +243,8 @@ const SalesOrders: React.FC = () => {
             delayReason: detailForm.delayReason,
             delayCategory: detailForm.delayCategory
         };
-        const next = all.map(q => q.id === selectedOrder.id ? updatedOrder : q);
-        SalesService.saveQuotations(next);
+        // Phase-2 (2.6): per-row save instead of read-modify-write-all
+        SalesService.saveQuotations([updatedOrder]);
         setSelectedOrder(updatedOrder);
 
         // Auto-generate invoice on delivery if not already invoiced
@@ -245,12 +252,13 @@ const SalesOrders: React.FC = () => {
         const deliveryMarked = !!detailForm.deliveryDate;
         if (deliveryMarked && !alreadyInvoiced) {
             try {
-                const result = generateDeliveryInvoice(updatedOrder as any, company, 0);
+                const result = await generateDeliveryInvoice(updatedOrder as any, company, 0);
                 if (!result.alreadyInvoiced) {
                     toast.success(`Invoice ${result.invoiceId} generated — PKR ${result.grandTotal.toLocaleString('en-PK')}`);
                 }
             } catch (err: any) {
-                toast.error(`Invoice generation failed: ${err?.message || 'unknown error'}`);
+                // Phase-2 F3: credit-limit failures now THROW — surface them so user knows why invoice didn't post.
+                toast.error(`Invoice generation failed: ${err?.message || 'unknown error'}`, { duration: 8000 });
             }
         }
 
@@ -276,33 +284,202 @@ const SalesOrders: React.FC = () => {
         }, 1200);
     };
 
-    const handlePrintReceipt = () => {
-        if (!selectedOrder || detailForm.receivedAmount <= 0) {
-            toast.error("No received amount to print.");
+    // ── Phase-2 (2.3): Record + Print Receipt — was a print-only stub. ──
+    // Audit F7: previous implementation built a PettyCashEntry, printed it,
+    // and discarded — physical cash could be received and "official receipt"
+    // handed over while the books showed zero collection (revenue leak).
+    //
+    // New flow (atomic):
+    //   1. Compute delta payment (only the increment over previously
+    //      recorded receivedAmount is posted as a new receipt).
+    //   2. Build/post GL: Dr Cash/Bank — Cr AR (if invoiced) OR
+    //      Cr Customer Advance Liability (if no invoice yet).
+    //   3. If invoiced: persist PaymentReceipt via AsyncSalesService
+    //      (uses process_payment_receipt RPC for atomic balance/status).
+    //      Update Invoice.payments[].
+    //   4. Update Quotation.receivedAmount (per-row save, 2.6).
+    //   5. For Cash: append a Petty Cash entry so cash drawer balance
+    //      reconciles.
+    //   6. Print the receipt.
+    const handlePrintReceipt = async () => {
+        if (!selectedOrder) return;
+        if (detailForm.receivedAmount <= 0) {
+            toast.error("Enter a positive Received Amount before printing the receipt.");
             return;
         }
-        const client = clients.find(c => c.id === selectedOrder.clientId);
-        const existingInvoice = SalesService.getInvoices().find((i: any) => i.orderId === selectedOrder.id);
 
-        const receiptEntry: PettyCashEntry = {
-            id: existingInvoice?.id || `RCP-${Date.now().toString().slice(-6)}`,
-            company,
-            date: new Date().toISOString().split('T')[0],
-            description: `Payment received — Order ${selectedOrder.orderNo || selectedOrder.id}`,
-            amount: detailForm.receivedAmount,
-            type: 'Receipt',
-            balance: existingInvoice ? (existingInvoice.totalAmount - detailForm.receivedAmount) : 0,
-            recordedBy: 'Sales Desk',
-            status: 'Posted',
-            businessTransaction: 'Customer Payment',
-            referenceDoc: selectedOrder.orderNo || selectedOrder.id,
-        };
+        const previouslyReceived = Number(selectedOrder.receivedAmount || 0);
+        const newPayment = Number(detailForm.receivedAmount) - previouslyReceived;
+        if (newPayment <= 0) {
+            toast.error(`Received Amount (PKR ${detailForm.receivedAmount.toLocaleString('en-PK')}) is not greater than already-recorded (PKR ${previouslyReceived.toLocaleString('en-PK')}). Nothing to post.`);
+            return;
+        }
 
-        setPrintingReceipt({ data: receiptEntry, client: client?.name || 'Walk-in Customer' });
-        setTimeout(() => {
-            window.print();
-            setPrintingReceipt(null);
-        }, 500);
+        const client       = clients.find(c => c.id === selectedOrder.clientId);
+        const clientName   = client?.name || 'Walk-in Customer';
+        const today        = new Date().toISOString().split('T')[0];
+        const orderRef     = selectedOrder.orderNo || selectedOrder.id;
+        const allInvoices  = SalesService.getInvoices();
+        const existingInvoice: any = allInvoices.find((i: any) => i.orderId === selectedOrder.id);
+
+        // Validate we don't over-pay the invoice (PKR 1 tolerance)
+        if (existingInvoice) {
+            const invBalance = Number(existingInvoice.balance || 0);
+            if (newPayment > invBalance + 1) {
+                toast.error(
+                    `Payment PKR ${newPayment.toLocaleString('en-PK')} exceeds invoice balance PKR ${invBalance.toLocaleString('en-PK')} on ${existingInvoice.id}. Issue a credit note for over-payments.`,
+                    { duration: 8000 }
+                );
+                return;
+            }
+        }
+
+        setPostingPayment(true);
+        try {
+            const receiptId = `REC-${Date.now().toString().slice(-6)}`;
+            const txId      = `GL-${receiptId}`;
+
+            // ── Cash/Bank account by method ──
+            const METHOD_MAP: Record<string, { code: string; name: string }> = {
+                'Cash':          { code: '1111', name: 'CASH IN HAND' },
+                'Bank Transfer': { code: '1112', name: 'CASH AT BANK' },
+                'Cheque':        { code: '1112', name: 'CASH AT BANK' },
+                'Online':        { code: '1113', name: 'ONLINE COLLECTIONS' },
+            };
+            const m            = METHOD_MAP[paymentMethod] || METHOD_MAP['Cash'];
+            const cashParent   = FinanceService.ensureAccount(company, 'ASSETS',          1, null,             'Asset', '10');
+            const cashCurrent  = FinanceService.ensureAccount(company, 'CURRENT ASSETS',  2, cashParent.id,    'Asset', '11');
+            const cashBank     = FinanceService.ensureAccount(company, 'CASH & BANK',     3, cashCurrent.id,   'Asset', '111');
+            const methodParent = FinanceService.ensureAccount(company, m.name,            4, cashBank.id,      'Asset', m.code);
+            const cashAcc      = FinanceService.ensureAccount(company, `${m.name} — MAIN`, 5, methodParent.id, 'Asset', `${m.code}0`);
+
+            // ── Credit side: AR (invoiced) OR Customer Advance Liability (no invoice yet) ──
+            let creditAccId: string;
+            let creditText:  string;
+            if (existingInvoice) {
+                const arParent  = FinanceService.ensureAccount(company, 'ASSETS',              1, null,           'Asset', '10');
+                const arCurrent = FinanceService.ensureAccount(company, 'CURRENT ASSETS',     2, arParent.id,    'Asset', '11');
+                const arTrade   = FinanceService.ensureAccount(company, 'TRADE RECEIVABLES',  3, arCurrent.id,   'Asset', '122');
+                const arControl = FinanceService.ensureAccount(company, 'CUSTOMERS CONTROL',  4, arTrade.id,     'Asset', '1221');
+                const clientAR  = FinanceService.ensureAccount(company, clientName.toUpperCase(), 5, arControl.id, 'Asset', '12210');
+                creditAccId = clientAR.id;
+                creditText  = `AR settled: ${clientName} — ${existingInvoice.id}`;
+            } else {
+                const liabParent = FinanceService.ensureAccount(company, 'LIABILITIES',         1, null,           'Liability', '20');
+                const liabCurr   = FinanceService.ensureAccount(company, 'CURRENT LIABILITIES', 2, liabParent.id,  'Liability', '22');
+                const advance    = FinanceService.ensureAccount(company, 'CUSTOMER ADVANCES',   3, liabCurr.id,    'Liability', '223');
+                const clientAdv  = FinanceService.ensureAccount(company, `${clientName.toUpperCase()} — ADVANCE`, 4, advance.id, 'Liability', '2230');
+                creditAccId = clientAdv.id;
+                creditText  = `Customer advance: ${clientName} — ${orderRef}`;
+            }
+
+            // ── Post GL entry (Posted, not Parked — receipts are immediate cash) ──
+            const glTx: LedgerTransaction = {
+                id: txId, company, docType: 'DZ',
+                docDate: today, date: today,
+                description: `RECEIPT ${receiptId}: ${clientName} — ${orderRef} via ${paymentMethod}${paymentReference ? ' (' + paymentReference + ')' : ''}`,
+                referenceId: receiptId, status: 'Posted',
+                reqId: selectedOrder.id,
+                details: [
+                    { accountId: cashAcc.id,  debit: newPayment, credit: 0,          text: `${paymentMethod} received${paymentReference ? ': ' + paymentReference : ''}` },
+                    { accountId: creditAccId, debit: 0,          credit: newPayment, text: creditText },
+                ],
+            };
+            FinanceService.saveLedger([...FinanceService.getLedger(), glTx]);
+
+            // ── Append Petty Cash entry for Cash receipts (drawer reconciliation) ──
+            if (paymentMethod === 'Cash') {
+                const cashEntries = FinanceService.getPettyCashEntries();
+                const lastBalance = cashEntries
+                    .filter((e: any) => e.company === company)
+                    .sort((a: any, b: any) => String(b.id).localeCompare(String(a.id)))[0]?.balance || 0;
+                FinanceService.savePettyCashEntries([
+                    ...cashEntries,
+                    {
+                        id: `CJ-${receiptId}`, company, date: today,
+                        description: `Cash received: ${clientName} — ${orderRef}`,
+                        type: 'Receipt', amount: newPayment, balance: lastBalance + newPayment,
+                        recordedBy: 'Sales Desk', status: 'Posted',
+                        glAccountId: cashAcc.id, businessTransaction: 'Customer Payment', referenceDoc: receiptId,
+                    } as any,
+                ]);
+            }
+
+            // ── Persist PaymentReceipt + update invoice (atomic via RPC) ──
+            if (existingInvoice) {
+                const payment: PaymentReceipt = {
+                    id: receiptId, invoiceId: existingInvoice.id, date: today,
+                    amount: newPayment, method: paymentMethod, reference: paymentReference, glTxId: txId,
+                };
+                await AsyncSalesService.savePaymentReceipts([payment]);
+
+                // Mirror invoice balance/status locally so UI reflects immediately
+                const newReceived = Number(existingInvoice.receivedAmount || 0) + newPayment;
+                const newBalance  = Number(existingInvoice.totalAmount) - newReceived;
+                const newStatus   = newBalance <= 0 ? 'Paid' : 'Partial';
+                SalesService.saveInvoices([{
+                    ...existingInvoice,
+                    receivedAmount: newReceived,
+                    balance:        Math.max(0, newBalance),
+                    status:         newStatus,
+                    payments:       [...(existingInvoice.payments || []), payment],
+                }]);
+            }
+
+            // ── Financial Event registry entry ──
+            FinanceService.saveFinancialEvents([
+                ...FinanceService.getFinancialEvents(),
+                {
+                    id: `EVT-${receiptId}`, company, date: today,
+                    sourceModule: 'Sales',
+                    description: `Payment received: ${clientName} — PKR ${newPayment.toLocaleString('en-PK')} via ${paymentMethod}`,
+                    amount: newPayment, referenceId: receiptId, status: 'Posted',
+                } as any,
+            ]);
+
+            // ── Update Quotation.receivedAmount (per-row save 2.6) ──
+            const updatedOrder = { ...selectedOrder, receivedAmount: Number(detailForm.receivedAmount) };
+            SalesService.saveQuotations([updatedOrder as any]);
+            setSelectedOrder(updatedOrder);
+
+            // ── Build & print the receipt ──
+            const receiptEntry: PettyCashEntry = {
+                id: receiptId,
+                company, date: today,
+                description: `Payment received — Order ${orderRef}${paymentReference ? ' — Ref: ' + paymentReference : ''}`,
+                amount: newPayment,
+                type: 'Receipt',
+                balance: existingInvoice
+                    ? Math.max(0, Number(existingInvoice.totalAmount) - (Number(existingInvoice.receivedAmount || 0) + newPayment))
+                    : 0,
+                recordedBy: 'Sales Desk',
+                status: 'Posted',
+                businessTransaction: 'Customer Payment',
+                referenceDoc: orderRef,
+            };
+
+            setPrintingReceipt({ data: receiptEntry, client: clientName });
+            setPaymentReference('');                       // clear for next entry
+
+            toast.success(
+                `Receipt ${receiptId} posted — PKR ${newPayment.toLocaleString('en-PK')} via ${paymentMethod}` +
+                (existingInvoice
+                    ? `. Invoice balance: PKR ${Math.max(0, Number(existingInvoice.totalAmount) - (Number(existingInvoice.receivedAmount || 0) + newPayment)).toLocaleString('en-PK')}`
+                    : ' — held as Customer Advance until invoice is generated.'),
+                { duration: 7000 }
+            );
+            refreshData();
+
+            setTimeout(() => {
+                window.print();
+                setPrintingReceipt(null);
+            }, 500);
+        } catch (err: any) {
+            toast.error(`Receipt posting failed: ${err?.message || 'unknown error'}`, { duration: 8000 });
+            console.error('[handlePrintReceipt] failed:', err);
+        } finally {
+            setPostingPayment(false);
+        }
     };
 
     // --- SERVICE ORDER LOGIC ---
@@ -689,26 +866,47 @@ const SalesOrders: React.FC = () => {
 
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Received Payment (Advance/Bal)</label>
-                                        <div className="flex space-x-2">
-                                            <div className="relative flex-1">
-                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-black text-slate-300">PKR</span>
-                                                <input 
-                                                    type="number" 
-                                                    className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-xl text-emerald-600 outline-none focus:border-indigo-500 transition-all"
-                                                    value={detailForm.receivedAmount || ''}
-                                                    onChange={e => setDetailForm({...detailForm, receivedAmount: Number(e.target.value)})}
-                                                    placeholder="0"
-                                                />
-                                            </div>
-                                            <button 
-                                                onClick={handlePrintReceipt}
-                                                disabled={detailForm.receivedAmount <= 0}
-                                                className="bg-emerald-50 text-emerald-600 border-2 border-emerald-100 rounded-2xl px-3 hover:bg-emerald-100 transition-all disabled:opacity-50"
-                                                title="Print Official Receipt"
-                                            >
-                                                <Receipt size={20}/>
-                                            </button>
+                                        <div className="relative">
+                                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-black text-slate-300">PKR</span>
+                                            <input
+                                                type="number"
+                                                className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-xl text-emerald-600 outline-none focus:border-indigo-500 transition-all"
+                                                value={detailForm.receivedAmount || ''}
+                                                onChange={e => setDetailForm({...detailForm, receivedAmount: Number(e.target.value)})}
+                                                placeholder="0"
+                                            />
                                         </div>
+                                        {/* Phase-2 (2.3): payment method + reference for the new receipt to be posted */}
+                                        <div className="grid grid-cols-2 gap-2 pt-1">
+                                            <select
+                                                className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs text-slate-800 outline-none focus:border-indigo-500"
+                                                value={paymentMethod}
+                                                onChange={e => setPaymentMethod(e.target.value as any)}
+                                                disabled={postingPayment}
+                                            >
+                                                <option value="Cash">Cash</option>
+                                                <option value="Bank Transfer">Bank Transfer</option>
+                                                <option value="Cheque">Cheque</option>
+                                                <option value="Online">Online</option>
+                                            </select>
+                                            <input
+                                                type="text"
+                                                className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs text-slate-800 outline-none focus:border-indigo-500 placeholder:text-[10px] placeholder:font-normal placeholder:text-slate-400"
+                                                value={paymentReference}
+                                                onChange={e => setPaymentReference(e.target.value)}
+                                                placeholder={paymentMethod === 'Cash' ? 'Reference (optional)' : 'Cheque/TXN no.'}
+                                                disabled={postingPayment}
+                                            />
+                                        </div>
+                                        <button
+                                            onClick={handlePrintReceipt}
+                                            disabled={detailForm.receivedAmount <= 0 || postingPayment}
+                                            className="w-full bg-emerald-600 text-white border-2 border-emerald-600 rounded-2xl py-3 font-black uppercase text-xs tracking-widest hover:bg-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                                            title="Post Payment + GL Entry + Print Receipt"
+                                        >
+                                            <Receipt size={16}/>
+                                            <span>{postingPayment ? 'Posting…' : 'Record + Print Receipt'}</span>
+                                        </button>
                                     </div>
 
                                     <div className={`p-4 rounded-2xl border flex justify-between items-center transition-all ${balance <= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>

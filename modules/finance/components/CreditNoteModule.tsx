@@ -69,7 +69,7 @@ const CreditNoteModule: React.FC<Props> = ({ company }) => {
 
     setSaving(true);
     try {
-      const cn = issueCreditNote({ invoice: selInvoice, amount: amt, reason: finalReason, company, createdBy: actor });
+      const cn = await issueCreditNote({ invoice: selInvoice, amount: amt, reason: finalReason, company, createdBy: actor });
       toast.success(`Credit Note ${cn.id} issued — PKR ${amt.toLocaleString()} credited.`);
       setShowForm(false);
       setSelInvoiceId(''); setAmount(''); setReason(REASONS[0]); setCustomReason('');

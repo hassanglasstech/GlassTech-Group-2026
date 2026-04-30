@@ -20,6 +20,7 @@ import { Invoice }  from '@/modules/finance/types/finance';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { SalesService }   from '@/modules/sales/services/salesService';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
+import { allocateSerial } from '@/modules/sales/services/serialAllocator';
 
 // ── CreditNote record type ────────────────────────────────────────────────────
 export interface CreditNote {
@@ -38,13 +39,13 @@ export interface CreditNote {
   createdAt:   string;
 }
 
-// ── Sequential CN numbering ───────────────────────────────────────────────────
-const getNextCNNumber = (company: Company): string => {
+// ── Sequential CN numbering (Phase-2: atomic via Postgres allocate_serial) ──
+// RC-9 fix: was a pure local counter with zero collision protection. Now
+// issued by the same RPC that protects orderNo and invoice numbers.
+const getNextCNNumber = async (company: Company): Promise<string> => {
   const year = new Date().getFullYear();
-  const key  = `gtk_erp_cn_seq_${company}_${year}`;
-  const next = parseInt(localStorage.getItem(key) || '0', 10) + 1;
-  localStorage.setItem(key, String(next));
-  return `CN-${company.substring(0, 3).toUpperCase()}-${year}-${String(next).padStart(4, '0')}`;
+  const seq  = await allocateSerial(company, 'CN', year, 1);
+  return `CN-${company.substring(0, 3).toUpperCase()}-${year}-${String(seq).padStart(4, '0')}`;
 };
 
 // ── localStorage helpers (kept for legacy reads — Supabase is source of truth) ──
@@ -78,19 +79,19 @@ const persistCreditNote = (company: Company, cn: CreditNote): void => {
 };
 
 // ── Issue Credit Note ─────────────────────────────────────────────────────────
-export function issueCreditNote(params: {
+export async function issueCreditNote(params: {
   invoice:   Invoice;
   amount:    number;
   reason:    string;
   company:   Company;
   createdBy: string;
-}): CreditNote {
+}): Promise<CreditNote> {
   const { invoice, amount, reason, company, createdBy } = params;
 
   if (amount <= 0)              throw new Error('Credit note amount must be positive.');
   if (amount > invoice.balance) throw new Error(`Amount (${amount}) exceeds outstanding balance (${invoice.balance}).`);
 
-  const cnId  = getNextCNNumber(company);
+  const cnId  = await getNextCNNumber(company);
   const txId  = `GL-${cnId}`;
   const today = new Date().toISOString().split('T')[0];
 

@@ -162,7 +162,7 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
     setGstModalOrder(order);
   };
 
-  const confirmGenerateInvoice = () => {
+  const confirmGenerateInvoice = async () => {
     if (!gstModalOrder) return;
     const client = clients.find((c: any) => c.id === gstModalOrder.clientId);
     if (client) {
@@ -179,16 +179,17 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
       }
     }
     try {
-      const result = generateDeliveryInvoice(gstModalOrder, company, gstPercent);
+      const result = await generateDeliveryInvoice(gstModalOrder, company, gstPercent);
       setGstModalOrder(null);
       refreshData();
       toast.success(
         `Invoice ${result.invoiceId} — PKR ${result.grandTotal.toLocaleString('en-PK')} — Posted to GL. AR: ${result.clientName}`,
         { duration: 6000 }
       );
-    } catch (err) {
+    } catch (err: any) {
       console.error('[BillingHub] Invoice generation failed:', err);
-      toast.error('Invoice generation failed.');
+      // Phase-2 F3: surface credit-limit / validation errors instead of swallowing.
+      toast.error(err?.message || 'Invoice generation failed.', { duration: 8000 });
     }
   };
 

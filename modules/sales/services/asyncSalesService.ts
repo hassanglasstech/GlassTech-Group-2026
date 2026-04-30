@@ -26,6 +26,46 @@ const KEYS = {
   PROJECTS: 'gtk_erp_projects',
   VENDORS: 'gtk_erp_vendors',
   CREDIT_NOTES: 'gtk_erp_credit_notes',
+  INVOICES: 'gtk_erp_invoices',
+  PAYMENT_RECEIPTS: 'gtk_erp_payment_receipts',
+};
+
+// ── Phase-2 (2.6): per-row merge save helper ──────────────────────────
+// Replaces the previous "filter all + save all" pattern that caused
+// concurrent writers (multi-tab / multi-device) to overwrite each other.
+// Now: callers pass ONLY the rows being changed; existing localStorage
+// rows are preserved by id-keyed merge.
+const _mergeIntoLocal = <T extends { id: string }>(key: string, incoming: T[]): T[] => {
+  let existing: T[] = [];
+  try { existing = safeParse(key) as T[]; } catch { existing = []; }
+  const idMap = new Map<string, T>();
+  for (const row of existing) if (row && row.id) idMap.set(row.id, row);
+  for (const row of incoming) if (row && row.id) idMap.set(row.id, row);
+  const merged = Array.from(idMap.values());
+  safeSave(key, merged);
+  return merged;
+};
+
+// ── Phase-2 (2.6): generic per-row delete (cloud + local) ─────────────
+const _deleteRow = async (table: string, localKey: string, id: string): Promise<void> => {
+  // Local delete first
+  try {
+    const existing = safeParse(localKey) as Array<{ id: string }>;
+    safeSave(localKey, existing.filter((r) => r.id !== id));
+  } catch (e: any) {
+    console.warn(`[AsyncSalesService] _deleteRow local prune failed for ${table}/${id}: ${e?.message}`);
+  }
+  // Cloud delete
+  try {
+    const { error } = await supabase.from(table).delete().eq('id', id);
+    if (error) {
+      Logger.error('Sales', `delete ${table}/${id} cloud failed`, error);
+      _queueRetry(table);
+    }
+  } catch (err: any) {
+    Logger.error('Sales', `delete ${table}/${id} exception`, err);
+    _queueRetry(table);
+  }
 };
 
 // Simulate network delay for async operations
@@ -71,8 +111,8 @@ export const AsyncSalesService = {
     }
   },
   saveClients: async (data: Client[]): Promise<void> => {
-    // Always save locally first
-    safeSave(KEYS.CLIENTS, data);
+    // Phase-2 (2.6): per-row merge save (preserves siblings)
+    _mergeIntoLocal<Client>(KEYS.CLIENTS, data);
     // Upsert to Supabase (snake_case mapping + JSONB blob for forward-compat)
     try {
       const rows = data.map((c: any) => ({
@@ -90,15 +130,21 @@ export const AsyncSalesService = {
         created_at: c.createdAt ?? c.created_at ?? new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }));
-      const { error } = await supabase.from('clients').upsert(rows, { onConflict: 'id' });
-      if (error) {
-        console.error('[AsyncSalesService] saveClients Supabase error:', error.message);
-        _queueRetry('clients');                                   // D5: queue for retry
+      if (rows.length > 0) {
+        const { error } = await supabase.from('clients').upsert(rows, { onConflict: 'id' });
+        if (error) {
+          console.error('[AsyncSalesService] saveClients Supabase error:', error.message);
+          _queueRetry('clients');                                   // D5: queue for retry
+        }
       }
     } catch (err: any) {
       console.error('[AsyncSalesService] saveClients exception:', err.message);
       _queueRetry('clients');
     }
+  },
+
+  deleteClient: async (id: string): Promise<void> => {
+    await _deleteRow('clients', KEYS.CLIENTS, id);
   },
 
   getProducts: async (): Promise<Product[]> => {
@@ -257,6 +303,8 @@ export const AsyncSalesService = {
     }
   },
   saveQuotations: async (data: Quotation[]): Promise<void> => {
+    // Phase-2 (2.6): caller may pass ONLY the rows being changed; we
+    // merge into existing localStorage by id rather than overwriting.
     // SAL-1: server-side discount cap — last line of defence before DB write.
     for (const q of data) {
       const subTotal = ((q as any).items ?? []).reduce((s: number, i: any) => s + (Number(i.amount) || 0), 0);
@@ -267,6 +315,9 @@ export const AsyncSalesService = {
       if (subTotal > 0 && discAmt > subTotal)
         throw new Error(`SAL-1: Discount amount PKR ${discAmt} exceeds subtotal PKR ${subTotal} on quotation ${q.id}`);
     }
+
+    // 2.6: merge incoming rows into existing localStorage (preserves siblings)
+    _mergeIntoLocal<Quotation>(KEYS.QUOTATIONS, data);
 
     try {
       // D7: Dual-write — JSONB `data` (zero fields lost) AND flat columns
@@ -300,7 +351,7 @@ export const AsyncSalesService = {
         updated_at:             new Date().toISOString(),
       }));
 
-      if (supabase) {
+      if (supabase && mapped.length > 0) {
         const { error } = await supabase.from('quotations').upsert(mapped, { onConflict: 'id' });
         if (error) {
           console.error('[AsyncSalesService] Supabase Error:', error.message);
@@ -310,13 +361,14 @@ export const AsyncSalesService = {
           toast.success('Synced to Cloud', { id: 'sync-success' });
         }
       }
-
-      safeSave(KEYS.QUOTATIONS, data);
     } catch (err: any) {
       console.error('[AsyncSalesService] saveQuotations exception:', err.message);
-      safeSave(KEYS.QUOTATIONS, data);
       _queueRetry('quotations');
     }
+  },
+
+  deleteQuotation: async (id: string): Promise<void> => {
+    await _deleteRow('quotations', KEYS.QUOTATIONS, id);
   },
 
   getProjects: async (): Promise<Project[]> => {
@@ -433,7 +485,8 @@ export const AsyncSalesService = {
         );
       }
     }
-    safeSave('gtk_erp_invoices', data);
+    // Phase-2 (2.6): per-row merge save (preserves siblings)
+    _mergeIntoLocal<Invoice>(KEYS.INVOICES, data);
     try {
       const rows = data.map((i: any) => ({
         id: i.id, company: i.company,
@@ -453,12 +506,18 @@ export const AsyncSalesService = {
         updated_by: _currentUser(),
         updated_at: new Date().toISOString(),
       }));
-      const { error } = await supabase.from('invoices').upsert(rows, { onConflict: 'id' });
-      if (error) { Logger.error('Sales', 'saveInvoices failed', error); _queueRetry('invoices'); }
+      if (rows.length > 0) {
+        const { error } = await supabase.from('invoices').upsert(rows, { onConflict: 'id' });
+        if (error) { Logger.error('Sales', 'saveInvoices failed', error); _queueRetry('invoices'); }
+      }
     } catch (err: any) {
       Logger.error('Sales', 'saveInvoices exception', err);
       _queueRetry('invoices');
     }
+  },
+
+  deleteInvoice: async (id: string): Promise<void> => {
+    await _deleteRow('invoices', KEYS.INVOICES, id);
   },
 
   getPaymentReceipts: async (): Promise<PaymentReceipt[]> => {
@@ -477,7 +536,8 @@ export const AsyncSalesService = {
     }
   },
   savePaymentReceipts: async (data: PaymentReceipt[]): Promise<void> => {
-    safeSave('gtk_erp_payment_receipts', data);
+    // Phase-2 (2.6): per-row merge save (preserves siblings)
+    _mergeIntoLocal<PaymentReceipt>(KEYS.PAYMENT_RECEIPTS, data);
     try {
       // SAL-4: Use atomic RPC (process_payment_receipt) so that receipt
       // insertion and invoice balance/status update occur in a single
@@ -564,7 +624,8 @@ export const AsyncSalesService = {
   },
 
   saveCreditNotes: async (data: any[]): Promise<void> => {
-    safeSave(KEYS.CREDIT_NOTES, data);
+    // Phase-2 (2.6): per-row merge save (preserves siblings)
+    _mergeIntoLocal<any>(KEYS.CREDIT_NOTES, data);
     try {
       const rows = data.map((c: any) => ({
         id:           c.id,
@@ -583,11 +644,17 @@ export const AsyncSalesService = {
         updated_at:   new Date().toISOString(),
         data:         c,                                          // forward-compat blob
       }));
-      const { error } = await supabase.from('credit_notes').upsert(rows, { onConflict: 'id' });
-      if (error) { Logger.error('Sales', 'saveCreditNotes failed', error); _queueRetry('credit_notes'); }
+      if (rows.length > 0) {
+        const { error } = await supabase.from('credit_notes').upsert(rows, { onConflict: 'id' });
+        if (error) { Logger.error('Sales', 'saveCreditNotes failed', error); _queueRetry('credit_notes'); }
+      }
     } catch (err: any) {
       Logger.error('Sales', 'saveCreditNotes exception', err);
       _queueRetry('credit_notes');
     }
+  },
+
+  deleteCreditNote: async (id: string): Promise<void> => {
+    await _deleteRow('credit_notes', KEYS.CREDIT_NOTES, id);
   },
 };

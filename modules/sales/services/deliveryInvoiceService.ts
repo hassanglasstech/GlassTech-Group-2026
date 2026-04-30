@@ -13,6 +13,7 @@ import { FinanceService } from '@/modules/finance/services/financeService';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { postDeliveryCOGS } from '@/modules/procurement/services/glasscoGLService';
 import { ProductionService } from '@/modules/production/services/productionService';
+import { allocateSerial } from '@/modules/sales/services/serialAllocator';
 
 interface InvoiceResult {
   invoiceId: string;
@@ -35,31 +36,27 @@ const buildInvoiceNumber = (company: Company, seq: number): string => {
   return `INV-${prefix}-${year}-${String(seq).padStart(4, '0')}`;
 };
 
-const getNextInvoiceNumber = (company: Company): string => {
+// Phase-2: atomic Postgres-issued invoice number (RC-8 fix).
+// Falls back to local counter when RPC unavailable (offline mode).
+const getNextInvoiceNumber = async (company: Company): Promise<string> => {
   const year = new Date().getFullYear();
-  const key = `gtk_erp_inv_seq_${company}_${year}`;
-  const existingIds = new Set(SalesService.getInvoices().map((i: Invoice) => i.id));
+  const seq  = await allocateSerial(company, 'INV', year, 1);
+  const candidate = buildInvoiceNumber(company, seq);
 
-  // Atomic-ish read-modify-write with collision retry
-  let candidate = '';
-  for (let attempt = 0; attempt < 50; attempt++) {
-    const current = parseInt(localStorage.getItem(key) || '0', 10);
-    const next = current + 1 + attempt;
-    candidate = buildInvoiceNumber(company, next);
-    if (!existingIds.has(candidate)) {
-      localStorage.setItem(key, String(next));
-      return candidate;
-    }
+  // Belt-and-braces: if local cache somehow already has this id (pre-Phase-2
+  // duplicates), append timestamp to break the tie rather than overwrite.
+  const existingIds = new Set(SalesService.getInvoices().map((i: Invoice) => i.id));
+  if (existingIds.has(candidate)) {
+    return `${candidate}-${Date.now().toString().slice(-4)}`;
   }
-  // Fallback: suffix with timestamp to guarantee uniqueness
-  return `${candidate}-${Date.now().toString().slice(-4)}`;
+  return candidate;
 };
 
-export function generateDeliveryInvoice(
+export async function generateDeliveryInvoice(
   order: Quotation,
   company: Company,
   gstPercent: number = 0
-): InvoiceResult {
+): Promise<InvoiceResult> {
   // ── Validation guards (P1) ────────────────────────────────────────
   if (!order || !order.id) {
     throw new Error('Invoice generation: order is missing.');
@@ -129,15 +126,24 @@ export function generateDeliveryInvoice(
     throw new Error(`Invoice generation: grand total must be > 0 (got PKR ${grandTotal}).`);
   }
 
-  // ── Credit Limit Check ────────────────────────────────────────────
+  // ── Credit Limit Check (Phase-2: HARD ENFORCE — was console.warn) ─
+  // Audit F3: silent log let AR balloon for defaulting clients.
+  // Now throws so the invoice is NOT posted unless the client is within
+  // their credit limit. Override path: caller must increase the client's
+  // creditLimit (in ClientMaster) or have customer settle outstanding.
   if (client) {
     const creditLimit = (client as any).creditLimit || 0;
     if (creditLimit > 0) {
       const outstanding = SalesService.getInvoices()
-        .filter((i: any) => i.clientId === order.clientId && i.status !== 'Paid')
-        .reduce((s: number, i: any) => s + (i.balance || 0), 0);
+        .filter((i: any) => i.clientId === order.clientId && i.status !== 'Paid' && i.status !== 'Voided')
+        .reduce((s: number, i: any) => s + (Number(i.balance) || 0), 0);
       if (outstanding + grandTotal > creditLimit) {
-        console.warn('[CreditLimit] ' + clientName + ': outstanding ' + outstanding + ' + new ' + grandTotal + ' > limit ' + creditLimit);
+        throw new Error(
+          `Credit limit exceeded for ${clientName}: outstanding PKR ${outstanding.toLocaleString('en-PK')} + ` +
+          `new invoice PKR ${grandTotal.toLocaleString('en-PK')} = PKR ${(outstanding + grandTotal).toLocaleString('en-PK')} ` +
+          `> limit PKR ${creditLimit.toLocaleString('en-PK')}. ` +
+          `Increase client credit limit in Client Master or collect outstanding balance first.`
+        );
       }
     }
   }
@@ -168,8 +174,8 @@ export function generateDeliveryInvoice(
     gstPayableAcc    = FinanceService.ensureAccount(company, 'GST Payable',         4, taxLiab.id,     'Liability', '2214');
   }
 
-  // ── Invoice ID (sequential) ───────────────────────────────────────
-  const invoiceId = getNextInvoiceNumber(company);
+  // ── Invoice ID (sequential, atomic via Postgres allocate_serial RPC) ─
+  const invoiceId = await getNextInvoiceNumber(company);
   const txId      = 'GL-' + invoiceId;
   const today     = new Date().toISOString().split('T')[0];
 

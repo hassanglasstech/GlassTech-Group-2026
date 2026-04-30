@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Company, Client, Quotation, QuotationItem, Product, ProductionPiece, PieceStatus } from '@/modules/shared/types';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
+import { allocateSerial } from '@/modules/sales/services/serialAllocator';
 import { toast } from 'sonner';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { calculateAutoRate, calculateLineItemTotal } from '@/modules/glassco/core/GlasscoUtils';
@@ -85,57 +86,65 @@ export const useGlasscoQuotations = () => {
         toast.error("Quotation total must be greater than 0.", { duration: 4000 });
         return;
       }
+
+      // ── Phase-2 (2.2): SAL-3 credit limit guard for Glassco quotation save ──
+      // Audit F4: this guard existed in the generic QuotationManager but was
+      // never wired into Glassco's save path. A defaulting client could
+      // accumulate unlimited orders. Now blocks save on Approve when:
+      //   outstanding AR + this quotation grand total > client.creditLimit
+      if (action === 'approve') {
+        const clientList = await AsyncSalesService.getClients();
+        const clientRow: any = clientList.find((c: any) => c.id === dataToSave.clientId && c.company === company);
+        const creditLimit = Number(clientRow?.creditLimit ?? 0);
+        if (creditLimit > 0) {
+          const subtotal = (dataToSave.items || [])
+            .filter((i: any) => !i.isSection)
+            .reduce((s: number, i: any) => s + (Number(i.amount) || 0), 0);
+          const discount = Number(dataToSave.discountAmount || 0)
+            + (subtotal * (Number(dataToSave.discountPercent || 0) / 100));
+          const newOrderValue = Math.max(0, subtotal - discount);
+          const outstanding = await AsyncSalesService.getClientOutstandingAR(dataToSave.clientId, company);
+          if (outstanding + newOrderValue > creditLimit) {
+            toast.error(
+              `Credit limit exceeded for ${clientRow?.name || dataToSave.clientId}: ` +
+              `outstanding PKR ${outstanding.toLocaleString('en-PK')} + new order PKR ${newOrderValue.toLocaleString('en-PK')} ` +
+              `= PKR ${(outstanding + newOrderValue).toLocaleString('en-PK')} > limit PKR ${creditLimit.toLocaleString('en-PK')}. ` +
+              `Increase the limit in Client Master or collect outstanding balance first.`,
+              { duration: 10000 }
+            );
+            return;
+          }
+        }
+      }
     }
-    
-    // Refresh all quotations to get the absolute latest serial for this company
-    const all = (await AsyncSalesService.getQuotations()).filter(q => q.company === company);
+
     const originalId = dataToSave.id;
     let finalId = originalId;
-    
+
     const dateParts = (dataToSave.date || new Date().toISOString().split('T')[0]).split('-');
     const mmyy = `${dateParts[1]}${dateParts[0].slice(-2)}`;
+    const year = parseInt(dateParts[0], 10) || new Date().getFullYear();
 
     const hasFormalId = finalId && (finalId.startsWith('GT-QUT-') || finalId.startsWith('GT-SO-') || finalId.startsWith('QT-') || finalId.startsWith('SO-'));
     const hasDraftId = finalId && finalId.startsWith('DRF-');
 
+    // ── Phase-2 (2.5): atomic serial allocation via Postgres allocate_serial RPC ──
+    // RC-1 fix: parallel approves no longer compute the same maxSeq+1 from
+    // a stale local snapshot. Falls back to local counter when offline.
     if (action === 'draft') {
         if (!hasFormalId && !hasDraftId) {
-            // New Draft: Start from 9026
-            let maxSeq = 9025;
-            all.forEach(q => {
-                const refId = q.id || '';
-                if (refId.startsWith('DRF-GLS-')) {
-                    const parts = refId.split('-');
-                    const lastPart = parts[parts.length - 1];
-                    const num = parseInt(lastPart);
-                    // Draft range: 9000 and above
-                    if (!isNaN(num) && num > maxSeq && num >= 9000) maxSeq = num;
-                }
-            });
-            finalId = `DRF-GLS-${mmyy}-${(maxSeq + 1).toString().padStart(4, '0')}`;
+            const seq = await allocateSerial(company, 'DRF', year, 9026);
+            finalId = `DRF-GLS-${mmyy}-${String(seq).padStart(4, '0')}`;
         }
     }
     else if (action === 'save' || action === 'approve') {
         if (!hasFormalId) {
-            // New Formal Quotation/Sales Order — GT-QUT-GLS-MMYY-XXXX / GT-SO-GLS-MMYY-XXXX, start from 2523
-            let maxSeq = 2522;
-            all.forEach(q => {
-                const refId = q.orderNo || q.id || '';
-                // Look at both new GT- format and legacy QT-/SO- format
-                if (refId.includes('-GLS-')) {
-                    const parts = refId.split('-');
-                    const lastPart = parts[parts.length - 1];
-                    const baseNum = lastPart.split('-')[0];
-                    const num = parseInt(baseNum);
-                    // Formal range: below 9000
-                    if (!isNaN(num) && num > maxSeq && num < 9000) maxSeq = num;
-                }
-            });
-            const nextSeq = (maxSeq + 1).toString().padStart(4, '0');
+            const docType = action === 'approve' ? 'GT-SO' : 'GT-QUT';
+            const seq = await allocateSerial(company, docType, year, 2523);
             const prefix = action === 'approve' ? 'GT-SO-GLS' : 'GT-QUT-GLS';
-            finalId = `${prefix}-${mmyy}-${nextSeq}`;
-        } else if (action === 'approve' && (finalId.startsWith('GT-QUT-') || finalId.startsWith('QT-'))) {
-            // Transitioning existing QUT to SO: Keep the same number
+            finalId = `${prefix}-${mmyy}-${String(seq).padStart(4, '0')}`;
+        } else if (action === 'approve' && finalId && (finalId.startsWith('GT-QUT-') || finalId.startsWith('QT-'))) {
+            // Transitioning existing QUT to SO: keep the same number (just swap prefix)
             finalId = finalId.replace('GT-QUT-', 'GT-SO-').replace('QT-', 'GT-SO-');
         }
     }
@@ -147,30 +156,55 @@ export const useGlasscoQuotations = () => {
             toast.error(`Quotation expired on ${dataToSave.dueDate}. Update due date or get manager approval before converting to order.`);
             return;
         }
-        finalOrderNo = finalId.replace('GT-QUT-', 'GT-SO-').replace('QT-', 'GT-SO-');
+        finalOrderNo = (finalId || '').replace('GT-QUT-', 'GT-SO-').replace('QT-', 'GT-SO-');
     }
 
-    const finalQuo: Quotation = { 
-        ...(dataToSave as Quotation), 
-        id: finalId!, 
-        company, 
+    const finalQuo: Quotation = {
+        ...(dataToSave as Quotation),
+        id: finalId!,
+        company,
         status: action === 'approve' ? 'Approved' : 'Draft',
         orderNo: finalOrderNo
     };
 
+    // ── Phase-2 (2.4 + 2.6): SAVE QUOTATION FIRST, THEN PIECES ───────────
+    // Audit B1: previous code saved pieces synchronously BEFORE the
+    // quotation was persisted, then MFG-1 ghost-order rejection silently
+    // dropped the pieces. Order: persist quotation → cleanup old id →
+    // (only if approve) build & save pieces with rollback on failure.
+    try {
+      // 2.6: pass ONLY the row being changed (per-row merge save)
+      await AsyncSalesService.saveQuotations([finalQuo]);
+
+      // Cleanup obsolete id rows when DRF/QT transitions to a new id
+      if (originalId && originalId !== finalId) {
+        await AsyncSalesService.deleteQuotation(originalId);
+      }
+      if (finalOrderNo && finalOrderNo !== finalId) {
+        // Drop any stale row keyed on the old orderNo (rare — defensive)
+        const existing = await AsyncSalesService.getQuotations();
+        const dup = existing.find(x => x.orderNo === finalOrderNo && x.id !== finalId && x.id !== originalId);
+        if (dup) await AsyncSalesService.deleteQuotation(dup.id);
+      }
+    } catch (e: any) {
+      toast.error(`Save failed: ${e?.message || 'unknown error'}`, { duration: 8000 });
+      return;
+    }
+
+    // 2.4: pieces save AFTER quotation is in Supabase — MFG-1 ghost-order
+    // check now passes because the order id exists. Wrap in try/catch so
+    // a piece-save failure rolls the order back to Draft (not silently lost).
     if (action === 'approve') {
+      try {
         const currentPieces = ProductionService.getProductionPieces();
-        // Use last 4 digits of orderNo for piece ID
         const orderRef = finalOrderNo || finalId || '';
         const numericOnly = orderRef.replace(/[^0-9]/g, '');
         const numericPart = numericOnly.slice(-4) || orderRef.slice(-4) || '0000';
-        
+
         const newPieces: ProductionPiece[] = [];
         let globalSerialCounter = 1;
-        
         finalQuo.items.forEach((item, idx) => {
             if (item.isSection) return;
-            
             for (let i = 0; i < item.qty; i++) {
                 newPieces.push({
                     id: `${numericPart}/${globalSerialCounter}`,
@@ -184,23 +218,27 @@ export const useGlasscoQuotations = () => {
             }
         });
         const others = currentPieces.filter(p => !p.id.startsWith(`${numericPart}/`));
-        ProductionService.saveProductionPieces([...others, ...newPieces]);
+        await ProductionService.saveProductionPieces([...others, ...newPieces]);
+      } catch (pieceErr: any) {
+        // Roll back: revert the order to Draft so the user can fix and retry.
+        toast.error(
+          `Order ${finalOrderNo} saved but production pieces failed: ${pieceErr?.message || 'unknown error'}. ` +
+          `Order rolled back to Draft — review and re-approve.`,
+          { duration: 12000 }
+        );
+        try {
+          await AsyncSalesService.saveQuotations([{ ...finalQuo, status: 'Draft' as any, orderNo: undefined as any }]);
+        } catch { /* swallow rollback errors — user already notified */ }
+        return;
+      }
     }
 
-    const filteredList = all.filter(x => {
-        if (originalId && x.id === originalId) return false;
-        if (finalId && x.id === finalId) return false;
-        if (finalOrderNo && x.orderNo === finalOrderNo) return false;
-        return true;
-    });
-    await AsyncSalesService.saveQuotations([...filteredList, finalQuo]);
-    
     setFormData(finalQuo);
 
     // Always close editor and return to list after save
     setIsEditorOpen(false);
     setTimeout(() => refreshData(), 200);
-    
+
     if (action === 'approve') {
         toast.success(`Approved as ${finalOrderNo}`, { duration: 3000 });
     } else if (action === 'draft') {
@@ -300,10 +338,10 @@ export const useGlasscoQuotations = () => {
   };
 
   const handleDeleteQuotation = async (id: string) => {
-      if (confirm("Delete? ID will not be reused.")) { 
-          const all = await AsyncSalesService.getQuotations();
-          await AsyncSalesService.saveQuotations(all.filter(x => x.id !== id)); 
-          await refreshData(); 
+      if (confirm("Delete? ID will not be reused.")) {
+          // Phase-2 (2.6): per-row delete (was full-table overwrite, race-prone).
+          await AsyncSalesService.deleteQuotation(id);
+          await refreshData();
       }
   };
 
@@ -410,26 +448,25 @@ export const useGlasscoQuotations = () => {
       try {
         const data = JSON.parse(e.target?.result as string);
         const all = await AsyncSalesService.getQuotations();
-        let next = [...all];
-        
+        const existingIds = new Set(all.map(q => q.id));
+        const toInsert: Quotation[] = [];
+
         if (Array.isArray(data)) {
           data.forEach((q: Quotation) => {
-            if (!next.some(existing => existing.id === q.id)) {
-              next.push({ ...q, company });
-            }
+            if (!existingIds.has(q.id)) toInsert.push({ ...q, company });
           });
         } else {
-          if (!next.some(existing => existing.id === data.id)) {
-            next.push({ ...data, company });
-          } else {
+          if (existingIds.has(data.id)) {
             toast.error("Quotation with this ID already exists.", { duration: 4000 });
             return;
           }
+          toInsert.push({ ...data, company });
         }
-        
-        await AsyncSalesService.saveQuotations(next);
+
+        // Phase-2 (2.6): per-row save — passes only NEW rows, no full overwrite.
+        if (toInsert.length > 0) await AsyncSalesService.saveQuotations(toInsert);
         await refreshData();
-        toast.success("Import Successful", { duration: 3000 });
+        toast.success(`Imported ${toInsert.length} quotation(s).`, { duration: 3000 });
       } catch (err) {
         toast.error("Invalid JSON file", { duration: 4000 });
       }
@@ -495,7 +532,8 @@ export const useGlasscoQuotations = () => {
             newQuo.id = `QT-IMP-${Date.now()}`;
         }
 
-        await AsyncSalesService.saveQuotations([...all, newQuo]);
+        // Phase-2 (2.6): per-row save — only the new row, not the whole table.
+        await AsyncSalesService.saveQuotations([newQuo]);
         await refreshData();
         toast.success("Excel Quotation Imported as Draft", { duration: 3000 });
       } catch (err) {
