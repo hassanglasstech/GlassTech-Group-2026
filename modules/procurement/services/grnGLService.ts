@@ -246,7 +246,7 @@ export function postFreightOwnExpenseGL(params: {
   // Try 51214 first (inward freight), fallback to 51213
   const frtAcc = getOrCreateAcc(company, ACC.FREIGHT_EXPENSE)
     || getOrCreateAcc(company, '51213')
-    || accounts.find(a => a.name?.toLowerCase().includes('freight') && a.type === 'Expense');
+    || FinanceService.getAccounts().find(a => a.name?.toLowerCase().includes('freight') && a.type === 'Expense');
   const crAcc = paidBy === 'Cash'
     ? getOrCreateAcc(company, ACC.CASH_IN_HAND)
     : getOrCreateAcc(company, ACC.PAYABLE_OTHER);
@@ -349,7 +349,7 @@ export function postScrapDisposalGL(params: {
   const scrapInvAcc = getOrCreateAcc(company, ACC.SCRAP_INVENTORY)
     || getOrCreateAcc(company, ACC.INVENTORY_GLASS);
   const otherIncomeAcc = getOrCreateAcc(company, ACC.OTHER_INCOME)
-    || accounts.find(a => a.name?.toLowerCase().includes('other income') && a.type === 'Revenue');
+    || FinanceService.getAccounts().find(a => a.name?.toLowerCase().includes('other income') && a.type === 'Revenue');
 
   if (!cashAcc || !scrapInvAcc) {
     console.warn('[Scrap GL] Required accounts not found');
@@ -425,9 +425,9 @@ export function postOtherChargesGL(params: {
   const { company, grnId, grnDate, amount, description } = params;
   if (amount <= 0) return true;
 
-  const expAcc  = accounts.find(a => a.name?.toLowerCase().includes('miscellaneous') && a.type === 'Expense')
+  const expAcc  = FinanceService.getAccounts().find(a => a.name?.toLowerCase().includes('miscellaneous') && a.type === 'Expense')
     || getOrCreateAcc(company, '52291') // misc operating expense
-    || accounts.find(a => a.type === 'Expense' && a.level >= 4);
+    || FinanceService.getAccounts().find(a => a.type === 'Expense' && a.level >= 4);
   const cashAcc = getOrCreateAcc(company, ACC.CASH_IN_HAND);
 
   if (!expAcc || !cashAcc) return false;
@@ -465,7 +465,7 @@ export function postCranePV(params: {
   if (craneAmount <= 0) return true;
 
   const craneAcc = getOrCreateAcc(company, ACC.UNLOADING_CRANE)
-    || accounts.find(a => a.name?.toLowerCase().includes('unloading') && a.type === 'Expense')
+    || FinanceService.getAccounts().find(a => a.name?.toLowerCase().includes('unloading') && a.type === 'Expense')
     || getOrCreateAcc(company, ACC.FREIGHT_EXPENSE); // fallback
   const cashAcc = getOrCreateAcc(company, ACC.CASH_IN_HAND);
 
@@ -513,9 +513,9 @@ export function postLabourPackingPV(params: {
 
   const labourAcc = getOrCreateAcc(company, ACC.UNLOADING_LABOUR)
     || getOrCreateAcc(company, ACC.UNLOADING_CRANE)
-    || accounts.find(a => a.name?.toLowerCase().includes('unloading') && a.type === 'Expense');
+    || FinanceService.getAccounts().find(a => a.name?.toLowerCase().includes('unloading') && a.type === 'Expense');
   const incomeAcc = getOrCreateAcc(company, ACC.OTHER_INCOME)
-    || accounts.find(a => a.name?.toLowerCase().includes('other income') && a.type === 'Revenue');
+    || FinanceService.getAccounts().find(a => a.name?.toLowerCase().includes('other income') && a.type === 'Revenue');
   const cashAcc = getOrCreateAcc(company, ACC.CASH_IN_HAND);
 
   if (!labourAcc || !cashAcc) {

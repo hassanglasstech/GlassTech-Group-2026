@@ -218,7 +218,11 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
         .filter((r: any) => r.grnId === (selectedPO.grnRef || '') && r.status === 'Verbally Confirmed');
       vdrList.forEach((vdr: any) => {
         postDefectAdjustmentGL({ company, grnId: vdr.grnId, adjustmentDate: new Date().toISOString().split('T')[0], adjustmentAmount: vdr.totalAdjustment, vendorName: vdr.vendorName, defectReportId: vdr.id });
-        InventoryService.upsertVendorDefectReport({ ...vdr, status: 'Settled', settlementRef: matchGL.id });
+        // Phase-7 (P3-1): was `matchGL.id` — undefined variable would throw
+        // ReferenceError on every defect-settlement attempt. Use the MIRO GL
+        // id created at line 155 as the settlement reference.
+        const settlementId = `IR-${invForm.vendorInvoiceNo}-MATCH`;
+        InventoryService.upsertVendorDefectReport({ ...vdr, status: 'Settled', settlementRef: settlementId });
       });
       setActiveStep('approval');
     }

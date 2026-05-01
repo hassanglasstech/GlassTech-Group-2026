@@ -940,6 +940,111 @@ export const FinanceService = {
       }).sort((a, b) => b.date.localeCompare(a.date));
   },
 
+  // ── Phase-7 (P3-2): Vendor AP balance — sum of all AP debits/credits ─
+  // Returns the net outstanding payable to a vendor (positive = we owe them).
+  // Walks the full ledger, identifies AP entries by account-name match
+  // (Payable / AP) AND a vendor-name match in the line text. Cheap because
+  // single user, single-company; if perf becomes an issue we'll index AP by
+  // vendor in a separate ap_balances table.
+  getVendorAPBalance: (company: Company, vendorName: string): {
+    totalCredits: number; totalDebits: number; outstanding: number;
+  } => {
+    const v = (vendorName || '').trim().toLowerCase();
+    if (!v) return { totalCredits: 0, totalDebits: 0, outstanding: 0 };
+    const accs = FinanceService.getAccounts().filter(a =>
+      a.company === company &&
+      a.type === 'Liability' &&
+      /payable|\bap\b/i.test(a.name || '')
+    );
+    const apIds = new Set(accs.map(a => a.id));
+    const ledger = FinanceService.getLedger().filter(t =>
+      t.company === company && t.status === 'Posted'
+    );
+    let totalCredits = 0, totalDebits = 0;
+    for (const tx of ledger) {
+      for (const d of (tx.details || [])) {
+        if (!apIds.has(d.accountId)) continue;
+        const text = String(d.text || '').toLowerCase();
+        if (!text.includes(v)) continue;
+        totalCredits += Number(d.credit) || 0;
+        totalDebits  += Number(d.debit)  || 0;
+      }
+    }
+    return {
+      totalCredits, totalDebits,
+      outstanding: totalCredits - totalDebits, // net liability
+    };
+  },
+
+  // ── Phase-7 (P3-3): Post a vendor payment voucher ────────────────────
+  // Standard payment GL: Dr AP — Vendor / Cr Cash-in-Hand or Bank.
+  // Reduces the AP balance + reduces cash. Used by the vendor payment UI
+  // (Finance / Procurement). Throws if the input is malformed; uses
+  // assertGLBalance + recordTransaction so MakerChecker is enforced (this
+  // IS a manual JV — accountant must approve).
+  postVendorPaymentGL: (params: {
+    company:    Company;
+    vendorName: string;
+    amount:     number;
+    paymentDate: string;
+    paidBy:     'Cash' | 'Bank';
+    bankAccountName?: string;     // required if paidBy === 'Bank'
+    apAccountCode?:   string;     // override AP account code (e.g. 21111 / 21112 / 21113)
+    invoiceRef?:      string;     // vendor invoice no being settled
+    createdBy?:       string;     // for MakerChecker; default 'finance-user'
+  }): LedgerTransaction => {
+    const { company, vendorName, amount, paymentDate, paidBy } = params;
+    if (!vendorName?.trim()) throw new Error('Vendor name is required.');
+    if (!amount || amount <= 0) throw new Error('Payment amount must be > 0.');
+    if (!paymentDate) throw new Error('Payment date is required.');
+
+    // Resolve AP account (specific code → vendor sub-ledger → generic AP)
+    let apAcc: any = null;
+    if (params.apAccountCode) {
+      apAcc = FinanceService.getAccounts().find(a =>
+        a.company === company && a.code === params.apAccountCode
+      );
+    }
+    if (!apAcc) {
+      // Default to "Payable — Other Vendors" (21113), parent of trade payables
+      const tpParent = FinanceService.ensureAccount(company, 'TRADE PAYABLES', 3, null, 'Liability', '211');
+      apAcc = FinanceService.ensureAccount(company, 'Payable — Other Vendors', 4, tpParent.id, 'Liability', '21113');
+    }
+
+    // Resolve cash/bank account
+    let cashAcc: any = null;
+    if (paidBy === 'Bank') {
+      const bankParent = FinanceService.ensureAccount(company, 'BANK', 2, null, 'Asset', '111');
+      cashAcc = FinanceService.ensureAccount(
+        company, params.bankAccountName || 'BANK — DEFAULT', 3, bankParent.id, 'Asset', '1112'
+      );
+    } else {
+      const cashParent = FinanceService.ensureAccount(company, 'CASH', 2, null, 'Asset', '111');
+      cashAcc = FinanceService.ensureAccount(company, 'CASH IN HAND', 3, cashParent.id, 'Asset', '11111');
+    }
+
+    if (!apAcc || !cashAcc) throw new Error('Could not resolve AP or Cash/Bank account.');
+
+    const txId = `PV-${vendorName.replace(/[^A-Z0-9]/gi, '').slice(0, 8).toUpperCase()}-${Date.now().toString().slice(-6)}`;
+    const tx: LedgerTransaction = {
+      id: txId, company, docType: 'PV',
+      docDate: paymentDate, date: paymentDate,
+      description: `Vendor Payment: ${vendorName}${params.invoiceRef ? ' | Inv ' + params.invoiceRef : ''} | PKR ${amount.toLocaleString('en-PK')}`,
+      referenceId: params.invoiceRef || vendorName,
+      status: 'Posted',
+      // Manual JV — operator must be named for MakerChecker audit trail.
+      createdBy: params.createdBy || 'finance-user',
+      details: [
+        { accountId: apAcc.id,   debit: amount, credit: 0,      text: `AP settlement: ${vendorName}` },
+        { accountId: cashAcc.id, debit: 0,      credit: amount, text: `${paidBy} payment to ${vendorName}` },
+      ],
+    } as LedgerTransaction;
+
+    _assertGLBalance(tx);
+    FinanceService.recordTransaction(tx);
+    return tx;
+  },
+
   // ── Post Parked PV ──────────────────────────────────────────────────
   postParkedPV: (pvId: string): LedgerTransaction | null => {
     const all = FinanceService.getLedger();
