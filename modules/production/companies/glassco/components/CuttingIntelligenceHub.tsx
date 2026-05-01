@@ -127,6 +127,36 @@ const SessionLogger: React.FC = () => {
       supervisorSignOff: Math.abs(variance) > 5 ? 'PENDING' : undefined,
     };
 
+    // ── Phase-7 (B8): pre-flight stock guard — must happen BEFORE GL or save.
+    // Audit RC-12: previously the cutting session deducted stock with
+    // Math.max(0, qty - consumed), silently clamping to zero when insufficient.
+    // GL posted full WIP debit but stock was over-consumed → permanent
+    // stock-vs-books drift. Now we tally consumption FIRST, hard-fail if any
+    // material lacks the on-hand qty, abort the close.
+    const sheetEntriesForCheck = (session.sheetsScanned || [])
+      .map(s => InventoryService.getGRNSheetEntryByTag(s.tagId))
+      .filter(Boolean);
+
+    const consumedByMaterial: Record<string, number> = {};
+    sheetEntriesForCheck.forEach((entry: any) => {
+      if (!entry) return;
+      consumedByMaterial[entry.materialId] =
+        (consumedByMaterial[entry.materialId] || 0) + (entry.sqftPerSheet || 0);
+    });
+
+    const storeForCheck = InventoryService.getStore();
+    for (const [materialId, consumed] of Object.entries(consumedByMaterial)) {
+      const item = storeForCheck.find((s: any) => s.id === materialId);
+      const onHand = Number(item?.unrestrictedQty ?? item?.quantity ?? 0);
+      if (consumed > onHand) {
+        toast.error(
+          `Insufficient stock for ${item?.name || materialId}: need ${consumed.toFixed(2)} sqft, on-hand ${onHand.toFixed(2)} sqft. Cutting session NOT closed. Receive more glass via GRN first.`,
+          { duration: 9000 }
+        );
+        return; // abort: GL not posted, stock not deducted, session stays Open
+      }
+    }
+
     InventoryService.saveCuttingSessions(all.map(s => s.id === sessionId ? updated : s));
 
     // ── Post Cutting GL: Dr WIP / Cr Glass Inventory ─────────────
@@ -138,26 +168,16 @@ const SessionLogger: React.FC = () => {
       date: nowISO().split('T')[0],
     });
 
-    // ── Reduce glass inventory for each sheet consumed ──────────────
+    // ── Reduce glass inventory for each sheet consumed (already validated) ──
     if (session.sheetsScanned && session.sheetsScanned.length > 0) {
       const store = InventoryService.getStore();
-      const sheetEntries = session.sheetsScanned
-        .map(s => InventoryService.getGRNSheetEntryByTag(s.tagId))
-        .filter(Boolean);
-
-      const consumedByMaterial: Record<string, number> = {};
-      sheetEntries.forEach((entry: any) => {
-        if (!entry) return;
-        consumedByMaterial[entry.materialId] = (consumedByMaterial[entry.materialId] || 0) + (entry.sqftPerSheet || 0);
-      });
-
       const updatedStore = store.map((item: any) => {
         const consumed = consumedByMaterial[item.id] || 0;
         if (consumed === 0) return item;
         return {
           ...item,
-          unrestrictedQty: Math.max(0, (item.unrestrictedQty || 0) - consumed),
-          quantity: Math.max(0, (item.quantity || 0) - consumed),
+          unrestrictedQty: (item.unrestrictedQty || 0) - consumed,
+          quantity: (item.quantity || 0) - consumed,
           lastMovementDate: nowISO().split('T')[0],
         };
       });

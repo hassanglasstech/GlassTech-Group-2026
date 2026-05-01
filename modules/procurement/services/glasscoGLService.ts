@@ -312,11 +312,16 @@ export function postTemperingInwardGL(params: {
     // Rate: from effectiveRates (dispatch snapshot > vendor live rates)
     const rate = effectiveRates[mm] ?? 0;
     if (rate === 0) {
-      console.warn(
-        `[TemperingGL] No rate for ${mm}mm from vendor "${vendorName}" — ` +
-        `piece ${piece.id} excluded. Add rate to vendor price list.`,
+      // Phase-7 (B9): silent-skip → loud-fail. Audit I9: previously a missing
+      // mm rate caused the piece to be quietly excluded from AP, leaving the
+      // vendor liability understated and a tempering WIP residue with no
+      // matching CR. Now we abort the whole inward post so the operator must
+      // (a) update vendor price list or (b) supply a one-off override before
+      // the GL is touched. Books stay consistent.
+      throw new Error(
+        `Tempering AP cannot be posted: no rate found for ${mm}mm with vendor "${vendorName}" ` +
+        `(piece ${piece.id}). Add the ${mm}mm rate to the vendor price list, then retry inward.`,
       );
-      return;
     }
     const cost = Math.round(sqft * rate);
 

@@ -7,7 +7,6 @@
  *  - Sequential invoice numbering via localStorage counter
  */
 
-import { toast } from 'sonner';
 import { Company, Quotation, LedgerTransaction, Invoice } from '@/modules/shared/types';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { SalesService } from '@/modules/sales/services/salesService';
@@ -145,6 +144,26 @@ export async function generateDeliveryInvoice(
         );
       }
     }
+  }
+
+  // ── Phase-7 (B10): pre-flight pieces validation. Audit I10: glass-cutting
+  // invoices used to post Revenue with zero COGS when no production pieces
+  // were linked, permanently inflating gross profit. Validate UPFRONT — before
+  // any GL or DB writes — so the books stay clean if pieces are missing.
+  const hasGlassItems = effectiveItems.some(
+    (i: any) => !i.isSection && (Number(i.totalSqFt) || Number(i.sqft) || 0) > 0
+  );
+  const linkedPieceIds = ProductionService.getProductionPieces()
+    .filter((p: any) => p.orderId === order.id || p.orderId === order.orderNo)
+    .map((p: any) => p.id);
+
+  if (hasGlassItems && linkedPieceIds.length === 0) {
+    throw new Error(
+      `Invoice generation blocked for "${order.orderNo || order.id}": order has glass items ` +
+      `(sqft > 0) but no production pieces are linked. Cutting session must be closed first ` +
+      `(it creates the pieces). Otherwise revenue would post without COGS — gross profit ` +
+      `would be permanently inflated. Close the cutting session, then retry invoicing.`
+    );
   }
 
   // ── JIT Account Creation — AR & Revenue ──────────────────────────
@@ -319,32 +338,29 @@ export async function generateDeliveryInvoice(
   }
 
   // ── COGS GL — raw glass + service labor ──────────────────────────
-  try {
-    const pieceIds = ProductionService.getProductionPieces()
-      .filter((p: any) => p.orderId === order.id || p.orderId === order.orderNo)
-      .map((p: any) => p.id);
-
-    if (pieceIds.length > 0) {
+  // Pre-validated above (B10): glass orders must have linkedPieceIds at this
+  // point. Pure-service orders (no glass items) skip COGS legitimately.
+  if (linkedPieceIds.length > 0) {
+    try {
       postDeliveryCOGS({
         company,
         invoiceId,
         orderId: order.orderNo || order.id,
-        pieceIds,
+        pieceIds: linkedPieceIds,
         date: today,
         clientName,
       });
-    } else {
-      // No production pieces linked — GP will be overstated until COGS posted.
-      toast.warning(
-        `Invoice ${invoiceId}: No production pieces found. COGS skipped — Gross Profit will look inflated. Link production pieces to post COGS.`,
-        { duration: 8000 }
+    } catch (e: any) {
+      // Hard-fail: don't leave the invoice without its COGS — books would diverge.
+      console.error('[Invoice COGS] postDeliveryCOGS threw:', e);
+      throw new Error(
+        `COGS posting failed for ${invoiceId}: ${e?.message || 'unknown error'}. ` +
+        `Invoice was created but COGS not posted — DELETE the invoice or post a ` +
+        `manual JV to balance, then retry.`
       );
-      console.warn('[Invoice COGS] Skipped — no production pieces for order', order.id);
     }
-  } catch (e: any) {
-    console.warn('[Invoice] COGS GL skipped:', e?.message);
-    toast.error(`COGS posting failed for ${invoiceId}: ${e?.message || 'unknown error'}`);
   }
+  // else: pure-service invoice (no glass items) — COGS not applicable.
 
   return { invoiceId, finalAmount, gstAmount, grandTotal, alreadyInvoiced: false, clientName };
 }
