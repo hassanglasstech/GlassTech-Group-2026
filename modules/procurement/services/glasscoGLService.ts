@@ -7,7 +7,10 @@
  * C. Delivery             → Dr COGS / Cr Glass Inventory (at MAP × sqft)
  *
  * IAS 2 compliant — WAC / MAP method throughout
- * All entries → Parked (Finance reviews before posting)
+ * Phase-7 (B2): All system-auto entries now Post directly. Parked status
+ * was leaving the trial balance perpetually misleading until a manual bulk
+ * post — went against the single-user real-time accuracy goal. Manual JVs
+ * still flow through Maker-Checker (financeService.ts FIN-3).
  */
 
 import { FinanceService }  from '@/modules/finance/services/financeService';
@@ -219,11 +222,17 @@ export function postCuttingGL(params: {
   details.push({ accountId: accs.glassInv.id, debit: 0, credit: totalValue,
     text: `Cutting session ${sessionId} — ${sheetEntries.length} sheets` });
 
+  // Phase-7 (B2): Cutting GL also Posts directly. Pure asset
+  // reclassification (Glass Inventory → WIP) — no liability, no Maker-
+  // Checker concern. Keeping it Parked left raw inventory overstated on
+  // the balance sheet until a manual post. system-auto bypasses the JV
+  // approval gate.
   FinanceService.recordTransaction({
     id: txId, company, docType: 'WA',
     docDate: date, date,
     description: `Cutting GL: ${sessionId} — ${totalSqft.toFixed(1)} sqft → WIP`,
-    referenceId: sessionId, status: 'Parked',
+    referenceId: sessionId, status: 'Posted',
+    createdBy: 'system-auto',
     details,
   } as any);
 }
@@ -355,11 +364,20 @@ export function postTemperingInwardGL(params: {
     .map(([mm, v]) => `${mm}mm:${v.sqft.toFixed(0)}sqft@PKR${effectiveRates[mm] ?? 0}`)
     .join(' | ');
 
+  // Phase-7 (B2): Tempering inward now Posted directly (was 'Parked').
+  // Audit I3: Parked status meant the AP liability was deferred until a
+  // manual bulk-post — violating IAS 37 (liabilities must be recognised
+  // when the service is rendered + vendor bill received). With single-user
+  // go-live, the vendor invoice is concrete by the time pieces are
+  // received back, so the liability is real and must hit AP immediately.
+  // createdBy='system-auto' bypasses the Maker-Checker gate (this is a
+  // system-generated event, not a manual JV).
   FinanceService.recordTransaction({
     id: txId, company, docType: 'KR',
     docDate: date, date,
     description: `Tempering inward: ${vendorName} — ${dispatchId} | ${mmSummary} | Total PKR ${exactTotalCharges.toLocaleString()}`,
-    referenceId: dispatchId, status: 'Parked',
+    referenceId: dispatchId, status: 'Posted',
+    createdBy: 'system-auto',
     details: glDetails,
   } as any);
 

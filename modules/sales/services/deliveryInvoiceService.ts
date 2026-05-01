@@ -38,18 +38,17 @@ const buildInvoiceNumber = (company: Company, seq: number): string => {
 
 // Phase-2: atomic Postgres-issued invoice number (RC-8 fix).
 // Falls back to local counter when RPC unavailable (offline mode).
+//
+// Phase-7 (B4): the previous local collision check was removed. With the
+// `uk_invoices_company_no` UNIQUE constraint added in migration 037, the
+// DB itself rejects duplicates — and `allocate_serial` is already atomic
+// at the Postgres level, so a clean candidate is guaranteed. Appending a
+// timestamp suffix on a phantom collision was masking pre-Phase-2 dirty
+// data and risked legitimate sequential numbers being mutated.
 const getNextInvoiceNumber = async (company: Company): Promise<string> => {
   const year = new Date().getFullYear();
   const seq  = await allocateSerial(company, 'INV', year, 1);
-  const candidate = buildInvoiceNumber(company, seq);
-
-  // Belt-and-braces: if local cache somehow already has this id (pre-Phase-2
-  // duplicates), append timestamp to break the tie rather than overwrite.
-  const existingIds = new Set(SalesService.getInvoices().map((i: Invoice) => i.id));
-  if (existingIds.has(candidate)) {
-    return `${candidate}-${Date.now().toString().slice(-4)}`;
-  }
-  return candidate;
+  return buildInvoiceNumber(company, seq);
 };
 
 export async function generateDeliveryInvoice(
@@ -211,13 +210,18 @@ export async function generateDeliveryInvoice(
     status: 'Posted',
     reqId: order.id,
     details,
-  };
-  try {
-    FinanceService.saveLedger([...FinanceService.getLedger(), glTx]);
-  } catch (e: any) {
-    console.error('[Invoice GL] GL posting failed:', e.message);
-    toast.error(`Invoice GL failed for ${invoiceId}: ${e.message}. Invoice created but GL entry missing — check Finance.`, { duration: 10000 });
-  }
+    // Phase-7 (B1): system-auto invoice GL bypasses Maker-Checker (this is
+    // an automated event, not a manual JV). Without this, saveLedger throws.
+    createdBy: 'system-auto',
+  } as any;
+
+  // Phase-7 (B1): pre-assert balance + abort invoice creation on imbalance.
+  // Previous flow swallowed the assertion error and persisted the invoice
+  // record anyway — books were left missing the AR/Revenue entry while the
+  // invoice itself appeared valid in the UI. Now the throw aborts the whole
+  // operation so the user can fix and retry, leaving books consistent.
+  FinanceService.assertGLBalance(glTx);
+  FinanceService.recordTransaction(glTx);
 
   // ── Financial Event Registry ──────────────────────────────────────
   FinanceService.saveFinancialEvents([
@@ -250,16 +254,20 @@ export async function generateDeliveryInvoice(
     ) || targetAccounts.find((a: any) => a.type === 'Liability');
 
     if (costAcc && payableAcc) {
-      FinanceService.saveLedger([...FinanceService.getLedger(), {
+      // Phase-7 (B1): system-auto + recordTransaction (pre-asserts balance).
+      const mirrorTx = {
         id: 'BILL-' + txId, company: targetCompany, docType: 'KR',
         docDate: today, date: today,
         description: 'AUTO-PURCHASE: From ' + company + ' — ' + invoiceId,
         referenceId: txId, status: 'Posted',
+        createdBy: 'system-auto',
         details: [
           { accountId: costAcc.id,    debit: grandTotal, credit: 0,           text: 'Service from ' + company },
           { accountId: payableAcc.id, debit: 0,           credit: grandTotal, text: 'Payable to ' + company },
         ],
-      } as LedgerTransaction]);
+      } as LedgerTransaction;
+      FinanceService.assertGLBalance(mirrorTx);
+      FinanceService.recordTransaction(mirrorTx);
     }
   }
 

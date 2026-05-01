@@ -100,13 +100,33 @@ export async function issueCreditNote(params: {
   const allGL  = FinanceService.getLedger();
   const origTx = allGL.find(t => t.id === invoice.glTxId);
 
-  // AR account = the debit side of the original invoice GL
-  const arDetail = origTx?.details?.find(d => d.debit > 0);
-  const arAccId  = arDetail?.accountId ?? `${company}-12210`;
+  // Phase-7 (P2-2): hard-fail when the original GL entry can't be located.
+  // Previously the code fell back to hard-coded account codes
+  // (`${company}-12210`, `${company}-41110`) that may not exist or may
+  // refer to the wrong client sub-ledger. Reconciliation broke silently
+  // and the CFO had no signal anything was wrong. Better to refuse the
+  // CN, force operator to investigate (restore from snapshot, post a
+  // manual reversal JV, or rebuild the invoice GL).
+  if (!origTx) {
+    throw new Error(
+      `Original invoice GL entry "${invoice.glTxId}" not found for ${invoice.id}. ` +
+      `Cannot issue credit note — falling back to default accounts would break ` +
+      `AR/Revenue reconciliation. Restore the GL entry from snapshot, post a ` +
+      `manual reversal JV, or contact Finance.`
+    );
+  }
 
-  // Revenue account = credit side of original invoice GL
-  const revDetail = origTx?.details?.find(d => d.credit > 0);
-  const revAccId  = revDetail?.accountId ?? `${company}-41110`;
+  // AR account = the debit side of the original invoice GL
+  const arDetail = origTx.details?.find(d => d.debit > 0);
+  const revDetail = origTx.details?.find(d => d.credit > 0);
+  if (!arDetail || !revDetail) {
+    throw new Error(
+      `Original invoice GL "${invoice.glTxId}" is malformed — missing debit or ` +
+      `credit line. Cannot derive AR/Revenue accounts for credit note.`
+    );
+  }
+  const arAccId  = arDetail.accountId;
+  const revAccId = revDetail.accountId;
 
   // ── Post reversing GL ─────────────────────────────────────────────────────
   FinanceService.recordTransaction({

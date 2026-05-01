@@ -6,6 +6,43 @@ import { SalesService } from '@/modules/sales/services/salesService';
 import { postTemperingInwardGL, postDeliveryCOGS } from '@/modules/procurement/services/glasscoGLService';
 import { Loader2 } from 'lucide-react';
 
+// ── Phase-7 (B5): Piece status state-machine ──────────────────────────
+// Audit found that ANY-to-ANY transition was allowed, so a piece could go
+// Cut → Dispatched (skipping QC) or Delivered → Cut (impossible). The map
+// below codifies the legitimate forward + corrective transitions. Anything
+// missing from a row's allow-list is rejected with a toast.
+//
+// Universal allowances (work from ANY status):
+//   • 'Hold'    — operator parks a piece for any reason
+//   • 'Broken'  — NCR can void a piece at any stage
+//   • 'Returned'— customer/vendor return at any stage (rare, but legal)
+//
+// Terminal cleanups are intentionally narrow:
+//   • Delivered  → only Returned / Broken
+//   • Broken     → terminal (no further moves; NCR is the audit trail)
+const UNIVERSAL_TRANSITIONS: PieceStatus[] = ['Hold', 'Broken', 'Returned'];
+const PIECE_TRANSITIONS: Record<PieceStatus, PieceStatus[]> = {
+  'Cut':                       ['Service-Pending', 'QC-Pending', 'QC-Failed'],
+  'Service-Pending':           ['QC-Pending', 'Cut', 'QC-Failed'],
+  'QC-Pending':                ['QC-Passed', 'QC-Failed', 'Service-Pending'],
+  'QC-Failed':                 ['Cut', 'Service-Pending'],            // rework path
+  'QC-Passed':                 ['Ready to Dispatch', 'Dispatched', 'Delivered'],
+  'Ready to Dispatch':         ['Dispatched', 'Delivered', 'QC-Passed'],
+  'Dispatched':                ['Tempered', 'Received-From-Tempering', 'Ready to Dispatch'],
+  'Tempered':                  ['Ready to Dispatch', 'Received-From-Tempering', 'Delivered', 'QC-Pending'],
+  'Received-From-Tempering':   ['Ready to Dispatch', 'Tempered', 'QC-Pending'],
+  'Delivered':                 [],                                    // ← terminal except universal
+  'Returned':                  ['Cut'],                               // rework after return
+  'Broken':                    [],                                    // terminal
+  'Hold':                      ['Cut', 'Service-Pending', 'QC-Pending', 'QC-Passed', 'Ready to Dispatch', 'Dispatched', 'Tempered', 'Received-From-Tempering'],
+};
+
+const isTransitionAllowed = (from: PieceStatus, to: PieceStatus): boolean => {
+  if (from === to) return true;                             // no-op (e.g. spot reassignment)
+  if (UNIVERSAL_TRANSITIONS.includes(to)) return true;
+  return (PIECE_TRANSITIONS[from] || []).includes(to);
+};
+
 interface ProductionContextType {
   company: Company;
   pieces: ProductionPiece[];
@@ -127,7 +164,20 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
   };
 
   const handleUpdatePieceStatus = (id: string, status: PieceStatus, extra: Partial<ProductionPiece> = {}) => {
+    // Phase-7 (B5): enforce piece state-machine — reject illegal transitions.
+    // Without this, a piece can skip QC entirely (Cut → Dispatched) or jump
+    // back from Delivered into Cut (impossible in the real world). The
+    // operator gets a clear toast and the piece stays unchanged.
     setPieces(prev => {
+        const current = prev.find(p => p.id === id);
+        if (current && !isTransitionAllowed(current.status as PieceStatus, status)) {
+          toast.error(
+            `Illegal status change: ${id} is "${current.status}" → "${status}". ` +
+            `Allowed next steps: ${[...(PIECE_TRANSITIONS[current.status as PieceStatus] || []), ...UNIVERSAL_TRANSITIONS].join(', ') || '(terminal)'}`,
+            { duration: 8000 }
+          );
+          return prev;
+        }
         const updated = prev.map(p => p.id === id ? { ...p, ...extra, status, lastUpdated: new Date().toISOString() } : p);
         ProductionService.getProductionPiecesAsync().then(all => {
             const newAll = all.map(p => p.id === id ? { ...p, ...extra, status, lastUpdated: new Date().toISOString() } : p);

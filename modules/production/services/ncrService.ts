@@ -4,6 +4,7 @@ import { SyncService } from '@/src/services/SyncService';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { ProductionService } from './productionService';
 import { Logger } from '@/modules/shared/services/logger';
+import { toast } from 'sonner';
 import type { NCREvent, NCRReproduction, NCRVendorClaim, BreakageRemnant } from '../types/ncr';
 
 const KEYS = {
@@ -283,6 +284,12 @@ export const NCRService = {
 
       const causeTag = ncr.cause.replace(/-/g, ' ');
       const all = FinanceService.getLedger();
+      // Phase-7 (B6): NCR scrap write-off is a system-generated event,
+      // not a manual JV. Without `createdBy: 'system-auto'` the
+      // Maker-Checker gate in financeService.saveLedger threw and the
+      // catch block silently swallowed it — pieces stayed in WIP forever
+      // and the breakage loss never hit the P&L. The pre-assert here also
+      // catches any imbalanced lines before they touch the ledger.
       const entry = {
         id: `GL-NCR-${ncr.id}`,
         company,
@@ -292,18 +299,23 @@ export const NCRService = {
         description: `Glass Breakage Write-off — ${ncr.id} — ${ncr.stage} — ${causeTag}`,
         referenceId: ncr.id,
         status: 'Posted',
+        createdBy: 'system-auto',
         details: [
           { accountId: breakageLoss.id, debit: ncr.estimatedValue, credit: 0, text: `Breakage [${causeTag}]: ${ncr.description}`, costCenterId: prodCCId },
           { accountId: wip.id, debit: 0, credit: ncr.estimatedValue, text: `WIP reduction — ${ncr.sqftLost} sqft` },
         ],
       };
+      FinanceService.assertGLBalance(entry as any);
       FinanceService.saveLedger([...all, entry as any]);
       SyncService.markDirty('ledger');
 
       // Update NCR with GL reference
       NCRService.updateNCR(ncr.id, { glEntryId: entry.id });
-    } catch (e) {
-      console.warn('[NCR] GL write-off failed:', e);
+    } catch (e: any) {
+      // Now we surface the failure (toast) instead of silent console.warn —
+      // a missing GL entry on a scrap write-off was the original bug.
+      console.warn('[NCR] GL write-off failed:', e?.message || e);
+      toast.error(`NCR ${ncr.id}: GL write-off failed (${e?.message || 'unknown'}). Books will be wrong — investigate.`, { duration: 12000 });
     }
   },
 

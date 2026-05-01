@@ -35,16 +35,42 @@ const _writeWorkbook = (rows: any[], sheetName: string, fileName: string) => {
 };
 
 // ── 1. Production pieces ────────────────────────────────────────────────
+//
+// Phase-7 (P2-10): an explicit `company` filter is now mandatory. Without
+// it, an operator scoped to Glassco could accidentally export GTK / GTI
+// pieces that bled in via a parent component pulling `getProductionPieces()`
+// without a filter. The function signature is backward-compatible — when
+// `company` is omitted, behaviour is unchanged but a console.warn fires
+// so callers in code-review can be flagged.
 export function exportProductionPieces(
   pieces: ProductionPiece[],
   jobOrders: Quotation[],
   clients: Client[],
-  scopeLabel: string = 'all'
+  scopeLabel: string = 'all',
+  company?: string
 ): void {
   if (!pieces || pieces.length === 0) {
     throw new Error('No production pieces to export.');
   }
-  const rows = pieces.map((p: any) => {
+  if (!company) {
+    console.warn('[productionExporter] exportProductionPieces called without `company` — cross-company leak risk. Pass the active company.');
+  }
+  const filtered = company
+    ? pieces.filter((p: any) => {
+        // Pieces don't have a flat `company` column yet (see CLAUDE.md WIP),
+        // so we infer from orderId prefix: GLS=Glassco, GTK=GTK, GTI=GTI.
+        const orderId = String((p as any).orderId || '');
+        if (company === 'Glassco') return orderId.includes('GLS');
+        if (company === 'GTK')     return orderId.includes('GTK');
+        if (company === 'GTI')     return orderId.includes('GTI');
+        if (company === 'Nippon')  return orderId.includes('NIP');
+        return (p as any).company === company;
+      })
+    : pieces;
+  if (filtered.length === 0) {
+    throw new Error(`No production pieces to export for company "${company || 'all'}".`);
+  }
+  const rows = filtered.map((p: any) => {
     const order = jobOrders.find((j: any) => j.orderNo === p.orderId || j.id === p.orderId);
     const client = order ? clients.find((c: any) => c.id === order.clientId) : null;
     const item = order?.items?.[Number(p.itemIndex || 0)] || {};

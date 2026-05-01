@@ -490,6 +490,20 @@ export const AsyncSalesService = {
           `Expected a finite non-negative number. Recalculate and re-save.`
         );
       }
+      // Phase-7 (P2-3): mirror the SAL-1 discount cap from saveQuotations.
+      // Without this, an invoice generated from outside generateDeliveryInvoice
+      // (e.g. CSV import, manual edit) could persist a 110% discount and produce
+      // a negative AR posting. SAL-2 above catches `< 0` total but not bad
+      // discount inputs that happen to net to a positive total.
+      const subTotal = ((inv as any).items ?? []).reduce(
+        (s: number, i: any) => s + (Number(i.amount) || 0), 0
+      );
+      const discAmt = Number((inv as any).discountAmount ?? 0);
+      if (subTotal > 0 && discAmt > subTotal) {
+        throw new Error(
+          `SAL-1: Discount amount PKR ${discAmt} exceeds subtotal PKR ${subTotal} on invoice ${inv.id}.`
+        );
+      }
     }
     // Phase-2 (2.6): per-row merge save (preserves siblings)
     _mergeIntoLocal<Invoice>(KEYS.INVOICES, data);

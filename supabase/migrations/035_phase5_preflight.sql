@@ -87,6 +87,15 @@ END $$;
 --   snapshotted tables for the given company. Restorable by
 --   erp_snapshot_restore() (manual write — see runbook).
 -- ─────────────────────────────────────────────────────────────────────
+-- ─────────────────────────────────────────────────────────────────────
+-- 1b. Ensure erp_backups has all required columns (table may pre-date them)
+-- ─────────────────────────────────────────────────────────────────────
+ALTER TABLE erp_backups ADD COLUMN IF NOT EXISTS backup_type  TEXT;
+ALTER TABLE erp_backups ADD COLUMN IF NOT EXISTS table_count  INTEGER DEFAULT 0;
+ALTER TABLE erp_backups ADD COLUMN IF NOT EXISTS record_count INTEGER DEFAULT 0;
+ALTER TABLE erp_backups ADD COLUMN IF NOT EXISTS source       TEXT;
+ALTER TABLE erp_backups ADD COLUMN IF NOT EXISTS meta         JSONB DEFAULT '{}';
+
 CREATE OR REPLACE FUNCTION erp_snapshot(
   p_company TEXT DEFAULT NULL,    -- NULL = all companies
   p_label   TEXT DEFAULT 'manual'
