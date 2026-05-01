@@ -47,27 +47,39 @@ const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
     );
     setLoans(filtered);
 
-    // Fetch Authorized Requisitions for linking
+    // Phase-7 (P5-1): reqType mismatch fix. Audit RC-20: PR module saves
+    // reqType from the user-facing subCategory ("Loan Request" / "Salary
+    // Advance"), but LoanAdvance.type uses canonical "Loan" / "Advance".
+    // Previously approved loan PRs never appeared here → Hassan couldn't
+    // disburse loans that had been approved. Now we accept both forms and
+    // normalize when linking.
     const allReqs = InventoryService.getRequisitions().filter(Boolean);
-    const relevant = allReqs.filter(r => 
-      r.company === company && 
-      r.status === 'Approved' && 
-      (r.reqType === 'Loan' || r.reqType === 'Advance')
+    const relevant = allReqs.filter(r =>
+      r.company === company &&
+      r.status === 'Approved' &&
+      ['Loan', 'Loan Request', 'Advance', 'Salary Advance'].includes(r.reqType as string)
     );
     setAuthorizedReqs(relevant);
+  };
+
+  // Normalize PR reqType → LoanAdvance.type
+  const _normalizeLoanType = (reqType: string): 'Loan' | 'Advance' => {
+    if (reqType === 'Loan Request' || reqType === 'Loan') return 'Loan';
+    return 'Advance';   // 'Salary Advance' or 'Advance'
   };
 
   const handleLinkRequisition = (reqId: string) => {
       const req = authorizedReqs.find(r => r.id === reqId);
       if (req) {
+          const normalizedType = _normalizeLoanType(req.reqType as string);
           setNewLoan(prev => ({
               ...prev,
               requisitionId: req.id,
               amount: req.totalValue,
-              type: req.reqType as 'Loan' | 'Advance',
+              type: normalizedType,
               date: new Date().toISOString().split('T')[0] // Use current date for issuance
           }));
-          setModalType(req.reqType as 'Loan' | 'Advance');
+          setModalType(normalizedType);
       } else {
           setNewLoan(prev => ({ ...prev, requisitionId: '' }));
       }

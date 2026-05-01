@@ -522,7 +522,45 @@ const Requisitions: React.FC = () => {
     InventoryService.saveRequisitions(updated);
     SyncService.markDirty('requisitions');
     SyncService.markDirty('ledger');
-    toast.success(`Approved ✓ Parked PV ${pv.id} created — Finance must review & post`, { duration: 6000 });
+
+    // Phase-7 (P5-2): auto-apply Overtime Approval to attendance.
+    // Audit RC-21: previously an approved Overtime PR went to a Parked PV
+    // but the OT hours never reached attendance/payroll → payroll computed
+    // OT only from manually-entered attendance, ignoring approved PRs.
+    let otApplied = 0;
+    if (pr.subCategory === 'Overtime Approval') {
+      const otHours = Number((pr as any).overtimeHours) || 0;
+      const otEmpIds: string[] = ((pr as any).overtimeEmployees || []).filter(Boolean);
+      const otDate = (pr as any).date || new Date().toISOString().split('T')[0];
+
+      if (otHours > 0 && otEmpIds.length > 0) {
+        try {
+          const allAtt = HRService.getAttendance();
+          const updatedAtt = [...allAtt];
+          for (const empId of otEmpIds) {
+            const idx = updatedAtt.findIndex((r: any) => r.employeeId === empId && r.date === otDate);
+            if (idx >= 0) {
+              updatedAtt[idx] = { ...updatedAtt[idx], overtimeHours: (Number(updatedAtt[idx].overtimeHours) || 0) + otHours };
+            } else {
+              updatedAtt.push({
+                id: `ATT-OT-${empId}-${otDate}-${Date.now()}`,
+                employeeId: empId, date: otDate,
+                status: 'Present', lateMinutes: 0, earlyMinutes: 0,
+                overtimeHours: otHours,
+              } as any);
+            }
+            otApplied++;
+          }
+          await HRService.saveAttendance(updatedAtt);
+        } catch (e: any) {
+          console.warn('[OT Approval] Could not push OT to attendance:', e?.message);
+          toast.error(`OT PR approved but attendance update failed: ${e?.message?.slice(0,60)}`, { duration: 5000 });
+        }
+      }
+    }
+
+    const otNote = otApplied > 0 ? ` | OT applied to ${otApplied} employees on ${(pr as any).date}` : '';
+    toast.success(`Approved ✓ Parked PV ${pv.id} created — Finance must review & post${otNote}`, { duration: 6000 });
 
     // Send notification back to Branch
     if (company === 'Factory' && pr.company !== 'Factory') {
