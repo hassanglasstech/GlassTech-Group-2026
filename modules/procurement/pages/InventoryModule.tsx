@@ -38,6 +38,14 @@ const InventoryModule: React.FC = () => {
   const [handlingUnits, setHUs] = useState<HandlingUnit[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isMigoOpen, setIsMigoOpen] = useState(false);
+  // Phase-7 (P6-1): Glassco store-purchase MIGO. Audit RC-22: Glassco's
+  // existing GoodsReceiptMIGO is glass-only (filters PO category='Glass')
+  // and does NOT call FinanceService.settleAdvance — so local-purchase
+  // requisitions (Maintenance, Tool Purchase, Consumables, etc.) had no
+  // path to clear their Employee Advances PV after the actual bill came
+  // in. GTKStoreReceipt already supports linkedReqId + settleAdvance.
+  // Expose it as a second button for non-aluminium companies.
+  const [isStoreMigoOpen, setIsStoreMigoOpen] = useState(false);
 
   useEffect(() => {
     const refreshData = async () => {
@@ -108,8 +116,14 @@ const InventoryModule: React.FC = () => {
             </button>
           ))}
           <button onClick={() => setIsMigoOpen(true)} className="bg-slate-900 text-white px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center space-x-2 shadow-xl hover:bg-blue-600 transition-all whitespace-nowrap">
-            <Truck size={16} /><span>GRN (Stock In)</span>
+            <Truck size={16} /><span>{isAluminiumCompany ? 'GRN (Stock In)' : 'Glass GRN'}</span>
           </button>
+          {/* P6-1: Local-purchase GRN — settles advance PV from approved requisition */}
+          {!isAluminiumCompany && (
+            <button onClick={() => setIsStoreMigoOpen(true)} className="bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center space-x-2 shadow-xl hover:bg-emerald-800 transition-all whitespace-nowrap">
+              <PackageOpen size={16} /><span>Local Purchase GRN</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -207,12 +221,22 @@ const InventoryModule: React.FC = () => {
             refreshData={refreshSync}
           />
       ) : (
-          <GoodsReceiptMIGO 
+          <GoodsReceiptMIGO
             products={products}
             isOpen={isMigoOpen}
             onClose={() => setIsMigoOpen(false)}
             refreshData={refreshSync}
           />
+      )}
+      {/* P6-1: Local Purchase GRN for non-aluminium companies (Glassco/Nippon).
+          Reuses GTKStoreReceipt — same component already settles advance PV
+          via FinanceService.settleAdvance() when linkedReqId is provided. */}
+      {!isAluminiumCompany && (
+        <GTKStoreReceipt
+          isOpen={isStoreMigoOpen}
+          onClose={() => setIsStoreMigoOpen(false)}
+          refreshData={refreshSync}
+        />
       )}
     </div>
   );
