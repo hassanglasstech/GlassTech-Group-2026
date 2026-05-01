@@ -22,12 +22,12 @@ import WeightMaster from '@/modules/procurement/components/inventory/WeightMaste
 import PurchaseReturnModule from '@/modules/procurement/components/inventory/PurchaseReturnModule';
 import GlasscoMRP from '@/modules/procurement/components/inventory/GlasscoMRP';
 import { 
-  LayoutGrid, ArrowUpRight, ShieldCheck, Truck, Database, Loader2, Layers, BarChart3, Wrench, Banknote, PackageOpen, ClipboardList, Scale, TrendingDown
+  LayoutGrid, ArrowUpRight, Truck, Database, Loader2, Layers, BarChart3, Wrench, Banknote, PackageOpen, ClipboardList, Scale, TrendingDown
 } from 'lucide-react';
 
 const InventoryModule: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'overview' | 'master' | 'issuance' | 'migo' | 'quality' | 'remnants' | 'consumption' | 'tools' | 'advances' | 'opening' | 'grnRegister' | 'weightMaster' | 'mrp' | 'purchase_return'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'master' | 'issuance' | 'migo' | 'remnants' | 'consumption' | 'tools' | 'advances' | 'opening' | 'grnRegister' | 'weightMaster' | 'mrp' | 'purchase_return'>('overview');
   const [isLoading, setIsLoading] = useState(true);
   
   const [items, setItems] = useState<StoreItem[]>([]);
@@ -81,11 +81,14 @@ const InventoryModule: React.FC = () => {
     // Tools tab only for aluminium companies
     ...(isAluminiumCompany ? [{ id: 'tools', label: 'Tool Register', icon: Wrench }] : []),
     ...(isAluminiumCompany ? [{ id: 'advances', label: 'Cash Advances', icon: Banknote }] : []),
-    // Quality Hub & Remnants only for glass companies
-    ...(!isAluminiumCompany ? [{ id: 'quality', label: 'Quality Hub', icon: ShieldCheck }] : []),
-    ...(!isAluminiumCompany ? [{ id: 'remnants', label: 'Remnants', icon: Layers }] : []),
-    ...(!isAluminiumCompany ? [{ id: 'grnRegister', label: 'GRN Register', icon: ClipboardList }] : []),
-    ...(!isAluminiumCompany ? [{ id: 'weightMaster', label: 'Weight Master', icon: Scale }] : []),
+    // Glass/Nippon-specific tabs
+    // NOTE: 'quality' tab removed — QC/NCR lives in Production module (NCRModule)
+    ...(!isAluminiumCompany ? [{ id: 'remnants',       label: 'Remnants',        icon: Layers        }] : []),
+    ...(!isAluminiumCompany ? [{ id: 'grnRegister',    label: 'GRN Register',    icon: ClipboardList }] : []),
+    ...(!isAluminiumCompany ? [{ id: 'weightMaster',   label: 'Weight Master',   icon: Scale         }] : []),
+    // MRP + Purchase Return: glass companies only (render blocks already exist)
+    ...(isGlassCompany      ? [{ id: 'mrp',            label: 'MRP',             icon: TrendingDown  }] : []),
+    ...(!isAluminiumCompany ? [{ id: 'purchase_return',label: 'Purchase Return', icon: ArrowUpRight  }] : []),
   ];
 
   if (isLoading) return <div className="h-full flex items-center justify-center text-slate-400"><Loader2 className="animate-spin mr-2"/> Loading Inventory Data...</div>;
