@@ -376,6 +376,18 @@ const Requisitions: React.FC = () => {
         totalValue = formHeader.amount;
     }
 
+    // Phase-7 (P4-6): zero-value PR guard. Audit RC-19: previously a PR with
+    // 0 total could be saved (e.g. all rates left at 0), polluting the
+    // approval queue and creating a PKR 0 PV when approved. HR-category
+    // exempt (Waive Absent / Loan Request initial draft can be 0 by design
+    // — they're set later in the workflow).
+    if (formHeader.category !== 'HR' && totalValue <= 0) {
+      return toast.error(
+        'Validation Error: Total value must be > 0. Add line items with quantities and rates, or set the requested amount.',
+        { duration: 5000 }
+      );
+    }
+
     const allReqs = InventoryService.getRequisitions().filter(Boolean);
     const prId = AppService.generateSequenceID('REQ', company, allReqs);
 
@@ -480,18 +492,29 @@ const Requisitions: React.FC = () => {
     const pr = requisitions.find(r => r.id === id);
     if (!pr) return;
 
+    // Phase-7 (P4-1): zero-value PR guard. Audit RC-15: previously a PR with
+    // totalValue===0 (empty items, or all rates=0) would be approved and a
+    // PKR 0 Parked PV created → cluttered ledger + meaningless audit trail.
+    const prAmount = (pr as any).totalValue || (pr as any).loanAmount || (pr as any).amount || 0;
+    if (prAmount <= 0) {
+      toast.error(`Cannot approve PR ${id}: total value is PKR 0. Edit the PR with a non-zero amount first.`, { duration: 6000 });
+      return;
+    }
+
     const approvedPr = { ...pr, status: 'Approved' as const, approvedBy: 'MD', paymentStatus: 'Pending' as const };
 
-    // ── Single GL Entry: Parked PV ──
-    // Finance reviews → edits if needed → posts to GL
-    // NO separate postAutomatedRequisitionEntry (that caused double entries)
+    // ── Phase-7 (P4-2): atomic approval. Audit RC-16: previously the
+    // try/catch swallowed PV creation failures and STILL marked the PR as
+    // Approved → orphan Approved PR with no GL entry, breaking the audit
+    // chain. Now PV creation must succeed before the PR status changes.
+    let pv: any;
     try {
-      const pv = FinanceService.createParkedPV(approvedPr);
+      pv = FinanceService.createParkedPV(approvedPr);
       approvedPr.paymentRef = pv.id;
-      toast.success(`Approved ✓ Parked PV ${pv.id} created — Finance must review & post`, { duration: 6000 });
-    } catch (e) {
+    } catch (e: any) {
       console.error('PV creation failed:', e);
-      toast.error('Approved but PV creation failed — check Finance module', { duration: 5000 });
+      toast.error(`Approval blocked: Parked PV creation failed (${e?.message?.slice(0,60) || 'unknown'}). PR remains Pending — fix and retry.`, { duration: 7000 });
+      return; // abort: PR stays Pending, no ledger touch
     }
 
     const all = InventoryService.getRequisitions().filter(Boolean);
@@ -499,6 +522,7 @@ const Requisitions: React.FC = () => {
     InventoryService.saveRequisitions(updated);
     SyncService.markDirty('requisitions');
     SyncService.markDirty('ledger');
+    toast.success(`Approved ✓ Parked PV ${pv.id} created — Finance must review & post`, { duration: 6000 });
 
     // Send notification back to Branch
     if (company === 'Factory' && pr.company !== 'Factory') {
@@ -542,10 +566,25 @@ const Requisitions: React.FC = () => {
   };
 
   const handleDelete = (id: string) => {
-    if (!confirm("Are you sure you want to delete this requisition?")) return;
+    // Phase-7 (P4-3): block delete when PR is downstream-bound. Audit RC-17:
+    // previously deleting an Approved PR left an orphan Parked PV in the
+    // ledger (pv.reqId points to a PR that no longer exists). Likewise
+    // 'Converted to PO' would orphan the PO. Now we hard-block.
+    const pr = InventoryService.getRequisitions().find((r: any) => r.id === id);
+    if (!pr) return;
+    if (pr.status === 'Approved' || pr.status === 'Converted to PO' || pr.status === 'Paid') {
+      toast.error(
+        `Cannot delete PR ${id}: status is "${pr.status}". Downstream records exist (Parked PV / PO / Payment). ` +
+        `If you really need to remove this, void the PV first via Finance, then retry.`,
+        { duration: 7000 }
+      );
+      return;
+    }
+    if (!confirm(`Delete requisition ${id}? This cannot be undone.`)) return;
     const all = InventoryService.getRequisitions().filter(Boolean);
     InventoryService.saveRequisitions(all.filter(r => r.id !== id));
     refreshData();
+    toast.success(`Requisition ${id} deleted.`, { duration: 3000 });
   };
 
   // handlePaymentVoucher REMOVED — Parked PV is created on approval.

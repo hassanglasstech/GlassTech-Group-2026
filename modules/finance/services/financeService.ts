@@ -764,19 +764,37 @@ export const FinanceService = {
       pvDesc = `[PARKED] ${subCategory.toUpperCase()}: ${itemDesc}`.toUpperCase();
     }
 
+    // Phase-7 (P4-4): ensure both accounts exist before referencing them.
+    // Audit RC-18: previously the PV referenced "${company}-${code}" without
+    // calling ensureAccount — if the COA hadn't been seeded yet (or someone
+    // added a custom subcategory), the Parked PV pointed to a non-existent
+    // account → invisible in trial balance, ledger orphaned at post-time.
+    // Best-effort level=4 placement under the matching parent code.
+    const debitParentCode = debitCode.length >= 2 ? debitCode.slice(0, -1) : debitCode;
+    const creditParentCode = creditAcc.code.length >= 2 ? creditAcc.code.slice(0, -1) : creditAcc.code;
+    const debitType: Account['type']  = isStorePurchase ? 'Asset' : 'Expense';
+    const creditType: Account['type'] = ['11112','11111','11121'].includes(creditAcc.code) ? 'Asset' : 'Liability';
+    const debitAcc  = FinanceService.ensureAccount(company, debitName,        4, null, debitType,  debitCode);
+    const creditAccObj = FinanceService.ensureAccount(company, creditAcc.name, 4, null, creditType, creditAcc.code);
+
     const pv: LedgerTransaction = {
       id: pvId, company, docType: 'PV' as LedgerDocType,
       docDate: req.date || new Date().toISOString().split('T')[0],
       date: req.date || new Date().toISOString().split('T')[0],
       description: pvDesc, referenceId: req.id, status: 'Parked', reqId: req.id,
       details: [
-        { accountId: `${company}-${debitCode}`, debit: amount, credit: 0,
+        { accountId: debitAcc.id, debit: amount, credit: 0,
           text: `${debitCode} ${debitName}${isStorePurchase ? ' [ADVANCE]' : ''}`,
           costCenterId: req.items?.[0]?.costCenter || undefined },
-        { accountId: `${company}-${creditAcc.code}`, debit: 0, credit: amount,
+        { accountId: creditAccObj.id, debit: 0, credit: amount,
           text: `${creditAcc.code} ${creditAcc.name} | ${paymentMode || 'Cash'}` },
       ],
     };
+
+    // Phase-7 (P4-5): assert balance before persisting. Already balanced by
+    // construction (debit = credit = amount), but if a future refactor adds
+    // a third line we want LedgerImbalanceError, not silent corruption.
+    _assertGLBalance(pv);
 
     const all = FinanceService.getLedger();
     all.push(pv);
