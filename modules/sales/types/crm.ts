@@ -15,6 +15,11 @@ export interface Client {
   creditLimit: number;
   status: ClientStatus;
   createdAt: string;
+  // Sprint 2 — IC mirror FK. NULL/undefined = no mirror entry on invoice.
+  mirrorCompany?: 'GTK' | 'GTI' | 'Glassco' | 'Nippon' | 'Factory' | null;
+  // Sprint 2 — optimistic concurrency. Server bumps on every write via
+  // update_with_version RPC. Stale `version` → save throws version_conflict.
+  version?: number;
 }
 
 export interface VendorRate {

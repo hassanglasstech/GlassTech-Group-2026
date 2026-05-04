@@ -59,11 +59,14 @@ export interface GlassServiceCharge {
 
 export interface Quotation {
   id: string;
-  orderNo?: string; 
+  orderNo?: string;
   invoiceNo?: string;
   company: Company;
   date: string;
   clientId: string;
+  // Sprint 2 — optimistic concurrency. Server-bumped on each write via
+  // update_with_version RPC. Stale value → save throws version_conflict.
+  version?: number;
   projectName?: string; 
   dueDate?: string;
   reqDate?: string;
@@ -138,6 +141,8 @@ export interface ProductionPiece {
   receivedAtGateId?: string;
   dispatchId?: string;
   lastUpdated: string;
+  // Sprint 2 — optimistic concurrency
+  version?: number;
   fault?: PieceFault;
   pendingServices?: string[];
   isRevised?: boolean;

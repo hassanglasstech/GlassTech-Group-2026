@@ -26,7 +26,8 @@ const ClientMaster: React.FC = () => {
     address: '',
     ntn: '',
     creditLimit: 0,
-    status: 'Active'
+    status: 'Active',
+    mirrorCompany: null,  // Sprint 2 — explicit IC mirror FK
   };
 
   const [formData, setFormData] = useState<Partial<Client>>(initialForm);
@@ -52,6 +53,7 @@ const ClientMaster: React.FC = () => {
       ntn: client.ntn,
       creditLimit: client.creditLimit,
       status: client.status,
+      mirrorCompany: client.mirrorCompany ?? null,
     });
     setEditingId(client.id);
     setIsModalOpen(true);
@@ -231,6 +233,28 @@ const ClientMaster: React.FC = () => {
             <div className="space-y-1">
               <label className="text-[10px] font-bold uppercase text-slate-500">Credit Limit (PKR)</label>
               <input type="number" className="sap-input w-full font-black text-blue-600" value={formData.creditLimit} onChange={e => setFormData({...formData, creditLimit: Number(e.target.value)})} />
+            </div>
+            {/* Sprint 2 — IC mirror FK. Replaces regex-on-name lookup. */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold uppercase text-slate-500">
+                Intercompany Mirror
+                <span className="ml-1 text-slate-400 normal-case font-medium">— posts BILL on selected company's books at invoice time</span>
+              </label>
+              <select
+                className="sap-input w-full font-bold"
+                value={formData.mirrorCompany ?? ''}
+                onChange={e => setFormData({
+                  ...formData,
+                  mirrorCompany: (e.target.value || null) as Client['mirrorCompany'],
+                })}
+              >
+                <option value="">— None (no IC mirror) —</option>
+                <option value="GTK">GTK — GlassTech Karachi</option>
+                <option value="GTI">GTI — GlassTech Industries</option>
+                <option value="Glassco">Glassco</option>
+                <option value="Nippon">Nippon</option>
+                <option value="Factory">Factory Ops</option>
+              </select>
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-bold uppercase text-slate-500">Billing Address</label>

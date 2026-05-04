@@ -44,13 +44,27 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
     const [isDirty, setIsDirty] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; idx: number } | null>(null);
+    // Sprint 2 — surfaces version_conflict from update_with_version RPC.
+    // Modal offers reload (drops local edits) or cancel (lets user copy
+    // dirty fields before deciding).
+    const [conflictModal, setConflictModal] = useState<{ action: 'draft' | 'save' | 'approve' } | null>(null);
     const tableRef = useRef<HTMLDivElement>(null);
 
     const handleSaveClick = async (action: 'draft' | 'save' | 'approve') => {
       if (isSaving) return;
       setIsSaving(true);
-      try { await onSave(action); }
-      finally { setIsSaving(false); }
+      try {
+        await onSave(action);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes('version_conflict')) {
+          setConflictModal({ action });
+        } else {
+          throw e;
+        }
+      } finally {
+        setIsSaving(false);
+      }
     };
 
     // Auto-scroll to bottom only when rows exceed 7
@@ -624,6 +638,41 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                                 className="bg-amber-500 text-white px-6 py-2 rounded-xl text-xs font-bold uppercase shadow-lg hover:bg-amber-600"
                             >
                                 Confirm Override
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Sprint 2 — version-conflict reload prompt */}
+            {conflictModal && (
+                <div className="fixed inset-0 bg-slate-900/70 z-[600] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+                        <div className="px-6 py-4 bg-red-600 text-white rounded-t-2xl flex items-center gap-2">
+                            <span className="font-black uppercase text-sm">Edit Conflict</span>
+                        </div>
+                        <div className="p-5 space-y-3">
+                            <p className="text-xs text-slate-700 font-bold">
+                                Someone else edited this record while you were working on it.
+                                Your changes were NOT saved.
+                            </p>
+                            <p className="text-[11px] text-slate-500">
+                                Reload to see the latest version. Copy any unsaved fields
+                                before reloading — your local edits will be discarded.
+                            </p>
+                        </div>
+                        <div className="px-6 py-4 bg-slate-50 rounded-b-2xl flex justify-end gap-3">
+                            <button
+                                onClick={() => setConflictModal(null)}
+                                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-500 hover:bg-white"
+                            >
+                                Keep Editing
+                            </button>
+                            <button
+                                onClick={() => window.location.reload()}
+                                className="px-6 py-2 bg-red-600 text-white rounded-xl text-xs font-black uppercase hover:bg-red-700"
+                            >
+                                Reload Now
                             </button>
                         </div>
                     </div>

@@ -220,7 +220,10 @@ const accountToRow = (a: Account) => ({
   updated_at: new Date().toISOString(),
 });
 
-const ledgerToRow = (t: LedgerTransaction) => ({
+// Sprint 1: exported so deliveryInvoiceService can build atomic-RPC payloads
+// without re-implementing the column mapping. Keep this in lockstep with the
+// Supabase `ledger` table column list (migration 003 + 20260434).
+export const ledgerToRow = (t: LedgerTransaction) => ({
   id: t.id, company: t.company, doc_type: t.docType, doc_date: t.docDate,
   date: t.date, description: t.description,
   reference_id: t.referenceId ?? null, status: t.status,

@@ -598,6 +598,52 @@ export const InventoryService = {
     safeSave(KEYS.GRN_SHEET_ENTRIES, all);
   },
 
+  // ── Sheet consumption (Sprint 0) ──────────────────────────────────
+  // Available sheets for cutter autocomplete: company-scoped, status OK,
+  // not yet consumed by any active session. (Status Defective/Broken
+  // remain visible because they're still consumable with cutter note.)
+  getAvailableSheetsForCompany: (company: string): GRNSheetEntry[] =>
+    safeParse(KEYS.GRN_SHEET_ENTRIES).filter((e: GRNSheetEntry) =>
+      e.company === company && !e.consumedInSessionId
+    ),
+
+  // Atomic consume via Postgres RPC. Falls back to local-only marking
+  // if Supabase is unreachable (best-effort offline).
+  consumeSheet: async (
+    tagId: string,
+    sessionId: string,
+    company: string,
+    consumedBy: string
+  ): Promise<{ data: GRNSheetEntry | null; error: string | null }> => {
+    try {
+      const { data, error } = await supabase.rpc('consume_grn_sheet', {
+        p_tag_id: tagId,
+        p_session_id: sessionId,
+        p_company: company,
+        p_consumed_by: consumedBy,
+      });
+      if (error) return { data: null, error: error.message };
+
+      // Mirror the consumption into localStorage so offline reads agree
+      const all: GRNSheetEntry[] = safeParse(KEYS.GRN_SHEET_ENTRIES);
+      const idx = all.findIndex(e => e.tagId === tagId && e.company === company);
+      if (idx !== -1) {
+        all[idx] = {
+          ...all[idx],
+          consumedInSessionId: sessionId,
+          consumedAt: new Date().toISOString(),
+          consumedBy,
+        };
+        safeSave(KEYS.GRN_SHEET_ENTRIES, all);
+        return { data: all[idx], error: null };
+      }
+      return { data: null, error: 'sheet_not_found_locally' };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'consume_failed';
+      return { data: null, error: msg };
+    }
+  },
+
   // ── Vendor Defect Reports (Phase 1) ───────────────────────────────
   getVendorDefectReports: (): VendorDefectReport[] => safeParse(KEYS.VENDOR_DEFECT_REPORTS),
   getVendorDefectReportsByGRN: (grnId: string): VendorDefectReport[] =>

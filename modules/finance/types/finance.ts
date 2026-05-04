@@ -163,6 +163,8 @@ export interface Invoice {
   voidedAt?:  string;
   glTxId: string;
   payments: PaymentReceipt[];
+  // Sprint 2 — optimistic concurrency
+  version?: number;
 }
 
 export interface PaymentReceipt {

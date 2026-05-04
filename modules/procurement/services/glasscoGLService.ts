@@ -169,6 +169,104 @@ function getPieceCostData(piece: any, company: Company): {
 // A. CUTTING SESSION CLOSE → Dr WIP / Cr Glass Inventory
 // ══════════════════════════════════════════════════════════════════
 
+/**
+ * Sprint 1: builder for the atomic cutting-close flow.
+ * Returns the ledger row + per-material consumption plan WITHOUT
+ * writing. Caller bundles into consume_glass_stock RPC.
+ */
+export interface CuttingGLPlan {
+  ledgerTx: any | null;
+  consumption: Array<{ material_id: string; qty: number }>;
+  stockLedgerRows: any[];
+  totalSqft: number;
+  totalValue: number;
+  alreadyPosted: boolean;
+}
+
+export function buildCuttingGLPlan(params: {
+  company: Company;
+  sessionId: string;
+  sheetsScanned: { tagId: string; isDefective: boolean }[];
+  scrapSqft: number;
+  date: string;
+}): CuttingGLPlan {
+  const { company, sessionId, sheetsScanned, scrapSqft, date } = params;
+  const accs = glassAccounts(company);
+  const ledger = FinanceService.getLedger();
+  const txId = `GL-CUT-${sessionId}`;
+  if (ledger.some((t: any) => t.id === txId)) {
+    return { ledgerTx: null, consumption: [], stockLedgerRows: [],
+      totalSqft: 0, totalValue: 0, alreadyPosted: true };
+  }
+
+  const sheetEntries = sheetsScanned
+    .map(s => InventoryService.getGRNSheetEntryByTag(s.tagId))
+    .filter(Boolean);
+  if (sheetEntries.length === 0) {
+    return { ledgerTx: null, consumption: [], stockLedgerRows: [],
+      totalSqft: 0, totalValue: 0, alreadyPosted: false };
+  }
+
+  const byMaterial: Record<string, { sqft: number; map: number }> = {};
+  sheetEntries.forEach((entry: any) => {
+    if (!entry) return;
+    const map = getMAPForMaterial(company, entry.materialId);
+    if (!byMaterial[entry.materialId]) byMaterial[entry.materialId] = { sqft: 0, map };
+    byMaterial[entry.materialId].sqft += entry.sqftPerSheet || 0;
+  });
+
+  const totalSqft  = Object.values(byMaterial).reduce((s, v) => s + v.sqft, 0);
+  const totalValue = Object.values(byMaterial).reduce((s, v) => s + v.sqft * v.map, 0);
+  const wipValue   = totalValue;
+  const scrapValue = scrapSqft > 0 && totalSqft > 0
+    ? (scrapSqft / totalSqft) * totalValue : 0;
+  if (totalValue <= 0) {
+    return { ledgerTx: null, consumption: [], stockLedgerRows: [],
+      totalSqft, totalValue: 0, alreadyPosted: false };
+  }
+
+  const details: any[] = [
+    { accountId: accs.wip.id, debit: wipValue - scrapValue, credit: 0,
+      text: `Cutting: ${sheetEntries.length} sheets → WIP (${totalSqft.toFixed(1)} sqft)` },
+  ];
+  if (scrapValue > 0) {
+    details.push({ accountId: accs.scrap.id, debit: scrapValue, credit: 0,
+      text: `Cutting scrap: ${scrapSqft.toFixed(1)} sqft @ avg MAP` });
+  }
+  details.push({ accountId: accs.glassInv.id, debit: 0, credit: totalValue,
+    text: `Cutting session ${sessionId} — ${sheetEntries.length} sheets` });
+
+  const ledgerTx = {
+    id: txId, company, docType: 'WA',
+    docDate: date, date,
+    description: `Cutting GL: ${sessionId} — ${totalSqft.toFixed(1)} sqft → WIP`,
+    referenceId: sessionId, status: 'Posted' as const,
+    createdBy: 'system-auto',
+    details,
+  };
+
+  const consumption = Object.entries(byMaterial)
+    .map(([material_id, { sqft }]) => ({ material_id, qty: sqft }));
+
+  // Stock ledger audit rows — one per material consumed
+  const stockLedgerRows = consumption.map(c => ({
+    id: `SL-CUT-${sessionId}-${c.material_id}`,
+    company,
+    data: {
+      company,
+      materialId: c.material_id,
+      txnType: 'CUT-CONSUME',
+      qty: -c.qty,
+      sessionId,
+      date,
+      reference: txId,
+    },
+  }));
+
+  return { ledgerTx, consumption, stockLedgerRows,
+    totalSqft, totalValue, alreadyPosted: false };
+}
+
 export function postCuttingGL(params: {
   company: Company;
   sessionId: string;
@@ -423,6 +521,142 @@ export function postTemperingInwardGL(params: {
 // C. DELIVERY → Dr COGS / Cr Inventory  +  Dr Service COGS / Cr Accrued
 //    Separate GL lines per cost type: raw glass, cutting, processing
 // ══════════════════════════════════════════════════════════════════
+
+/**
+ * Sprint 1: when caller opts in to atomic mode, this returns the
+ * ledger transaction + the inventory side-effect plan WITHOUT writing
+ * anything. Caller (deliveryInvoiceService.generateDeliveryInvoiceAtomic)
+ * bundles the ledger row into post_invoice_atomic, then applies the
+ * inventory side-effects locally only after the RPC commits.
+ */
+export interface DeliveryCOGSPlan {
+  ledgerTx: any;
+  storeUpdates: Array<{ id: string; deduction: number }>;
+  totalSqft: number;
+  rawGlassCOGS: number;
+  totalCuttingCost: number;
+  totalProcessingCost: number;
+  alreadyPosted: boolean;
+}
+
+export function buildDeliveryCOGSPlan(params: {
+  company: Company;
+  invoiceId: string;
+  orderId: string;
+  pieceIds: string[];
+  date: string;
+  clientName: string;
+}): DeliveryCOGSPlan | null {
+  const { company, invoiceId, orderId, pieceIds, date, clientName } = params;
+  const accs = glassAccounts(company);
+  const ledger = FinanceService.getLedger();
+  const txId = `GL-COGS-${invoiceId}`;
+  if (ledger.some((t: any) => t.id === txId)) {
+    return { ledgerTx: null, storeUpdates: [], totalSqft: 0,
+      rawGlassCOGS: 0, totalCuttingCost: 0, totalProcessingCost: 0,
+      alreadyPosted: true };
+  }
+
+  const pieces = ProductionService.getProductionPieces()
+    .filter((p: any) => pieceIds.includes(p.id));
+  if (pieces.length === 0) return null;
+
+  let rawGlassCOGS = 0;
+  let totalSqft = 0;
+  const materialDeductions: Record<string, number> = {};
+
+  pieces.forEach((piece: any) => {
+    const { sqft, materialId, map, totalCost } = getPieceCostData(piece, company);
+    if (sqft <= 0 || map <= 0) return;
+    rawGlassCOGS += totalCost;
+    totalSqft    += sqft;
+    if (materialId) {
+      materialDeductions[materialId] = (materialDeductions[materialId] || 0) + totalCost;
+    }
+  });
+
+  const cuttingLabor: { nick: string; sqft: number; cost: number }[]    = [];
+  const processingLabor: { nick: string; sqft: number; cost: number }[] = [];
+  const CUTTING_SERVICES = new Set(['Cutting', 'Cut']);
+  const CUTTING_NICKS    = new Set(['cutting', 'cut']);
+
+  pieces.forEach((piece: any) => {
+    (piece.serviceLog || []).forEach((log: any) => {
+      const sqftLog = log.sqft || 0;
+      const rate    = log.costRatePerSqft || SERVICE_LABOR_RATES[log.serviceNick] || 0;
+      const cost    = log.totalCost > 0 ? log.totalCost : Math.round(sqftLog * rate);
+      if (cost <= 0) return;
+      const nick = log.serviceNick || '';
+      if (CUTTING_SERVICES.has(nick) || CUTTING_NICKS.has(nick.toLowerCase())) {
+        cuttingLabor.push({ nick, sqft: sqftLog, cost });
+      } else {
+        processingLabor.push({ nick, sqft: sqftLog, cost });
+      }
+    });
+  });
+
+  const totalCuttingCost    = cuttingLabor.reduce((s, l) => s + l.cost, 0);
+  const totalProcessingCost = processingLabor.reduce((s, l) => s + l.cost, 0);
+
+  if (rawGlassCOGS <= 0 && totalCuttingCost <= 0 && totalProcessingCost <= 0) return null;
+
+  const glDetails: any[] = [];
+  if (rawGlassCOGS > 0) {
+    glDetails.push({ accountId: accs.cogsGlass.id, debit: rawGlassCOGS, credit: 0,
+      text: `Raw glass COGS: ${pieces.length} pcs, ${totalSqft.toFixed(1)} sqft @ avg MAP PKR ${totalSqft > 0 ? (rawGlassCOGS / totalSqft).toFixed(0) : 0}/sqft` });
+    glDetails.push({ accountId: accs.glassInv.id, debit: 0, credit: rawGlassCOGS,
+      text: `Inventory relief: ${orderId} → ${clientName}` });
+  }
+  if (totalCuttingCost > 0) {
+    const cuttingSqft = cuttingLabor.reduce((s, l) => s + l.sqft, 0);
+    glDetails.push({ accountId: accs.cogsCutting.id, debit: totalCuttingCost, credit: 0,
+      text: `Cutting labour → COGS: ${cuttingSqft.toFixed(1)} sqft @ PKR ${cuttingSqft > 0 ? (totalCuttingCost / cuttingSqft).toFixed(0) : 0}/sqft` });
+    glDetails.push({ accountId: accs.wipLabour.id, debit: 0, credit: totalCuttingCost,
+      text: `WIP-Labour closed (cutting): ${orderId}` });
+  }
+  if (totalProcessingCost > 0) {
+    const byNick: Record<string, number> = {};
+    processingLabor.forEach(l => { byNick[l.nick] = (byNick[l.nick] || 0) + l.cost; });
+    const nickSummary = Object.entries(byNick).map(([k, v]) => `${k}=PKR ${v.toLocaleString()}`).join(', ');
+    const procSqft = processingLabor.reduce((s, l) => s + l.sqft, 0);
+    glDetails.push({ accountId: accs.cogsProcess.id, debit: totalProcessingCost, credit: 0,
+      text: `Processing labour → COGS: ${nickSummary} | ${procSqft.toFixed(1)} sqft` });
+    glDetails.push({ accountId: accs.wipLabour.id, debit: 0, credit: totalProcessingCost,
+      text: `WIP-Labour closed (processing): ${orderId}` });
+  }
+
+  const ledgerTx = {
+    id: txId, company, docType: 'SA',
+    docDate: date, date,
+    description: `COGS: ${orderId} → ${clientName} — ${totalSqft.toFixed(1)} sqft | Glass PKR ${rawGlassCOGS.toLocaleString()} | Labour PKR ${(totalCuttingCost + totalProcessingCost).toLocaleString()}`,
+    referenceId: invoiceId, status: 'Posted' as const,
+    createdBy: 'system-auto',
+    details: glDetails,
+  };
+
+  const storeUpdates = Object.entries(materialDeductions)
+    .map(([id, deduction]) => ({ id, deduction }));
+
+  return { ledgerTx, storeUpdates, totalSqft, rawGlassCOGS,
+    totalCuttingCost, totalProcessingCost, alreadyPosted: false };
+}
+
+export function applyDeliveryCOGSStoreUpdates(
+  company: Company,
+  storeUpdates: Array<{ id: string; deduction: number }>,
+  date: string,
+): void {
+  if (storeUpdates.length === 0) return;
+  const store = InventoryService.getStore();
+  const updateMap = new Map(storeUpdates.map(u => [u.id, u.deduction]));
+  const newStore = store.map((item: any) => {
+    if (item.company !== company) return item;
+    const deduction = updateMap.get(item.id) || 0;
+    if (deduction === 0) return item;
+    return { ...item, totalValue: Math.max(0, (item.totalValue || 0) - deduction), lastMovementDate: date };
+  });
+  InventoryService.saveStore(newStore);
+}
 
 export function postDeliveryCOGS(params: {
   company: Company;

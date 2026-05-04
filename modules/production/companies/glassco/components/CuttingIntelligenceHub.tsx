@@ -13,7 +13,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
-import { postCuttingGL } from '@/modules/procurement/services/glasscoGLService';
+import { postCuttingGL, buildCuttingGLPlan } from '@/modules/procurement/services/glasscoGLService';
+import { ledgerToRow } from '@/modules/finance/services/financeService';
+import { supabase } from '../../../../../src/services/supabaseClient';
+import { safeParse, safeSave } from '@/modules/shared/services/utils';
 import { LabourService, CutterDailyLog } from '@/modules/production/services/labourService';
 import { HRService } from '@/modules/hr/services/hrService';
 import { useProductionContext } from '@/modules/production/components/ProductionContext';
@@ -109,13 +112,17 @@ const SessionLogger: React.FC = () => {
     toast.success(`Session started for ${newForm.cutterName}`);
   };
 
-  const handleCloseSession = (sessionId: string) => {
+  // Sprint 1: atomic close. GL post + stock decrement + session-close all
+  // happen in one Postgres transaction (consume_glass_stock RPC). Any
+  // failure → full rollback, books unchanged.
+  const handleCloseSession = async (sessionId: string) => {
     const all = InventoryService.getCuttingSessions();
     const session = all.find(s => s.id === sessionId);
     if (!session) return;
 
     const actualWastage = closeForm.actualWastage;
     const variance = actualWastage - session.estimatedWastagePct;
+    const today = nowISO().split('T')[0];
     const updated: CuttingSession = {
       ...session,
       status: 'Closed',
@@ -127,49 +134,59 @@ const SessionLogger: React.FC = () => {
       supervisorSignOff: Math.abs(variance) > 5 ? 'PENDING' : undefined,
     };
 
-    // ── Phase-7 (B8): pre-flight stock guard — must happen BEFORE GL or save.
-    // Audit RC-12: previously the cutting session deducted stock with
-    // Math.max(0, qty - consumed), silently clamping to zero when insufficient.
-    // GL posted full WIP debit but stock was over-consumed → permanent
-    // stock-vs-books drift. Now we tally consumption FIRST, hard-fail if any
-    // material lacks the on-hand qty, abort the close.
-    const sheetEntriesForCheck = (session.sheetsScanned || [])
-      .map(s => InventoryService.getGRNSheetEntryByTag(s.tagId))
-      .filter(Boolean);
-
-    const consumedByMaterial: Record<string, number> = {};
-    sheetEntriesForCheck.forEach((entry: any) => {
-      if (!entry) return;
-      consumedByMaterial[entry.materialId] =
-        (consumedByMaterial[entry.materialId] || 0) + (entry.sqftPerSheet || 0);
-    });
-
-    const storeForCheck = InventoryService.getStore();
-    for (const [materialId, consumed] of Object.entries(consumedByMaterial)) {
-      const item = storeForCheck.find((s: any) => s.id === materialId);
-      const onHand = Number(item?.unrestrictedQty ?? item?.quantity ?? 0);
-      if (consumed > onHand) {
-        toast.error(
-          `Insufficient stock for ${item?.name || materialId}: need ${consumed.toFixed(2)} sqft, on-hand ${onHand.toFixed(2)} sqft. Cutting session NOT closed. Receive more glass via GRN first.`,
-          { duration: 9000 }
-        );
-        return; // abort: GL not posted, stock not deducted, session stays Open
-      }
-    }
-
-    InventoryService.saveCuttingSessions(all.map(s => s.id === sessionId ? updated : s));
-
-    // ── Post Cutting GL: Dr WIP / Cr Glass Inventory ─────────────
-    postCuttingGL({
+    // Build the cutting GL plan (no writes yet)
+    const plan = buildCuttingGLPlan({
       company: company as any,
       sessionId,
       sheetsScanned: session.sheetsScanned || [],
       scrapSqft: closeForm.scrapSqft || 0,
-      date: nowISO().split('T')[0],
+      date: today,
     });
 
-    // ── Reduce glass inventory for each sheet consumed (already validated) ──
+    if (plan.alreadyPosted) {
+      toast.error('Cutting GL already posted for this session.');
+      return;
+    }
+
+    // ── Atomic RPC: validate stock, decrement, post GL, update session ─
+    const { error } = await supabase.rpc('consume_glass_stock', {
+      p_company:      company,
+      p_session_id:   sessionId,
+      p_consumption:  plan.consumption,
+      p_gl_row:       plan.ledgerTx ? ledgerToRow(plan.ledgerTx as any) : null,
+      p_stock_rows:   plan.stockLedgerRows,
+      p_session_row:  { id: sessionId, data: updated },
+    });
+
+    if (error) {
+      const msg = error.message || '';
+      if (msg.startsWith('insufficient_stock')) {
+        toast.error(`Insufficient stock — ${msg}. Receive more glass via GRN first. Cutting session NOT closed.`,
+          { duration: 9000 });
+      } else if (msg.startsWith('gl_already_posted')) {
+        toast.error('Cutting GL already exists for this session.');
+      } else if (msg.startsWith('material_not_found')) {
+        toast.error(`Material missing in store: ${msg}. Reload master data.`);
+      } else {
+        toast.error(`Atomic close failed: ${msg}`);
+      }
+      return; // RPC rolled back — local state unchanged
+    }
+
+    // RPC committed. Mirror to localStorage so synchronous reads agree.
+    InventoryService.saveCuttingSessions(all.map(s => s.id === sessionId ? updated : s));
+    try {
+      const lsLedger = safeParse('gtk_erp_ledger') as any[];
+      if (plan.ledgerTx) {
+        safeSave('gtk_erp_ledger',
+          [...lsLedger.filter((t: any) => t.id !== plan.ledgerTx!.id), plan.ledgerTx]);
+      }
+    } catch { /* non-fatal */ }
+
     if (session.sheetsScanned && session.sheetsScanned.length > 0) {
+      // Mirror stock decrements locally — RPC already did the cloud write
+      const consumedByMaterial: Record<string, number> = {};
+      plan.consumption.forEach(c => { consumedByMaterial[c.material_id] = c.qty; });
       const store = InventoryService.getStore();
       const updatedStore = store.map((item: any) => {
         const consumed = consumedByMaterial[item.id] || 0;
@@ -178,7 +195,7 @@ const SessionLogger: React.FC = () => {
           ...item,
           unrestrictedQty: (item.unrestrictedQty || 0) - consumed,
           quantity: (item.quantity || 0) - consumed,
-          lastMovementDate: nowISO().split('T')[0],
+          lastMovementDate: today,
         };
       });
       InventoryService.saveStore(updatedStore);
@@ -194,6 +211,9 @@ const SessionLogger: React.FC = () => {
       toast.success(`Session closed — ${session.sheetsScanned?.length || 0} sheets deducted from inventory`);
     }
   };
+
+  // Silence unused-import lint after refactor
+  void postCuttingGL;
 
   const getDuration = (start: string, end?: string) => {
     const ms = new Date(end || nowISO()).getTime() - new Date(start).getTime();

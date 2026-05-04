@@ -6,9 +6,11 @@ export type { RequisitionStatus, PurchaseOrderStatus };
 export interface Product {
   id: string;
   company: Company;
-  category: string; 
+  // Sprint 2 — optimistic concurrency
+  version?: number;
+  category: string;
   description: string;
-  basePrice: number; 
+  basePrice: number;
   temperingPrice?: number;
   costPrice?: number; 
   unit: 'SqFt' | 'Unit' | 'RunningFt' | 'Inch' | 'KG' | 'Mtr' | 'Sheet' | 'PCS' | 'Set' | 'Pair' | 'Roll' | 'Pkt' | 'Box' | 'Ltr' | 'Tube';
@@ -63,10 +65,12 @@ export interface ProductComponent {
   qtyPerSet: number;
 }
 
-export interface StoreItem { 
-  id: string; 
-  company: Company; 
-  name: string; 
+export interface StoreItem {
+  id: string;
+  company: Company;
+  // Sprint 2 — optimistic concurrency
+  version?: number;
+  name: string;
   category: 'Raw' | 'Hardware' | 'Consumable' | 'Profile' | 'Service'; 
   quantity: number; 
   unrestrictedQty: number; 
@@ -215,6 +219,11 @@ export interface GRNSheetEntry {
 
   // ── Storage Location ──────────────────────────────────────────
   locationCode?: string;          // warehouse position code e.g. "A-01"
+
+  // ── Consumption Lock (Sprint 0) ───────────────────────────────
+  consumedInSessionId?: string;   // cutting session that claimed this sheet
+  consumedAt?: string;            // ISO timestamp when consumed
+  consumedBy?: string;            // cutter name who consumed
 }
 
 // ── Vendor Defect Report — formal report sent to vendor ───────────────────

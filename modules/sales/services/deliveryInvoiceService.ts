@@ -8,11 +8,24 @@
  */
 
 import { Company, Quotation, LedgerTransaction, Invoice } from '@/modules/shared/types';
-import { FinanceService } from '@/modules/finance/services/financeService';
+import { FinanceService, ledgerToRow } from '@/modules/finance/services/financeService';
 import { SalesService } from '@/modules/sales/services/salesService';
-import { postDeliveryCOGS } from '@/modules/procurement/services/glasscoGLService';
+import {
+  postDeliveryCOGS,
+  buildDeliveryCOGSPlan,
+  applyDeliveryCOGSStoreUpdates,
+} from '@/modules/procurement/services/glasscoGLService';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { allocateSerial } from '@/modules/sales/services/serialAllocator';
+import { supabase } from '../../../src/services/supabaseClient';
+import { safeParse, safeSave } from '@/modules/shared/services/utils';
+
+// Sprint 1: localStorage cache keys mirrored after the atomic RPC commits,
+// so synchronous getters (SalesService.getInvoices, FinanceService.getLedger)
+// see the new rows on the next read without waiting for the next pull cycle.
+const LS_INVOICES   = 'gtk_erp_invoices';
+const LS_LEDGER     = 'gtk_erp_ledger';
+const LS_QUOTATIONS = 'gtk_erp_quotations';
 
 interface InvoiceResult {
   invoiceId: string;
@@ -234,33 +247,31 @@ export async function generateDeliveryInvoice(
     createdBy: 'system-auto',
   } as any;
 
-  // Phase-7 (B1): pre-assert balance + abort invoice creation on imbalance.
-  // Previous flow swallowed the assertion error and persisted the invoice
-  // record anyway — books were left missing the AR/Revenue entry while the
-  // invoice itself appeared valid in the UI. Now the throw aborts the whole
-  // operation so the user can fix and retry, leaving books consistent.
+  // Phase-7 (B1): pre-assert balance — fail fast before any RPC dispatch.
   FinanceService.assertGLBalance(glTx);
-  FinanceService.recordTransaction(glTx);
 
-  // ── Financial Event Registry ──────────────────────────────────────
-  FinanceService.saveFinancialEvents([
-    ...FinanceService.getFinancialEvents(),
-    {
-      id: 'EVT-' + invoiceId, company, date: today,
-      sourceModule: 'Sales',
-      description: 'Invoice ' + invoiceId + ' — ' + clientName + ' — PKR ' + grandTotal.toLocaleString('en-PK'),
-      amount: grandTotal, referenceId: invoiceId, status: 'Posted',
-    },
-  ]);
+  // ── Inter-company mirror — build (don't write) ──────────────────────
+  // Sprint 2: prefer the explicit `client.mirrorCompany` FK over the legacy
+  // regex-on-name lookup. Regex stays as a fallback for migrating clients
+  // that haven't been edited yet (Hassan can backfill mirrorCompany via
+  // Client Master → Mirror Company dropdown).
+  const VALID_COMPANIES: Company[] = ['GTK', 'GTI', 'Glassco', 'Nippon', 'Factory'];
+  let targetCompany: Company | null = null;
+  const explicitMirror = (client as any)?.mirrorCompany;
+  if (explicitMirror && VALID_COMPANIES.includes(explicitMirror)) {
+    targetCompany = explicitMirror as Company;
+  } else if (!explicitMirror) {
+    // Legacy fallback — only used when mirrorCompany is null/undefined
+    const cNameUpper = clientName.toUpperCase();
+    const MIRROR_MAP: Record<string, Company> = {
+      GTI: 'GTI', GTK: 'GTK', NIPPON: 'Nippon', GLASSCO: 'Glassco', FACTORY: 'Factory',
+    };
+    targetCompany =
+      Object.entries(MIRROR_MAP).find(([key]) => cNameUpper.includes(key))?.[1] ?? null;
+  }
+  // explicitMirror set to '' / 'None' / null → no mirror (overrides regex).
 
-  // ── Inter-company mirror ──────────────────────────────────────────
-  const cNameUpper = clientName.toUpperCase();
-  const MIRROR_MAP: Record<string, Company> = {
-    GTI: 'GTI', GTK: 'GTK', NIPPON: 'Nippon', GLASSCO: 'Glassco', FACTORY: 'Factory',
-  };
-  const targetCompany =
-    Object.entries(MIRROR_MAP).find(([key]) => cNameUpper.includes(key))?.[1] ?? null;
-
+  let mirrorTx: LedgerTransaction | null = null;
   if (targetCompany && targetCompany !== company) {
     const targetAccounts = FinanceService.getAccounts().filter(
       (a: any) => a.company === targetCompany
@@ -273,8 +284,7 @@ export async function generateDeliveryInvoice(
     ) || targetAccounts.find((a: any) => a.type === 'Liability');
 
     if (costAcc && payableAcc) {
-      // Phase-7 (B1): system-auto + recordTransaction (pre-asserts balance).
-      const mirrorTx = {
+      mirrorTx = {
         id: 'BILL-' + txId, company: targetCompany, docType: 'KR',
         docDate: today, date: today,
         description: 'AUTO-PURCHASE: From ' + company + ' — ' + invoiceId,
@@ -284,13 +294,12 @@ export async function generateDeliveryInvoice(
           { accountId: costAcc.id,    debit: grandTotal, credit: 0,           text: 'Service from ' + company },
           { accountId: payableAcc.id, debit: 0,           credit: grandTotal, text: 'Payable to ' + company },
         ],
-      } as LedgerTransaction;
-      FinanceService.assertGLBalance(mirrorTx);
-      FinanceService.recordTransaction(mirrorTx);
+      } as any;
+      FinanceService.assertGLBalance(mirrorTx as LedgerTransaction);
     }
   }
 
-  // ── Create Invoice record ─────────────────────────────────────────
+  // ── Build invoice record ─────────────────────────────────────────
   const dueDate = new Date();
   dueDate.setDate(dueDate.getDate() + 30);
 
@@ -314,15 +323,11 @@ export async function generateDeliveryInvoice(
     discountAmount: discount,
     wastageApplied: applyWastage,
   };
-  SalesService.saveInvoices([...SalesService.getInvoices(), invoice]);
 
-  // ── Update Quotation status → Invoiced ───────────────────────────
-  // Phase-3 (3.10): when wastage was applied, push the adjusted items
-  // (with the higher rate / amount) back to the quotation so the printed
-  // quotation matches the invoice. Audit I11: previously the rate
-  // increment lived only on the invoice — customer reconciliation gap.
-  // Phase-2 (2.6): per-row save instead of read-modify-write-all.
+  // ── Build quotation patch ─────────────────────────────────────────
   const orderRow = SalesService.getQuotations().find((q: Quotation) => q.id === order.id);
+  let quotationPatch: { id: string; patch: any } | null = null;
+  let quotationFullUpdated: any = null;
   if (orderRow) {
     const updated: any = {
       ...orderRow,
@@ -334,33 +339,124 @@ export async function generateDeliveryInvoice(
       updated.wastageAppliedAt = today;
       updated.wastageAppliedInvoiceId = invoiceId;
     }
-    SalesService.saveQuotations([updated]);
+    quotationFullUpdated = updated;
+    quotationPatch = {
+      id: order.id,
+      patch: {
+        status: 'Invoiced',
+        invoiceNo: invoiceId,
+        ...(applyWastage ? {
+          items: effectiveItems,
+          wastageAppliedAt: today,
+          wastageAppliedInvoiceId: invoiceId,
+        } : {}),
+      },
+    };
   }
 
-  // ── COGS GL — raw glass + service labor ──────────────────────────
-  // Pre-validated above (B10): glass orders must have linkedPieceIds at this
-  // point. Pure-service orders (no glass items) skip COGS legitimately.
+  // ── Build COGS plan (without writing) ────────────────────────────
+  let cogsPlan: ReturnType<typeof buildDeliveryCOGSPlan> = null;
   if (linkedPieceIds.length > 0) {
-    try {
-      postDeliveryCOGS({
-        company,
-        invoiceId,
-        orderId: order.orderNo || order.id,
-        pieceIds: linkedPieceIds,
-        date: today,
-        clientName,
-      });
-    } catch (e: any) {
-      // Hard-fail: don't leave the invoice without its COGS — books would diverge.
-      console.error('[Invoice COGS] postDeliveryCOGS threw:', e);
-      throw new Error(
-        `COGS posting failed for ${invoiceId}: ${e?.message || 'unknown error'}. ` +
-        `Invoice was created but COGS not posted — DELETE the invoice or post a ` +
-        `manual JV to balance, then retry.`
-      );
-    }
+    cogsPlan = buildDeliveryCOGSPlan({
+      company, invoiceId,
+      orderId: order.orderNo || order.id,
+      pieceIds: linkedPieceIds,
+      date: today, clientName,
+    });
   }
-  // else: pure-service invoice (no glass items) — COGS not applicable.
+
+  // ── Sprint 1: ATOMIC RPC — invoice + GL + quote + COGS + mirror ─
+  // One Postgres transaction. If any step fails, the entire transaction
+  // rolls back. No more orphan ledger entries when step N+1 fails.
+  const rpcPayload = {
+    company,
+    invoice_row: {
+      id: invoice.id, company: invoice.company,
+      order_id: invoice.orderId, order_no: invoice.orderNo,
+      client_id: invoice.clientId, client_name: invoice.clientName,
+      date: invoice.date, due_date: invoice.dueDate,
+      total_amount: invoice.totalAmount, received_amount: invoice.receivedAmount,
+      balance: invoice.balance, status: invoice.status, gl_tx_id: invoice.glTxId,
+      payments: invoice.payments, items: invoice.items,
+      service_charges: invoice.serviceCharges, project_name: invoice.projectName,
+      discount_amount: invoice.discountAmount, gst_percent: invoice.gstPercent,
+      gst_amount: invoice.gstAmount,
+      data: { wastageApplied: invoice.wastageApplied, subtotal: invoice.subtotal },
+    },
+    main_ledger_row: ledgerToRow(glTx),
+    cogs_ledger_row: cogsPlan && cogsPlan.ledgerTx
+      ? ledgerToRow(cogsPlan.ledgerTx as LedgerTransaction)
+      : null,
+    mirror_ledger_row: mirrorTx ? ledgerToRow(mirrorTx) : null,
+    quotation_patch: quotationPatch,
+  };
+
+  const { data: rpcResult, error: rpcError } = await supabase.rpc(
+    'post_invoice_atomic',
+    { p_payload: rpcPayload }
+  );
+
+  if (rpcError) {
+    // Atomic transaction failed — nothing was written to the cloud.
+    // Surface the specific error so caller can act (already-exists →
+    // user re-pulls; imbalance → fix the calc; etc).
+    throw new Error(
+      `Atomic invoice post failed: ${rpcError.message || 'unknown'}. ` +
+      `No GL entry, no invoice, no quotation update — books unchanged. Retry safely.`
+    );
+  }
+
+  // ── Mirror writes to localStorage so synchronous reads agree ─────
+  // The RPC committed everything to Supabase. Writing to localStorage
+  // here does NOT trigger a duplicate cloud upsert — we use safeSave
+  // directly instead of the service-layer save functions which queue a
+  // sync push.
+  try {
+    const localInvoices = safeParse(LS_INVOICES) as any[];
+    safeSave(LS_INVOICES, [...localInvoices.filter((i: any) => i.id !== invoice.id), invoice]);
+
+    const localLedger = safeParse(LS_LEDGER) as any[];
+    const newLedgerEntries: any[] = [{ ...glTx }];
+    if (cogsPlan && cogsPlan.ledgerTx) newLedgerEntries.push({ ...cogsPlan.ledgerTx });
+    if (mirrorTx) newLedgerEntries.push({ ...mirrorTx });
+    const ledgerWithoutNew = localLedger.filter(
+      (t: any) => !newLedgerEntries.some(n => n.id === t.id)
+    );
+    safeSave(LS_LEDGER, [...ledgerWithoutNew, ...newLedgerEntries]);
+
+    if (quotationFullUpdated) {
+      const localQuotes = safeParse(LS_QUOTATIONS) as any[];
+      safeSave(LS_QUOTATIONS, [
+        ...localQuotes.filter((q: any) => q.id !== quotationFullUpdated.id),
+        quotationFullUpdated,
+      ]);
+    }
+
+    if (cogsPlan && !cogsPlan.alreadyPosted && cogsPlan.storeUpdates.length > 0) {
+      applyDeliveryCOGSStoreUpdates(company, cogsPlan.storeUpdates, today);
+    }
+  } catch (e) {
+    console.warn('[generateDeliveryInvoice] cloud committed but local mirror failed:', e);
+    // Non-fatal — next sync pull from Supabase will reconcile.
+  }
+
+  // ── Financial Event Registry (non-atomic, audit-only) ────────────
+  try {
+    FinanceService.saveFinancialEvents([
+      ...FinanceService.getFinancialEvents(),
+      {
+        id: 'EVT-' + invoiceId, company, date: today,
+        sourceModule: 'Sales',
+        description: 'Invoice ' + invoiceId + ' — ' + clientName + ' — PKR ' + grandTotal.toLocaleString('en-PK'),
+        amount: grandTotal, referenceId: invoiceId, status: 'Posted',
+      },
+    ]);
+  } catch { /* event log is best-effort, never blocks an invoice */ }
 
   return { invoiceId, finalAmount, gstAmount, grandTotal, alreadyInvoiced: false, clientName };
 }
+
+// Sprint 1: legacy postDeliveryCOGS path is still imported for any direct
+// callers that have not been migrated to the atomic flow. Re-export for
+// backward compatibility.
+export { postDeliveryCOGS };

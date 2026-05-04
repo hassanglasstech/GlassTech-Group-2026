@@ -54,6 +54,9 @@ const TABLE_MAP: Record<string, string> = {
   // Production
   production_pieces:  'gtk_erp_production_pieces',
   job_orders:         'gtk_erp_job_orders',
+  // Sprint 2 — Glassco floor live updates (cutting + sheet consumption)
+  cutting_sessions:   'gtk_erp_cutting_sessions',
+  grn_sheet_entries:  'gtk_erp_grn_sheet_entries',
   // Logistics
   gate_passes:        'gtk_erp_gate_pass',
   warehouse_spots:    'gtk_erp_warehouse_spots',

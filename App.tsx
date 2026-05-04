@@ -12,6 +12,9 @@ import { AppService } from '@/modules/shared/services/appService';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { SyncService } from '@/src/services/SyncService';
 import { RealtimeService } from '@/src/services/RealtimeService';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from '@/src/services/queryClient';
+import { startRealtimeQueryBridge } from '@/src/services/realtimeQueryBridge';
 import { getNetworkStatus, OfflineQueue } from '@/modules/shared/services/networkService';
 import { DataIntegrity } from '@/modules/shared/services/dataIntegrity';
 import { checkSchemaVersion } from '@/modules/shared/services/utils';
@@ -51,6 +54,7 @@ const ProcurementHub   = React.lazy(() => import('./modules/procurement/pages/Pr
 const EventOSChatWidget = React.lazy(() => import('./modules/factory/components/eventOS/ChatWidget').catch(() => ({ default: () => null })));
 const WazirLauncher     = React.lazy(() => import('./modules/wazir/components/WazirLauncher').catch(() => ({ default: () => null })));
 const TestSuite        = React.lazy(() => import('./modules/shared/pages/TestSuite'));
+const HealthMonitor    = React.lazy(() => import('./modules/admin/pages/HealthMonitor'));
 const LoanFlowChart    = React.lazy(() => import('./modules/shared/pages/LoanFlowChart'));
 const GuidedTestFlows  = React.lazy(() => import('./modules/shared/pages/GuidedTestFlows'));
 const E2EVerifier      = React.lazy(() => import('./modules/shared/pages/E2EVerifier'));
@@ -334,6 +338,9 @@ const App: React.FC = () => {
       AppService.checkAndTriggerAutoBackup();
       // Start Realtime AFTER initial fetch — live cross-device sync
       RealtimeService.start();
+      // Sprint 3: bridge gtk_realtime_update events into TanStack cache
+      // so hooks (useClients/useInvoices/...) refetch on remote changes.
+      startRealtimeQueryBridge();
     };
     init();
     return () => { RealtimeService.stop(); };
@@ -366,6 +373,7 @@ const App: React.FC = () => {
   return (
     <GlobalErrorBoundary>
       <a href="#main-content" className="skip-to-content">Skip to main content</a>
+    <QueryClientProvider client={queryClient}>
     <ShortcutProvider>
     <ConfirmProvider>
     <HashRouter>
@@ -467,6 +475,7 @@ const App: React.FC = () => {
                   <Route path="/md-dashboard" element={<ModuleErrorBoundary moduleName="MD Dashboard"><MDDashboard /></ModuleErrorBoundary>} />
                   <Route path="/factory-incharge" element={<ModuleErrorBoundary moduleName="Factory Incharge"><FactoryInchargeModule /></ModuleErrorBoundary>} />
                   <Route path="/admin"         element={<ModuleErrorBoundary moduleName="Admin"><AdminSecurity /></ModuleErrorBoundary>} />
+                  <Route path="/health"        element={<ModuleErrorBoundary moduleName="Health Monitor"><HealthMonitor /></ModuleErrorBoundary>} />
                   <Route path="/test-suite"    element={<ModuleErrorBoundary moduleName="UAT Test Suite"><TestSuite /></ModuleErrorBoundary>} />
                   <Route path="/loan-flow"     element={<ModuleErrorBoundary moduleName="Loan Flow Chart"><LoanFlowChart /></ModuleErrorBoundary>} />
                   <Route path="/guided-tests"  element={<ModuleErrorBoundary moduleName="Guided Tests"><GuidedTestFlows /></ModuleErrorBoundary>} />
@@ -484,6 +493,7 @@ const App: React.FC = () => {
     </HashRouter>
     </ConfirmProvider>
     </ShortcutProvider>
+    </QueryClientProvider>
     </GlobalErrorBoundary>
   );
 };

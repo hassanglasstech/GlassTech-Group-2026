@@ -1,9 +1,10 @@
 /**
- * CutterScanPanel.tsx — Phase 5
+ * CutterScanPanel.tsx — Phase 5 + Sprint 0 manual entry
  *
  * Cutter's active work interface:
  * - Select job order → see 2D cutting plan
- * - Scan sheet tag before cutting
+ * - Manually type sheet tag (autocomplete from grn_sheet_entries)
+ *   → DB-atomic consume_grn_sheet RPC blocks double-claim across sessions
  * - System detects missed/late scans → NCR-CUT auto-generated
  * - Defective sheet → per-piece defect check prompt
  * - Session tracking (CuttingSession)
@@ -20,9 +21,9 @@ import { CuttingSession, GRNSheetEntry } from '@/modules/procurement/types/inven
 import { JobOrder } from '@/modules/production/types/production';
 import CuttingDiagram, { buildPackingPiecesFromQuotation } from '@/modules/glassco/core/CuttingDiagram';
 import {
-  ScanLine, AlertTriangle, CheckCircle2, Clock, X,
+  AlertTriangle, CheckCircle2, Clock, X,
   Package, Scissors, ChevronDown, ChevronRight,
-  Play, Square, Tag, Info
+  Play, Square, Tag, Info, Search, Hash
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -85,6 +86,9 @@ const CutterScanPanel: React.FC = () => {
 
   const [activeSession, setActiveSession]         = useState<ActiveSession | null>(null);
   const [scanInput, setScanInput]                 = useState('');
+  const [showSuggestions, setShowSuggestions]     = useState(false);
+  const [highlightedIdx, setHighlightedIdx]       = useState(0);
+  const [isConsuming, setIsConsuming]             = useState(false);
   const [showDiagram, setShowDiagram]             = useState(false);
   const [selectedJobId, setSelectedJobId]         = useState('');
   const [expandedAlerts, setExpandedAlerts]       = useState(false);
@@ -122,7 +126,21 @@ const CutterScanPanel: React.FC = () => {
     const map: Record<string, GRNSheetEntry> = {};
     entries.forEach(e => { map[e.tagId] = e; });
     return map;
-  }, [company]);
+  }, [company, activeSession]);
+
+  // Available (un-consumed) sheets for autocomplete dropdown
+  const availableSheets: GRNSheetEntry[] = useMemo(() =>
+    InventoryService.getAvailableSheetsForCompany(company),
+  [company, activeSession]);
+
+  // Filtered suggestions based on cutter input (case-insensitive contains)
+  const sheetSuggestions = useMemo(() => {
+    const q = scanInput.trim().toUpperCase();
+    if (!q) return availableSheets.slice(0, 8);
+    return availableSheets
+      .filter(s => (s.tagId || '').toUpperCase().includes(q))
+      .slice(0, 8);
+  }, [scanInput, availableSheets]);
 
   // Missed scan alerts across all open sessions
   const missedAlerts = useMemo(() => {
@@ -152,21 +170,46 @@ const CutterScanPanel: React.FC = () => {
   };
 
   // ── Process scan ──────────────────────────────────────────────────────
-  const handleScan = () => {
-    const tagId = scanInput.trim().toUpperCase();
-    if (!tagId || !activeSession) return;
+  const handleScan = async (tagOverride?: string) => {
+    const tagId = (tagOverride ?? scanInput).trim().toUpperCase();
+    if (!tagId || !activeSession || isConsuming) return;
 
-    setScanInput('');
-
-    // Check if already scanned in this session
+    // Check if already scanned in this session (local guard)
     if (activeSession.scans.find(s => s.tagId === tagId)) {
       toast.warning(`${tagId} already scanned in this session`);
       return;
     }
 
-    // Lookup in GRN sheet entries
+    // Lookup in GRN sheet entries (must exist in this company)
     const sheetEntry = sheetDb[tagId];
-    const isDefective = sheetEntry?.status === 'Defective' || sheetEntry?.status === 'Broken';
+    if (!sheetEntry) {
+      toast.error(`Sheet ${tagId} not found in GRN — check tag number`, { duration: 4000 });
+      return;
+    }
+
+    // Atomic consume — DB-enforced lock prevents double-claim across sessions
+    setIsConsuming(true);
+    const { error } = await InventoryService.consumeSheet(
+      tagId, activeSession.sessionId, company, cutterName
+    );
+    setIsConsuming(false);
+
+    if (error) {
+      if (error.startsWith('sheet_already_consumed')) {
+        toast.error(`${tagId} already consumed in another session`, { duration: 5000 });
+      } else if (error.startsWith('sheet_not_found')) {
+        toast.error(`${tagId} not found in GRN — check tag number`, { duration: 4000 });
+      } else {
+        toast.error(`Could not claim ${tagId}: ${error}`, { duration: 5000 });
+      }
+      return;
+    }
+
+    setScanInput('');
+    setShowSuggestions(false);
+    setHighlightedIdx(0);
+
+    const isDefective = sheetEntry.status === 'Defective' || sheetEntry.status === 'Broken';
 
     // Late scan check: if piecesLogged > 0 and this is the FIRST scan on a new sheet
     // (heuristic: any scan after first piece without prior scan = late)
@@ -540,45 +583,109 @@ const CutterScanPanel: React.FC = () => {
             </div>
           )}
 
-          {/* Scan input */}
+          {/* Sheet entry input + autocomplete */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
             <div className="flex items-center gap-3 pb-4 border-b mb-4">
-              <ScanLine size={16} className="text-blue-600"/>
+              <Hash size={16} className="text-blue-600"/>
               <div>
-                <h3 className="text-xs font-black uppercase">Scan Sheet Tag</h3>
+                <h3 className="text-xs font-black uppercase">Enter Sheet Number</h3>
                 <p className="text-[9px] text-slate-400 font-bold mt-0.5">
-                  Scan or type tag ID before cutting each sheet
+                  Type tag ID — autocomplete suggests available sheets in stock
                 </p>
               </div>
             </div>
 
-            <div className="flex gap-3">
-              <input
-                ref={scanRef}
-                type="text"
-                className="sap-input flex-1 font-mono font-bold text-sm uppercase"
-                placeholder="GLS-5MM-0326-001-01"
-                value={scanInput}
-                onChange={e => setScanInput(e.target.value.toUpperCase())}
-                onKeyDown={e => e.key === 'Enter' && handleScan()}
-                autoComplete="off"
-                autoFocus
-              />
-              <button onClick={handleScan}
-                className="bg-blue-700 text-white px-6 py-2.5 rounded-xl font-black uppercase text-xs hover:bg-blue-800 flex items-center gap-2">
-                <ScanLine size={14}/> Scan
-              </button>
+            <div className="relative">
+              <div className="flex gap-3">
+                <div className="flex-1 relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none"/>
+                  <input
+                    ref={scanRef}
+                    type="text"
+                    className="sap-input w-full font-mono font-bold text-sm uppercase pl-9"
+                    placeholder="Type GLS-T- ..."
+                    value={scanInput}
+                    onChange={e => {
+                      setScanInput(e.target.value.toUpperCase());
+                      setShowSuggestions(true);
+                      setHighlightedIdx(0);
+                    }}
+                    onFocus={() => setShowSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                    onKeyDown={e => {
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setHighlightedIdx(i => Math.min(i + 1, sheetSuggestions.length - 1));
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setHighlightedIdx(i => Math.max(i - 1, 0));
+                      } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const pick = sheetSuggestions[highlightedIdx];
+                        handleScan(pick ? pick.tagId : undefined);
+                      } else if (e.key === 'Escape') {
+                        setShowSuggestions(false);
+                      }
+                    }}
+                    autoComplete="off"
+                    autoFocus
+                    disabled={isConsuming}
+                  />
+                </div>
+                <button onClick={() => handleScan()} disabled={isConsuming || !scanInput.trim()}
+                  className={`px-6 py-2.5 rounded-xl font-black uppercase text-xs flex items-center gap-2 ${
+                    isConsuming || !scanInput.trim()
+                      ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                      : 'bg-blue-700 text-white hover:bg-blue-800'
+                  }`}>
+                  <CheckCircle2 size={14}/> {isConsuming ? 'Saving…' : 'Use Sheet'}
+                </button>
+              </div>
+
+              {/* Autocomplete dropdown */}
+              {showSuggestions && sheetSuggestions.length > 0 && (
+                <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-40 max-h-64 overflow-y-auto">
+                  {sheetSuggestions.map((s, i) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onMouseDown={() => handleScan(s.tagId)}
+                      onMouseEnter={() => setHighlightedIdx(i)}
+                      className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 border-b last:border-b-0 ${
+                        i === highlightedIdx ? 'bg-blue-50' : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-mono font-black text-xs text-slate-800 truncate">{s.tagId}</span>
+                        <span className="text-[9px] text-slate-400 font-bold">
+                          {s.thickness} · {s.sheetSize} · {s.sqftPerSheet?.toFixed(1)} sqft
+                        </span>
+                      </div>
+                      {s.status !== 'OK' && (
+                        <span className="text-[9px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded shrink-0">
+                          {s.status.toUpperCase()}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {showSuggestions && scanInput && sheetSuggestions.length === 0 && (
+                <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-40 px-4 py-3">
+                  <p className="text-[10px] text-slate-400 font-bold">No matching sheet in stock — check tag number or GRN</p>
+                </div>
+              )}
             </div>
 
-            {/* Alert: log piece without scan button */}
+            {/* Alert: log piece without entry */}
             <div className="mt-3 flex items-center gap-3">
               <Info size={12} className="text-slate-400 shrink-0"/>
               <p className="text-[9px] text-slate-400 font-bold">
-                If you cut without scanning, tap below — this will raise an NCR-CUT alert.
+                If you cut without entering tag, tap below — this will raise an NCR-CUT alert.
               </p>
               <button onClick={handleLogPieceWithoutScan}
                 className="text-[9px] font-black text-red-500 border border-red-200 px-2 py-1 rounded-lg hover:bg-red-50 shrink-0">
-                Log piece (no scan)
+                Log piece (no tag)
               </button>
             </div>
           </div>
