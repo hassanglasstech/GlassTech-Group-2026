@@ -143,6 +143,11 @@ export interface ProductionPiece {
   lastUpdated: string;
   // Sprint 2 — optimistic concurrency
   version?: number;
+  // Sprint 5 — Hold-state asymmetry fix.
+  // When a piece is moved to status='Hold', `holdFrom` snapshots the
+  // origin status; when it leaves Hold the only legal exit is back to
+  // `holdFrom` (or the universal Broken/Returned). Cleared on exit.
+  holdFrom?: PieceStatus;
   fault?: PieceFault;
   pendingServices?: string[];
   isRevised?: boolean;

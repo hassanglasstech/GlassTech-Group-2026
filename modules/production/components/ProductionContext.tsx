@@ -4,6 +4,8 @@ import { Company, Quotation, Client, ProductionPiece, PieceStatus, TemperingDisp
 import { ProductionService } from '@/modules/production/services/productionService';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { postTemperingInwardGL, postDeliveryCOGS } from '@/modules/procurement/services/glasscoGLService';
+import { supabase } from '@/src/services/supabaseClient';                       // Sprint 5
+import { useAuthStore } from '@/modules/auth/authStore';                       // Sprint 5
 import { Loader2 } from 'lucide-react';
 
 // ── Phase-7 (B5): Piece status state-machine ──────────────────────────
@@ -66,11 +68,11 @@ interface ProductionContextType {
   activeInwardDispatchId: string;
   setActiveInwardDispatchId: (id: string) => void;
 
-  handleUpdatePieceStatus: (id: string, status: PieceStatus, extra?: Partial<ProductionPiece>) => void;
+  handleUpdatePieceStatus: (id: string, status: PieceStatus, extra?: Partial<ProductionPiece>) => Promise<void>;
   handleCuttingOutput: (piece: ProductionPiece) => void;
   handleInwardPiece: (pieceId: string) => void;
   togglePieceToDispatch: (pieceId: string) => void;
-  loadAllPiecesToDispatch: (pieceIds: string[]) => void;
+  loadAllPiecesToDispatch: (pieceIds: string[]) => Promise<void>;
   togglePieceForDelivery: (pieceId: string) => void;
   executeDirectDelivery: () => void;
   handleRecordFault: () => void;
@@ -163,28 +165,102 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
     setIsLoading(false);
   };
 
-  const handleUpdatePieceStatus = (id: string, status: PieceStatus, extra: Partial<ProductionPiece> = {}) => {
-    // Phase-7 (B5): enforce piece state-machine — reject illegal transitions.
-    // Without this, a piece can skip QC entirely (Cut → Dispatched) or jump
-    // back from Delivered into Cut (impossible in the real world). The
-    // operator gets a clear toast and the piece stays unchanged.
-    setPieces(prev => {
-        const current = prev.find(p => p.id === id);
-        if (current && !isTransitionAllowed(current.status as PieceStatus, status)) {
-          toast.error(
-            `Illegal status change: ${id} is "${current.status}" → "${status}". ` +
-            `Allowed next steps: ${[...(PIECE_TRANSITIONS[current.status as PieceStatus] || []), ...UNIVERSAL_TRANSITIONS].join(', ') || '(terminal)'}`,
-            { duration: 8000 }
-          );
-          return prev;
+  // ── Sprint 5 (P0 fix) — atomic piece status update via Postgres RPC. ───
+  // Audit defects addressed:
+  //   #1 P0: previous code used `getPiecesAsync().then(saveAll)` — non-
+  //          awaited, racy. Two fast clicks could lose the second update.
+  //   #3 P1: NCR could resurrect a Delivered piece because the client-side
+  //          state-machine guard was per-pieces snapshot. The RPC enforces
+  //          the same map server-side using SELECT … FOR UPDATE.
+  //   #5 P1: Hold state asymmetry — exits were unrestricted. The RPC
+  //          captures `holdFrom` on entry and rejects exits to anywhere
+  //          else (besides universal Broken/Returned/Hold).
+  //
+  // Client still does an optimistic update for snappy UX + a quick local
+  // transition guard (so the obvious "Cut → Dispatched" gets a toast
+  // immediately without a round-trip). On RPC failure we revert.
+  const handleUpdatePieceStatus = async (id: string, status: PieceStatus, extra: Partial<ProductionPiece> = {}) => {
+    const current = pieces.find(p => p.id === id);
+    if (!current) return;
+
+    // Client-side transition guard (mirrors RPC) — fast feedback path.
+    const fromStatus = current.status as PieceStatus;
+    if (fromStatus === 'Hold') {
+      // Hold→origin only (or universal). Mirror of RPC hold check.
+      const hf = (current as any).holdFrom as PieceStatus | undefined;
+      const isUniversal = UNIVERSAL_TRANSITIONS.includes(status);
+      if (!isUniversal && hf && status !== hf) {
+        toast.error(
+          `Hold exit blocked: ${id} was held from "${hf}" — it can only return to "${hf}" (or Broken/Returned).`,
+          { duration: 8000 }
+        );
+        return;
+      }
+    } else if (!isTransitionAllowed(fromStatus, status)) {
+      toast.error(
+        `Illegal status change: ${id} is "${current.status}" → "${status}". ` +
+        `Allowed next steps: ${[...(PIECE_TRANSITIONS[fromStatus] || []), ...UNIVERSAL_TRANSITIONS].join(', ') || '(terminal)'}`,
+        { duration: 8000 }
+      );
+      return;
+    }
+
+    // Optimistic UI: patch local state immediately so the operator sees
+    // the change without waiting for the network round-trip.
+    const optimistic: Partial<ProductionPiece> = {
+      ...extra,
+      status,
+      lastUpdated: new Date().toISOString(),
+    };
+    if (status === 'Hold' && fromStatus !== 'Hold') {
+      (optimistic as any).holdFrom = fromStatus;
+    } else if (fromStatus === 'Hold' && status !== 'Hold') {
+      (optimistic as any).holdFrom = undefined;
+    }
+    setPieces(prev => prev.map(p => p.id === id ? { ...p, ...optimistic } as ProductionPiece : p));
+
+    // Atomic server-side update — locks the row, validates again, increments
+    // version, audit-trail trigger captures before/after automatically.
+    try {
+      const actor = useAuthStore.getState().profile?.email
+                  ?? useAuthStore.getState().user?.email
+                  ?? 'system';
+      const { error } = await supabase.rpc('update_piece_status_atomic', {
+        p_piece_id:   id,
+        p_new_status: status,
+        p_changed_by: actor,
+        p_reason:     null,
+        p_extra:      extra as any,
+      });
+      if (error) {
+        // Revert optimistic update + surface server-side reason.
+        setPieces(prev => prev.map(p => p.id === id ? current : p));
+        const msg = error.message || '';
+        if (msg.includes('invalid_hold_exit')) {
+          toast.error(`Hold exit rejected by server: ${msg}`, { duration: 9000 });
+        } else if (msg.includes('invalid_transition')) {
+          toast.error(`Server rejected status transition: ${msg}`, { duration: 9000 });
+        } else if (msg.includes('piece_not_found')) {
+          toast.error(`Piece ${id} not found in cloud — refresh and retry.`, { duration: 9000 });
+        } else {
+          toast.error(`Atomic status update failed: ${msg}`, { duration: 9000 });
         }
-        const updated = prev.map(p => p.id === id ? { ...p, ...extra, status, lastUpdated: new Date().toISOString() } : p);
-        ProductionService.getProductionPiecesAsync().then(all => {
-            const newAll = all.map(p => p.id === id ? { ...p, ...extra, status, lastUpdated: new Date().toISOString() } : p);
-            ProductionService.saveProductionPieces(newAll);
-        });
-        return updated;
-    });
+        return;
+      }
+      // RPC committed. Mirror to localStorage for synchronous reads.
+      ProductionService.getProductionPiecesAsync().then(all => {
+        const newAll = all.map(p => p.id === id ? { ...p, ...optimistic } as ProductionPiece : p);
+        ProductionService.saveProductionPieces(newAll);
+      });
+    } catch (e: any) {
+      // Network exception — keep optimistic update locally; offline-queue
+      // will catch the cloud delta on reconnect.
+      console.warn('[update_piece_status_atomic] network exception (kept local):', e?.message);
+      ProductionService.getProductionPiecesAsync().then(all => {
+        const newAll = all.map(p => p.id === id ? { ...p, ...optimistic } as ProductionPiece : p);
+        ProductionService.saveProductionPieces(newAll);
+      });
+    }
   };
 
   const handleCuttingOutput = (piece: ProductionPiece) => {
@@ -255,27 +331,82 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
     setDispatches(updatedDispatches);
   };
 
-  // Batch load multiple pieces to active dispatch at once
-  const loadAllPiecesToDispatch = (pieceIds: string[]) => {
-    if (!activeDispatchIdForLoading) return toast.error("Choose a Trip first.", { duration: 4000 });
+  // ── Sprint 5 (P1 fix) — atomic batch dispatch via Postgres RPC. ───
+  // Audit defect #4: previous code did getPieces → mutate-all → saveAll
+  // which is non-atomic — two operators dispatching the same piece
+  // into different trips simultaneously could both succeed. The RPC
+  // takes a SELECT … FOR UPDATE on each piece + the dispatch row, so
+  // the second batch waits and then sees the first one's changes
+  // (rejecting any piece already in another active dispatch).
+  const loadAllPiecesToDispatch = async (pieceIds: string[]) => {
+    if (!activeDispatchIdForLoading) {
+      toast.error("Choose a Trip first.", { duration: 4000 });
+      return;
+    }
     const targetTrip = dispatches.find(d => d.id === activeDispatchIdForLoading);
     if (!targetTrip) return;
+    if (pieceIds.length === 0) {
+      toast.warning('No pieces selected to load.');
+      return;
+    }
 
-    const allPcs = ProductionService.getProductionPieces();
-    const updatedPcs = allPcs.map(p => {
-      if (pieceIds.includes(p.id) && p.dispatchId !== activeDispatchIdForLoading) {
-        return { ...p, dispatchId: activeDispatchIdForLoading, lastUpdated: new Date().toISOString() };
+    const actor = useAuthStore.getState().profile?.email
+                ?? useAuthStore.getState().user?.email
+                ?? 'system';
+
+    try {
+      const { data, error } = await supabase.rpc('load_pieces_to_dispatch_atomic', {
+        p_dispatch_id: activeDispatchIdForLoading,
+        p_piece_ids:   pieceIds,
+        p_changed_by:  actor,
+      });
+      if (error) {
+        const msg = error.message || '';
+        if (msg.includes('piece_already_dispatched')) {
+          toast.error(`Batch rejected — at least one piece is already in another dispatch: ${msg}`, { duration: 10000 });
+        } else if (msg.includes('piece_not_dispatchable')) {
+          toast.error(`Batch rejected — piece status not eligible for dispatch: ${msg}`, { duration: 10000 });
+        } else if (msg.includes('piece_not_found')) {
+          toast.error(`Batch rejected — piece not found: ${msg}. Refresh and retry.`, { duration: 10000 });
+        } else if (msg.includes('dispatch_not_found')) {
+          toast.error(`Trip ${activeDispatchIdForLoading} not found in cloud.`, { duration: 8000 });
+        } else {
+          toast.error(`Atomic batch dispatch failed: ${msg}`, { duration: 10000 });
+        }
+        return; // RPC rolled back — no local mutation either
       }
-      return p;
-    });
-    ProductionService.saveProductionPieces(updatedPcs);
-    setPieces(updatedPcs.filter(p => p.company === company));
 
-    const newPieceIds = [...new Set([...targetTrip.pieceIds, ...pieceIds])];
-    const updDisp = dispatches.map(d => d.id === activeDispatchIdForLoading ? { ...d, pieceIds: newPieceIds } : d);
-    ProductionService.saveTemperingDispatches(updDisp);
-    setDispatches(updDisp);
-    toast.success(`${pieceIds.length} pieces loaded to ${targetTrip.plantName}`);
+      // RPC committed. Mirror to local state + localStorage.
+      const allPcs = ProductionService.getProductionPieces();
+      const updatedPcs = allPcs.map(p => {
+        if (pieceIds.includes(p.id) && p.dispatchId !== activeDispatchIdForLoading) {
+          return {
+            ...p,
+            dispatchId: activeDispatchIdForLoading,
+            status: 'Dispatched' as PieceStatus,
+            lastUpdated: new Date().toISOString(),
+          };
+        }
+        return p;
+      });
+      ProductionService.saveProductionPieces(updatedPcs);
+      setPieces(updatedPcs.filter(p => (p as any).company === company));
+
+      const newPieceIds = [...new Set([...targetTrip.pieceIds, ...pieceIds])];
+      const updDisp = dispatches.map(d => d.id === activeDispatchIdForLoading ? { ...d, pieceIds: newPieceIds } : d);
+      ProductionService.saveTemperingDispatches(updDisp);
+      setDispatches(updDisp);
+
+      const result: any = data || {};
+      const added = result.added ?? pieceIds.length;
+      const skipped = result.skipped ?? 0;
+      toast.success(
+        `${added} pieces loaded to ${targetTrip.plantName}${skipped > 0 ? ` (${skipped} already there)` : ''}`,
+        { duration: 4000 }
+      );
+    } catch (e: any) {
+      toast.error(`Network error during batch dispatch: ${e?.message || 'unknown'}`, { duration: 8000 });
+    }
   };
 
   const handleInwardPiece = (pieceId: string) => {

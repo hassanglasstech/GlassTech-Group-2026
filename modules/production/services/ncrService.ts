@@ -45,7 +45,32 @@ export const NCRService = {
     NCRService.getNCREvents().filter(e => e.jobOrderId === jobOrderId),
 
   // ── Create NCR ───────────────────────────────────────────────────────
+  // Sprint 5 (defect #3 — P1): Reject NCR creation against pieces that
+  // have already terminated (Delivered / Broken). Without this guard
+  // an NCR would set the piece status back to 'Broken' even if the
+  // customer had already received it — silent zombie that confused
+  // dispatch + COGS accounting (delivered piece "becomes" broken,
+  // which it never was at delivery time).
+  //
+  // The server-side equivalent is enforced by update_piece_status_atomic
+  // (migration 046) — Delivered → Broken is allowed via the universal
+  // 'Broken' carve-out, but ncrService is the official entry point for
+  // NCR-driven status transitions and deserves a stricter, more
+  // descriptive guard at the application boundary.
   createNCR: (data: Omit<NCREvent, 'id' | 'reportedAt' | 'status'>): NCREvent => {
+    if (data.pieceId) {
+      const piece = ProductionService.getProductionPieces().find(p => p.id === data.pieceId);
+      if (piece && (piece.status === 'Delivered' || piece.status === 'Broken')) {
+        const errMsg = `NCR rejected — piece ${data.pieceId} is "${piece.status}". ` +
+          `${piece.status === 'Delivered'
+            ? 'Delivered pieces cannot have an NCR raised; issue a Customer Complaint or Credit Note instead.'
+            : 'This piece already has an NCR — see existing NCR for it.'}`;
+        toast.error(errMsg, { duration: 12000 });
+        Logger.warn('Production', 'NCR blocked on terminal piece', { pieceId: data.pieceId, status: piece.status });
+        throw new Error(errMsg);
+      }
+    }
+
     const ncr: NCREvent = {
       ...data,
       id: genNcrId(),
