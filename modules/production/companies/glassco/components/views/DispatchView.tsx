@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useProductionContext } from '@/modules/production/components/ProductionContext';
 import AnalyticsView from '@/modules/production/components/AnalyticsView';
 import QCCheckPanel from '@/modules/glassco/core/QCCheckPanel';                     // Phase-4 (4.2)
 import QCDefectPicker, { QCDefectSelection } from '@/modules/glassco/core/QCDefectPicker';   // Sprint 7
 import { QC_DEFECT_CODE_MAP } from '@/modules/production/constants/qcCodes';                  // Sprint 7
+import BulkActionBar, { useBulkSelection, BulkAction } from '@/modules/production/components/sub/BulkActionBar';   // Sprint 8
 import { exportTemperingDispatches, exportProductionPieces } from '@/modules/production/services/productionExporter';  // Phase-6 (6.7)
-import { ShieldAlert, PackageCheck, Ban, BarChart3, ChevronLeft, User, LayoutGrid, X, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
+import { ShieldAlert, PackageCheck, Ban, BarChart3, ChevronLeft, User, LayoutGrid, X, AlertTriangle, ShieldCheck, FileSpreadsheet, CheckCircle2, Truck } from 'lucide-react';
 import { NCRService } from '@/modules/production/services/ncrService';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { toast } from 'sonner';
@@ -132,6 +133,55 @@ const DispatchView: React.FC = () => {
 
   const handleQCFail = (piece: any) => setFailingPiece(piece);
 
+  // ── Sprint 8 — bulk selection (per-tab) ─────────────────────────────
+  const bulk = useBulkSelection<string>();
+
+  // Reset selection when the tab changes — different tabs have different
+  // valid actions (QC tab → Pass, FG tab → Dispatched).
+  useEffect(() => { bulk.clear(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [activeSubTab]);
+
+  // Bulk handlers — re-use Sprint 5's atomic update_piece_status_atomic
+  // by routing through handleUpdatePieceStatus which already calls the
+  // RPC + falls back to local state on network error.
+  const handleBulkPass = async () => {
+    const ids = bulk.selectedArray;
+    if (ids.length === 0) return;
+    if (!confirm(`Mark ${ids.length} piece(s) as QC-Passed?`)) return;
+    let success = 0; let failed = 0;
+    for (const id of ids) {
+      try {
+        await handleUpdatePieceStatus(id, 'QC-Passed' as any);
+        success++;
+      } catch { failed++; }
+    }
+    bulk.clear();
+    toast.success(`Bulk QC pass: ${success}/${ids.length} pieces${failed > 0 ? ` (${failed} failed — see toasts)` : ''}`, { duration: 6000 });
+  };
+  const handleBulkMarkDispatched = async () => {
+    const ids = bulk.selectedArray;
+    if (ids.length === 0) return;
+    if (!confirm(`Mark ${ids.length} piece(s) as Dispatched?`)) return;
+    let success = 0; let failed = 0;
+    for (const id of ids) {
+      try {
+        await handleUpdatePieceStatus(id, 'Dispatched' as any);
+        success++;
+      } catch { failed++; }
+    }
+    bulk.clear();
+    toast.success(`Bulk dispatch: ${success}/${ids.length} pieces${failed > 0 ? ` (${failed} failed)` : ''}`);
+  };
+  const handleBulkPrintTags = () => {
+    const ids = bulk.selectedArray;
+    if (ids.length === 0) return;
+    // Lightweight: open the browser print dialog with a tagged listing.
+    // Full per-piece label printing already lives in CutterScanPanel /
+    // GlassCoSheetTagPrint — Sprint 8 wires the bulk-action surface;
+    // dedicated mass-tag print is a Sprint 6/16 follow-up.
+    toast.success(`${ids.length} pieces queued for print (open Job Card from registry to print).`);
+    bulk.clear();
+  };
+
   const confirmQCFail = (faultCode: string, faultDesc: string, notes: string, createNCR: boolean) => {
     if (!failingPiece) return;
     // Update piece status with fault info
@@ -185,17 +235,52 @@ const DispatchView: React.FC = () => {
                         <div><p className="text-[9px] font-black text-slate-400 uppercase">Ft²</p><p className="text-lg font-black">{jobData.pendingSqFt}</p></div>
                     </div>
                 </div>
+                {/* Sprint 8 — bulk select all toggle (only on tabs that support it) */}
+                {(activeSubTab === 'qc' || activeSubTab === 'finished_goods') && relevantPieces.length > 0 && (
+                  <div className="flex items-center gap-2 px-1">
+                    <button
+                      onClick={() => {
+                        const ids = relevantPieces.map(p => p.id);
+                        if (ids.every(id => bulk.isSelected(id))) bulk.clear();
+                        else bulk.replace(ids);
+                      }}
+                      className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-900"
+                    >
+                      {relevantPieces.every(p => bulk.isSelected(p.id)) && relevantPieces.length > 0
+                        ? `Clear all (${relevantPieces.length})`
+                        : `Select all (${relevantPieces.length})`}
+                    </button>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {relevantPieces.map(p => (
-                        <div key={p.id} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm space-y-3">
-                            <div className="flex justify-between items-start">
-                                <span className="font-black text-blue-600 text-sm">{p.id}</span>
-                                <button onClick={() => openBinModal(p)} className="text-[9px] font-bold text-slate-400 border border-slate-200 rounded px-1.5 py-0.5 hover:border-slate-400">BIN</button>
+                    {relevantPieces.map(p => {
+                        const selectable = activeSubTab === 'qc' || activeSubTab === 'finished_goods';
+                        const checked = selectable && bulk.isSelected(p.id);
+                        return (
+                            <div
+                              key={p.id}
+                              className={`bg-white border-2 rounded-2xl p-4 shadow-sm space-y-3 transition-colors ${checked ? 'border-blue-500 bg-blue-50' : 'border-slate-100'}`}
+                            >
+                                <div className="flex justify-between items-start">
+                                    <div className="flex items-center gap-2">
+                                      {selectable && (
+                                        <input
+                                          type="checkbox"
+                                          checked={checked}
+                                          onChange={() => bulk.toggle(p.id)}
+                                          aria-label={`Select piece ${p.id}`}
+                                          className="w-5 h-5 rounded cursor-pointer"
+                                        />
+                                      )}
+                                      <span className="font-black text-blue-600 text-sm">{p.id}</span>
+                                    </div>
+                                    <button onClick={() => openBinModal(p)} className="text-[9px] font-bold text-slate-400 border border-slate-200 rounded px-1.5 py-0.5 hover:border-slate-400">BIN</button>
+                                </div>
+                                <p className="text-xs text-slate-500 leading-tight">{p.specs}</p>
+                                {renderAction(p)}
                             </div>
-                            <p className="text-xs text-slate-500 leading-tight">{p.specs}</p>
-                            {renderAction(p)}
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
         );
@@ -332,6 +417,43 @@ const DispatchView: React.FC = () => {
             onCancel={() => setFailingPiece(null)}
           />
         )}
+
+        {/* Sprint 8 — bulk action bar (visible only when N > 0). Actions
+            depend on the active tab so we don't surface "Mark Dispatched"
+            on a QC-pending piece etc. */}
+        <BulkActionBar
+          count={bulk.count}
+          total={pieces.filter(p =>
+            activeSubTab === 'qc' ? p.status === 'QC-Pending'
+            : activeSubTab === 'finished_goods' ? p.status === 'Ready to Dispatch' && !p.dispatchId
+            : 0
+          ).length}
+          noun="pieces"
+          onClear={bulk.clear}
+          onSelectAll={() => {
+            const ids = pieces
+              .filter(p => activeSubTab === 'qc'
+                ? p.status === 'QC-Pending'
+                : activeSubTab === 'finished_goods'
+                  ? p.status === 'Ready to Dispatch' && !p.dispatchId
+                  : false
+              )
+              .map(p => p.id);
+            bulk.replace(ids);
+          }}
+          actions={(() => {
+            const acts: BulkAction[] = [];
+            if (activeSubTab === 'qc') {
+              acts.push({ label: `Pass ${bulk.count}`, icon: <CheckCircle2 size={14}/>, tone: 'success', onClick: handleBulkPass, title: 'Mark all selected as QC-Passed' });
+            }
+            if (activeSubTab === 'finished_goods') {
+              acts.push({ label: `Dispatch ${bulk.count}`, icon: <Truck size={14}/>, tone: 'primary', onClick: handleBulkMarkDispatched, title: 'Mark all selected as Dispatched' });
+            }
+            // Print is always available
+            acts.push({ label: 'Print Tags', icon: <FileSpreadsheet size={14}/>, tone: 'neutral', onClick: handleBulkPrintTags });
+            return acts;
+          })()}
+        />
 
       {/* BA-03: Delivery Acknowledgment Modal */}
       {ackingDispatchId && (

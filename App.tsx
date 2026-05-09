@@ -62,6 +62,9 @@ const E2EVerifier      = React.lazy(() => import('./modules/shared/pages/E2EVeri
 const CutterWorkbench  = React.lazy(() => import('./modules/production/companies/glassco/pages/CutterWorkbench'));
 // Sprint 7 — dedicated mobile-first QC workbench (dispatch_staff / supervisor)
 const QCWorkbench      = React.lazy(() => import('./modules/production/companies/glassco/pages/QCWorkbench'));
+// Sprint 8 — WIP aging + vendor SLA + cutter performance
+const WIPAging         = React.lazy(() => import('./modules/production/companies/glassco/pages/WIPAging'));
+const CutterPerformance= React.lazy(() => import('./modules/production/companies/glassco/pages/CutterPerformance'));
 
 // ── All nav items definition ─────────────────────────────────────────
 // ── Core nav — always visible (role-filtered) ───────────────────────
@@ -490,6 +493,9 @@ const App: React.FC = () => {
                   <Route path="/cutter"        element={<ModuleErrorBoundary moduleName="Cutter Workbench"><CutterWorkbench /></ModuleErrorBoundary>} />
                   {/* Sprint 7 — QC Workbench (mobile-first; role gate enforced internally) */}
                   <Route path="/qc"            element={<ModuleErrorBoundary moduleName="QC Workbench"><QCWorkbench /></ModuleErrorBoundary>} />
+                  {/* Sprint 8 — WIP aging + Vendor SLA + Cutter Performance */}
+                  <Route path="/production/aging"             element={<ModuleErrorBoundary moduleName="WIP Aging"><WIPAging /></ModuleErrorBoundary>} />
+                  <Route path="/production/cutter-performance" element={<ModuleErrorBoundary moduleName="Cutter Performance"><CutterPerformance /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />
                 </Routes>              </Suspense>
             </div>
