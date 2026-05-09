@@ -3,9 +3,9 @@ import { GlobalErrorBoundary, ModuleErrorBoundary } from '@/modules/shared/compo
 import { HashRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, ShoppingBag, Landmark, ShieldCheck,
-  Briefcase, Factory, Globe, Warehouse, Menu, Bell, Search, 
+  Briefcase, Factory, Globe, Warehouse, Menu, Bell, Search,
   Truck, Handshake, Folder, Loader2, X, LogOut, ChevronDown,
-  Home, DollarSign, Settings, BarChart3, Package
+  Home, DollarSign, Settings, BarChart3, Package, ScanLine
 } from 'lucide-react';
 import { Company } from '@/modules/shared/constants';
 import { AppService } from '@/modules/shared/services/appService';
@@ -58,6 +58,8 @@ const HealthMonitor    = React.lazy(() => import('./modules/admin/pages/HealthMo
 const LoanFlowChart    = React.lazy(() => import('./modules/shared/pages/LoanFlowChart'));
 const GuidedTestFlows  = React.lazy(() => import('./modules/shared/pages/GuidedTestFlows'));
 const E2EVerifier      = React.lazy(() => import('./modules/shared/pages/E2EVerifier'));
+// Sprint 6 — dedicated mobile-first cutter workbench (route-gated to glassco_cutter)
+const CutterWorkbench  = React.lazy(() => import('./modules/production/companies/glassco/pages/CutterWorkbench'));
 
 // ── All nav items definition ─────────────────────────────────────────
 // ── Core nav — always visible (role-filtered) ───────────────────────
@@ -82,7 +84,8 @@ const ROLE_NAV: Record<string, { name: string; path: string; icon: any; key: str
   glassco_supervisor: [],
   gtk_supervisor:     [],
   gti_supervisor:     [],
-  glassco_cutter:     [],
+  // Sprint 6 — direct link to mobile-first Cutter Workbench
+  glassco_cutter:     [{ name: 'Cutter Workbench', path: '/cutter', icon: ScanLine, key: 'cutter' }],
   dispatch_staff:     [],
   admin_officer:      [],
   gtk_admin:          [{ name: 'MD Dashboard', path: '/md-dashboard',    icon: BarChart3,  key: 'md-dashboard'     }],
@@ -480,6 +483,8 @@ const App: React.FC = () => {
                   <Route path="/loan-flow"     element={<ModuleErrorBoundary moduleName="Loan Flow Chart"><LoanFlowChart /></ModuleErrorBoundary>} />
                   <Route path="/guided-tests"  element={<ModuleErrorBoundary moduleName="Guided Tests"><GuidedTestFlows /></ModuleErrorBoundary>} />
                   <Route path="/e2e-verify"    element={<ModuleErrorBoundary moduleName="E2E Verifier"><E2EVerifier /></ModuleErrorBoundary>} />
+                  {/* Sprint 6 — Cutter Workbench (mobile-first; CutterWorkbench enforces role gate internally) */}
+                  <Route path="/cutter"        element={<ModuleErrorBoundary moduleName="Cutter Workbench"><CutterWorkbench /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />
                 </Routes>              </Suspense>
             </div>
