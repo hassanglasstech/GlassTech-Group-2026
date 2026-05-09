@@ -1,11 +1,12 @@
 import { toast } from 'sonner';
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import QCCheckPanel from '@/modules/glassco/core/QCCheckPanel';
 import { useProductionContext } from '@/modules/production/components/ProductionContext';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import InwardAuditView from '@/modules/production/components/InwardAuditView';
 import { Flame, ArrowDownLeft, Hourglass, Layers, ChevronLeft, User, LayoutGrid, Clock, CheckCircle2, ArrowLeft, ShieldCheck, Truck, AlertTriangle } from 'lucide-react';
 import JobCard from '@/modules/production/components/sub/JobCard';
+import VirtualPieceGrid from '@/modules/production/components/sub/VirtualPieceGrid';   // Sprint 9
 import { isInternal, getGlassSize } from '@/modules/production/components/ProductionUtils';
 import { useNavigate } from 'react-router-dom';
 import { FinanceService } from '@/modules/finance/services/financeService';
@@ -68,11 +69,27 @@ const ProcessingView: React.FC = () => {
     }
   }, [dispatches]);
 
+  // ── Sprint 9 perf — pre-build lookup maps once so the per-piece render
+  // doesn't repeatedly do array.find() (was O(n*m) for n pieces × m jobs/spots).
+  const jobOrderByOrderNo = useMemo(() => {
+    const m = new Map<string, any>();
+    jobOrders.forEach(j => {
+      const k = (j as any).orderNo || j.id;
+      if (k) m.set(k, j);
+    });
+    return m;
+  }, [jobOrders]);
+  const spotById = useMemo(() => {
+    const m = new Map<string, any>();
+    spots.forEach(s => { if (s.id) m.set(s.id, s); });
+    return m;
+  }, [spots]);
+
   const renderGrid = (filterFn: (p: any) => boolean, renderAction: (p: any) => React.ReactNode, title: string, color: string) => {
     if (selectedJobId) {
         const jobData = getJobDetails(selectedJobId, filterFn);
         const relevantPieces = pieces.filter(p => p.orderId === selectedJobId && filterFn(p));
-        
+
         // Sort by piece number ascending (e.g. 2428/1, 2428/2, 2428/10)
         relevantPieces.sort((a, b) => {
           const getNum = (id: string) => {
@@ -81,7 +98,7 @@ const ProcessingView: React.FC = () => {
           };
           return getNum(a.id) - getNum(b.id);
         });
-        
+
         if (relevantPieces.length === 0) { setSelectedJobId(null); return null; }
 
         return (
@@ -99,22 +116,36 @@ const ProcessingView: React.FC = () => {
                     <div className="bg-slate-50 rounded-xl p-3 text-center"><p className="text-[9px] font-black text-slate-400 uppercase mb-1">Volume</p><p className="text-xl font-black text-slate-800">{jobData.pendingSqFt} <span className="text-[9px] text-slate-400">Ft²</span></p></div>
                  </div>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                 {relevantPieces.map(p => {
-                    const isWaitingAtTempering = p.status === 'Dispatched' && (activeSubTab === 'lamination' || activeSubTab === 'double_glaze' || activeSubTab === 'wip');
-                    return (
-                        <div key={p.id} className="relative">
-                            {isWaitingAtTempering && (
-                                <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px] z-10 rounded-xl flex flex-col items-center justify-center text-white p-4 text-center">
-                                    <Clock size={20} className="mb-2 animate-pulse text-amber-400"/>
-                                    <p className="text-[10px] font-black uppercase tracking-widest">At External Plant</p>
-                                </div>
-                            )}
-                            <JobCard piece={p} jobOrder={jobOrders.find(j => j.orderNo === p.orderId)} spot={spots.find(s => s.id === p.spotId)} onBinClick={(e) => { e.stopPropagation(); openBinModal(p); }} actionRenderer={() => isWaitingAtTempering ? <div className="h-10"></div> : renderAction(p)} />
+              {/* Sprint 9 — VirtualPieceGrid; falls through to plain grid for ≤100 items */}
+              <VirtualPieceGrid
+                items={relevantPieces}
+                getKey={(p) => p.id}
+                rowHeight={236}
+                threshold={100}
+                cellRenderer={(p) => {
+                  const isWaitingAtTempering = p.status === 'Dispatched' && (activeSubTab === 'lamination' || activeSubTab === 'double_glaze' || activeSubTab === 'wip');
+                  // Sprint 9 perf — use pre-built lookup maps instead of array.find()
+                  const jobOrder = jobOrderByOrderNo.get(p.orderId);
+                  const spot = p.spotId ? spotById.get(p.spotId) : undefined;
+                  return (
+                    <div className="relative">
+                      {isWaitingAtTempering && (
+                        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px] z-10 rounded-xl flex flex-col items-center justify-center text-white p-4 text-center">
+                          <Clock size={20} className="mb-2 animate-pulse text-amber-400"/>
+                          <p className="text-[10px] font-black uppercase tracking-widest">At External Plant</p>
                         </div>
-                    );
-                 })}
-              </div>
+                      )}
+                      <JobCard
+                        piece={p}
+                        jobOrder={jobOrder}
+                        spot={spot}
+                        onBinClick={(e) => { e.stopPropagation(); openBinModal(p); }}
+                        actionRenderer={() => isWaitingAtTempering ? <div className="h-10"></div> : renderAction(p)}
+                      />
+                    </div>
+                  );
+                }}
+              />
            </div>
         );
     }
