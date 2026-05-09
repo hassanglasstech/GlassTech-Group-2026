@@ -2,97 +2,68 @@ import React, { useState } from 'react';
 import { useProductionContext } from '@/modules/production/components/ProductionContext';
 import AnalyticsView from '@/modules/production/components/AnalyticsView';
 import QCCheckPanel from '@/modules/glassco/core/QCCheckPanel';                     // Phase-4 (4.2)
+import QCDefectPicker, { QCDefectSelection } from '@/modules/glassco/core/QCDefectPicker';   // Sprint 7
+import { QC_DEFECT_CODE_MAP } from '@/modules/production/constants/qcCodes';                  // Sprint 7
 import { exportTemperingDispatches, exportProductionPieces } from '@/modules/production/services/productionExporter';  // Phase-6 (6.7)
 import { ShieldAlert, PackageCheck, Ban, BarChart3, ChevronLeft, User, LayoutGrid, X, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import { NCRService } from '@/modules/production/services/ncrService';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { toast } from 'sonner';
 
-// ── QC Fail Codes ────────────────────────────────────────────────────
-const FAULT_CODES = [
-  { code: 'QC-01', desc: 'Edge Chip / Rough Edge' },
-  { code: 'QC-02', desc: 'Surface Scratch' },
-  { code: 'QC-03', desc: 'Incorrect Dimensions' },
-  { code: 'QC-04', desc: 'Hole / Notch Position Error' },
-  { code: 'QC-05', desc: 'Glass Breakage' },
-  { code: 'QC-06', desc: 'Tempering Defect (Optical)' },
-  { code: 'QC-07', desc: 'Coating / Film Defect' },
-  { code: 'QC-08', desc: 'Wrong Glass Type / Spec' },
-  { code: 'QC-09', desc: 'Stain / Contamination' },
-  { code: 'QC-10', desc: 'Other (specify in notes)' },
-];
-
-// ── QC Fail Modal ────────────────────────────────────────────────────
+// ── QC Fail Modal — Sprint 7: now uses canonical QC_DEFECT_CODES + searchable picker
 const QCFailModal: React.FC<{
   piece: any;
   company: string;
   onConfirm: (faultCode: string, faultDesc: string, notes: string, createNCR: boolean) => void;
   onCancel: () => void;
-}> = ({ piece, company, onConfirm, onCancel }) => {
-  const [faultCode, setFaultCode] = useState('QC-05');
-  const [notes, setNotes] = useState('');
+}> = ({ piece, onConfirm, onCancel }) => {
+  // Sprint 7 — single state object for the picker; default to "Crack"
+  // (most-common breakage code) so a fail can be confirmed in one tap.
+  const [defect, setDefect] = useState<QCDefectSelection>({ code: 'QC-05' });
   const [createNCR, setCreateNCR] = useState(false);
 
-  const selected = FAULT_CODES.find(f => f.code === faultCode);
-
   const handleConfirm = () => {
-    if (!notes.trim() && faultCode === 'QC-10') {
-      toast.error('Notes required for QC-10 Other.'); return;
+    if (!defect.code) { toast.error('Pick a defect code.'); return; }
+    const meta = QC_DEFECT_CODE_MAP[defect.code];
+    // Sprint 7 — "Other" requires a comment per canonical metadata.
+    if (meta?.requiresComment && !(defect.comment || '').trim()) {
+      toast.error('Comment required for this defect code.');
+      return;
     }
-    onConfirm(faultCode, selected?.desc || '', notes, createNCR);
+    if (meta?.needsMeasurement && !(defect.measurement || '').trim()) {
+      toast.error('Measurement required for this defect code.');
+      return;
+    }
+    const combinedNotes = [defect.comment, defect.measurement && `Measured: ${defect.measurement}`]
+      .filter(Boolean).join(' · ');
+    onConfirm(defect.code, meta?.label || '', combinedNotes, createNCR);
   };
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[600] flex items-center justify-center p-4" onClick={onCancel}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-        <div className="bg-rose-600 text-white p-5 rounded-t-2xl flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-black uppercase">QC Fail — {piece.id}</h3>
-            <p className="text-xs text-rose-200 mt-0.5">{piece.specs}</p>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="bg-rose-600 text-white p-5 rounded-t-2xl flex items-center justify-between shrink-0">
+          <div className="min-w-0">
+            <h3 className="text-base font-black uppercase truncate">QC Fail — {piece.id}</h3>
+            <p className="text-xs text-rose-200 mt-0.5 truncate">{piece.specs}</p>
           </div>
-          <button onClick={onCancel} className="p-2 hover:bg-white/10 rounded-full"><X size={18}/></button>
+          <button onClick={onCancel} className="p-2 hover:bg-white/10 rounded-full shrink-0"><X size={18}/></button>
         </div>
-        <div className="p-5 space-y-4">
-          <div>
-            <label className="text-xs font-black text-slate-600 uppercase mb-2 block">Fault Code *</label>
-            <div className="grid grid-cols-2 gap-2">
-              {FAULT_CODES.map(f => (
-                <button
-                  key={f.code}
-                  onClick={() => setFaultCode(f.code)}
-                  className={`p-2.5 rounded-xl border-2 text-left transition-all ${
-                    faultCode === f.code
-                      ? 'border-rose-500 bg-rose-50'
-                      : 'border-slate-100 hover:border-slate-200'
-                  }`}
-                >
-                  <span className={`text-[10px] font-black block ${faultCode === f.code ? 'text-rose-700' : 'text-slate-500'}`}>{f.code}</span>
-                  <span className={`text-[10px] font-bold ${faultCode === f.code ? 'text-rose-600' : 'text-slate-400'}`}>{f.desc}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-black text-slate-600 uppercase mb-1 block">Supervisor Notes</label>
-            <textarea
-              rows={2}
-              className="sap-input w-full resize-none"
-              placeholder="Describe the defect in detail..."
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-            />
-          </div>
-          {faultCode === 'QC-05' && (
+        <div className="p-5 space-y-4 overflow-y-auto">
+          {/* Sprint 7 — searchable picker replaces the 2-column grid */}
+          <QCDefectPicker value={defect} onChange={setDefect} alwaysShowComment />
+          {/* Glass-breakage NCR shortcut — only relevant for QC-05 (Crack) */}
+          {defect.code === 'QC-05' && (
             <label className="flex items-center gap-2 bg-amber-50 rounded-xl p-3 border border-amber-100 cursor-pointer">
               <input type="checkbox" checked={createNCR} onChange={e => setCreateNCR(e.target.checked)} className="rounded"/>
               <div>
                 <span className="text-xs font-black text-amber-800">Create NCR + Reproduction Order</span>
-                <p className="text-[9px] text-amber-600 mt-0.5">Glass broken — raise NCR and queue for re-cutting</p>
+                <p className="text-[9px] text-amber-600 mt-0.5">Glass cracked — raise NCR and queue for re-cutting</p>
               </div>
             </label>
           )}
         </div>
-        <div className="p-5 border-t border-slate-100 flex justify-end gap-3">
+        <div className="p-5 border-t border-slate-100 flex justify-end gap-3 shrink-0">
           <button onClick={onCancel} className="sap-btn-ghost">Cancel</button>
           <button onClick={handleConfirm} className="flex items-center gap-2 bg-rose-600 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase hover:bg-rose-700">
             <AlertTriangle size={14}/> Confirm Fail

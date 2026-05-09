@@ -13,12 +13,17 @@
 
 import React, { useState, useMemo } from 'react';
 import { useAppStore } from '@/modules/shared/store/appStore';
+import { useAuthStore } from '@/modules/auth/authStore';
 import { toast } from 'sonner';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { NCRService } from '@/modules/production/services/ncrService';
 import { GRNSheetEntry, CuttingSession } from '@/modules/procurement/types/inventory';
 import { CheckCircle2, X, AlertTriangle, Eye, EyeOff, Info, ShieldCheck } from 'lucide-react';
+// Sprint 7 — canonical defect codes + searchable picker + first-use tutorial
+import { QC_DEFECT_CODE_MAP } from '@/modules/production/constants/qcCodes';
+import QCDefectPicker, { QCDefectSelection } from '@/modules/glassco/core/QCDefectPicker';
+import QCBlindCheckIntro from '@/modules/glassco/core/QCBlindCheckIntro';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 type QCDecision = 'Pass' | 'Fail' | null;
@@ -57,15 +62,11 @@ interface QCResult {
   qcAt: string;
 }
 
-const QC_DEFECT_CODES = [
-  { code: 'QC-01', label: 'QC-01 — Scratch / Surface Damage' },
-  { code: 'QC-02', label: 'QC-02 — Wrong Size / Cut Error' },
-  { code: 'QC-03', label: 'QC-03 — Edge Chip' },
-  { code: 'QC-04', label: 'QC-04 — Hole Wrong Size/Position' },
-  { code: 'QC-05', label: 'QC-05 — Notch Wrong Size/Position' },
-  { code: 'QC-06', label: 'QC-06 — Defect from Raw Material' },
-  { code: 'QC-07', label: 'QC-07 — Breakage / Crack' },
-];
+// Sprint 7 — local QC_DEFECT_CODES list removed; the canonical source is
+// `modules/production/constants/qcCodes.ts` (imported above as
+// QC_DEFECT_CODE_MAP). The legacy local list disagreed with DispatchView
+// FAULT_CODES (different labels for same codes) and with no severity
+// metadata, breaking cross-team analytics.
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 function getPieceSize(specs: string): string {
@@ -269,6 +270,9 @@ const QCCheckPanel: React.FC<{
   return (
     <div className="space-y-5">
 
+      {/* Sprint 7 — first-use blind-check tutorial banner */}
+      <QCBlindCheckIntro userId={useAuthStore.getState().user?.id} />
+
       {/* Header */}
       <div className="bg-emerald-600 text-white rounded-2xl p-5 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -371,26 +375,33 @@ const QCCheckPanel: React.FC<{
                     </div>
                   </div>
 
-                  {/* Fail details */}
+                  {/* Fail details — Sprint 7: searchable picker w/ recents + severity */}
                   {result.decision === 'Fail' && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase text-slate-400">Defect Code *</label>
-                        <select className="sap-input w-full text-xs"
-                          value={result.defectCode || ''}
-                          onChange={e => updateResult(item.pieceId, { defectCode: e.target.value })}>
-                          <option value="">— Select —</option>
-                          {QC_DEFECT_CODES.map(d => <option key={d.code} value={d.code}>{d.label}</option>)}
-                        </select>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase text-slate-400">Comment</label>
-                        <input type="text" className="sap-input w-full text-xs"
-                          placeholder="Describe defect…"
-                          value={result.defectComment || ''}
-                          onChange={e => updateResult(item.pieceId, { defectComment: e.target.value })}/>
-                      </div>
-                    </div>
+                    <QCDefectPicker
+                      value={{
+                        code:        result.defectCode || null,
+                        comment:     result.defectComment,
+                        // Hole/notch measurement is captured in the dedicated
+                        // purple panel below; the picker re-shows for QC-07
+                        // (dimension) which has no separate input.
+                        measurement: result.actualHoleDiameter
+                          ? String(result.actualHoleDiameter)
+                          : (result.actualNotchSize || ''),
+                      }}
+                      onChange={(next) => updateResult(item.pieceId, {
+                        defectCode:    next.code || undefined,
+                        defectComment: next.comment,
+                        // Map measurement back into the right legacy field
+                        // depending on the picker's needsMeasurement kind.
+                        ...(QC_DEFECT_CODE_MAP[next.code || '']?.needsMeasurement === 'hole'
+                          ? { actualHoleDiameter: Number(next.measurement) || undefined }
+                          : {}),
+                        ...(QC_DEFECT_CODE_MAP[next.code || '']?.needsMeasurement === 'notch'
+                          ? { actualNotchSize: next.measurement }
+                          : {}),
+                      })}
+                      alwaysShowComment
+                    />
                   )}
 
                   {/* Hole/notch measurement */}

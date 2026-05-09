@@ -60,6 +60,8 @@ const GuidedTestFlows  = React.lazy(() => import('./modules/shared/pages/GuidedT
 const E2EVerifier      = React.lazy(() => import('./modules/shared/pages/E2EVerifier'));
 // Sprint 6 — dedicated mobile-first cutter workbench (route-gated to glassco_cutter)
 const CutterWorkbench  = React.lazy(() => import('./modules/production/companies/glassco/pages/CutterWorkbench'));
+// Sprint 7 — dedicated mobile-first QC workbench (dispatch_staff / supervisor)
+const QCWorkbench      = React.lazy(() => import('./modules/production/companies/glassco/pages/QCWorkbench'));
 
 // ── All nav items definition ─────────────────────────────────────────
 // ── Core nav — always visible (role-filtered) ───────────────────────
@@ -86,7 +88,8 @@ const ROLE_NAV: Record<string, { name: string; path: string; icon: any; key: str
   gti_supervisor:     [],
   // Sprint 6 — direct link to mobile-first Cutter Workbench
   glassco_cutter:     [{ name: 'Cutter Workbench', path: '/cutter', icon: ScanLine, key: 'cutter' }],
-  dispatch_staff:     [],
+  // Sprint 7 — direct link to mobile-first QC Workbench
+  dispatch_staff:     [{ name: 'QC Workbench', path: '/qc', icon: ShieldCheck, key: 'qc' }],
   admin_officer:      [],
   gtk_admin:          [{ name: 'MD Dashboard', path: '/md-dashboard',    icon: BarChart3,  key: 'md-dashboard'     }],
   glassco_admin:      [],
@@ -485,6 +488,8 @@ const App: React.FC = () => {
                   <Route path="/e2e-verify"    element={<ModuleErrorBoundary moduleName="E2E Verifier"><E2EVerifier /></ModuleErrorBoundary>} />
                   {/* Sprint 6 — Cutter Workbench (mobile-first; CutterWorkbench enforces role gate internally) */}
                   <Route path="/cutter"        element={<ModuleErrorBoundary moduleName="Cutter Workbench"><CutterWorkbench /></ModuleErrorBoundary>} />
+                  {/* Sprint 7 — QC Workbench (mobile-first; role gate enforced internally) */}
+                  <Route path="/qc"            element={<ModuleErrorBoundary moduleName="QC Workbench"><QCWorkbench /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />
                 </Routes>              </Suspense>
             </div>
