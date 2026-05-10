@@ -67,6 +67,9 @@ const WIPAging         = React.lazy(() => import('./modules/production/companies
 const CutterPerformance= React.lazy(() => import('./modules/production/companies/glassco/pages/CutterPerformance'));
 // Sprint 12 — public mobile driver POD page (no auth — token-gated)
 const DriverScreen     = React.lazy(() => import('./src/pages/DriverScreen'));
+// Sprint 14 — live GPS dashboard (supervisor) + public customer tracking
+const LiveDispatchMap   = React.lazy(() => import('./src/pages/LiveDispatchMap'));
+const PublicTrackingMap = React.lazy(() => import('./src/pages/LiveDispatchMap').then(m => ({ default: m.PublicTrackingMap })));
 
 // ── All nav items definition ─────────────────────────────────────────
 // ── Core nav — always visible (role-filtered) ───────────────────────
@@ -412,10 +415,12 @@ const App: React.FC = () => {
       <KeyboardShortcutsProvider />
       <Toaster position="top-right" richColors />
       {/* Sprint 12: public driver POD route — bypasses auth via token */}
-      {window.location.hash.startsWith('#/driver/') ? (
+      {/* Sprint 14: public customer tracking route — same pattern */}
+      {window.location.hash.startsWith('#/driver/') || window.location.hash.startsWith('#/track/') ? (
         <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" size={32}/></div>}>
           <Routes>
             <Route path="/driver/:tripId" element={<ModuleErrorBoundary moduleName="Driver POD"><DriverScreen /></ModuleErrorBoundary>} />
+            <Route path="/track/:tripId"  element={<ModuleErrorBoundary moduleName="Customer Tracking"><PublicTrackingMap /></ModuleErrorBoundary>} />
           </Routes>
         </Suspense>
       ) : !user || !user.email || !user.role ? (
@@ -526,6 +531,8 @@ const App: React.FC = () => {
                   {/* Sprint 8 — WIP aging + Vendor SLA + Cutter Performance */}
                   <Route path="/production/aging"             element={<ModuleErrorBoundary moduleName="WIP Aging"><WIPAging /></ModuleErrorBoundary>} />
                   <Route path="/production/cutter-performance" element={<ModuleErrorBoundary moduleName="Cutter Performance"><CutterPerformance /></ModuleErrorBoundary>} />
+                  {/* Sprint 14 — Live GPS dashboard (supervisor) */}
+                  <Route path="/dispatch/live"  element={<ModuleErrorBoundary moduleName="Live Dispatch Map"><LiveDispatchMap /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />
                 </Routes>              </Suspense>
             </div>

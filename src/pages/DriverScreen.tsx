@@ -28,6 +28,7 @@ import {
 import SignaturePad   from '@/src/components/SignaturePad';
 import PhotoCapture   from '@/src/components/PhotoCapture';
 import { PodService, DriverDispatchView } from '@/modules/sales/services/podService';
+import { useDriverGeoEmitter } from '@/src/hooks/useDriverGeoEmitter';   // Sprint 14
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -65,6 +66,14 @@ const DriverScreen: React.FC = () => {
   const [submitting,      setSubmitting]      = useState(false);
   const [requestingOtp,   setRequestingOtp]   = useState(false);
   const [completed,       setCompleted]       = useState(false);
+
+  // ── Sprint 14: Emit driver GPS while POD is in progress ────────
+  useDriverGeoEmitter({
+    vehicleId: dispatch?.vehicleNo ?? '',
+    tripId:    dispatch?.id,
+    token,
+    enabled:   !!dispatch && !completed,
+  });
 
   // ── Initial fetch ────────────────────────────────────────────────
   useEffect(() => {
