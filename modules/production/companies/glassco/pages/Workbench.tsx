@@ -29,7 +29,7 @@ import { ProductionProvider, useProductionContext } from '@/modules/production/c
 import { useAuthStore } from '@/modules/auth/authStore';
 import PieceStatusBadge   from '@/modules/production/components/sub/PieceStatusBadge';
 import VirtualPieceGrid   from '@/modules/production/components/sub/VirtualPieceGrid';
-import { Search as SearchIcon, RefreshCw, Package, MapPin } from 'lucide-react';
+import { Search as SearchIcon, RefreshCw, Package, MapPin, Printer, Keyboard, HelpCircle } from 'lucide-react';
 import SearchBar    from '../components/workbench/SearchBar';
 import FilterChips, { WorkbenchFilters, DEFAULT_FILTERS } from '../components/workbench/FilterChips';
 import ViewToggle, { WorkbenchView } from '../components/workbench/ViewToggle';
@@ -37,6 +37,9 @@ import LensesSidebar, { LensId, LENS_PREDICATES, LENSES } from '../components/wo
 import KanbanBoard  from '../components/workbench/KanbanBoard';     // Sprint 16
 import PieceDetailPanel from '../components/workbench/PieceDetailPanel'; // Sprint 17
 import AgingAlertsBanner from '../components/workbench/AgingAlertsBanner'; // Sprint 18
+import ShortcutSheet   from '../components/workbench/ShortcutSheet';   // Sprint 20
+import FilterPresets   from '../components/workbench/FilterPresets';   // Sprint 20
+import OnboardingTour  from '../components/workbench/OnboardingTour';  // Sprint 20
 import type { ProductionPiece } from '@/modules/shared/types';
 
 // ── Allowed roles ─────────────────────────────────────────────────────
@@ -115,6 +118,9 @@ const WorkbenchContent: React.FC = () => {
 
   // Sprint 17: detail panel — id of the currently focused piece
   const [openPieceId, setOpenPieceId] = useState<string | null>(params.get('piece') ?? null);
+
+  // Sprint 20: tour replay (force-show via Help button)
+  const [replayTour, setReplayTour] = useState(false);
 
   // ── Reflect state back to URL (shareable links) ───────────────
   useEffect(() => {
@@ -208,44 +214,75 @@ const WorkbenchContent: React.FC = () => {
       <AgingAlertsBanner pieces={pieces} hideWhenClear/>
 
       {/* Sticky header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-20 no-print">
         <div className="px-4 py-3 flex items-center gap-3 flex-wrap">
-          <div className="flex-1 min-w-[240px] max-w-md">
+          <div className="flex-1 min-w-[240px] max-w-md" data-tour="search">
             <SearchBar value={query} onChange={setQuery}/>
           </div>
-          <FilterChips
-            filters={filters}
-            onChange={setFilters}
-            jobOptions={jobOptions}
-            vendorOptions={vendorOptions}
-            statusOptions={statusOptions}
-          />
+          <div data-tour="filter-chips">
+            <FilterChips
+              filters={filters}
+              onChange={setFilters}
+              jobOptions={jobOptions}
+              vendorOptions={vendorOptions}
+              statusOptions={statusOptions}
+            />
+          </div>
           <div className="ml-auto flex items-center gap-3">
             <span className="text-xs text-slate-400">
               <span className="font-bold text-slate-700">{visiblePieces.length}</span>
               {' / '}
               {pieces.length} pieces
             </span>
-            <ViewToggle value={view} onChange={setView}/>
+            <div data-tour="view-toggle">
+              <ViewToggle value={view} onChange={setView}/>
+            </div>
+            {/* Sprint 20: Print + Tour replay + shortcut help */}
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100"
+              title="Print / Save as PDF"
+              aria-label="Print"
+            >
+              <Printer size={14}/>
+            </button>
+            <button
+              type="button"
+              onClick={() => setReplayTour(true)}
+              className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100"
+              title="Replay tour"
+              aria-label="Replay tour"
+            >
+              <HelpCircle size={14}/>
+            </button>
           </div>
         </div>
         <div className="px-4 pb-2 text-[10px] text-slate-400 flex items-center gap-2">
           <span className="hidden sm:inline">Tip:</span>
           <kbd className="bg-slate-100 px-1.5 rounded font-mono">⌘K</kbd>
-          <span>to focus search</span>
+          <span>to focus search ·</span>
+          <kbd className="bg-slate-100 px-1.5 rounded font-mono">?</kbd>
+          <span>for all shortcuts</span>
         </div>
       </header>
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
-        <LensesSidebar
-          activeLens={lens}
-          onChange={setLens}
-          counts={lensCounts}
-          className="w-44 shrink-0 overflow-y-auto"
-        />
+        <aside className="w-44 shrink-0 overflow-y-auto flex flex-col bg-white border-r border-slate-200 no-print" data-tour="lenses">
+          <LensesSidebar
+            activeLens={lens}
+            onChange={setLens}
+            counts={lensCounts}
+          />
+          {/* Sprint 20: filter presets in sidebar */}
+          <FilterPresets
+            currentQuery={params.toString()}
+            onApply={(p) => setParams(p, { replace: true })}
+          />
+        </aside>
 
-        <main className="flex-1 overflow-y-auto p-4">
+        <main className="flex-1 overflow-y-auto p-4" data-tour="content">
           {visiblePieces.length === 0 ? (
             <EmptyState onReset={resetAll} hasFilters={isFiltered}/>
           ) : view === 'kanban' ? (
@@ -264,6 +301,15 @@ const WorkbenchContent: React.FC = () => {
         pieceId={openPieceId}
         onClose={() => setOpenPieceId(null)}
         onNavigate={setOpenPieceId}
+      />
+
+      {/* Sprint 20: shortcut sheet (toggled by '?') */}
+      <ShortcutSheet/>
+
+      {/* Sprint 20: onboarding tour — first visit auto + Help button replay */}
+      <OnboardingTour
+        forceShow={replayTour}
+        onClose={() => setReplayTour(false)}
       />
     </div>
   );
