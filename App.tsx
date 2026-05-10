@@ -65,6 +65,8 @@ const QCWorkbench      = React.lazy(() => import('./modules/production/companies
 // Sprint 8 — WIP aging + vendor SLA + cutter performance
 const WIPAging         = React.lazy(() => import('./modules/production/companies/glassco/pages/WIPAging'));
 const CutterPerformance= React.lazy(() => import('./modules/production/companies/glassco/pages/CutterPerformance'));
+// Sprint 15 — Production Workbench (single page replacing 19 tabs + 12 sub-tabs)
+const Workbench        = React.lazy(() => import('./modules/production/companies/glassco/pages/Workbench'));
 // Sprint 12 — public mobile driver POD page (no auth — token-gated)
 const DriverScreen     = React.lazy(() => import('./src/pages/DriverScreen'));
 // Sprint 14 — live GPS dashboard (supervisor) + public customer tracking
@@ -533,6 +535,8 @@ const App: React.FC = () => {
                   <Route path="/production/cutter-performance" element={<ModuleErrorBoundary moduleName="Cutter Performance"><CutterPerformance /></ModuleErrorBoundary>} />
                   {/* Sprint 14 — Live GPS dashboard (supervisor) */}
                   <Route path="/dispatch/live"  element={<ModuleErrorBoundary moduleName="Live Dispatch Map"><LiveDispatchMap /></ModuleErrorBoundary>} />
+                  {/* Sprint 15 — Production Workbench (single page) */}
+                  <Route path="/production/workbench" element={<ModuleErrorBoundary moduleName="Workbench"><Workbench /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />
                 </Routes>              </Suspense>
             </div>
