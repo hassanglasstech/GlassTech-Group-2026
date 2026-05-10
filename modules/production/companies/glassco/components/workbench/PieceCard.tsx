@@ -17,7 +17,7 @@
 import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, MapPin, AlertTriangle } from 'lucide-react';
+import { GripVertical, MapPin, AlertTriangle, ExternalLink } from 'lucide-react';
 import PieceStatusBadge from '@/modules/production/components/sub/PieceStatusBadge';
 import type { ProductionPiece } from '@/modules/shared/types';
 
@@ -28,6 +28,8 @@ interface PieceCardProps {
   density:    CardDensity;
   selected:   boolean;
   onToggle:   (id: string, additive: boolean) => void;
+  /** Sprint 17: open the slide-in detail panel (double-click). */
+  onOpen?:    (id: string) => void;
   /** True while ANY piece is selected — shows checkboxes everywhere. */
   inSelectionMode: boolean;
   /** True for the dragging-overlay clone — hides pointer effects. */
@@ -58,7 +60,7 @@ function ageDotClass(piece: ProductionPiece): string {
 // ── Component ─────────────────────────────────────────────────────────
 
 const PieceCard: React.FC<PieceCardProps> = ({
-  piece, density, selected, onToggle, inSelectionMode, isOverlay, vendorName,
+  piece, density, selected, onToggle, onOpen, inSelectionMode, isOverlay, vendorName,
 }) => {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging,
@@ -81,6 +83,10 @@ const PieceCard: React.FC<PieceCardProps> = ({
     <div
       ref={setNodeRef}
       style={style}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        if (onOpen && !isOverlay) onOpen(piece.id);
+      }}
       className={`
         group relative bg-white rounded-lg border shadow-sm select-none
         ${selected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-slate-200 hover:border-slate-300'}
@@ -111,6 +117,20 @@ const PieceCard: React.FC<PieceCardProps> = ({
         >
           {piece.id}
         </button>
+
+        {/* Open detail panel (Sprint 17) — visible on hover */}
+        {onOpen && !isOverlay && (
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onOpen(piece.id); }}
+            className="text-slate-300 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+            title="Open details (or double-click)"
+            aria-label="Open piece details"
+          >
+            <ExternalLink size={12}/>
+          </button>
+        )}
 
         {/* Drag grip — visible on hover */}
         <GripVertical

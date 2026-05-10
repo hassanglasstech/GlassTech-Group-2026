@@ -35,6 +35,7 @@ import FilterChips, { WorkbenchFilters, DEFAULT_FILTERS } from '../components/wo
 import ViewToggle, { WorkbenchView } from '../components/workbench/ViewToggle';
 import LensesSidebar, { LensId, LENS_PREDICATES, LENSES } from '../components/workbench/LensesSidebar';
 import KanbanBoard  from '../components/workbench/KanbanBoard';     // Sprint 16
+import PieceDetailPanel from '../components/workbench/PieceDetailPanel'; // Sprint 17
 import type { ProductionPiece } from '@/modules/shared/types';
 
 // ── Allowed roles ─────────────────────────────────────────────────────
@@ -81,7 +82,10 @@ function paramsToFilters(p: URLSearchParams): WorkbenchFilters {
   };
 }
 
-function filtersToParams(f: WorkbenchFilters, q: string, lens: LensId, view: WorkbenchView): URLSearchParams {
+function filtersToParams(
+  f: WorkbenchFilters, q: string, lens: LensId, view: WorkbenchView,
+  pieceId: string | null,
+): URLSearchParams {
   const p = new URLSearchParams();
   if (q.trim()) p.set('q', q.trim());
   if (lens !== 'all')      p.set('lens', lens);
@@ -91,6 +95,7 @@ function filtersToParams(f: WorkbenchFilters, q: string, lens: LensId, view: Wor
   if (f.mm     !== 'all')  p.set('mm',     f.mm);
   if (f.vendor !== 'all')  p.set('vendor', f.vendor);
   if (f.status !== 'all')  p.set('status', f.status);
+  if (pieceId)             p.set('piece',  pieceId);
   return p;
 }
 
@@ -107,12 +112,15 @@ const WorkbenchContent: React.FC = () => {
   const [view,     setView]     = useState<WorkbenchView>((params.get('view') as WorkbenchView) || 'list');
   const [filters,  setFilters]  = useState<WorkbenchFilters>(paramsToFilters(params));
 
+  // Sprint 17: detail panel — id of the currently focused piece
+  const [openPieceId, setOpenPieceId] = useState<string | null>(params.get('piece') ?? null);
+
   // ── Reflect state back to URL (shareable links) ───────────────
   useEffect(() => {
-    const next = filtersToParams(filters, query, lens, view);
+    const next = filtersToParams(filters, query, lens, view, openPieceId);
     setParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, lens, view, filters]);
+  }, [query, lens, view, filters, openPieceId]);
 
   // ── Derived option lists ───────────────────────────────────────
   const jobOptions = useMemo(() =>
@@ -237,14 +245,22 @@ const WorkbenchContent: React.FC = () => {
           {visiblePieces.length === 0 ? (
             <EmptyState onReset={resetAll} hasFilters={isFiltered}/>
           ) : view === 'kanban' ? (
-            <KanbanBoard pieces={visiblePieces}/>
+            <KanbanBoard pieces={visiblePieces} onOpen={setOpenPieceId}/>
           ) : view === 'grid' ? (
-            <GridView pieces={visiblePieces} jobOrders={jobOrders} dispatches={dispatches}/>
+            <GridView pieces={visiblePieces} jobOrders={jobOrders} dispatches={dispatches} onOpen={setOpenPieceId}/>
           ) : (
-            <ListView pieces={visiblePieces} jobOrders={jobOrders} dispatches={dispatches}/>
+            <ListView pieces={visiblePieces} jobOrders={jobOrders} dispatches={dispatches} onOpen={setOpenPieceId}/>
           )}
         </main>
       </div>
+
+      {/* Sprint 17: Slide-in detail panel */}
+      <PieceDetailPanel
+        visiblePieces={visiblePieces}
+        pieceId={openPieceId}
+        onClose={() => setOpenPieceId(null)}
+        onNavigate={setOpenPieceId}
+      />
     </div>
   );
 };
@@ -255,9 +271,10 @@ interface ViewProps {
   pieces:     ProductionPiece[];
   jobOrders:  Array<{ id: string; orderNo?: string; clientName?: string; items?: Array<{ glassSize?: string; thickness?: string }> }>;
   dispatches: Array<{ id: string; plantName?: string }>;
+  onOpen:     (id: string) => void;
 }
 
-const ListView: React.FC<ViewProps> = ({ pieces, jobOrders, dispatches }) => (
+const ListView: React.FC<ViewProps> = ({ pieces, dispatches, onOpen }) => (
   <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
     <table className="w-full text-sm">
       <thead className="bg-slate-50 text-xs font-black uppercase text-slate-500">
@@ -272,10 +289,13 @@ const ListView: React.FC<ViewProps> = ({ pieces, jobOrders, dispatches }) => (
       </thead>
       <tbody>
         {pieces.slice(0, 500).map(p => {
-          const order = jobOrders.find(j => j.orderNo === p.orderId || j.id === p.orderId);
           const dispatch = dispatches.find(d => d.id === p.dispatchId);
           return (
-            <tr key={p.id} className="border-t border-slate-100 hover:bg-blue-50/30">
+            <tr
+              key={p.id}
+              className="border-t border-slate-100 hover:bg-blue-50/30 cursor-pointer"
+              onClick={() => onOpen(p.id)}
+            >
               <td className="px-3 py-2 font-mono font-bold text-blue-700">{p.id}</td>
               <td className="px-3 py-2 text-slate-600">{p.orderId}</td>
               <td className="px-3 py-2 text-slate-500 text-xs">{p.specs}</td>
@@ -299,31 +319,29 @@ const ListView: React.FC<ViewProps> = ({ pieces, jobOrders, dispatches }) => (
 
 // ── Grid view ────────────────────────────────────────────────────────
 
-const GridView: React.FC<ViewProps> = ({ pieces, jobOrders }) => (
+const GridView: React.FC<ViewProps> = ({ pieces, onOpen }) => (
   <VirtualPieceGrid
     items={pieces}
     getKey={p => p.id}
     rowHeight={140}
     threshold={50}
-    cellRenderer={(p) => {
-      const order = jobOrders.find(j => j.orderNo === p.orderId || j.id === p.orderId);
-      return (
-        <div
-          key={p.id}
-          className="bg-white rounded-lg border border-slate-200 p-3 hover:border-blue-300 transition-colors h-full flex flex-col"
-        >
-          <div className="flex items-start justify-between mb-2">
-            <span className="font-mono font-black text-xs text-blue-700">{p.id}</span>
-            <PieceStatusBadge status={p.status} size="xs"/>
-          </div>
-          <div className="text-xs text-slate-500 leading-tight mb-1">{p.specs}</div>
-          <div className="text-[10px] text-slate-400 mt-auto flex items-center gap-2">
-            <Package size={10}/>{p.orderId}
-            {p.spotId && <><MapPin size={10}/>{p.spotId}</>}
-          </div>
+    cellRenderer={(p) => (
+      <div
+        key={p.id}
+        className="bg-white rounded-lg border border-slate-200 p-3 hover:border-blue-300 transition-colors h-full flex flex-col cursor-pointer"
+        onClick={() => onOpen(p.id)}
+      >
+        <div className="flex items-start justify-between mb-2">
+          <span className="font-mono font-black text-xs text-blue-700">{p.id}</span>
+          <PieceStatusBadge status={p.status} size="xs"/>
         </div>
-      );
-    }}
+        <div className="text-xs text-slate-500 leading-tight mb-1">{p.specs}</div>
+        <div className="text-[10px] text-slate-400 mt-auto flex items-center gap-2">
+          <Package size={10}/>{p.orderId}
+          {p.spotId && <><MapPin size={10}/>{p.spotId}</>}
+        </div>
+      </div>
+    )}
   />
 );
 

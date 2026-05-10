@@ -126,9 +126,11 @@ function loadDensity(): CardDensity {
 
 interface KanbanBoardProps {
   pieces: ProductionPiece[];
+  /** Sprint 17: open the slide-in detail panel for a piece */
+  onOpen?: (pieceId: string) => void;
 }
 
-const KanbanBoard: React.FC<KanbanBoardProps> = ({ pieces }) => {
+const KanbanBoard: React.FC<KanbanBoardProps> = ({ pieces, onOpen }) => {
   const { handleUpdatePieceStatus, dispatches } = useProductionContext();
   const bulk = useBulkSelection<string>();
 
@@ -277,6 +279,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ pieces }) => {
             density={density}
             bulk={bulk}
             vendorByDispatchId={vendorByDispatchId}
+            onOpen={onOpen}
           />
         ))}
       </div>
@@ -291,6 +294,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ pieces }) => {
             density={density}
             bulk={bulk}
             vendorByDispatchId={vendorByDispatchId}
+            onOpen={onOpen}
             isUniversal
           />
         ))}
@@ -331,10 +335,11 @@ interface ColumnProps {
   density:    CardDensity;
   bulk:       ReturnType<typeof useBulkSelection<string>>;
   vendorByDispatchId: Map<string, string>;
+  onOpen?:    (pieceId: string) => void;
   isUniversal?: boolean;
 }
 
-const Column: React.FC<ColumnProps> = ({ col, pieces, density, bulk, vendorByDispatchId, isUniversal }) => {
+const Column: React.FC<ColumnProps> = ({ col, pieces, density, bulk, vendorByDispatchId, onOpen, isUniversal }) => {
   const { setNodeRef, isOver } = useDroppable({ id: col.id });
 
   return (
@@ -377,6 +382,7 @@ const Column: React.FC<ColumnProps> = ({ col, pieces, density, bulk, vendorByDis
                 density={density}
                 selected={bulk.selected.has(p.id)}
                 onToggle={(id) => bulk.toggle(id)}
+                onOpen={onOpen}
                 inSelectionMode={bulk.count > 0}
                 vendorName={p.dispatchId ? vendorByDispatchId.get(p.dispatchId) : undefined}
               />
