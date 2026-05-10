@@ -65,6 +65,8 @@ const QCWorkbench      = React.lazy(() => import('./modules/production/companies
 // Sprint 8 — WIP aging + vendor SLA + cutter performance
 const WIPAging         = React.lazy(() => import('./modules/production/companies/glassco/pages/WIPAging'));
 const CutterPerformance= React.lazy(() => import('./modules/production/companies/glassco/pages/CutterPerformance'));
+// Sprint 12 — public mobile driver POD page (no auth — token-gated)
+const DriverScreen     = React.lazy(() => import('./src/pages/DriverScreen'));
 
 // ── All nav items definition ─────────────────────────────────────────
 // ── Core nav — always visible (role-filtered) ───────────────────────
@@ -388,7 +390,14 @@ const App: React.FC = () => {
     <HashRouter>
       <KeyboardShortcutsProvider />
       <Toaster position="top-right" richColors />
-      {!user || !user.email || !user.role ? (
+      {/* Sprint 12: public driver POD route — bypasses auth via token */}
+      {window.location.hash.startsWith('#/driver/') ? (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" size={32}/></div>}>
+          <Routes>
+            <Route path="/driver/:tripId" element={<ModuleErrorBoundary moduleName="Driver POD"><DriverScreen /></ModuleErrorBoundary>} />
+          </Routes>
+        </Suspense>
+      ) : !user || !user.email || !user.role ? (
         <LoginPage />
       ) : (
       <div className="flex h-screen bg-slate-50 font-sans overflow-hidden"
