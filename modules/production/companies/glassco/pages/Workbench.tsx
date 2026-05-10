@@ -29,11 +29,12 @@ import { ProductionProvider, useProductionContext } from '@/modules/production/c
 import { useAuthStore } from '@/modules/auth/authStore';
 import PieceStatusBadge   from '@/modules/production/components/sub/PieceStatusBadge';
 import VirtualPieceGrid   from '@/modules/production/components/sub/VirtualPieceGrid';
-import { Search as SearchIcon, RefreshCw, Package, MapPin, Construction } from 'lucide-react';
+import { Search as SearchIcon, RefreshCw, Package, MapPin } from 'lucide-react';
 import SearchBar    from '../components/workbench/SearchBar';
 import FilterChips, { WorkbenchFilters, DEFAULT_FILTERS } from '../components/workbench/FilterChips';
 import ViewToggle, { WorkbenchView } from '../components/workbench/ViewToggle';
 import LensesSidebar, { LensId, LENS_PREDICATES, LENSES } from '../components/workbench/LensesSidebar';
+import KanbanBoard  from '../components/workbench/KanbanBoard';     // Sprint 16
 import type { ProductionPiece } from '@/modules/shared/types';
 
 // ── Allowed roles ─────────────────────────────────────────────────────
@@ -236,7 +237,7 @@ const WorkbenchContent: React.FC = () => {
           {visiblePieces.length === 0 ? (
             <EmptyState onReset={resetAll} hasFilters={isFiltered}/>
           ) : view === 'kanban' ? (
-            <KanbanStub count={visiblePieces.length}/>
+            <KanbanBoard pieces={visiblePieces}/>
           ) : view === 'grid' ? (
             <GridView pieces={visiblePieces} jobOrders={jobOrders} dispatches={dispatches}/>
           ) : (
@@ -324,20 +325,6 @@ const GridView: React.FC<ViewProps> = ({ pieces, jobOrders }) => (
       );
     }}
   />
-);
-
-// ── Kanban stub (Sprint 16 fills this) ──────────────────────────────
-
-const KanbanStub: React.FC<{ count: number }> = ({ count }) => (
-  <div className="bg-white rounded-xl border-2 border-dashed border-slate-300 p-12 text-center max-w-2xl mx-auto">
-    <Construction className="text-slate-400 mx-auto mb-3" size={40}/>
-    <h3 className="text-base font-black text-slate-700 mb-1">Kanban — coming in Sprint 16</h3>
-    <p className="text-sm text-slate-500 max-w-md mx-auto">
-      {count} pieces match the current filter. Drag-drop board with state-machine validation
-      (atomic transitions, bulk select, realtime sync) lands next sprint.
-      Use List or Grid for now.
-    </p>
-  </div>
 );
 
 // ── Empty state ──────────────────────────────────────────────────────
