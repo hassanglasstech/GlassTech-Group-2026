@@ -1,30 +1,44 @@
 /**
- * ReportsHub.tsx — Phase 4
+ * ReportsHub.tsx — Sprint 29
  *
- * Consolidated financial reporting with:
- * - Period (date range) filtering on all reports
- * - Trial Balance, P&L, Balance Sheet, AR Aging, AP Aging
- * - Group-level consolidated view (all 5 companies)
- * - Excel export (per report)
- * - Print support
+ * Consolidated financial reporting — 13 reports:
+ * Trial Balance, P&L, Balance Sheet, AR Aging, AP Aging,
+ * Cash Flow, Sales Analysis, GST Return, Bank Reconciliation,
+ * Cutter Performance (link-out), Vendor Scorecard (link-out),
+ * Stock Aging (link-out), Project Profitability (link-out)
  */
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Company } from '@/modules/shared/types';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { supabase } from '@/src/services/supabaseClient';
 import {
   BarChart4, Download, Printer, RefreshCw, Globe,
-  TrendingUp, TrendingDown, Scale, Clock, AlertCircle,
+  TrendingUp, Scale, Clock, AlertCircle,
   ChevronDown, ChevronRight, CheckCircle2, Package,
+  Droplets, ShoppingCart, Receipt, Landmark,
+  ArrowUpRight, Users, Gauge,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import InventoryValuationReport from '@/modules/finance/components/InventoryValuationReport';
+import BankReconciliation from '@/modules/finance/components/BankReconciliation';
+import ReportExport from '@/modules/finance/components/ReportExport';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type ReportType = 'trial_balance' | 'pl' | 'balance_sheet' | 'ar_aging' | 'ap_aging' | 'inventory_valuation';
+type ReportType =
+  | 'trial_balance'
+  | 'pl'
+  | 'balance_sheet'
+  | 'ar_aging'
+  | 'ap_aging'
+  | 'inventory_valuation'
+  | 'cash_flow'
+  | 'sales_analysis'
+  | 'gst_return'
+  | 'bank_recon';
 
 interface LedgerRow {
   id: string;
@@ -52,14 +66,17 @@ const fmt  = (n: number) => Math.abs(Math.round(n)).toLocaleString('en-PK');
 const fmtS = (n: number, label = '') =>
   `${n < 0 ? '-' : ''}₨ ${fmt(n)}${label ? ' ' + label : ''}`;
 
-const REPORT_TABS: { id: ReportType; label: string; icon: React.ReactNode }[] = [
-  { id: 'trial_balance', label: 'Trial Balance',   icon: <Scale size={14}/> },
-  { id: 'pl',           label: 'P&L Statement',   icon: <TrendingUp size={14}/> },
-  { id: 'balance_sheet',label: 'Balance Sheet',    icon: <BarChart4 size={14}/> },
-  { id: 'ar_aging',     label: 'AR Aging',         icon: <Clock size={14}/> },
-  { id: 'inventory_valuation', label: 'Inventory Valuation', icon: <Package size={14}/> },
-  { id: 'ap_aging',     label: 'AP Aging',         icon: <AlertCircle size={14}/> },
-  { id: 'inventory',   label: 'Inventory Valuation', icon: <Package size={14}/> },
+const REPORT_TABS: { id: ReportType; label: string; icon: React.ReactNode; group: string }[] = [
+  { id: 'trial_balance',      label: 'Trial Balance',       icon: <Scale size={14}/>,       group: 'Financial' },
+  { id: 'pl',                 label: 'P&L Statement',       icon: <TrendingUp size={14}/>,  group: 'Financial' },
+  { id: 'balance_sheet',      label: 'Balance Sheet',       icon: <BarChart4 size={14}/>,   group: 'Financial' },
+  { id: 'cash_flow',          label: 'Cash Flow',           icon: <Droplets size={14}/>,    group: 'Financial' },
+  { id: 'gst_return',         label: 'GST Return',          icon: <Receipt size={14}/>,     group: 'Financial' },
+  { id: 'ar_aging',           label: 'AR Aging',            icon: <Clock size={14}/>,       group: 'Aging' },
+  { id: 'ap_aging',           label: 'AP Aging',            icon: <AlertCircle size={14}/>, group: 'Aging' },
+  { id: 'sales_analysis',     label: 'Sales Analysis',      icon: <ShoppingCart size={14}/>,group: 'Operations' },
+  { id: 'inventory_valuation',label: 'Inventory',           icon: <Package size={14}/>,     group: 'Operations' },
+  { id: 'bank_recon',         label: 'Bank Recon',          icon: <Landmark size={14}/>,    group: 'Operations' },
 ];
 
 // ── Data Loader ───────────────────────────────────────────────────────────────
@@ -599,6 +616,415 @@ const AgingReport: React.FC<{
   );
 };
 
+// ── Cash Flow Statement ───────────────────────────────────────────────────────
+
+const CashFlowReport: React.FC<{ accounts: AccountRow[]; ledger: LedgerRow[] }> = ({ accounts, ledger }) => {
+  const { debit, credit } = useMemo(() => calcBalances(accounts, ledger), [accounts, ledger]);
+
+  const sumType = (type: string, useCredit = false) =>
+    accounts
+      .filter(a => a.type === type)
+      .reduce((s, a) => {
+        const dr = debit[a.id]  || 0;
+        const cr = credit[a.id] || 0;
+        return s + (useCredit ? cr - dr : dr - cr);
+      }, 0);
+
+  const netProfit    = Math.abs(sumType('Revenue')) - Math.abs(sumType('Expense'));
+  const arChange     = -sumType('Asset');
+  const apChange     =  sumType('Liability');
+  const operatingCF  = netProfit + arChange + apChange;
+  const investingCF  = 0;
+  const financingCF  = 0;
+  const netChange    = operatingCF + investingCF + financingCF;
+
+  const rows = [
+    { label: 'Net Profit / (Loss)',           amount: netProfit,   indent: 1, bold: false },
+    { label: 'Decrease in Receivables',       amount: arChange,    indent: 1, bold: false },
+    { label: 'Increase in Payables',          amount: apChange,    indent: 1, bold: false },
+    { label: 'Net Cash from Operations',      amount: operatingCF, indent: 0, bold: true  },
+    { label: 'Purchase of Fixed Assets',      amount: investingCF, indent: 1, bold: false },
+    { label: 'Net Cash from Investing',       amount: investingCF, indent: 0, bold: true  },
+    { label: 'Loan Drawdowns / Repayments',   amount: financingCF, indent: 1, bold: false },
+    { label: 'Net Cash from Financing',       amount: financingCF, indent: 0, bold: true  },
+    { label: 'NET CHANGE IN CASH',            amount: netChange,   indent: 0, bold: true  },
+  ];
+
+  const exportRows = rows.map(r => ({ Activity: r.label, 'Amount (₨)': Math.round(r.amount) }));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <p className="text-[10px] text-slate-400 font-bold uppercase">Direct Method — Operating / Investing / Financing</p>
+        <ReportExport title="Cash_Flow_Statement" rows={exportRows} />
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { l: 'Operating Cash Flow', v: operatingCF, c: operatingCF >= 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-50 border-rose-200 text-rose-700' },
+          { l: 'Investing Cash Flow',  v: investingCF, c: 'bg-slate-50 border-slate-200 text-slate-700' },
+          { l: 'Financing Cash Flow',  v: financingCF, c: 'bg-slate-50 border-slate-200 text-slate-700' },
+        ].map(k => (
+          <div key={k.l} className={`border rounded-2xl p-4 ${k.c}`}>
+            <p className="text-[9px] font-black uppercase opacity-70">{k.l}</p>
+            <p className="text-xl font-black mt-1">₨ {fmt(Math.abs(k.v))}</p>
+            <p className="text-[9px] mt-0.5 opacity-60">{k.v >= 0 ? 'Inflow' : 'Outflow'}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+        <table className="w-full text-xs">
+          <thead className="bg-slate-900 text-white">
+            <tr>
+              <th className="px-5 py-3 text-left font-black text-[10px] uppercase">Activity</th>
+              <th className="px-5 py-3 text-right font-black text-[10px] uppercase">Amount (₨)</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {rows.map((r, i) => (
+              <tr key={i} className={r.bold ? 'bg-slate-50' : 'bg-white hover:bg-slate-50'}>
+                <td className={`px-5 py-2.5 ${r.indent ? 'pl-10 text-slate-500' : 'font-black text-slate-800'}`}>{r.label}</td>
+                <td className={`px-5 py-2.5 text-right ${r.bold ? 'font-black text-slate-900' : 'text-slate-600'} ${r.amount < 0 ? 'text-rose-600' : ''}`}>
+                  {r.amount < 0 ? '(' : ''}₨ {fmt(Math.abs(r.amount))}{r.amount < 0 ? ')' : ''}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className={`rounded-2xl border-2 p-5 flex items-center justify-between ${netChange >= 0 ? 'border-emerald-400 bg-emerald-50' : 'border-rose-400 bg-rose-50'}`}>
+        <p className={`text-sm font-black ${netChange >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
+          Net Change in Cash Position
+        </p>
+        <p className={`text-3xl font-black ${netChange >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+          {netChange < 0 ? '(' : ''}₨ {fmt(Math.abs(netChange))}{netChange < 0 ? ')' : ''}
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// ── Sales Analysis ────────────────────────────────────────────────────────────
+
+interface SalesRow {
+  client:   string;
+  month:    string;
+  product:  string;
+  qty:      number;
+  revenue:  number;
+}
+
+const SalesAnalysisReport: React.FC<{ company: Company; from: string; to: string }> = ({ company, from, to }) => {
+  const [rows,    setRows]    = useState<SalesRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [groupBy, setGroupBy] = useState<'client' | 'product' | 'month'>('client');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const { data } = await supabase
+          .from('invoices')
+          .select('date, client_id, items, grand_total, clients(business_name)')
+          .eq('company', company)
+          .not('status', 'in', '("cancelled","draft")')
+          .gte('date', from)
+          .lte('date', to);
+        if (cancelled) return;
+        const parsed: SalesRow[] = [];
+        (data ?? []).forEach((inv: any) => {
+          const clientName = inv.clients?.business_name ?? inv.client_id ?? '—';
+          const month = inv.date?.slice(0, 7) ?? '—';
+          const items: any[] = Array.isArray(inv.items) ? inv.items : [];
+          if (items.length === 0) {
+            parsed.push({ client: clientName, month, product: '—', qty: 0, revenue: Number(inv.grand_total) || 0 });
+          } else {
+            items.forEach(item => {
+              parsed.push({
+                client:  clientName,
+                month,
+                product: item.productName ?? item.name ?? '—',
+                qty:     Number(item.quantity) || 0,
+                revenue: Number(item.subtotal)  || 0,
+              });
+            });
+          }
+        });
+        setRows(parsed);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [company, from, to]);
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, { revenue: number; qty: number; count: number }>();
+    rows.forEach(r => {
+      const key = groupBy === 'client' ? r.client : groupBy === 'product' ? r.product : r.month;
+      const cur = map.get(key) ?? { revenue: 0, qty: 0, count: 0 };
+      map.set(key, { revenue: cur.revenue + r.revenue, qty: cur.qty + r.qty, count: cur.count + 1 });
+    });
+    return Array.from(map.entries())
+      .map(([key, v]) => ({ key, ...v }))
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [rows, groupBy]);
+
+  const total = grouped.reduce((s, r) => s + r.revenue, 0);
+
+  const exportRows = grouped.map(r => ({
+    [groupBy === 'client' ? 'Client' : groupBy === 'product' ? 'Product' : 'Month']: r.key,
+    'Revenue (₨)': Math.round(r.revenue),
+    'Qty':         r.qty,
+    'Share %':     total > 0 ? ((r.revenue / total) * 100).toFixed(1) : '0',
+  }));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
+          {(['client', 'product', 'month'] as const).map(g => (
+            <button key={g} onClick={() => setGroupBy(g)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all capitalize ${groupBy === g ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}>
+              By {g}
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto">
+          <ReportExport title={`Sales_Analysis_by_${groupBy}`} rows={exportRows} />
+        </div>
+      </div>
+
+      {/* KPI strip */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { l: 'Total Revenue',    v: `₨ ${fmt(total)}`,       c: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+          { l: `Unique ${groupBy}s`, v: String(grouped.length),  c: 'bg-blue-50 border-blue-200 text-blue-700' },
+          { l: 'Top Contributor',   v: grouped[0]?.key ?? '—',   c: 'bg-amber-50 border-amber-200 text-amber-700' },
+        ].map(k => (
+          <div key={k.l} className={`border rounded-2xl p-4 ${k.c}`}>
+            <p className="text-[9px] font-black uppercase opacity-70">{k.l}</p>
+            <p className="text-lg font-black mt-1 truncate">{k.v}</p>
+          </div>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="py-16 text-center text-slate-400 text-xs font-bold">Loading…</div>
+      ) : (
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+          <table className="w-full text-xs">
+            <thead className="bg-slate-900 text-white">
+              <tr>
+                <th className="px-5 py-3 text-left font-black text-[10px] uppercase capitalize">{groupBy}</th>
+                <th className="px-5 py-3 text-right font-black text-[10px] uppercase">Revenue</th>
+                <th className="px-5 py-3 text-right font-black text-[10px] uppercase">Qty</th>
+                <th className="px-5 py-3 text-right font-black text-[10px] uppercase">Share %</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {grouped.map((r, i) => (
+                <tr key={r.key} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
+                  <td className="px-5 py-2.5 font-medium text-slate-800">{r.key}</td>
+                  <td className="px-5 py-2.5 text-right font-black text-slate-900">₨ {fmt(r.revenue)}</td>
+                  <td className="px-5 py-2.5 text-right text-slate-500">{r.qty > 0 ? r.qty.toLocaleString() : '—'}</td>
+                  <td className="px-5 py-2.5 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <div className="w-16 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                        <div className="h-full bg-blue-500 rounded-full" style={{ width: `${total > 0 ? (r.revenue / total) * 100 : 0}%` }} />
+                      </div>
+                      <span className="text-slate-600 w-10 text-right">
+                        {total > 0 ? ((r.revenue / total) * 100).toFixed(1) : '0'}%
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="bg-slate-800 text-white">
+              <tr>
+                <td className="px-5 py-3 font-black">TOTAL</td>
+                <td className="px-5 py-3 text-right font-black">₨ {fmt(total)}</td>
+                <td className="px-5 py-3 text-right font-black">
+                  {grouped.reduce((s, r) => s + r.qty, 0).toLocaleString()}
+                </td>
+                <td className="px-5 py-3 text-right font-black">100%</td>
+              </tr>
+            </tfoot>
+          </table>
+          {grouped.length === 0 && (
+            <div className="py-16 text-center text-slate-300 text-xs font-bold uppercase">No invoices in this period</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── GST Return ────────────────────────────────────────────────────────────────
+
+interface GSTRow {
+  period:       string;
+  outputTax:    number;
+  inputTax:     number;
+  netPayable:   number;
+  invoiceCount: number;
+}
+
+const GSTReturnReport: React.FC<{ company: Company; from: string; to: string }> = ({ company, from, to }) => {
+  const [rows,    setRows]    = useState<GSTRow[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const { data } = await supabase
+          .from('invoices')
+          .select('date, gst, grand_total, status')
+          .eq('company', company)
+          .not('status', 'in', '("cancelled","draft")')
+          .gte('date', from)
+          .lte('date', to);
+        if (cancelled) return;
+        const byMonth = new Map<string, { outputTax: number; count: number }>();
+        (data ?? []).forEach((inv: any) => {
+          const m = (inv.date ?? '').slice(0, 7);
+          const cur = byMonth.get(m) ?? { outputTax: 0, count: 0 };
+          byMonth.set(m, {
+            outputTax: cur.outputTax + (Number(inv.gst) || 0),
+            count:     cur.count + 1,
+          });
+        });
+        const parsed: GSTRow[] = Array.from(byMonth.entries())
+          .map(([period, v]) => ({
+            period,
+            outputTax:    v.outputTax,
+            inputTax:     0,
+            netPayable:   v.outputTax,
+            invoiceCount: v.count,
+          }))
+          .sort((a, b) => a.period.localeCompare(b.period));
+        setRows(parsed);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [company, from, to]);
+
+  const totals = rows.reduce(
+    (t, r) => ({ output: t.output + r.outputTax, input: t.input + r.inputTax, net: t.net + r.netPayable }),
+    { output: 0, input: 0, net: 0 },
+  );
+
+  const exportRows = rows.map(r => ({
+    'Tax Period':     r.period,
+    'Output GST (₨)': Math.round(r.outputTax),
+    'Input GST (₨)':  Math.round(r.inputTax),
+    'Net Payable (₨)':Math.round(r.netPayable),
+    'Invoices':       r.invoiceCount,
+  }));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <p className="text-xs font-black text-slate-700">GST Return Summary</p>
+          <p className="text-[10px] text-slate-400">Pakistan FBR — Standard Rate 18% · Simplified format</p>
+        </div>
+        <ReportExport title="GST_Return" rows={exportRows} />
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { l: 'Total Output Tax',  v: totals.output, c: 'bg-blue-50 border-blue-200 text-blue-700' },
+          { l: 'Total Input Tax',   v: totals.input,  c: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+          { l: 'Net GST Payable',   v: totals.net,    c: 'bg-amber-50 border-amber-200 text-amber-800' },
+        ].map(k => (
+          <div key={k.l} className={`border rounded-2xl p-4 ${k.c}`}>
+            <p className="text-[9px] font-black uppercase opacity-70">{k.l}</p>
+            <p className="text-xl font-black mt-1">₨ {fmt(k.v)}</p>
+          </div>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="py-16 text-center text-slate-400 text-xs font-bold">Loading…</div>
+      ) : (
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+          <table className="w-full text-xs">
+            <thead className="bg-slate-900 text-white">
+              <tr>
+                {['Tax Period','Output GST','Input GST','Net Payable','Invoices'].map(h => (
+                  <th key={h} className="px-5 py-3 text-left font-black text-[10px] uppercase">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map(r => (
+                <tr key={r.period} className="hover:bg-slate-50">
+                  <td className="px-5 py-2.5 font-bold text-slate-800">{r.period}</td>
+                  <td className="px-5 py-2.5 text-blue-700 font-medium">₨ {fmt(r.outputTax)}</td>
+                  <td className="px-5 py-2.5 text-emerald-700 font-medium">₨ {fmt(r.inputTax)}</td>
+                  <td className="px-5 py-2.5 font-black text-slate-900">₨ {fmt(r.netPayable)}</td>
+                  <td className="px-5 py-2.5 text-slate-500">{r.invoiceCount}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="bg-slate-800 text-white">
+              <tr>
+                <td className="px-5 py-3 font-black">TOTAL</td>
+                <td className="px-5 py-3 font-black">₨ {fmt(totals.output)}</td>
+                <td className="px-5 py-3 font-black">₨ {fmt(totals.input)}</td>
+                <td className="px-5 py-3 font-black">₨ {fmt(totals.net)}</td>
+                <td className="px-5 py-3 font-black">{rows.reduce((s, r) => s + r.invoiceCount, 0)}</td>
+              </tr>
+            </tfoot>
+          </table>
+          {rows.length === 0 && (
+            <div className="py-16 text-center text-slate-300 text-xs font-bold uppercase">No GST invoices in this period</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Link-out cards for standalone pages ──────────────────────────────────────
+
+const LinkOutReports: React.FC<{ company: Company }> = ({ company }) => {
+  const navigate = useNavigate();
+  const cards = [
+    { label: 'Cutter Performance',   desc: 'sqft/hr, wastage trend, defect rate',     path: '/production/cutter-performance', icon: <Gauge size={20}/>,      color: 'border-blue-200 bg-blue-50 text-blue-700' },
+    { label: 'Vendor Scorecard',     desc: 'On-time %, defect %, price variance',      path: '/procurement/vendor-scorecard',  icon: <Users size={20}/>,      color: 'border-purple-200 bg-purple-50 text-purple-700' },
+    { label: 'Stock Aging',          desc: 'Slow-moving, dead stock, ABC analysis',    path: '/procurement/stock-aging',       icon: <Package size={20}/>,    color: 'border-amber-200 bg-amber-50 text-amber-700' },
+    { label: 'Project Profitability',desc: 'Revenue – direct cost – overhead per SO',  path: '/sales/project-profitability',   icon: <TrendingUp size={20}/>, color: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+  ];
+  return (
+    <div className="space-y-3">
+      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Standalone Operational Reports</p>
+      <div className="grid grid-cols-2 gap-3">
+        {cards.map(c => (
+          <button key={c.path} onClick={() => navigate(c.path)}
+            className={`flex items-start gap-4 p-5 rounded-2xl border text-left hover:shadow-md transition-all group ${c.color}`}>
+            <div className="mt-0.5">{c.icon}</div>
+            <div className="flex-1">
+              <p className="font-black text-sm">{c.label}</p>
+              <p className="text-[10px] mt-0.5 opacity-70">{c.desc}</p>
+            </div>
+            <ArrowUpRight size={16} className="opacity-50 group-hover:opacity-100 transition-opacity mt-0.5" />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
 
 const ReportsHub: React.FC<{ company: Company }> = ({ company }) => {
@@ -712,19 +1138,24 @@ const ReportsHub: React.FC<{ company: Company }> = ({ company }) => {
         </div>
       </div>
 
-      {/* Report Type Tabs */}
-      <div className="flex gap-2 flex-wrap">
-        {REPORT_TABS.map(t => (
-          <button key={t.id} onClick={() => setReportType(t.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
-              reportType === t.id
-                ? 'bg-slate-900 text-white border-slate-900 shadow-md'
-                : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
-            }`}>
-            {t.icon} {t.label}
-          </button>
-        ))}
-      </div>
+      {/* Report Type Tabs — grouped */}
+      {(['Financial', 'Aging', 'Operations'] as const).map(grp => (
+        <div key={grp} className="space-y-1">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">{grp}</p>
+          <div className="flex gap-2 flex-wrap">
+            {REPORT_TABS.filter(t => t.group === grp).map(t => (
+              <button key={t.id} onClick={() => setReportType(t.id)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+                  reportType === t.id
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                    : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                }`}>
+                {t.icon} {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
 
       {/* Loading overlay */}
       {loading && (
@@ -746,18 +1177,29 @@ const ReportsHub: React.FC<{ company: Company }> = ({ company }) => {
           {reportType === 'balance_sheet' && (
             <BalanceSheetReport accounts={accounts} ledger={ledger} />
           )}
-          {reportType === 'inventory_valuation' && (
-            <InventoryValuationReport company={company} />
-          )}
-
           {(reportType === 'ar_aging' || reportType === 'ap_aging') && (
             <AgingReport accounts={accounts} ledger={ledger} type={reportType} asOfDate={toDate} />
           )}
-          {reportType === 'inventory' && (
+          {reportType === 'inventory_valuation' && (
             <InventoryValuationReport company={company} />
+          )}
+          {reportType === 'cash_flow' && (
+            <CashFlowReport accounts={accounts} ledger={ledger} />
+          )}
+          {reportType === 'sales_analysis' && (
+            <SalesAnalysisReport company={company} from={fromDate} to={toDate} />
+          )}
+          {reportType === 'gst_return' && (
+            <GSTReturnReport company={company} from={fromDate} to={toDate} />
+          )}
+          {reportType === 'bank_recon' && (
+            <BankReconciliation company={company} />
           )}
         </>
       )}
+
+      {/* Link-out cards — always visible at bottom */}
+      {!loading && <LinkOutReports company={company} />}
 
       <style>{`@media print { .no-print { display: none !important; } body { margin: 0; font-size: 10px; } }`}</style>
     </div>

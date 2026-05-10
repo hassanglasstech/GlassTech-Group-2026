@@ -75,6 +75,10 @@ const CommandPalette    = React.lazy(() => import('./modules/shared/components/C
 const Breadcrumbs       = React.lazy(() => import('./modules/shared/components/Breadcrumbs'));
 // Sprint 25 — Finance inbox
 const FinanceInbox      = React.lazy(() => import('./modules/finance/pages/FinanceInbox'));
+// Sprint 29 — Reporting pack: standalone operational reports
+const VendorScorecard      = React.lazy(() => import('./modules/procurement/pages/VendorScorecard'));
+const StockAging           = React.lazy(() => import('./modules/procurement/pages/StockAging'));
+const ProjectProfitability = React.lazy(() => import('./modules/sales/pages/ProjectProfitability'));
 // Sprint 12 — public mobile driver POD page (no auth — token-gated)
 const DriverScreen     = React.lazy(() => import('./src/pages/DriverScreen'));
 // Sprint 14 — live GPS dashboard (supervisor) + public customer tracking
@@ -570,6 +574,10 @@ const App: React.FC = () => {
                   {/* Sprint 8 — WIP aging + Vendor SLA + Cutter Performance */}
                   <Route path="/production/aging"             element={<ModuleErrorBoundary moduleName="WIP Aging"><WIPAging /></ModuleErrorBoundary>} />
                   <Route path="/production/cutter-performance" element={<ModuleErrorBoundary moduleName="Cutter Performance"><CutterPerformance /></ModuleErrorBoundary>} />
+                  {/* Sprint 29 — Operational reports */}
+                  <Route path="/procurement/vendor-scorecard"  element={<ModuleErrorBoundary moduleName="Vendor Scorecard"><VendorScorecard /></ModuleErrorBoundary>} />
+                  <Route path="/procurement/stock-aging"       element={<ModuleErrorBoundary moduleName="Stock Aging"><StockAging /></ModuleErrorBoundary>} />
+                  <Route path="/sales/project-profitability"   element={<ModuleErrorBoundary moduleName="Project Profitability"><ProjectProfitability /></ModuleErrorBoundary>} />
                   {/* Sprint 14 — Live GPS dashboard (supervisor) */}
                   <Route path="/dispatch/live"  element={<ModuleErrorBoundary moduleName="Live Dispatch Map"><LiveDispatchMap /></ModuleErrorBoundary>} />
                   {/* Sprint 15 — Production Workbench (single page) */}
