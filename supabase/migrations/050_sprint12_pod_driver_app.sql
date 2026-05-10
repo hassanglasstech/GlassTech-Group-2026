@@ -16,31 +16,96 @@
 --   - Storage bucket  pod-evidence  — open to authenticated + anon writes
 --                                       (gated by dispatch_token at app layer)
 --
+-- ───────────────────────────────────────────────────────────────────────
+-- HOTFIX (user feedback 2026-05-10):
+-- Live Supabase has tempering_dispatches.id as UUID. dispatch_id columns
+-- on the new POD tables must match — built dynamically via EXECUTE format()
+-- so the FK works regardless of TEXT or UUID.
+--
 -- Idempotent — safe to re-run.
 -- ═══════════════════════════════════════════════════════════════════════
 
+-- Required for digest() in verify_delivery_otp + gen_random_bytes() in ensure_driver_token
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Drop any partial artefacts from a failed prior run
+DROP TABLE IF EXISTS dispatch_photos     CASCADE;
+DROP TABLE IF EXISTS customer_signatures CASCADE;
+DROP TABLE IF EXISTS delivery_otps       CASCADE;
+DROP FUNCTION IF EXISTS ensure_driver_token(TEXT)                   CASCADE;
+DROP FUNCTION IF EXISTS verify_delivery_otp(TEXT, TEXT, TEXT)        CASCADE;
+
 -- ─────────────────────────────────────────────────────────────────────
--- 1. dispatch_photos — photos captured at gate-out / customer site
+-- Type detection — keep the result for the rest of the script
 -- ─────────────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS dispatch_photos (
-  id           BIGSERIAL PRIMARY KEY,
-  dispatch_id  TEXT NOT NULL,
-  company      TEXT NOT NULL,
-  /** GATE_OUT | CUSTOMER_DELIVERY | DAMAGE | TEMPERING_HANDOFF */
-  photo_type   TEXT NOT NULL,
-  /** Path inside the `pod-evidence` Storage bucket */
-  storage_path TEXT NOT NULL,
-  caption      TEXT,
-  taken_at     TIMESTAMPTZ DEFAULT now(),
-  taken_by     TEXT,                                  -- driver name or user id
-  geo_lat      NUMERIC(10,7),
-  geo_lng      NUMERIC(10,7),
-  created_at   TIMESTAMPTZ DEFAULT now(),
-  CONSTRAINT fk_dispatch_photos_dispatch
-    FOREIGN KEY (dispatch_id) REFERENCES tempering_dispatches(id) ON DELETE CASCADE,
-  CONSTRAINT chk_dispatch_photos_type
-    CHECK (photo_type IN ('GATE_OUT','CUSTOMER_DELIVERY','DAMAGE','TEMPERING_HANDOFF'))
-);
+DO $$
+DECLARE
+  v_id_type TEXT;
+BEGIN
+  SELECT data_type INTO v_id_type
+    FROM information_schema.columns
+    WHERE table_name='tempering_dispatches' AND column_name='id' LIMIT 1;
+  IF v_id_type IS NULL THEN
+    RAISE EXCEPTION 'tempering_dispatches table missing — apply migration 049 (and earlier) first';
+  END IF;
+
+  -- ── 1. dispatch_photos ──────────────────────────────────────────
+  EXECUTE format($t$
+    CREATE TABLE dispatch_photos (
+      id           BIGSERIAL PRIMARY KEY,
+      dispatch_id  %s NOT NULL,
+      company      TEXT NOT NULL,
+      photo_type   TEXT NOT NULL,
+      storage_path TEXT NOT NULL,
+      caption      TEXT,
+      taken_at     TIMESTAMPTZ DEFAULT now(),
+      taken_by     TEXT,
+      geo_lat      NUMERIC(10,7),
+      geo_lng      NUMERIC(10,7),
+      created_at   TIMESTAMPTZ DEFAULT now(),
+      CONSTRAINT fk_dispatch_photos_dispatch
+        FOREIGN KEY (dispatch_id) REFERENCES tempering_dispatches(id) ON DELETE CASCADE,
+      CONSTRAINT chk_dispatch_photos_type
+        CHECK (photo_type IN ('GATE_OUT','CUSTOMER_DELIVERY','DAMAGE','TEMPERING_HANDOFF'))
+    )
+  $t$, v_id_type);
+
+  -- ── 2. customer_signatures ──────────────────────────────────────
+  EXECUTE format($t$
+    CREATE TABLE customer_signatures (
+      id              BIGSERIAL PRIMARY KEY,
+      dispatch_id     %s NOT NULL,
+      company         TEXT NOT NULL,
+      customer_name   TEXT NOT NULL,
+      customer_phone  TEXT,
+      signature_data  TEXT NOT NULL,
+      signed_at       TIMESTAMPTZ DEFAULT now(),
+      geo_lat         NUMERIC(10,7),
+      geo_lng         NUMERIC(10,7),
+      created_at      TIMESTAMPTZ DEFAULT now(),
+      CONSTRAINT fk_customer_signatures_dispatch
+        FOREIGN KEY (dispatch_id) REFERENCES tempering_dispatches(id) ON DELETE CASCADE
+    )
+  $t$, v_id_type);
+
+  -- ── 3. delivery_otps ────────────────────────────────────────────
+  EXECUTE format($t$
+    CREATE TABLE delivery_otps (
+      id              BIGSERIAL PRIMARY KEY,
+      dispatch_id     %s NOT NULL,
+      company         TEXT NOT NULL,
+      customer_phone  TEXT NOT NULL,
+      otp_hash        TEXT NOT NULL,
+      attempts        INT  DEFAULT 0,
+      verified        BOOLEAN DEFAULT FALSE,
+      verified_at     TIMESTAMPTZ,
+      expires_at      TIMESTAMPTZ NOT NULL,
+      created_at      TIMESTAMPTZ DEFAULT now(),
+      CONSTRAINT fk_delivery_otps_dispatch
+        FOREIGN KEY (dispatch_id) REFERENCES tempering_dispatches(id) ON DELETE CASCADE
+    )
+  $t$, v_id_type);
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_dispatch_photos_dispatch
   ON dispatch_photos (dispatch_id, taken_at);
@@ -52,25 +117,6 @@ DROP POLICY IF EXISTS dispatch_photos_rw ON dispatch_photos;
 CREATE POLICY dispatch_photos_rw ON dispatch_photos
   FOR ALL USING (true) WITH CHECK (true);
 
--- ─────────────────────────────────────────────────────────────────────
--- 2. customer_signatures — customer e-signature on delivery
--- ─────────────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS customer_signatures (
-  id              BIGSERIAL PRIMARY KEY,
-  dispatch_id     TEXT NOT NULL,
-  company         TEXT NOT NULL,
-  customer_name   TEXT NOT NULL,
-  customer_phone  TEXT,
-  /** Base64-encoded PNG dataURL ("data:image/png;base64,…") */
-  signature_data  TEXT NOT NULL,
-  signed_at       TIMESTAMPTZ DEFAULT now(),
-  geo_lat         NUMERIC(10,7),
-  geo_lng         NUMERIC(10,7),
-  created_at      TIMESTAMPTZ DEFAULT now(),
-  CONSTRAINT fk_customer_signatures_dispatch
-    FOREIGN KEY (dispatch_id) REFERENCES tempering_dispatches(id) ON DELETE CASCADE
-);
-
 CREATE INDEX IF NOT EXISTS idx_customer_signatures_dispatch
   ON customer_signatures (dispatch_id, signed_at);
 CREATE INDEX IF NOT EXISTS idx_customer_signatures_company_date
@@ -80,25 +126,6 @@ ALTER TABLE customer_signatures ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS customer_signatures_rw ON customer_signatures;
 CREATE POLICY customer_signatures_rw ON customer_signatures
   FOR ALL USING (true) WITH CHECK (true);
-
--- ─────────────────────────────────────────────────────────────────────
--- 3. delivery_otps — 6-digit OTPs sent to customer
--- ─────────────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS delivery_otps (
-  id              BIGSERIAL PRIMARY KEY,
-  dispatch_id     TEXT NOT NULL,
-  company         TEXT NOT NULL,
-  customer_phone  TEXT NOT NULL,
-  /** SHA-256 hex of the OTP — never store plaintext */
-  otp_hash        TEXT NOT NULL,
-  attempts        INT  DEFAULT 0,
-  verified        BOOLEAN DEFAULT FALSE,
-  verified_at     TIMESTAMPTZ,
-  expires_at      TIMESTAMPTZ NOT NULL,
-  created_at      TIMESTAMPTZ DEFAULT now(),
-  CONSTRAINT fk_delivery_otps_dispatch
-    FOREIGN KEY (dispatch_id) REFERENCES tempering_dispatches(id) ON DELETE CASCADE
-);
 
 CREATE INDEX IF NOT EXISTS idx_delivery_otps_dispatch_active
   ON delivery_otps (dispatch_id, verified, expires_at)
@@ -134,13 +161,15 @@ DECLARE
   v_existing TEXT;
   v_new TEXT;
 BEGIN
+  -- id::text cast supports both UUID and TEXT primary keys
   SELECT driver_token INTO v_existing
-    FROM tempering_dispatches WHERE id = p_dispatch_id;
+    FROM tempering_dispatches WHERE id::text = p_dispatch_id;
   IF v_existing IS NOT NULL THEN
     RETURN v_existing;
   END IF;
   v_new := encode(gen_random_bytes(24), 'hex');
-  UPDATE tempering_dispatches SET driver_token = v_new WHERE id = p_dispatch_id;
+  EXECUTE 'UPDATE tempering_dispatches SET driver_token = $1 WHERE id::text = $2'
+    USING v_new, p_dispatch_id;
   RETURN v_new;
 END $$;
 
@@ -163,7 +192,9 @@ DECLARE
   v_attempts    INT;
   v_expires_at  TIMESTAMPTZ;
 BEGIN
-  SELECT driver_token INTO v_token FROM tempering_dispatches WHERE id = p_dispatch_id;
+  -- id::text cast supports both UUID and TEXT primary keys
+  SELECT driver_token INTO v_token
+    FROM tempering_dispatches WHERE id::text = p_dispatch_id;
   IF v_token IS NULL OR v_token <> p_token THEN
     RAISE EXCEPTION 'invalid_token';
   END IF;
@@ -172,7 +203,7 @@ BEGIN
   SELECT id, otp_hash, attempts, expires_at
     INTO v_otp_id, v_hash, v_attempts, v_expires_at
     FROM delivery_otps
-   WHERE dispatch_id = p_dispatch_id AND verified = FALSE
+   WHERE dispatch_id::text = p_dispatch_id AND verified = FALSE
    ORDER BY created_at DESC LIMIT 1
    FOR UPDATE;
 
@@ -186,14 +217,13 @@ BEGIN
     RAISE EXCEPTION 'too_many_attempts';
   END IF;
 
-  -- SHA-256 hex of the plaintext
+  -- SHA-256 hex of the plaintext (pgcrypto extension installed at top of migration)
   IF encode(digest(p_otp_plain, 'sha256'), 'hex') = v_hash THEN
     UPDATE delivery_otps
        SET verified = TRUE, verified_at = now(), attempts = attempts + 1
      WHERE id = v_otp_id;
-    UPDATE tempering_dispatches
-       SET pod_otp_verified = TRUE
-     WHERE id = p_dispatch_id;
+    EXECUTE 'UPDATE tempering_dispatches SET pod_otp_verified = TRUE WHERE id::text = $1'
+      USING p_dispatch_id;
     RETURN TRUE;
   ELSE
     UPDATE delivery_otps SET attempts = attempts + 1 WHERE id = v_otp_id;

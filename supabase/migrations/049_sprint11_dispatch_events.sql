@@ -7,34 +7,57 @@
 --   • Vendor invoice mismatches missed → 3-way match columns + RPC flag
 --   • Dispatch could be marked Dispatched without gate pass → FK + RPC guard
 --
--- Schema notes:
---   tempering_dispatches stores most data in JSONB `data`. We add three
---   FLAT columns (vendor_invoice_amount, vendor_invoice_no,
---   three_way_match_status, gate_pass_id) so PostgREST can filter on
---   them and the unique constraints work without functional indexes
---   getting too gnarly.
+-- ───────────────────────────────────────────────────────────────────────
+-- HOTFIX (user feedback 2026-05-10):
+-- Live Supabase has tempering_dispatches.id as UUID (not TEXT as the
+-- repo migrations claim). Original FK fk_dispatch_event_dispatch failed
+-- with "incompatible types: text and uuid".
 --
---   production_pieces also keeps `dispatchId` + `status` inside JSONB
---   `data`. The active-dispatch uniqueness index uses expression
---   indexes on those JSONB paths.
+-- Fix: detect tempering_dispatches.id actual type at apply time. Build
+-- dispatch_id columns to match. FK created via EXECUTE format() so types
+-- always align. RPCs use TEXT params with explicit casts so a single
+-- function definition works regardless of PK type.
 --
--- Idempotent — safe to re-run.
+-- Idempotent — safe to re-run after a partial failure.
 -- ═══════════════════════════════════════════════════════════════════════
 
+-- Drop any partial artefacts from a failed prior run
+DROP TABLE IF EXISTS dispatch_events CASCADE;
+DROP FUNCTION IF EXISTS _dispatch_events_block_mutation() CASCADE;
+DROP FUNCTION IF EXISTS append_dispatch_event(TEXT, TEXT, JSONB, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS authorize_dispatch(TEXT, TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS record_three_way_match(TEXT, TEXT, NUMERIC, NUMERIC, TEXT) CASCADE;
+
 -- ─────────────────────────────────────────────────────────────────────
--- 1. dispatch_events — append-only audit log of dispatch lifecycle
+-- 1. dispatch_events — append-only audit log
+--    dispatch_id type matches tempering_dispatches.id
 -- ─────────────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS dispatch_events (
-  id           BIGSERIAL PRIMARY KEY,
-  dispatch_id  TEXT NOT NULL,
-  company      TEXT NOT NULL,
-  event_type   TEXT NOT NULL,            -- CREATED | PIECES_LOADED | AUTHORIZED | GATE_OUT | IN_TRANSIT | ARRIVED | RECEIVING | INVOICE_RECORDED | THREE_WAY_MATCHED | CLOSED | CANCELLED
-  event_data   JSONB DEFAULT '{}'::jsonb,
-  occurred_at  TIMESTAMPTZ DEFAULT now(),
-  created_by   TEXT,
-  CONSTRAINT fk_dispatch_event_dispatch
-    FOREIGN KEY (dispatch_id) REFERENCES tempering_dispatches(id) ON DELETE CASCADE
-);
+DO $$
+DECLARE
+  v_id_type TEXT;
+BEGIN
+  SELECT data_type INTO v_id_type
+    FROM information_schema.columns
+    WHERE table_name='tempering_dispatches' AND column_name='id' LIMIT 1;
+
+  IF v_id_type IS NULL THEN
+    RAISE EXCEPTION 'tempering_dispatches table missing — apply earlier migrations first';
+  END IF;
+
+  EXECUTE format($t$
+    CREATE TABLE dispatch_events (
+      id           BIGSERIAL PRIMARY KEY,
+      dispatch_id  %s NOT NULL,
+      company      TEXT NOT NULL,
+      event_type   TEXT NOT NULL,
+      event_data   JSONB DEFAULT '{}'::jsonb,
+      occurred_at  TIMESTAMPTZ DEFAULT now(),
+      created_by   TEXT,
+      CONSTRAINT fk_dispatch_event_dispatch
+        FOREIGN KEY (dispatch_id) REFERENCES tempering_dispatches(id) ON DELETE CASCADE
+    )
+  $t$, v_id_type);
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_dispatch_events_dispatch
   ON dispatch_events (dispatch_id, occurred_at);
@@ -45,35 +68,58 @@ CREATE INDEX IF NOT EXISTS idx_dispatch_events_company_date
 CREATE INDEX IF NOT EXISTS idx_dispatch_events_type
   ON dispatch_events (event_type, occurred_at DESC);
 
--- Append-only: prevent UPDATE / DELETE except for system roles
+-- Append-only: block UPDATE / DELETE
 CREATE OR REPLACE FUNCTION _dispatch_events_block_mutation()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
   RAISE EXCEPTION 'dispatch_events is append-only — UPDATE/DELETE denied (event_id=%)', OLD.id;
 END $$;
 
-DROP TRIGGER IF EXISTS dispatch_events_no_update ON dispatch_events;
 CREATE TRIGGER dispatch_events_no_update
   BEFORE UPDATE OR DELETE ON dispatch_events
   FOR EACH ROW EXECUTE FUNCTION _dispatch_events_block_mutation();
 
--- RLS — disabled for single-user; kept open so UI service-role writes work
 ALTER TABLE dispatch_events ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS dispatch_events_rw ON dispatch_events;
-CREATE POLICY dispatch_events_rw ON dispatch_events
-  FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY dispatch_events_rw ON dispatch_events FOR ALL USING (true) WITH CHECK (true);
 
 -- ─────────────────────────────────────────────────────────────────────
 -- 2. tempering_dispatches — flat columns for 3-way match + gate pass
 -- ─────────────────────────────────────────────────────────────────────
-ALTER TABLE tempering_dispatches
-  ADD COLUMN IF NOT EXISTS vendor_invoice_amount   NUMERIC(15,2),
-  ADD COLUMN IF NOT EXISTS vendor_invoice_no       TEXT,
-  ADD COLUMN IF NOT EXISTS three_way_match_status  TEXT,
-  ADD COLUMN IF NOT EXISTS gate_pass_id            TEXT,
-  ADD COLUMN IF NOT EXISTS status                  TEXT;
+DO $$
+DECLARE
+  v_gp_type TEXT;
+  v_disp_id_type TEXT;
+BEGIN
+  -- Look up gate_passes.id type so the gate_pass_id column matches it
+  SELECT data_type INTO v_gp_type
+    FROM information_schema.columns
+    WHERE table_name='gate_passes' AND column_name='id' LIMIT 1;
 
--- 3-way match check (Match | Mismatch | Pending | NULL=not yet posted)
+  -- Look up tempering_dispatches.id type for any FK we add
+  SELECT data_type INTO v_disp_id_type
+    FROM information_schema.columns
+    WHERE table_name='tempering_dispatches' AND column_name='id' LIMIT 1;
+
+  -- Add flat columns (idempotent)
+  ALTER TABLE tempering_dispatches
+    ADD COLUMN IF NOT EXISTS vendor_invoice_amount   NUMERIC(15,2),
+    ADD COLUMN IF NOT EXISTS vendor_invoice_no       TEXT,
+    ADD COLUMN IF NOT EXISTS three_way_match_status  TEXT,
+    ADD COLUMN IF NOT EXISTS status                  TEXT;
+
+  -- gate_pass_id with matching type (default to TEXT if gate_passes missing)
+  IF v_gp_type IS NOT NULL THEN
+    EXECUTE format(
+      'ALTER TABLE tempering_dispatches ADD COLUMN IF NOT EXISTS gate_pass_id %s',
+      v_gp_type
+    );
+  ELSE
+    ALTER TABLE tempering_dispatches ADD COLUMN IF NOT EXISTS gate_pass_id TEXT;
+  END IF;
+END $$;
+
+-- 3-way match check
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -87,13 +133,25 @@ BEGIN
   END IF;
 END $$;
 
--- Gate pass FK (deferred — added if gate_passes exists)
+-- gate_pass_id FK (only if types align)
 DO $$
+DECLARE
+  v_gp_type TEXT;
+  v_my_type TEXT;
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='gate_passes')
+  SELECT data_type INTO v_gp_type
+    FROM information_schema.columns
+    WHERE table_name='gate_passes' AND column_name='id' LIMIT 1;
+  SELECT data_type INTO v_my_type
+    FROM information_schema.columns
+    WHERE table_name='tempering_dispatches' AND column_name='gate_pass_id' LIMIT 1;
+
+  IF v_gp_type IS NOT NULL
+     AND v_my_type = v_gp_type
      AND NOT EXISTS (
        SELECT 1 FROM information_schema.table_constraints
-       WHERE table_name='tempering_dispatches' AND constraint_name='fk_tempering_dispatches_gate_pass'
+       WHERE table_name='tempering_dispatches'
+         AND constraint_name='fk_tempering_dispatches_gate_pass'
      ) THEN
     ALTER TABLE tempering_dispatches
       ADD CONSTRAINT fk_tempering_dispatches_gate_pass
@@ -124,10 +182,10 @@ CREATE UNIQUE INDEX idx_pieces_active_dispatch
     AND (data->>'status') IN ('Dispatched','Tempered','Received-From-Tempering');
 
 -- ─────────────────────────────────────────────────────────────────────
--- 4. RPC: append_dispatch_event — single insertion point
---    Dispatch lifecycle MUST go through this; raw INSERTs allowed but
---    the service layer is expected to use the RPC for `created_by`
---    + JSON validation.
+-- 4. RPC: append_dispatch_event
+--
+-- Param uses TEXT — the function casts on lookup so a single signature
+-- works whether tempering_dispatches.id is UUID or TEXT.
 -- ─────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION append_dispatch_event(
   p_dispatch_id  TEXT,
@@ -153,17 +211,21 @@ BEGIN
     RAISE EXCEPTION 'invalid_event_type: % (allowed: %)', p_event_type, v_allowed_types;
   END IF;
 
-  -- Look up company from the dispatch row (single source of truth)
+  -- id::text cast lets this work for both UUID and TEXT primary keys
   SELECT COALESCE(company, data->>'company') INTO v_company
-    FROM tempering_dispatches WHERE id = p_dispatch_id;
+    FROM tempering_dispatches WHERE id::text = p_dispatch_id;
 
   IF v_company IS NULL THEN
     RAISE EXCEPTION 'dispatch_not_found: %', p_dispatch_id;
   END IF;
 
-  INSERT INTO dispatch_events (dispatch_id, company, event_type, event_data, created_by)
-  VALUES (p_dispatch_id, v_company, p_event_type, COALESCE(p_event_data, '{}'::jsonb), COALESCE(p_created_by, 'system'))
-  RETURNING id INTO v_event_id;
+  -- INSERT — dispatch_id column type matches tempering_dispatches.id, so
+  -- we cast the TEXT param to that type via the column's implicit cast.
+  EXECUTE 'INSERT INTO dispatch_events (dispatch_id, company, event_type, event_data, created_by)
+           VALUES ($1, $2, $3, $4, $5) RETURNING id'
+    INTO v_event_id
+    USING p_dispatch_id, v_company, p_event_type,
+          COALESCE(p_event_data, '{}'::jsonb), COALESCE(p_created_by, 'system');
 
   RETURN v_event_id;
 END $$;
@@ -171,12 +233,11 @@ END $$;
 GRANT EXECUTE ON FUNCTION append_dispatch_event(TEXT, TEXT, JSONB, TEXT) TO anon, authenticated, service_role;
 
 -- ─────────────────────────────────────────────────────────────────────
--- 5. RPC: authorize_dispatch — atomic guard for Dispatched transition
---    Enforces gate pass requirement at the DB level (defense in depth).
+-- 5. RPC: authorize_dispatch — gate-pass guard
 -- ─────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION authorize_dispatch(
-  p_dispatch_id  TEXT,
-  p_gate_pass_id TEXT,
+  p_dispatch_id   TEXT,
+  p_gate_pass_id  TEXT,
   p_authorized_by TEXT DEFAULT 'system'
 ) RETURNS VOID
 LANGUAGE plpgsql SECURITY DEFINER AS $$
@@ -188,38 +249,35 @@ BEGIN
     RAISE EXCEPTION 'invalid_payload: dispatch_id + gate_pass_id required';
   END IF;
 
-  -- Lock dispatch row
-  SELECT COALESCE(company, data->>'company'), gate_pass_id
+  SELECT COALESCE(company, data->>'company'), gate_pass_id::text
     INTO v_company, v_existing_gate
-    FROM tempering_dispatches WHERE id = p_dispatch_id
+    FROM tempering_dispatches WHERE id::text = p_dispatch_id
     FOR UPDATE;
 
   IF v_company IS NULL THEN
     RAISE EXCEPTION 'dispatch_not_found: %', p_dispatch_id;
   END IF;
 
-  -- Verify gate pass exists for the same company
   IF NOT EXISTS (
     SELECT 1 FROM gate_passes
-    WHERE id = p_gate_pass_id AND COALESCE(company, '') = v_company
+    WHERE id::text = p_gate_pass_id AND COALESCE(company, '') = v_company
   ) THEN
     RAISE EXCEPTION 'gate_pass_not_found_for_company: gate_pass=% company=%', p_gate_pass_id, v_company;
   END IF;
 
-  -- Block re-authorization with a different gate pass (idempotent on same)
   IF v_existing_gate IS NOT NULL AND v_existing_gate <> p_gate_pass_id THEN
     RAISE EXCEPTION 'already_authorized_with_different_gate_pass: existing=% new=%', v_existing_gate, p_gate_pass_id;
   END IF;
 
-  UPDATE tempering_dispatches
-     SET gate_pass_id = p_gate_pass_id,
-         status       = 'Dispatched',
-         data         = COALESCE(data, '{}'::jsonb)
-                        || jsonb_build_object('gatePassId', p_gate_pass_id, 'status', 'Dispatched'),
-         updated_at   = now()
-   WHERE id = p_dispatch_id;
+  EXECUTE 'UPDATE tempering_dispatches
+              SET gate_pass_id = $1,
+                  status       = ''Dispatched'',
+                  data         = COALESCE(data, ''{}''::jsonb)
+                                 || jsonb_build_object(''gatePassId'', $2, ''status'', ''Dispatched''),
+                  updated_at   = now()
+            WHERE id::text = $3'
+    USING p_gate_pass_id, p_gate_pass_id, p_dispatch_id;
 
-  -- Append AUTHORIZED event
   PERFORM append_dispatch_event(p_dispatch_id, 'AUTHORIZED',
     jsonb_build_object('gatePassId', p_gate_pass_id), p_authorized_by);
 END $$;
@@ -227,26 +285,25 @@ END $$;
 GRANT EXECUTE ON FUNCTION authorize_dispatch(TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
 
 -- ─────────────────────────────────────────────────────────────────────
--- 6. RPC: record_three_way_match — vendor invoice vs computed AP
---    Flags Mismatch when delta > 5%.
+-- 6. RPC: record_three_way_match
 -- ─────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION record_three_way_match(
-  p_dispatch_id      TEXT,
-  p_vendor_invoice_no  TEXT,
+  p_dispatch_id           TEXT,
+  p_vendor_invoice_no     TEXT,
   p_vendor_invoice_amount NUMERIC,
-  p_computed_ap_amount   NUMERIC,
-  p_recorded_by      TEXT DEFAULT 'system'
+  p_computed_ap_amount    NUMERIC,
+  p_recorded_by           TEXT DEFAULT 'system'
 ) RETURNS TEXT
 LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
-  v_status TEXT;
+  v_status    TEXT;
   v_delta_pct NUMERIC;
+  v_rows      INT;
 BEGIN
   IF p_dispatch_id IS NULL OR p_vendor_invoice_amount IS NULL OR p_computed_ap_amount IS NULL THEN
     RAISE EXCEPTION 'invalid_payload: dispatch_id + amounts required';
   END IF;
 
-  -- Compute delta %
   IF p_computed_ap_amount = 0 THEN
     v_delta_pct := CASE WHEN p_vendor_invoice_amount = 0 THEN 0 ELSE 100 END;
   ELSE
@@ -255,14 +312,16 @@ BEGIN
 
   v_status := CASE WHEN v_delta_pct <= 5 THEN 'Match' ELSE 'Mismatch' END;
 
-  UPDATE tempering_dispatches
-     SET vendor_invoice_no       = p_vendor_invoice_no,
-         vendor_invoice_amount   = p_vendor_invoice_amount,
-         three_way_match_status  = v_status,
-         updated_at              = now()
-   WHERE id = p_dispatch_id;
+  EXECUTE 'UPDATE tempering_dispatches
+              SET vendor_invoice_no       = $1,
+                  vendor_invoice_amount   = $2,
+                  three_way_match_status  = $3,
+                  updated_at              = now()
+            WHERE id::text = $4'
+    USING p_vendor_invoice_no, p_vendor_invoice_amount, v_status, p_dispatch_id;
 
-  IF NOT FOUND THEN
+  GET DIAGNOSTICS v_rows = ROW_COUNT;
+  IF v_rows = 0 THEN
     RAISE EXCEPTION 'dispatch_not_found: %', p_dispatch_id;
   END IF;
 
@@ -286,11 +345,11 @@ GRANT EXECUTE ON FUNCTION record_three_way_match(TEXT, TEXT, NUMERIC, NUMERIC, T
 NOTIFY pgrst, 'reload schema';
 
 -- ─────────────────────────────────────────────────────────────────────
--- 8. Verification (run in SQL Editor after applying)
+-- 8. Verification
 --
 -- -- Lifecycle for a dispatch:
 -- SELECT event_type, occurred_at, created_by, event_data
---   FROM dispatch_events WHERE dispatch_id = 'TD-xxxx' ORDER BY occurred_at;
+--   FROM dispatch_events WHERE dispatch_id::text = 'TD-xxxx' ORDER BY occurred_at;
 --
 -- -- 3-way mismatches needing supervisor review:
 -- SELECT id, vendor_invoice_no, vendor_invoice_amount, three_way_match_status
