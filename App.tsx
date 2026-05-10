@@ -73,6 +73,8 @@ const DispatchWorkbench = React.lazy(() => import('./modules/production/companie
 // Sprint 21 — Global UX foundations
 const CommandPalette    = React.lazy(() => import('./modules/shared/components/CommandPalette'));
 const Breadcrumbs       = React.lazy(() => import('./modules/shared/components/Breadcrumbs'));
+// Sprint 25 — Finance inbox
+const FinanceInbox      = React.lazy(() => import('./modules/finance/pages/FinanceInbox'));
 // Sprint 12 — public mobile driver POD page (no auth — token-gated)
 const DriverScreen     = React.lazy(() => import('./src/pages/DriverScreen'));
 // Sprint 14 — live GPS dashboard (supervisor) + public customer tracking
@@ -551,6 +553,8 @@ const App: React.FC = () => {
                   <Route path="/hub/*"         element={<ModuleErrorBoundary moduleName="Supply Hub"><IntercompanyHub /></ModuleErrorBoundary>} />
                   <Route path="/requisitions"  element={<ModuleErrorBoundary moduleName="Procurement"><ProcurementHub /></ModuleErrorBoundary>} />
                   <Route path="/accounts/*"    element={<ModuleErrorBoundary moduleName="Finance"><AccountsModule /></ModuleErrorBoundary>} />
+                  {/* Sprint 25 — Finance inbox (single accountant action queue) */}
+                  <Route path="/finance/inbox"  element={<ModuleErrorBoundary moduleName="Finance Inbox"><FinanceInbox /></ModuleErrorBoundary>} />
                   <Route path="/md-dashboard" element={<ModuleErrorBoundary moduleName="MD Dashboard"><MDDashboard /></ModuleErrorBoundary>} />
                   <Route path="/factory-incharge" element={<ModuleErrorBoundary moduleName="Factory Incharge"><FactoryInchargeModule /></ModuleErrorBoundary>} />
                   <Route path="/admin"         element={<ModuleErrorBoundary moduleName="Admin"><AdminSecurity /></ModuleErrorBoundary>} />

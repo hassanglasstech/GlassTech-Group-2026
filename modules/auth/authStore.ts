@@ -103,7 +103,7 @@ export const ROLE_DEFAULT_ROUTE: Record<UserRole, string> = {
   owner:              '/md-dashboard',
   hassan:             '/',
   factory_manager:    '/factory-incharge',
-  admin_officer:      '/sales',
+  admin_officer:      '/finance/inbox',         // Sprint 25 — accountants land on inbox
   glassco_supervisor: '/production/workbench',     // Sprint 18 supervisor mini-app
   gtk_supervisor:     '/production/workbench',
   gti_supervisor:     '/production/workbench',
