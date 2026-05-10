@@ -70,6 +70,9 @@ const CutterPerformance= React.lazy(() => import('./modules/production/companies
 const Workbench        = React.lazy(() => import('./modules/production/companies/glassco/pages/Workbench'));
 // Sprint 18 — Role-based mini-apps
 const DispatchWorkbench = React.lazy(() => import('./modules/production/companies/glassco/pages/DispatchWorkbench'));
+// Sprint 21 — Global UX foundations
+const CommandPalette    = React.lazy(() => import('./modules/shared/components/CommandPalette'));
+const Breadcrumbs       = React.lazy(() => import('./modules/shared/components/Breadcrumbs'));
 // Sprint 12 — public mobile driver POD page (no auth — token-gated)
 const DriverScreen     = React.lazy(() => import('./src/pages/DriverScreen'));
 // Sprint 14 — live GPS dashboard (supervisor) + public customer tracking
@@ -516,6 +519,12 @@ const App: React.FC = () => {
             </div>
           )}
           <Suspense fallback={null}><OverrideModeBar /></Suspense>
+          {/* Sprint 21 — Persistent breadcrumbs (auto-hides on home + opt-out paths) */}
+          <Suspense fallback={null}>
+            <div className="px-3 md:px-8 pt-2 max-w-[1600px] mx-auto w-full no-print">
+              <Breadcrumbs/>
+            </div>
+          </Suspense>
           <div className="flex-1 overflow-y-auto scroll-smooth pb-16 lg:pb-0">
             <div className="p-3 md:p-8 max-w-[1600px] mx-auto min-h-full flex flex-col">
               <Suspense fallback={
@@ -571,6 +580,8 @@ const App: React.FC = () => {
         <BottomNav allowedModules={user?.allowedModules?.length ? user.allowedModules : null} />
         <Suspense fallback={null}><EventOSChatWidget /></Suspense>
         <Suspense fallback={null}><WazirLauncher /></Suspense>
+        {/* Sprint 21 — global ⌘K command palette (skips when in input field) */}
+        <Suspense fallback={null}><CommandPalette /></Suspense>
       </div>
       )}
     </HashRouter>
