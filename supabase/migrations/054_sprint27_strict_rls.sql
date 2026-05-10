@@ -210,6 +210,11 @@ GRANT EXECUTE ON FUNCTION disable_strict_company_rls(TEXT) TO authenticated, ser
 -- ─────────────────────────────────────────────────────────────────────
 -- 5. Audit summary — quickly see what's strict vs permissive
 -- ─────────────────────────────────────────────────────────────────────
+-- Drop first because OUT-param signature changed in this hotfix
+-- (table_name → tbl_name). PG rejects CREATE OR REPLACE when the
+-- row type differs.
+DROP FUNCTION IF EXISTS rls_status_summary();
+
 CREATE OR REPLACE FUNCTION rls_status_summary()
 RETURNS TABLE (
   tbl_name        TEXT,
@@ -247,6 +252,9 @@ GRANT EXECUTE ON FUNCTION rls_status_summary() TO authenticated, service_role;
 -- ─────────────────────────────────────────────────────────────────────
 -- 6. Bulk helpers — flip a curated list at once
 -- ─────────────────────────────────────────────────────────────────────
+-- Same OUT-param rename as rls_status_summary
+DROP FUNCTION IF EXISTS enable_strict_rls_recommended();
+
 CREATE OR REPLACE FUNCTION enable_strict_rls_recommended()
 RETURNS TABLE(tbl_name TEXT, status TEXT)
 LANGUAGE plpgsql SECURITY DEFINER AS $$
