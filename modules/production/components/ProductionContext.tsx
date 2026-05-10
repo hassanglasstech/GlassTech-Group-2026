@@ -6,6 +6,7 @@ import { SalesService } from '@/modules/sales/services/salesService';
 import { postTemperingInwardGL, postDeliveryCOGS } from '@/modules/procurement/services/glasscoGLService';
 import { supabase } from '@/src/services/supabaseClient';                       // Sprint 5
 import { useAuthStore } from '@/modules/auth/authStore';                       // Sprint 5
+import { dispatchPieceStatusEvent } from '@/modules/production/hooks/useProductionRealtime'; // Sprint 10
 import { Loader2 } from 'lucide-react';
 
 // ── Phase-7 (B5): Piece status state-machine ──────────────────────────
@@ -252,6 +253,8 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
         const newAll = all.map(p => p.id === id ? { ...p, ...optimistic } as ProductionPiece : p);
         ProductionService.saveProductionPieces(newAll);
       });
+      // Sprint 10 — fire cross-team toast on the same device
+      dispatchPieceStatusEvent(id, status, company);
     } catch (e: any) {
       // Network exception — keep optimistic update locally; offline-queue
       // will catch the cloud delta on reconnect.

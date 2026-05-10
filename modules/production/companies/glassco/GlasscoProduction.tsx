@@ -25,6 +25,9 @@ import GlasscoPriceLists from '@/modules/glassco/core/GlasscoPriceLists';       
 import GlasscoWorkOrders from '@/modules/glassco/core/GlasscoWorkOrders';       // Phase-6 (6.2)
 import GlasscoLeadKanban from '@/modules/glassco/core/GlasscoLeadKanban';       // Phase-6 (6.3)
 import { useAuthStore, UserRole } from '@/modules/auth/authStore';
+import { useProductionPresence } from '@/modules/production/hooks/usePiecePresence';     // Sprint 10
+import { useProductionRealtime } from '@/modules/production/hooks/useProductionRealtime'; // Sprint 10
+import PresenceAvatars from '@/modules/production/components/sub/PresenceAvatars';         // Sprint 10
 
 type ActiveView =
   'dashboard' | 'floorplan' | 'cutting' | 'ai_plan' | 'cross_company' |
@@ -290,23 +293,31 @@ const ViewRenderer: React.FC<{ view: ActiveView }> = ({ view }) => (
 
 // ── One-window: no tabs, just the view + role header ───────────────────
 const OneWindowView: React.FC<{
-  view: ActiveView;
-  role: UserRole;
-  userName: string;
-}> = ({ view, role, userName }) => {
+  view:        ActiveView;
+  role:        UserRole;
+  userName:    string;
+  userId?:     string;
+}> = ({ view, role, userName, userId }) => {
   const roleLabel = ROLE_LABELS[role] || role;
+
+  // Sprint 10 — presence for one-window roles
+  const { presenceMap } = useProductionPresence('Glassco', view);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', margin: '-24px' }}>
       <style>{styles}</style>
 
-      {/* Role header — shows who is logged in and their role */}
+      {/* Role header — shows who is logged in + live presence */}
       <div className="pp-role-header">
         <span className="company-label">GlassCo Production</span>
-        <span className="role-pill">
-          <User size={10} />
-          {userName || 'User'} — {roleLabel}
-        </span>
+        <div className="flex items-center gap-3">
+          {/* Sprint 10: presence avatars in one-window header */}
+          <PresenceAvatars presenceMap={presenceMap} currentUserId={userId} maxVisible={4} />
+          <span className="role-pill">
+            <User size={10} />
+            {userName || 'User'} — {roleLabel}
+          </span>
+        </div>
       </div>
 
       <div className="pp-body">
@@ -320,14 +331,21 @@ const OneWindowView: React.FC<{
 
 // ── Main content component ─────────────────────────────────────────────
 const GlasscoProductionContent: React.FC = () => {
-  const { profile } = useAuthStore();
+  const { user, profile } = useAuthStore();
   const userRole   = profile?.role;
   const userName   = profile?.fullName || profile?.email || '';
+  const userId     = user?.id;
   const mode       = getRoleMode(userRole);
 
   const [activeView, setActiveView] = useState<ActiveView>('fabrication');
   const [moreOpen,   setMoreOpen]   = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
+
+  // Sprint 10 — floor-level presence (full/supervisor modes)
+  const { presenceMap } = useProductionPresence('Glassco', activeView);
+
+  // Sprint 10 — cross-team toast notifications
+  useProductionRealtime(userRole);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -347,6 +365,7 @@ const GlasscoProductionContent: React.FC = () => {
         view="fabrication"
         role={userRole!}
         userName={userName}
+        userId={userId}
       />
     );
   }
@@ -358,6 +377,7 @@ const GlasscoProductionContent: React.FC = () => {
         view="dispatch"
         role={userRole!}
         userName={userName}
+        userId={userId}
       />
     );
   }
@@ -368,6 +388,7 @@ const GlasscoProductionContent: React.FC = () => {
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', margin: '-24px' }}>
         <style>{styles}</style>
         <nav className="pp-nav">
+          <div className="pp-nav-scroll">
           {SUPERVISOR_TABS.map(tab => (
             <button
               key={tab.id}
@@ -378,6 +399,11 @@ const GlasscoProductionContent: React.FC = () => {
               {tab.label}
             </button>
           ))}
+          </div>
+          {/* Sprint 10 — presence in supervisor nav */}
+          <div className="flex items-center px-3 shrink-0">
+            <PresenceAvatars presenceMap={presenceMap} currentUserId={userId} maxVisible={4} />
+          </div>
         </nav>
         <div className="pp-body">
           <div className="pp-body-inner">
@@ -413,6 +439,11 @@ const GlasscoProductionContent: React.FC = () => {
             {tab.label}
           </button>
         ))}
+        </div>
+
+        {/* Sprint 10 — live presence avatars in full-access nav */}
+        <div className="flex items-center px-3 shrink-0">
+          <PresenceAvatars presenceMap={presenceMap} currentUserId={userId} maxVisible={5} />
         </div>
 
         {/* More dropdown */}

@@ -333,6 +333,36 @@ const applyRealtimeEvent = (
 let channels: RealtimeChannel[] = [];
 let isSubscribed = false;
 
+// Sprint 10: auto-reconnect state
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let reconnectAttempt = 0;
+const MAX_RECONNECT_ATTEMPTS = 8;
+const BASE_BACKOFF_MS = 2_000; // 2s → 4s → 8s → … → ~4min cap
+
+function scheduleReconnect(): void {
+  if (reconnectTimer) return; // already scheduled
+  if (reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
+    console.warn('[Realtime] Max reconnect attempts reached — giving up');
+    return;
+  }
+  const delay = Math.min(BASE_BACKOFF_MS * 2 ** reconnectAttempt, 240_000);
+  reconnectAttempt += 1;
+  console.warn(`[Realtime] Reconnect attempt ${reconnectAttempt} in ${delay / 1000}s`);
+  reconnectTimer = setTimeout(async () => {
+    reconnectTimer = null;
+    await unsubscribeAll();
+    subscribeAll();
+  }, delay);
+}
+
+function resetReconnect(): void {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  reconnectAttempt = 0;
+}
+
 // Tables that Realtime is skipped for — local-only
 const SKIP_TABLES = new Set(['activity_logs']);
 
@@ -392,11 +422,14 @@ const subscribeAll = () => {
 
     channel.subscribe((status) => {
       if (status === 'SUBSCRIBED') {
+        resetReconnect();
         console.log(`[Realtime] Channel ${channelName} subscribed (${batch.join(', ')})`);
       } else if (status === 'CHANNEL_ERROR') {
-        console.warn(`[Realtime] Channel ${channelName} error — will retry`);
+        console.warn(`[Realtime] Channel ${channelName} error — scheduling reconnect`);
+        scheduleReconnect();
       } else if (status === 'TIMED_OUT') {
-        console.warn(`[Realtime] Channel ${channelName} timed out`);
+        console.warn(`[Realtime] Channel ${channelName} timed out — scheduling reconnect`);
+        scheduleReconnect();
       }
     });
 
@@ -434,6 +467,11 @@ const subscribeAll = () => {
 
 // ── Unsubscribe all (on logout / cleanup) ─────────────────────────────
 const unsubscribeAll = async () => {
+  // Cancel any pending reconnect before tearing down
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
   for (const channel of channels) {
     await supabase.removeChannel(channel);
   }
