@@ -9,7 +9,7 @@
 CREATE OR REPLACE VIEW v_gl_pnl AS
 SELECT
   l.company,
-  date_trunc('month', l.doc_date)::date          AS month,
+  date_trunc('month', l.doc_date::timestamp)::date AS month,
   a.id                                            AS account_id,
   a.code                                          AS account_code,
   a.name                                          AS account_name,
@@ -24,7 +24,7 @@ CROSS JOIN LATERAL jsonb_array_elements(
 ) AS d
 JOIN accounts a ON a.id::text = (d->>'accountId')
 WHERE l.status = 'Posted'
-GROUP BY l.company, date_trunc('month', l.doc_date), a.id, a.code, a.name, a.type;
+GROUP BY l.company, date_trunc('month', l.doc_date::timestamp), a.id, a.code, a.name, a.type;
 
 -- ── 2. AR Aging view ──────────────────────────────────────────────────────────
 -- Outstanding invoice balances bucketed by days-past-due.
@@ -87,7 +87,7 @@ HAVING (po.total_amount - COALESCE(SUM(pmt.amount), 0)) > 0.01;
 CREATE OR REPLACE VIEW v_sales_analysis AS
 SELECT
   i.company,
-  date_trunc('month', i.date::date)::date  AS month,
+  date_trunc('month', i.date::timestamp)::date AS month,
   c.business_name                           AS client_name,
   i.client_id,
   (item->>'productName')                   AS product_name,
@@ -101,7 +101,7 @@ CROSS JOIN LATERAL jsonb_array_elements(
   COALESCE(i.items, '[]'::jsonb)
 ) AS item
 WHERE i.status NOT IN ('cancelled', 'draft')
-GROUP BY i.company, date_trunc('month', i.date::date), c.business_name, i.client_id,
+GROUP BY i.company, date_trunc('month', i.date::timestamp), c.business_name, i.client_id,
          item->>'productName', item->>'productCode';
 
 -- ── 5. Stock Aging view ───────────────────────────────────────────────────────
