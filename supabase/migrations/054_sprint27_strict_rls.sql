@@ -212,7 +212,7 @@ GRANT EXECUTE ON FUNCTION disable_strict_company_rls(TEXT) TO authenticated, ser
 -- ─────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION rls_status_summary()
 RETURNS TABLE (
-  table_name      TEXT,
+  tbl_name        TEXT,
   has_company_col BOOLEAN,
   rls_enabled     BOOLEAN,
   policy_count    INT,
@@ -222,17 +222,18 @@ RETURNS TABLE (
 BEGIN
   RETURN QUERY
   SELECT
-    c.table_name::text,
+    c.table_name::text                                        AS tbl_name,
     EXISTS (
-      SELECT 1 FROM information_schema.columns
-       WHERE table_name = c.table_name AND column_name = 'company'
-    ) AS has_company_col,
-    t.relrowsecurity AS rls_enabled,
-    (SELECT count(*)::int FROM pg_policy WHERE polrelid = t.oid) AS policy_count,
-    (SELECT count(*)::int FROM pg_policy
-       WHERE polrelid = t.oid AND polname LIKE '%_strict_%') AS strict_count,
-    (SELECT count(*)::int FROM pg_policy
-       WHERE polrelid = t.oid AND (polname LIKE '%_permissive%' OR polname LIKE '%_rw')) AS permissive_count
+      SELECT 1 FROM information_schema.columns ic
+       WHERE ic.table_name = c.table_name AND ic.column_name = 'company'
+    )                                                          AS has_company_col,
+    t.relrowsecurity                                           AS rls_enabled,
+    (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = t.oid) AS policy_count,
+    (SELECT count(*)::int FROM pg_policy p
+       WHERE p.polrelid = t.oid AND p.polname LIKE '%_strict_%') AS strict_count,
+    (SELECT count(*)::int FROM pg_policy p
+       WHERE p.polrelid = t.oid
+         AND (p.polname LIKE '%_permissive%' OR p.polname LIKE '%_rw')) AS permissive_count
   FROM information_schema.tables c
   JOIN pg_class t ON t.relname = c.table_name
    AND t.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')
@@ -247,7 +248,7 @@ GRANT EXECUTE ON FUNCTION rls_status_summary() TO authenticated, service_role;
 -- 6. Bulk helpers — flip a curated list at once
 -- ─────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION enable_strict_rls_recommended()
-RETURNS TABLE(table_name TEXT, status TEXT)
+RETURNS TABLE(tbl_name TEXT, status TEXT)
 LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   v_tables TEXT[] := ARRAY[
@@ -268,7 +269,7 @@ BEGIN
     EXCEPTION WHEN OTHERS THEN
       v_status := 'ERROR: ' || SQLERRM;
     END;
-    table_name := v_t; status := v_status; RETURN NEXT;
+    tbl_name := v_t; status := v_status; RETURN NEXT;
   END LOOP;
 END $$;
 
