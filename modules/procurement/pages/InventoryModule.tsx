@@ -26,9 +26,58 @@ import {
   LayoutGrid, ArrowUpRight, Truck, Database, Loader2, Layers, BarChart3, Wrench, Banknote, PackageOpen, ClipboardList, Scale, TrendingDown
 } from 'lucide-react';
 
+// ── Sprint 24: 13 sub-tabs → 5 logical groups ─────────────────────────
+type SubTabId =
+  | 'overview' | 'master' | 'issuance' | 'migo' | 'remnants' | 'consumption'
+  | 'tools' | 'advances' | 'opening' | 'grnRegister' | 'weightMaster'
+  | 'mrp' | 'purchase_return';
+
+type MainTabId = 'stock' | 'master' | 'movements' | 'grn' | 'planning';
+
+/** Sub-tab → main group mapping. Drives both the default sub-tab when a
+ *  group is opened and the back-compat redirect from old links. */
+const SUB_TO_MAIN: Record<SubTabId, MainTabId> = {
+  overview:        'stock',
+  tools:           'stock',
+  advances:        'stock',
+  remnants:        'stock',
+  master:          'master',
+  weightMaster:    'master',
+  opening:         'master',
+  issuance:        'movements',
+  consumption:     'movements',
+  purchase_return: 'movements',
+  grnRegister:     'grn',
+  migo:            'grn',
+  mrp:             'planning',
+};
+
+const MAIN_DEFAULT_SUB: Record<MainTabId, SubTabId> = {
+  stock:     'overview',
+  master:    'master',
+  movements: 'issuance',
+  grn:       'grnRegister',
+  planning:  'mrp',
+};
+
 const InventoryModule: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'overview' | 'master' | 'issuance' | 'migo' | 'remnants' | 'consumption' | 'tools' | 'advances' | 'opening' | 'grnRegister' | 'weightMaster' | 'mrp' | 'purchase_return'>('overview');
+
+  // Sprint 24: read deep-link from URL hash (?invtab=xxx) for shareable views
+  const initialSub: SubTabId = (() => {
+    const q = new URLSearchParams(window.location.hash.split('?')[1] ?? '');
+    const t = q.get('invtab') as SubTabId | null;
+    return t && t in SUB_TO_MAIN ? t : 'overview';
+  })();
+  const [activeTab, setActiveTab] = useState<SubTabId>(initialSub);
+  const activeMain: MainTabId = SUB_TO_MAIN[activeTab];
+
+  // When user clicks a main group, jump to its default sub-tab (unless
+  // the current sub-tab is already inside that group)
+  const switchMain = (m: MainTabId) => {
+    if (SUB_TO_MAIN[activeTab] === m) return;
+    setActiveTab(MAIN_DEFAULT_SUB[m]);
+  };
   const [isLoading, setIsLoading] = useState(true);
   
   const [items, setItems] = useState<StoreItem[]>([]);
@@ -81,45 +130,74 @@ const InventoryModule: React.FC = () => {
   const isNippon = company === 'Nippon';
   const isAluminiumCompany = company === 'GTK' || company === 'GTI';
 
-  const tabs = [
-    { id: 'overview', label: 'Stock Balances', icon: LayoutGrid },
-    { id: 'master', label: 'Material Master', icon: Database },
-    { id: 'opening', label: 'Opening Balance', icon: PackageOpen },
-    { id: 'issuance', label: 'Goods Issue', icon: ArrowUpRight },
-    { id: 'consumption', label: 'Project Consumption', icon: BarChart3 },
-    // Tools tab only for aluminium companies
-    ...(isAluminiumCompany ? [{ id: 'tools', label: 'Tool Register', icon: Wrench }] : []),
-    ...(isAluminiumCompany ? [{ id: 'advances', label: 'Cash Advances', icon: Banknote }] : []),
-    // Glass/Nippon-specific tabs
-    // NOTE: 'quality' tab removed — QC/NCR lives in Production module (NCRModule)
-    ...(!isAluminiumCompany ? [{ id: 'remnants',       label: 'Remnants',        icon: Layers        }] : []),
-    ...(!isAluminiumCompany ? [{ id: 'grnRegister',    label: 'GRN Register',    icon: ClipboardList }] : []),
-    ...(!isAluminiumCompany ? [{ id: 'weightMaster',   label: 'Weight Master',   icon: Scale         }] : []),
-    // MRP + Purchase Return: glass companies only (render blocks already exist)
-    ...(isGlassCompany      ? [{ id: 'mrp',            label: 'MRP',             icon: TrendingDown  }] : []),
-    ...(!isAluminiumCompany ? [{ id: 'purchase_return',label: 'Purchase Return', icon: ArrowUpRight  }] : []),
+  // ── Sprint 24: 5 main groups (Stock / Master / Movements / GRN / Planning) ──
+  // Old `tabs` array preserved here as `subTabs` for the inner row.
+  const subTabs = [
+    { id: 'overview',        label: 'Stock Balances',     icon: LayoutGrid },
+    { id: 'master',          label: 'Material Master',    icon: Database },
+    { id: 'opening',         label: 'Opening Balance',    icon: PackageOpen },
+    { id: 'issuance',        label: 'Goods Issue',        icon: ArrowUpRight },
+    { id: 'consumption',     label: 'Project Consumption', icon: BarChart3 },
+    ...(isAluminiumCompany ? [{ id: 'tools',     label: 'Tool Register',  icon: Wrench  }] : []),
+    ...(isAluminiumCompany ? [{ id: 'advances',  label: 'Cash Advances',  icon: Banknote }] : []),
+    ...(!isAluminiumCompany ? [{ id: 'remnants',     label: 'Remnants',     icon: Layers       }] : []),
+    ...(!isAluminiumCompany ? [{ id: 'grnRegister',  label: 'GRN Register', icon: ClipboardList}] : []),
+    ...(!isAluminiumCompany ? [{ id: 'weightMaster', label: 'Weight Master',icon: Scale        }] : []),
+    ...(isGlassCompany      ? [{ id: 'mrp',          label: 'MRP',          icon: TrendingDown }] : []),
+    ...(!isAluminiumCompany ? [{ id: 'purchase_return', label: 'Purchase Return', icon: ArrowUpRight }] : []),
   ];
+
+  // Filter sub-tabs to those in the active main group
+  const visibleSubTabs = subTabs.filter(t => SUB_TO_MAIN[t.id as SubTabId] === activeMain);
+
+  // Main groups — only shown if at least one of their sub-tabs is visible
+  // for the current company (planning is glass-only via the MRP gate above).
+  const mainGroups: Array<{ id: MainTabId; label: string; icon: React.ElementType }> = [
+    { id: 'stock',     label: 'Stock',     icon: LayoutGrid },
+    { id: 'master',    label: 'Master',    icon: Database },
+    { id: 'movements', label: 'Movements', icon: ArrowUpRight },
+    { id: 'grn',       label: 'GRN',       icon: Truck },
+    ...(isGlassCompany ? [{ id: 'planning' as MainTabId, label: 'Planning', icon: TrendingDown }] : []),
+  ];
+
+  // Reflect activeTab → URL ?invtab= for shareable links
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const hashParts = window.location.hash.split('?');
+    const params = new URLSearchParams(hashParts[1] ?? '');
+    if (activeTab === 'overview') params.delete('invtab');
+    else                          params.set('invtab', activeTab);
+    const search = params.toString();
+    const newHash = search ? `${hashParts[0]}?${search}` : hashParts[0];
+    if (newHash !== window.location.hash) {
+      window.history.replaceState(null, '', `${url.pathname}${newHash}`);
+    }
+  }, [activeTab]);
 
   if (isLoading) return <div className="h-full flex items-center justify-center text-slate-400"><Loader2 className="animate-spin mr-2"/> Loading Inventory Data...</div>;
 
   return (
     <div className="space-y-6">
-      {/* Industrial Navigation Terminal */}
+      {/* Sprint 24: 2-tier navigation
+          Top tier — 5 main groups (Stock / Master / Movements / GRN / Planning)
+          Bottom tier — sub-tabs visible only for the active main group
+          Action buttons (GRN / Local Purchase) sit in the top tier alongside */}
       <div className="bg-white p-1 rounded-2xl border border-slate-200 shadow-sm no-print">
         <div className="sap-scroll-container">
-          {tabs.map(tab => (
-            <button 
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)} 
-                className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all whitespace-nowrap ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+          {mainGroups.map(g => (
+            <button
+              key={g.id}
+              onClick={() => switchMain(g.id)}
+              className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all whitespace-nowrap ${activeMain === g.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
             >
-              <tab.icon size={16} /><span>{tab.label}</span>
+              <g.icon size={16}/><span>{g.label}</span>
             </button>
           ))}
+
+          {/* Action buttons — promoted to top tier alongside main groups */}
           <button onClick={() => setIsMigoOpen(true)} className="bg-slate-900 text-white px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center space-x-2 shadow-xl hover:bg-blue-600 transition-all whitespace-nowrap">
             <Truck size={16} /><span>{isAluminiumCompany ? 'GRN (Stock In)' : 'Glass GRN'}</span>
           </button>
-          {/* P6-1: Local-purchase GRN — settles advance PV from approved requisition */}
           {!isAluminiumCompany && (
             <button onClick={() => setIsStoreMigoOpen(true)} className="bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center space-x-2 shadow-xl hover:bg-emerald-800 transition-all whitespace-nowrap">
               <PackageOpen size={16} /><span>Local Purchase GRN</span>
@@ -127,6 +205,23 @@ const InventoryModule: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Sub-tab strip — only render if the current main group has more than 1 sub-tab */}
+      {visibleSubTabs.length > 1 && (
+        <div className="bg-slate-50 px-2 py-1 rounded-xl border border-slate-200 no-print -mt-3">
+          <div className="sap-scroll-container">
+            {visibleSubTabs.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id as SubTabId)}
+                className={`flex items-center space-x-1.5 px-4 py-1.5 rounded-lg font-bold text-[11px] transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                <t.icon size={12}/><span>{t.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {activeTab === 'overview' && (
         company === 'Nippon' ? (
