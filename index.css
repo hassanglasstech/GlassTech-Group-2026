@@ -735,3 +735,42 @@ tr[tabindex]:focus-visible {
   border-color: #bfdbfe;
   box-shadow: 0 1px 2px rgba(37, 99, 235, 0.08);
 }
+
+
+/* ── Sprint 26: Mobile-First touch targets (WCAG 2.5.5) ────────────── */
+/* Coarse pointer = touch device. On those, ALL clickable controls get
+   a 44 × 44 px minimum hit area — the WCAG / Apple / Material spec.
+   Targets that are visually smaller still register the larger tap area. */
+@media (pointer: coarse) {
+  button:not(.sap-tab-button):not(.no-touch-target),
+  [role="button"]:not(.no-touch-target),
+  a.button,
+  input[type="checkbox"]:not(.no-touch-target),
+  input[type="radio"]:not(.no-touch-target),
+  select:not(.no-touch-target) {
+    min-height: 44px;
+    min-width:  44px;
+  }
+
+  /* Tap-padding helper — keeps visual sizes small while expanding hit area */
+  .tap-44 {
+    position: relative;
+  }
+  .tap-44::before {
+    content: "";
+    position: absolute;
+    inset: -8px;
+    /* keeps clickable but invisible */
+  }
+}
+
+/* Mobile-only utility: hide horizontal scroll on tables (apps should
+   prefer ResponsiveTable; this is a backstop for legacy markup) */
+@media (max-width: 767px) {
+  .auto-mobile-cards table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
