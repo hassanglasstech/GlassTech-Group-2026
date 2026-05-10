@@ -22,7 +22,7 @@ FROM ledger l
 CROSS JOIN LATERAL jsonb_array_elements(
   COALESCE(l.details, l.data->'details', '[]'::jsonb)
 ) AS d
-JOIN accounts a ON a.id = (d->>'accountId')::uuid
+JOIN accounts a ON a.id::text = (d->>'accountId')
 WHERE l.status = 'Posted'
 GROUP BY l.company, date_trunc('month', l.doc_date), a.id, a.code, a.name, a.type;
 
@@ -183,7 +183,7 @@ LEFT JOIN LATERAL (
   CROSS JOIN LATERAL jsonb_array_elements(
     COALESCE(l.details, l.data->'details', '[]'::jsonb)
   ) AS d
-  JOIN accounts a ON a.id = (d->>'accountId')::uuid
+  JOIN accounts a ON a.id::text = (d->>'accountId')
   WHERE l.company      = so.company
     AND l.reference    = so.order_number
     AND a.name ILIKE '%COGS%'
