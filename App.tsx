@@ -23,7 +23,7 @@ import { flushOfflineQueue } from '@/modules/shared/services/supabaseDB';
 import { Logger, setLogContext, installConsoleOverride } from '@/modules/shared/services/logger';
 const OverrideModeBar = React.lazy(() => import('@/src/components/OverrideModeBar'));
 import { Toaster, toast } from 'sonner';
-import { useAuthStore, isOfficeHours, ROLE_DEFAULT_COMPANY, ROLE_MODULES, ROLE_LABELS } from '@/modules/auth/authStore';
+import { useAuthStore, isOfficeHours, ROLE_DEFAULT_COMPANY, ROLE_DEFAULT_ROUTE, ROLE_MODULES, ROLE_LABELS } from '@/modules/auth/authStore';
 import { HRService } from '@/modules/hr/services/hrService';
 import { loadShiftRules } from '@/modules/hr/pages/ShiftMaster';
 import { FinanceService } from '@/modules/finance/services/financeService';
@@ -67,6 +67,8 @@ const WIPAging         = React.lazy(() => import('./modules/production/companies
 const CutterPerformance= React.lazy(() => import('./modules/production/companies/glassco/pages/CutterPerformance'));
 // Sprint 15 — Production Workbench (single page replacing 19 tabs + 12 sub-tabs)
 const Workbench        = React.lazy(() => import('./modules/production/companies/glassco/pages/Workbench'));
+// Sprint 18 — Role-based mini-apps
+const DispatchWorkbench = React.lazy(() => import('./modules/production/companies/glassco/pages/DispatchWorkbench'));
 // Sprint 12 — public mobile driver POD page (no auth — token-gated)
 const DriverScreen     = React.lazy(() => import('./src/pages/DriverScreen'));
 // Sprint 14 — live GPS dashboard (supervisor) + public customer tracking
@@ -384,6 +386,18 @@ const App: React.FC = () => {
         setSelectedCompany(defaultCompany as Company);
       }
 
+      // Sprint 18: role-based landing — if user is on root or empty hash,
+      // jump to their dedicated mini-app/page (cutter → /cutter,
+      // dispatch_staff → /dispatch, supervisors → /production/workbench).
+      try {
+        const currentHash = window.location.hash;
+        const isRoot = currentHash === '' || currentHash === '#' || currentHash === '#/';
+        const target = ROLE_DEFAULT_ROUTE[user.role];
+        if (isRoot && target && target !== '/') {
+          window.location.hash = `#${target}`;
+        }
+      } catch { /* noop */ }
+
       // Sprint 13 — daily SLA breach scan (idempotent server-side log)
       // Runs once per session; cheap (one RPC + one query) and surfaces
       // overdue tempering returns + driver-license expiries to supervisors.
@@ -537,6 +551,8 @@ const App: React.FC = () => {
                   <Route path="/dispatch/live"  element={<ModuleErrorBoundary moduleName="Live Dispatch Map"><LiveDispatchMap /></ModuleErrorBoundary>} />
                   {/* Sprint 15 — Production Workbench (single page) */}
                   <Route path="/production/workbench" element={<ModuleErrorBoundary moduleName="Workbench"><Workbench /></ModuleErrorBoundary>} />
+                  {/* Sprint 18 — Dispatch mini-app for dispatch_staff role */}
+                  <Route path="/dispatch"            element={<ModuleErrorBoundary moduleName="Dispatch"><DispatchWorkbench /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />
                 </Routes>              </Suspense>
             </div>

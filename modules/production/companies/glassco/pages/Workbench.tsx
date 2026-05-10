@@ -36,6 +36,7 @@ import ViewToggle, { WorkbenchView } from '../components/workbench/ViewToggle';
 import LensesSidebar, { LensId, LENS_PREDICATES, LENSES } from '../components/workbench/LensesSidebar';
 import KanbanBoard  from '../components/workbench/KanbanBoard';     // Sprint 16
 import PieceDetailPanel from '../components/workbench/PieceDetailPanel'; // Sprint 17
+import AgingAlertsBanner from '../components/workbench/AgingAlertsBanner'; // Sprint 18
 import type { ProductionPiece } from '@/modules/shared/types';
 
 // ── Allowed roles ─────────────────────────────────────────────────────
@@ -203,6 +204,9 @@ const WorkbenchContent: React.FC = () => {
   // ── Render ─────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full bg-slate-50">
+      {/* Sprint 18: Aging + SLA alert banner (hidden when all clear) */}
+      <AgingAlertsBanner pieces={pieces} hideWhenClear/>
+
       {/* Sticky header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
         <div className="px-4 py-3 flex items-center gap-3 flex-wrap">

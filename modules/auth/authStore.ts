@@ -96,20 +96,22 @@ export const ROLE_MODULES: Record<UserRole, string[]> = {
 };
 
 // Default route after login per role
+// Sprint 18: production roles land on their dedicated mini-app instead
+// of the shared module page.
 export const ROLE_DEFAULT_ROUTE: Record<UserRole, string> = {
   super_admin:        '/',
   owner:              '/md-dashboard',
   hassan:             '/',
   factory_manager:    '/factory-incharge',
   admin_officer:      '/sales',
-  glassco_supervisor: '/production',
-  gtk_supervisor:     '/production',
-  gti_supervisor:     '/production',
-  glassco_cutter:     '/production',
-  dispatch_staff:     '/logistics',
+  glassco_supervisor: '/production/workbench',     // Sprint 18 supervisor mini-app
+  gtk_supervisor:     '/production/workbench',
+  gti_supervisor:     '/production/workbench',
+  glassco_cutter:     '/cutter',                   // Sprint 6 mini-app
+  dispatch_staff:     '/dispatch',                 // Sprint 18 dispatch mini-app
   gtk_admin:          '/',
   glassco_admin:      '/sales',
-  glassco_production: '/production',
+  glassco_production: '/production/workbench',
   nippon_admin:       '/sales',
 };
 
