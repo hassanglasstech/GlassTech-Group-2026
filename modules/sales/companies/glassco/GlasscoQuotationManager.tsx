@@ -2,6 +2,7 @@ import React, { useMemo, useEffect, useState, lazy, Suspense } from 'react';
 import { GlasscoPrintTemplate } from '@/modules/glassco/core/GlasscoPrintTemplate';
 import { GlasscoList } from '@/modules/glassco/core/GlasscoList';
 import { GlasscoEditor } from '@/modules/glassco/core/GlasscoEditor';
+import GlasscoEditorUnified from '@/modules/glassco/core/GlasscoEditorUnified';   // Sprint 22
 import { useGlasscoQuotations } from './useGlasscoQuotations';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { Quotation } from '@/modules/shared/types';
@@ -213,18 +214,23 @@ const GlasscoQuotationManager: React.FC = () => {
           </div>
         ) : null}
 
-        {isEditorOpen && (
-          <div className="bg-white rounded-xl w-full shadow-sm border border-slate-200 overflow-hidden flex flex-col" style={{ minHeight: 'calc(100vh - 120px)' }}>
-              <GlasscoEditor
-                formData={formData} clients={clients} products={products} isMM={isMM} setIsMM={setIsMM}
-                lastSerial={lastSerial}
-                onClose={() => setIsEditorOpen(false)} onUpdateItem={updateGlassItem}
-                onAddItem={addItem} onAddSection={addSection} onDuplicateItem={duplicateItem}
-                onRemoveItem={removeItem} onSave={handleSaveQuotation}
-                onSaveWastageDecision={(dec) => setFormData(prev => ({ ...prev, wastageDecision: dec }))}
-              />
-          </div>
-        )}
+        {isEditorOpen && (() => {
+          // Sprint 22: opt-out via ?editor=v1 (legacy). Default = new unified editor.
+          const useLegacy = new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('editor') === 'v1';
+          const Editor = useLegacy ? GlasscoEditor : GlasscoEditorUnified;
+          return (
+            <div className="bg-white rounded-xl w-full shadow-sm border border-slate-200 overflow-hidden flex flex-col" style={{ minHeight: 'calc(100vh - 120px)' }}>
+                <Editor
+                  formData={formData} clients={clients} products={products} isMM={isMM} setIsMM={setIsMM}
+                  lastSerial={lastSerial}
+                  onClose={() => setIsEditorOpen(false)} onUpdateItem={updateGlassItem}
+                  onAddItem={addItem} onAddSection={addSection} onDuplicateItem={duplicateItem}
+                  onRemoveItem={removeItem} onSave={handleSaveQuotation}
+                  onSaveWastageDecision={(dec) => setFormData(prev => ({ ...prev, wastageDecision: dec }))}
+                />
+            </div>
+          );
+        })()}
     </div>
   );
 };
