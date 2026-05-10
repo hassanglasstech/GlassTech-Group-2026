@@ -205,6 +205,42 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
         const targetDispatch = allDispatches.find(d => d.id === id);
         if (!targetDispatch) return;
 
+        // ── Sprint 13: Hard capacity block ────────────────────────────
+        // Look up vehicle's max payload + compute total trip weight
+        // (sum of piece sqft × glass weight per sqft from store MAP).
+        try {
+          const dispatchVehicles = await ProductionService.getDispatchVehicles(targetDispatch.company);
+          const vehicle = dispatchVehicles.find(v => v.plate_number === targetDispatch.vehicleNo)
+                       ?? dispatchVehicles.find(v => v.id === (targetDispatch as { dispatch_vehicle_id?: string }).dispatch_vehicle_id);
+
+          if (vehicle && vehicle.max_payload_kg > 0) {
+            const tripPieces = pieces.filter(p => p.dispatchId === id);
+            const store      = InventoryService.getStore();
+            let weightKg = 0;
+            tripPieces.forEach(p => {
+              const order = jobOrders.find(o => o.orderNo === p.orderId || o.id === p.orderId);
+              const item  = order?.items[p.itemIndex];
+              const sqft  = item?.totalSqFt ? item.totalSqFt / Math.max(item.qty || 1, 1) : 0;
+              const thk   = String(item?.glassSize || '').replace(/[^0-9.]/g, '') || '6';
+              const storeItem = store.find((s: { company: string; name?: string }) =>
+                s.company === targetDispatch.company && (s.name || '').includes(`${thk}`));
+              const perSqftKg = (storeItem as { perSqftWeightKg?: number })?.perSqftWeightKg ?? 0.14 * Number(thk);
+              weightKg += sqft * perSqftKg;
+            });
+
+            if (weightKg > vehicle.max_payload_kg) {
+              const overKg = Math.round(weightKg - vehicle.max_payload_kg);
+              toast.error(
+                `Vehicle overloaded: ${Math.round(weightKg).toLocaleString()} kg load vs ` +
+                `${vehicle.max_payload_kg.toLocaleString()} kg capacity (+${overKg.toLocaleString()} kg over). ` +
+                `Split into 2 trips or use a larger vehicle.`,
+                { duration: 9000 },
+              );
+              return;
+            }
+          }
+        } catch { /* capacity check best-effort — continue if it fails */ }
+
         // ── Sprint 11: Mandatory gate pass before Dispatched ──────────
         // Find a gate pass for this dispatch's company. The user must have
         // issued a GP through GateControl already; otherwise abort.

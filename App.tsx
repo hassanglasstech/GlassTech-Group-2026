@@ -378,6 +378,27 @@ const App: React.FC = () => {
       if (defaultCompany && !user.allowedCompanies.includes(selectedCompany)) {
         setSelectedCompany(defaultCompany as Company);
       }
+
+      // Sprint 13 — daily SLA breach scan (idempotent server-side log)
+      // Runs once per session; cheap (one RPC + one query) and surfaces
+      // overdue tempering returns + driver-license expiries to supervisors.
+      import('@/modules/procurement/services/vendorSLATracker').then(({ VendorSLATracker }) => {
+        VendorSLATracker.runDailyScan(selectedCompany as Company).then(r => {
+          if (r.error) {
+            // Network blip or table missing — silent (Logger only)
+            Logger.error('VendorSLATracker', 'daily scan failed', new Error(r.error));
+            return;
+          }
+          const lateReturns     = r.data?.lateReturns ?? 0;
+          const expiringDrivers = r.data?.expiringDrivers ?? 0;
+          if (lateReturns > 0 || expiringDrivers > 0) {
+            const parts: string[] = [];
+            if (lateReturns > 0)     parts.push(`${lateReturns} overdue tempering`);
+            if (expiringDrivers > 0) parts.push(`${expiringDrivers} driver doc${expiringDrivers > 1 ? 's' : ''} expiring`);
+            toast.warning(`SLA alerts: ${parts.join(' · ')}`, { duration: 7000 });
+          }
+        });
+      }).catch(() => { /* lazy import failure — silent */ });
     }
   }, [user]);
 
