@@ -347,18 +347,39 @@ export function postCuttingGL(params: {
 // GL fires only when pieces RETURN with vendor bill.
 // ══════════════════════════════════════════════════════════════════
 
+/**
+ * Sprint 11: Tempering inward GL post — now supports partial inward.
+ *
+ * If `brokenPieceIds` is provided, those pieces post to the defect/NCR
+ * ledger (Loss on Tempering Defects) and are EXCLUDED from the AP credit.
+ * The vendor liability only covers what was actually returned good.
+ *
+ * @returns computed AP amount (sum of received-piece costs) for downstream
+ *          3-way match. Returns 0 if no GL was posted (e.g. duplicate call,
+ *          or zero received pieces).
+ */
 export function postTemperingInwardGL(params: {
-  company:       Company;
-  dispatchId:    string;
-  vendorName:    string;
-  date:          string;
-  pieceIds:      string[];
+  company:        Company;
+  dispatchId:     string;
+  vendorName:     string;
+  date:           string;
+  pieceIds:       string[];
   // Per-mm rates snapshotted from TemperingDispatch.ratesByMm at dispatch creation.
   // These take priority over vendor's current price list (rate may have changed since dispatch).
   // If empty/missing, falls back to vendor's current rates from SalesService.
   rateOverrides?: Record<string, number>;   // { '6': 55, '8': 65, … }
-}): void {
-  const { company, dispatchId, vendorName, date, pieceIds, rateOverrides = {} } = params;
+  // Sprint 11 — partial inward: pieces broken/lost in transit.
+  // These post to Loss on Tempering Defects (P&L), NOT to vendor AP.
+  brokenPieceIds?: string[];
+}): number {
+  const {
+    company, dispatchId, vendorName, date, pieceIds,
+    rateOverrides = {}, brokenPieceIds = [],
+  } = params;
+
+  // Sprint 11: filter out broken pieces — they don't go into AP
+  const brokenSet      = new Set(brokenPieceIds);
+  const receivedIds    = pieceIds.filter(id => !brokenSet.has(id));
 
   // ── Effective rate map: snapshotted rates > current vendor rates ──────
   // Priority: rateOverrides (from dispatch.ratesByMm, set at dispatch creation)
@@ -370,12 +391,14 @@ export function postTemperingInwardGL(params: {
   const accs  = glassAccounts(company);
   const ledger = FinanceService.getLedger();
   const txId  = `GL-TEMP-${dispatchId}`;
-  if (ledger.some((t: any) => t.id === txId)) return;
+  if (ledger.some((t: any) => t.id === txId)) return 0;
 
   // ── Step 1: Compute per-piece tempering cost (exact, per-mm) ─────
+  // Sprint 11: only the RECEIVED (good) pieces feed AP. Broken pieces
+  // are handled separately in Step 4 below.
   const pieces = ProductionService.getProductionPieces()
-    .filter((p: any) => pieceIds.includes(p.id));
-  if (pieces.length === 0) return;
+    .filter((p: any) => receivedIds.includes(p.id));
+  if (pieces.length === 0 && brokenPieceIds.length === 0) return 0;
 
   const store = InventoryService.getStore().filter(
     (s: any) => s.company === company && s.category === 'Raw',
@@ -441,7 +464,8 @@ export function postTemperingInwardGL(params: {
   });
 
   const exactTotalCharges = perPieceCosts.reduce((s, p) => s + p.cost, 0);
-  if (exactTotalCharges <= 0) return;
+  // Sprint 11: zero received pieces is OK if there are broken pieces (defect-only post)
+  if (exactTotalCharges <= 0 && brokenPieceIds.length === 0) return 0;
 
   // ── Step 2: GL entry — Dr WIP / Cr AP ───────────────────────────
   // One line per mm group for P&L transparency
@@ -458,10 +482,53 @@ export function postTemperingInwardGL(params: {
     text: `Tempering WIP: ${mm}mm — ${v.sqft.toFixed(1)} sqft @ PKR ${effectiveRates[mm] ?? 0}/sqft`,
   }));
 
-  glDetails.push({
-    accountId: accs.apGlass.id, debit: 0, credit: exactTotalCharges,
-    text: `AP — ${vendorName}: ${dispatchId} | ${pieces.length} pcs | PKR ${exactTotalCharges.toLocaleString()}`,
-  });
+  if (exactTotalCharges > 0) {
+    glDetails.push({
+      accountId: accs.apGlass.id, debit: 0, credit: exactTotalCharges,
+      text: `AP — ${vendorName}: ${dispatchId} | ${pieces.length} pcs | PKR ${exactTotalCharges.toLocaleString()}`,
+    });
+  }
+
+  // ── Sprint 11: Defect ledger for broken/lost pieces ─────────────
+  // Dr Loss on Tempering Defects / Cr Tempering WIP (write off)
+  // No vendor AP — vendor doesn't bill for lost pieces.
+  let brokenLoss = 0;
+  if (brokenPieceIds.length > 0) {
+    const brokenPieces = ProductionService.getProductionPieces()
+      .filter((p: any) => brokenPieceIds.includes(p.id));
+    brokenPieces.forEach((piece: any) => {
+      const order = ProductionService.getJobOrders()
+        .find((j: any) => j.orderNo === piece.orderId || j.id === piece.orderId);
+      const item: any = order ? (order.items || [])[piece.itemIndex ?? 0] : null;
+      const sqft  = item?.totalSqFt || piece.sqft || 0;
+      // Use carrying value from inventory MAP if available, else fall back
+      // to last-known per-sqft cost via a conservative estimate.
+      const mm    = String(
+        item?.glassThickness || item?.glassSize || item?.thickness || piece.thickness || '',
+      ).replace(/[^0-9.]/g, '') || '6';
+      const rate  = effectiveRates[mm] ?? 0;
+      brokenLoss += Math.round(sqft * rate);
+    });
+
+    if (brokenLoss > 0) {
+      // Sprint 11: Loss account sits as a sibling of COGS — Glass Sales
+      // (parent = cogsGlass's parent, i.e. the COST OF GOODS SOLD level-2 acct).
+      // We re-ensure it via FinanceService so it auto-creates if missing.
+      const lossAcc = FinanceService.ensureAccount(
+        company, 'Loss on Tempering Defects', 3,
+        accs.cogsGlass.parentId ?? null, 'Expense', '5119',
+      );
+      glDetails.push({
+        accountId: lossAcc.id, debit: brokenLoss, credit: 0,
+        text: `Tempering loss: ${brokenPieceIds.length} pcs broken in transit`,
+      });
+      // Balance with WIP credit (the WIP we built up at dispatch is being written off)
+      glDetails.push({
+        accountId: accs.wip.id, debit: 0, credit: brokenLoss,
+        text: `WIP write-off: ${brokenPieceIds.length} broken pcs (${dispatchId})`,
+      });
+    }
+  }
 
   const mmSummary = Object.entries(byMm)
     .map(([mm, v]) => `${mm}mm:${v.sqft.toFixed(0)}sqft@PKR${effectiveRates[mm] ?? 0}`)
@@ -475,10 +542,18 @@ export function postTemperingInwardGL(params: {
   // received back, so the liability is real and must hit AP immediately.
   // createdBy='system-auto' bypasses the Maker-Checker gate (this is a
   // system-generated event, not a manual JV).
+  // Sprint 11: Description includes broken-piece summary if partial inward
+  const descParts: string[] = [`Tempering inward: ${vendorName} — ${dispatchId}`];
+  if (mmSummary) descParts.push(mmSummary);
+  if (exactTotalCharges > 0) descParts.push(`AP PKR ${exactTotalCharges.toLocaleString()}`);
+  if (brokenPieceIds.length > 0) {
+    descParts.push(`Broken ${brokenPieceIds.length} pcs (loss PKR ${brokenLoss.toLocaleString()})`);
+  }
+
   FinanceService.recordTransaction({
     id: txId, company, docType: 'KR',
     docDate: date, date,
-    description: `Tempering inward: ${vendorName} — ${dispatchId} | ${mmSummary} | Total PKR ${exactTotalCharges.toLocaleString()}`,
+    description: descParts.join(' | '),
     referenceId: dispatchId, status: 'Posted',
     createdBy: 'system-auto',
     details: glDetails,
@@ -515,6 +590,9 @@ export function postTemperingInwardGL(params: {
     });
     if (updated) InventoryService.saveStore(newStore);
   }
+
+  // Sprint 11: return computed AP amount for caller's 3-way match
+  return exactTotalCharges;
 }
 
 // ══════════════════════════════════════════════════════════════════

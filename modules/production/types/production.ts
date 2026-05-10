@@ -193,27 +193,39 @@ export interface Project {
   }[]; 
 }
 
-export interface TemperingDispatch { 
-  id: string; 
-  tripId?: string; 
-  company: Company; 
-  date: string; 
-  dispatchTime?: string; 
-  originLocation?: string; 
-  plantName: string; 
-  pickLocation?: string; 
-  vehicleNo: string; 
-  driverName: string; 
-  serviceType: 'Tempering' | 'Lamination' | 'Site Delivery' | 'Supply' | 'Double Glazing' | 'Tempering Return'; 
-  pieceIds: string[]; 
-  totalSqFt: number; 
-  status: TemperingDispatchStatus; 
+export interface TemperingDispatch {
+  id: string;
+  tripId?: string;
+  company: Company;
+  date: string;
+  dispatchTime?: string;
+  originLocation?: string;
+  plantName: string;
+  pickLocation?: string;
+  vehicleNo: string;
+  driverName: string;
+  serviceType: 'Tempering' | 'Lamination' | 'Site Delivery' | 'Supply' | 'Double Glazing' | 'Tempering Return';
+  pieceIds: string[];
+  totalSqFt: number;
+  status: TemperingDispatchStatus;
   chargesPerSqFt: number;              // flat display / fallback value
   ratesByMm?: Record<string, number>;  // per-mm rates snapshotted from vendor price list at dispatch time
                                        // e.g. { '6': 55, '8': 65, '10': 75, '12': 85 }
   totalCharges: number;
   expectedReturnDate?: string;
   receivedPieceIds?: string[];
+
+  // ── Sprint 11: Atomic dispatch + 3-way match ────────────────────────
+  /** Mandatory before status='Dispatched' — DB FK to gate_passes.id */
+  gatePassId?:           string;
+  /** Vendor's invoice number (entered when invoice arrives) */
+  vendorInvoiceNo?:      string;
+  /** Vendor's invoice total (PKR) — compared to computed AP for 3-way match */
+  vendorInvoiceAmount?:  number;
+  /** Auto-set by record_three_way_match RPC: Match (Δ ≤ 5 %), Mismatch (Δ > 5 %), Pending */
+  threeWayMatchStatus?:  'Match' | 'Mismatch' | 'Pending';
+  /** Pieces broken or lost in transit — separate from receivedPieceIds */
+  brokenPieceIds?:       string[];
 }
 
 export interface ProductionMetric {

@@ -1,13 +1,15 @@
 import React, { useState, useMemo } from 'react';
+import { toast } from 'sonner';
 import { Company, TemperingDispatch, ProductionPiece, Quotation, Client, PettyCashEntry, Vendor } from '@/modules/shared/types';
 import { AppService } from '@/modules/shared/services/appService';
 import { ProductionService } from '@/modules/production/services/productionService';
-import { SalesService } from '@/modules/sales/services/salesService'; 
+import { SalesService } from '@/modules/sales/services/salesService';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
-import { 
-  ClipboardList, Plus, X, Activity, Truck, Calendar, Send,  
-  ShieldCheck, Printer, Ban, Receipt, ArrowRightLeft, Trash2  
+import { DispatchService } from '@/modules/procurement/services/dispatchService';      // Sprint 11
+import {
+  ClipboardList, Plus, X, Activity, Truck, Calendar, Send,
+  ShieldCheck, Printer, Ban, Receipt, ArrowRightLeft, Trash2
 } from 'lucide-react';
 import { UnifiedPaymentPrint } from '@/modules/finance/components/prints/UnifiedPaymentPrint';
 import { ServiceOrderPrint } from '@/modules/sales/components/prints/ServiceOrderPrint';
@@ -198,16 +200,59 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
 
     const resetForm = () => { setTripHeader({ date: new Date().toISOString().split('T')[0], time: '09:00', originLocation: 'Factory', vehicleId: '' }); setStops([]); };
 
-    const handleDispatchAction = (id: string) => {
-        if (!confirm("Mark trip as DISPATCHED? This freezes the manifest.")) return;
-        
+    const handleDispatchAction = async (id: string) => {
         const allDispatches = ProductionService.getTemperingDispatches();
         const targetDispatch = allDispatches.find(d => d.id === id);
         if (!targetDispatch) return;
 
-        // 1. Update Dispatch Status
-        const updatedDispatches = allDispatches.map(d => d.id === id ? { ...d, status: 'Dispatched' as const } : d);
+        // ── Sprint 11: Mandatory gate pass before Dispatched ──────────
+        // Find a gate pass for this dispatch's company. The user must have
+        // issued a GP through GateControl already; otherwise abort.
+        const gatePasses = ProductionService.getGatePasses()
+          .filter((gp: any) => gp.company === targetDispatch.company);
+
+        // Prefer a GP already linked to this dispatch (re-authorization);
+        // else the most recent unattached GP for the company.
+        const linkedGp = gatePasses.find((gp: any) => gp.linkedDispatchId === id);
+        const candidate: any = linkedGp ?? gatePasses
+          .filter((gp: any) => !gp.linkedDispatchId)
+          .sort((a: any, b: any) => String(b.id).localeCompare(String(a.id)))[0];
+
+        if (!candidate) {
+            toast.error(
+              `Gate pass required before dispatch. Issue a gate pass for ${targetDispatch.company} ` +
+              `in Logistics → Gate Control, then retry.`,
+              { duration: 8000 },
+            );
+            return;
+        }
+
+        if (!confirm(
+            `Mark trip as DISPATCHED?\n\n` +
+            `Gate pass: ${candidate.id}\n` +
+            `Vehicle: ${targetDispatch.vehicleNo}\n` +
+            `Pieces: ${targetDispatch.pieceIds?.length ?? 0}\n\n` +
+            `This freezes the manifest.`,
+        )) return;
+
+        // ── Sprint 11: Atomic authorize via DB RPC (DB-level guard) ───
+        const auth = await DispatchService.authorizeDispatch(id, candidate.id);
+        if (auth.error) {
+            toast.error(auth.error, { duration: 9000 });
+            return;
+        }
+
+        // 1. Update Dispatch Status (mirror to local cache so UI stays in sync)
+        const updatedDispatches = allDispatches.map(d =>
+          d.id === id
+            ? { ...d, status: 'Dispatched' as const, gatePassId: candidate.id }
+            : d,
+        );
         ProductionService.saveTemperingDispatches(updatedDispatches);
+
+        // Sprint 11: append GATE_OUT + IN_TRANSIT lifecycle events
+        await DispatchService.markGateOut(id, candidate.id);
+        await DispatchService.markInTransit(id);
         
         // 2. Update Production Pieces Status
         const allPieces = ProductionService.getProductionPieces();
