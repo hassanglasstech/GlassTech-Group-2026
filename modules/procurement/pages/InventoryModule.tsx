@@ -9,6 +9,7 @@ import ProductMaster from '@/modules/sales/pages/ProductMaster';
 import StockOverview from '@/modules/procurement/components/inventory/StockOverview';
 import GoodsIssue from '@/modules/procurement/components/inventory/GoodsIssue';
 import GoodsReceiptMIGO from '@/modules/procurement/components/inventory/GoodsReceiptMIGO';
+import GoodsReceiptMIGOWizard from '@/modules/procurement/components/inventory/GoodsReceiptMIGOWizard';   // Sprint 23
 import RemnantManager from '@/modules/procurement/components/inventory/RemnantManager';
 
 import NipponGoodsReceipt from '@/modules/procurement/components/inventory/NipponGoodsReceipt';
@@ -220,14 +221,19 @@ const InventoryModule: React.FC = () => {
             onClose={() => setIsMigoOpen(false)}
             refreshData={refreshSync}
           />
-      ) : (
-          <GoodsReceiptMIGO
-            products={products}
-            isOpen={isMigoOpen}
-            onClose={() => setIsMigoOpen(false)}
-            refreshData={refreshSync}
-          />
-      )}
+      ) : (() => {
+          // Sprint 23: opt-out via ?migo=v1 (legacy). Default = new 3-step wizard.
+          const useLegacy = new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('migo') === 'v1';
+          const Migo = useLegacy ? GoodsReceiptMIGO : GoodsReceiptMIGOWizard;
+          return (
+            <Migo
+              products={products}
+              isOpen={isMigoOpen}
+              onClose={() => setIsMigoOpen(false)}
+              refreshData={refreshSync}
+            />
+          );
+      })()}
       {/* P6-1: Local Purchase GRN for non-aluminium companies (Glassco/Nippon).
           Reuses GTKStoreReceipt — same component already settles advance PV
           via FinanceService.settleAdvance() when linkedReqId is provided. */}
