@@ -28,57 +28,76 @@ CREATE INDEX IF NOT EXISTS idx_vendors_search    ON vendors    USING GIN(search_
 -- ─────────────────────────────────────────────────────────────────────
 -- 2. Trigger functions — keep tsvector in sync on every INSERT/UPDATE
 --
--- Each table reads the columns it actually has. We use COALESCE +
--- (data->>'…') as a fallback so the JSONB twin column also contributes
--- (search hits both flat and JSONB-stored fields).
+-- HOTFIX (user feedback 2026-05-10): different envs have different
+-- flat-column sets on these tables (some envs have just `id` + `data`
+-- JSONB; others have full flat columns from migration 032). Using
+-- `NEW.colname` directly throws "record has no field" if the column
+-- is absent.
+--
+-- Fix: convert NEW to JSONB first via to_jsonb(NEW) and read every
+-- field via ->> 'fieldname'. Missing keys → NULL → COALESCE handles it.
+-- One trigger function definition works across all schema variants.
 -- ─────────────────────────────────────────────────────────────────────
 
 CREATE OR REPLACE FUNCTION update_clients_search() RETURNS TRIGGER
 LANGUAGE plpgsql AS $$
+DECLARE
+  r JSONB := to_jsonb(NEW);
+  d JSONB := COALESCE(r->'data', '{}'::jsonb);
 BEGIN
   NEW.search_tsv := to_tsvector('simple',
-       COALESCE(NEW.id::text, '')                            || ' '
-    || COALESCE(NEW.code, '')                                 || ' '
-    || COALESCE(NEW.business_name, NEW.data->>'businessName', NEW.data->>'name', '') || ' '
-    || COALESCE(NEW.contact_person, NEW.data->>'contactPerson', '') || ' '
-    || COALESCE(NEW.email,   NEW.data->>'email', '')          || ' '
-    || COALESCE(NEW.phone,   NEW.data->>'phone', '')
+       COALESCE(r->>'id', '')                                                              || ' '
+    || COALESCE(r->>'code',          d->>'code',          '')                              || ' '
+    || COALESCE(r->>'business_name', d->>'businessName',  d->>'name',          '')         || ' '
+    || COALESCE(r->>'name',          d->>'name',          '')                              || ' '
+    || COALESCE(r->>'contact_person',d->>'contactPerson', d->>'contact_person', '')        || ' '
+    || COALESCE(r->>'email',         d->>'email',         '')                              || ' '
+    || COALESCE(r->>'phone',         d->>'phone',         '')
   );
   RETURN NEW;
 END $$;
 
 CREATE OR REPLACE FUNCTION update_invoices_search() RETURNS TRIGGER
 LANGUAGE plpgsql AS $$
+DECLARE
+  r JSONB := to_jsonb(NEW);
+  d JSONB := COALESCE(r->'data', '{}'::jsonb);
 BEGIN
   NEW.search_tsv := to_tsvector('simple',
-       COALESCE(NEW.id::text, '')                            || ' '
-    || COALESCE(NEW.invoice_number, NEW.data->>'invoiceNumber', NEW.data->>'invoiceNo', '') || ' '
-    || COALESCE(NEW.client_name,    NEW.data->>'clientName', '') || ' '
-    || COALESCE(NEW.order_id::text, NEW.data->>'orderId', '')
+       COALESCE(r->>'id', '')                                                                                  || ' '
+    || COALESCE(r->>'invoice_number', d->>'invoiceNumber', d->>'invoiceNo', '')                                || ' '
+    || COALESCE(r->>'client_name',    d->>'clientName',    '')                                                 || ' '
+    || COALESCE(r->>'order_id',       d->>'orderId',       '')
   );
   RETURN NEW;
 END $$;
 
 CREATE OR REPLACE FUNCTION update_quotations_search() RETURNS TRIGGER
 LANGUAGE plpgsql AS $$
+DECLARE
+  r JSONB := to_jsonb(NEW);
+  d JSONB := COALESCE(r->'data', '{}'::jsonb);
 BEGIN
   NEW.search_tsv := to_tsvector('simple',
-       COALESCE(NEW.id::text, '')                            || ' '
-    || COALESCE(NEW.order_no,    NEW.data->>'orderNo',  '')   || ' '
-    || COALESCE(NEW.quote_number,NEW.data->>'quoteNumber','') || ' '
-    || COALESCE(NEW.client_name, NEW.data->>'clientName',  '')
+       COALESCE(r->>'id', '')                                                  || ' '
+    || COALESCE(r->>'order_no',    d->>'orderNo',     '')                       || ' '
+    || COALESCE(r->>'quote_number',d->>'quoteNumber', d->>'quoteNo', '')        || ' '
+    || COALESCE(r->>'client_name', d->>'clientName',  '')
   );
   RETURN NEW;
 END $$;
 
 CREATE OR REPLACE FUNCTION update_vendors_search() RETURNS TRIGGER
 LANGUAGE plpgsql AS $$
+DECLARE
+  r JSONB := to_jsonb(NEW);
+  d JSONB := COALESCE(r->'data', '{}'::jsonb);
 BEGIN
   NEW.search_tsv := to_tsvector('simple',
-       COALESCE(NEW.id::text, '')                            || ' '
-    || COALESCE(NEW.code, '')                                 || ' '
-    || COALESCE(NEW.name,    NEW.data->>'name', '')           || ' '
-    || COALESCE(NEW.contact, NEW.data->>'contact', '')
+       COALESCE(r->>'id', '')                                       || ' '
+    || COALESCE(r->>'code',    d->>'code',    '')                    || ' '
+    || COALESCE(r->>'name',    d->>'name',    '')                    || ' '
+    || COALESCE(r->>'contact', d->>'contact', '')
   );
   RETURN NEW;
 END $$;
@@ -107,12 +126,26 @@ CREATE TRIGGER tr_vendors_search
   FOR EACH ROW EXECUTE FUNCTION update_vendors_search();
 
 -- ─────────────────────────────────────────────────────────────────────
--- 4. Backfill existing rows (no-op UPDATE fires the trigger)
+-- 4. Backfill existing rows
+--    UPDATE col=col is a no-op write but it fires BEFORE UPDATE triggers,
+--    populating search_tsv via the functions above. Use updated_at as the
+--    pivot since `id` is the PK on every table here.
 -- ─────────────────────────────────────────────────────────────────────
-UPDATE clients     SET id = id WHERE search_tsv IS NULL;
-UPDATE invoices    SET id = id WHERE search_tsv IS NULL;
-UPDATE quotations  SET id = id WHERE search_tsv IS NULL;
-UPDATE vendors     SET id = id WHERE search_tsv IS NULL;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients'    AND column_name='updated_at') THEN
+    UPDATE clients    SET updated_at = updated_at WHERE search_tsv IS NULL;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='invoices'   AND column_name='updated_at') THEN
+    UPDATE invoices   SET updated_at = updated_at WHERE search_tsv IS NULL;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='quotations' AND column_name='updated_at') THEN
+    UPDATE quotations SET updated_at = updated_at WHERE search_tsv IS NULL;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='vendors'    AND column_name='updated_at') THEN
+    UPDATE vendors    SET updated_at = updated_at WHERE search_tsv IS NULL;
+  END IF;
+END $$;
 
 -- ─────────────────────────────────────────────────────────────────────
 -- 5. Unified search RPC — single entry point for the command palette.
@@ -142,12 +175,15 @@ BEGIN
     ) || ':*'
   );
 
+  -- Same defensive pattern as the triggers: read every label/subtitle
+  -- field via to_jsonb()->> so the SELECT works regardless of which
+  -- flat columns exist on the live tables.
   RETURN QUERY
   (
     SELECT 'client'::text,
-           c.id::text,
-           COALESCE(c.business_name, c.data->>'businessName', c.data->>'name', c.id::text)::text,
-           COALESCE(c.contact_person, c.email, c.data->>'phone', '')::text,
+           (to_jsonb(c)->>'id')::text,
+           COALESCE(to_jsonb(c)->>'business_name', c.data->>'businessName', c.data->>'name', to_jsonb(c)->>'id')::text,
+           COALESCE(to_jsonb(c)->>'contact_person', to_jsonb(c)->>'email', c.data->>'phone', '')::text,
            ts_rank(c.search_tsv, v_q)
       FROM clients c
      WHERE c.search_tsv @@ v_q
@@ -157,9 +193,9 @@ BEGIN
   UNION ALL
   (
     SELECT 'invoice'::text,
-           i.id::text,
-           COALESCE(i.invoice_number, i.data->>'invoiceNumber', i.id::text)::text,
-           COALESCE(i.client_name, i.data->>'clientName', '')::text,
+           (to_jsonb(i)->>'id')::text,
+           COALESCE(to_jsonb(i)->>'invoice_number', i.data->>'invoiceNumber', i.data->>'invoiceNo', to_jsonb(i)->>'id')::text,
+           COALESCE(to_jsonb(i)->>'client_name', i.data->>'clientName', '')::text,
            ts_rank(i.search_tsv, v_q)
       FROM invoices i
      WHERE i.search_tsv @@ v_q
@@ -169,9 +205,9 @@ BEGIN
   UNION ALL
   (
     SELECT 'quotation'::text,
-           q.id::text,
-           COALESCE(q.order_no, q.quote_number, q.data->>'orderNo', q.id::text)::text,
-           COALESCE(q.client_name, q.data->>'clientName', '')::text,
+           (to_jsonb(q)->>'id')::text,
+           COALESCE(to_jsonb(q)->>'order_no', to_jsonb(q)->>'quote_number', q.data->>'orderNo', to_jsonb(q)->>'id')::text,
+           COALESCE(to_jsonb(q)->>'client_name', q.data->>'clientName', '')::text,
            ts_rank(q.search_tsv, v_q)
       FROM quotations q
      WHERE q.search_tsv @@ v_q
@@ -181,9 +217,9 @@ BEGIN
   UNION ALL
   (
     SELECT 'vendor'::text,
-           v.id::text,
-           COALESCE(v.name, v.data->>'name', v.id::text)::text,
-           COALESCE(v.contact, v.data->>'contact', '')::text,
+           (to_jsonb(v)->>'id')::text,
+           COALESCE(to_jsonb(v)->>'name', v.data->>'name', to_jsonb(v)->>'id')::text,
+           COALESCE(to_jsonb(v)->>'contact', v.data->>'contact', '')::text,
            ts_rank(v.search_tsv, v_q)
       FROM vendors v
      WHERE v.search_tsv @@ v_q
