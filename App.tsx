@@ -45,6 +45,7 @@ const SalesCRM         = React.lazy(() => import('./modules/sales/pages/SalesCRM
 const ProjectsModule   = React.lazy(() => import('./modules/projects/pages/ProjectsModule'));
 const IntercompanyHub  = React.lazy(() => import('./modules/shared/pages/IntercompanyHub'));
 const ProductionModule = React.lazy(() => import('./modules/production/pages/ProductionModule'));
+const ProductionLegacy = React.lazy(() => import('./modules/production/pages/ProductionLegacy'));   // Sprint 19
 const InventoryModule  = React.lazy(() => import('./modules/procurement/pages/InventoryModule'));
 const LogisticsModule  = React.lazy(() => import('./modules/procurement/pages/LogisticsModule'));
 const VendorHub        = React.lazy(() => import('./modules/procurement/pages/VendorHub'));
@@ -80,7 +81,9 @@ const PublicTrackingMap = React.lazy(() => import('./src/pages/LiveDispatchMap')
 const CORE_NAV = [
   { name: 'Home',              path: '/',                 icon: LayoutDashboard, key: 'dashboard'        },
   { name: 'Sales & Orders',    path: '/sales',            icon: Briefcase,       key: 'sales'            },
-  { name: 'Production',        path: '/production',       icon: Factory,         key: 'production'       },
+  // Sprint 19: Single production entry — points to Workbench (Sprint 15-17).
+  // Legacy tabs accessible via /production/legacy/* until 2026-06-10.
+  { name: 'Workbench',         path: '/production/workbench', icon: Factory,     key: 'production'       },
   { name: 'Material Mgmt',     path: '/inventory',        icon: Warehouse,       key: 'inventory'        },
   { name: 'Procurement',       path: '/requisitions',     icon: Package,         key: 'requisitions'     },
   { name: 'Finance (FICO)',     path: '/accounts',         icon: Landmark,        key: 'accounts'         },
@@ -528,7 +531,14 @@ const App: React.FC = () => {
                   <Route path="/logistics"     element={<ModuleErrorBoundary moduleName="Logistics"><LogisticsModule /></ModuleErrorBoundary>} />
                   <Route path="/vendors"       element={<ModuleErrorBoundary moduleName="Vendors"><VendorHub /></ModuleErrorBoundary>} />
                   <Route path="/projects/*"    element={<ModuleErrorBoundary moduleName="Projects"><ProjectsModule /></ModuleErrorBoundary>} />
-                  <Route path="/production"    element={<ModuleErrorBoundary moduleName="Production"><ProductionModule /></ModuleErrorBoundary>} />
+                  {/* Sprint 19: /production now redirects to Workbench. Legacy tabs
+                      moved under /production/legacy/* (deprecate after 30 days = 2026-06-10). */}
+                  <Route path="/production"             element={<Navigate to="/production/workbench" replace/>} />
+                  <Route path="/production/fabrication" element={<Navigate to="/production/workbench" replace/>} />
+                  <Route path="/production/processing"  element={<Navigate to="/production/workbench" replace/>} />
+                  <Route path="/production/qc-dispatch" element={<Navigate to="/production/workbench" replace/>} />
+                  <Route path="/production/ncr"         element={<Navigate to="/production/workbench?lens=ncr" replace/>} />
+                  <Route path="/production/legacy"      element={<ModuleErrorBoundary moduleName="Production (Legacy)"><ProductionLegacy /></ModuleErrorBoundary>} />
                   <Route path="/hub/*"         element={<ModuleErrorBoundary moduleName="Supply Hub"><IntercompanyHub /></ModuleErrorBoundary>} />
                   <Route path="/requisitions"  element={<ModuleErrorBoundary moduleName="Procurement"><ProcurementHub /></ModuleErrorBoundary>} />
                   <Route path="/accounts/*"    element={<ModuleErrorBoundary moduleName="Finance"><AccountsModule /></ModuleErrorBoundary>} />
