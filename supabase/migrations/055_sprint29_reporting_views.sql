@@ -45,13 +45,13 @@ SELECT
   COALESCE(i.total_amount, 0)                                    AS invoice_amount,
   COALESCE(SUM(r.amount), 0)                                     AS paid_amount,
   COALESCE(i.total_amount, 0) - COALESCE(SUM(r.amount), 0)      AS balance,
-  i.date                                                         AS invoice_date,
-  (CURRENT_DATE - i.date)                                        AS days_outstanding,
+  i.date::date                                                   AS invoice_date,
+  (CURRENT_DATE - i.date::date)                                  AS days_outstanding,
   CASE
-    WHEN (CURRENT_DATE - i.date) <= 30  THEN 'current'
-    WHEN (CURRENT_DATE - i.date) <= 60  THEN '31_60'
-    WHEN (CURRENT_DATE - i.date) <= 90  THEN '61_90'
-    WHEN (CURRENT_DATE - i.date) <= 120 THEN '91_120'
+    WHEN (CURRENT_DATE - i.date::date) <= 30  THEN 'current'
+    WHEN (CURRENT_DATE - i.date::date) <= 60  THEN '31_60'
+    WHEN (CURRENT_DATE - i.date::date) <= 90  THEN '61_90'
+    WHEN (CURRENT_DATE - i.date::date) <= 120 THEN '91_120'
     ELSE 'over_120'
   END                                                            AS aging_bucket
 FROM invoices i
@@ -59,6 +59,7 @@ LEFT JOIN clients c           ON c.id = i.client_id
 LEFT JOIN payment_receipts r  ON r.invoice_id = i.id
 WHERE i.status NOT IN ('cancelled', 'draft', 'Cancelled', 'Draft')
   AND i.date IS NOT NULL
+  AND i.date <> ''
 GROUP BY i.company, i.id, i.data, i.client_name, c.name, c.data,
          i.total_amount, i.date
 HAVING (COALESCE(i.total_amount, 0) - COALESCE(SUM(r.amount), 0)) > 0.01;
@@ -110,6 +111,7 @@ CROSS JOIN LATERAL jsonb_array_elements(
 ) AS item
 WHERE i.status NOT IN ('cancelled', 'draft', 'Cancelled', 'Draft')
   AND i.date IS NOT NULL
+  AND i.date <> ''
 GROUP BY i.company, date_trunc('month', i.date::timestamp), c.name, c.data, i.client_name,
          i.client_id, item->>'productName', item->>'productCode';
 
