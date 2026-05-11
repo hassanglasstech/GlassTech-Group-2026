@@ -382,9 +382,12 @@ const App: React.FC = () => {
       await SyncService.fetchCritical();
       perfMonitor.markBoot('sync_critical');
       SyncService.fetchFromCloud().then(() => perfMonitor.markBoot('sync_full_done')).catch(() => {});
-      await prefetchCriticalTables();   // prime Supabase cache on login
-      perfMonitor.markBoot('prefetch_critical');
-      await flushOfflineQueue();         // push any offline writes
+      // Sprint 34 hotfix-3: prefetchCriticalTables is a redundant double-fetch —
+      // fetchCritical() already pulled the same 8/10 tables into localStorage.
+      // Fire non-blocking so TanStack cache warms in background without blocking boot.
+      prefetchCriticalTables().then(() => perfMonitor.markBoot('prefetch_done')).catch(() => {});
+      perfMonitor.markBoot('prefetch_critical'); // marks immediately
+      flushOfflineQueue().catch(() => {});        // push offline writes — non-blocking
       await AppService.seedInitialData();
       perfMonitor.markBoot('seed_data');
       // Sprint 34 hotfix-2: fire HR / Finance / Sales warm in background.
