@@ -94,6 +94,8 @@ const AuditorView          = React.lazy(() => import('./modules/admin/pages/Audi
 const DRConsole            = React.lazy(() => import('./modules/admin/pages/DRConsole'));
 // Sprint 33 — Print Document Compliance (branding + NTN/STRN + T&C)
 const BrandingSettings     = React.lazy(() => import('./modules/admin/pages/BrandingSettings'));
+// Pre-go-live — Tax/GST toggle (off by default; flip when business needs GST invoices)
+const TaxSettings          = React.lazy(() => import('./modules/admin/pages/TaxSettings'));
 // Sprint 34 — Performance at Scale (perf telemetry dashboard)
 const HealthMetrics        = React.lazy(() => import('./modules/admin/pages/HealthMetrics'));
 // Sprint 35 — Notifications + Alerts (threshold config)
@@ -659,6 +661,8 @@ const App: React.FC = () => {
                   <Route path="/admin/dr"                      element={<ModuleErrorBoundary moduleName="DR Console"><DRConsole /></ModuleErrorBoundary>} />
                   {/* Sprint 33 — Branding Settings (admin) */}
                   <Route path="/admin/branding"                element={<ModuleErrorBoundary moduleName="Branding Settings"><BrandingSettings /></ModuleErrorBoundary>} />
+                  {/* Pre-go-live — Tax/GST Settings toggle */}
+                  <Route path="/admin/tax-settings"            element={<ModuleErrorBoundary moduleName="Tax Settings"><TaxSettings /></ModuleErrorBoundary>} />
                   {/* Sprint 34 — Performance Metrics (admin) */}
                   <Route path="/admin/health-metrics"          element={<ModuleErrorBoundary moduleName="Health Metrics"><HealthMetrics /></ModuleErrorBoundary>} />
                   {/* Sprint 35 — Alert / Notification Settings (admin) */}
