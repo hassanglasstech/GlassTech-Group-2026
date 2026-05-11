@@ -66,30 +66,46 @@ HAVING (COALESCE(i.total_amount, 0) - COALESCE(SUM(r.amount), 0)) > 0.01;
 
 -- ── 3. AP Aging view ──────────────────────────────────────────────────────────
 -- Outstanding vendor bills bucketed by days-past-due.
--- Note: purchase_orders stores all fields in JSONB data col; no vendor_payments table.
---       paid_amount = 0 (vendor payments tracked via ledger, not a dedicated table).
-CREATE OR REPLACE VIEW v_ap_aging AS
-SELECT
-  po.company,
-  po.id                                                              AS bill_id,
-  COALESCE(po.data->>'id', po.id)                                   AS po_number,
-  COALESCE(v.name, po.data->>'vendorName', po.data->>'toVendor')    AS vendor_name,
-  COALESCE((po.data->>'totalAmount')::numeric, 0)                   AS bill_amount,
-  0::numeric                                                         AS paid_amount,
-  COALESCE((po.data->>'totalAmount')::numeric, 0)                   AS balance,
-  COALESCE((po.data->>'date')::date, po.created_at::date)           AS bill_date,
-  (CURRENT_DATE - COALESCE((po.data->>'date')::date, po.created_at::date)) AS days_outstanding,
-  CASE
-    WHEN (CURRENT_DATE - COALESCE((po.data->>'date')::date, po.created_at::date)) <= 30  THEN 'current'
-    WHEN (CURRENT_DATE - COALESCE((po.data->>'date')::date, po.created_at::date)) <= 60  THEN '31_60'
-    WHEN (CURRENT_DATE - COALESCE((po.data->>'date')::date, po.created_at::date)) <= 90  THEN '61_90'
-    WHEN (CURRENT_DATE - COALESCE((po.data->>'date')::date, po.created_at::date)) <= 120 THEN '91_120'
-    ELSE 'over_120'
-  END                                                                AS aging_bucket
-FROM purchase_orders po
-LEFT JOIN vendors v ON v.id = COALESCE(po.data->>'vendorId', po.data->>'toVendor')
-WHERE LOWER(COALESCE(po.data->>'status', '')) NOT IN ('cancelled', 'draft')
-  AND COALESCE((po.data->>'totalAmount')::numeric, 0) > 0.01;
+-- Note: purchase_orders is JSONB-based; no vendor_payments table.
+-- Wrapped in DO block: skip silently if purchase_orders.company missing
+-- (some installs only have the bare id/data cols).
+DO $reporting$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'purchase_orders' AND column_name = 'company'
+  ) THEN
+    EXECUTE $view$
+      CREATE OR REPLACE VIEW v_ap_aging AS
+      SELECT
+        po.company,
+        po.id                                                              AS bill_id,
+        COALESCE(po.data->>'id', po.id)                                   AS po_number,
+        COALESCE(v.name, po.data->>'vendorName', po.data->>'toVendor')    AS vendor_name,
+        COALESCE((po.data->>'totalAmount')::numeric, 0)                   AS bill_amount,
+        0::numeric                                                         AS paid_amount,
+        COALESCE((po.data->>'totalAmount')::numeric, 0)                   AS balance,
+        COALESCE((po.data->>'date')::date, po.created_at::date)           AS bill_date,
+        (CURRENT_DATE - COALESCE((po.data->>'date')::date, po.created_at::date)) AS days_outstanding,
+        CASE
+          WHEN (CURRENT_DATE - COALESCE((po.data->>'date')::date, po.created_at::date)) <= 30  THEN 'current'
+          WHEN (CURRENT_DATE - COALESCE((po.data->>'date')::date, po.created_at::date)) <= 60  THEN '31_60'
+          WHEN (CURRENT_DATE - COALESCE((po.data->>'date')::date, po.created_at::date)) <= 90  THEN '61_90'
+          WHEN (CURRENT_DATE - COALESCE((po.data->>'date')::date, po.created_at::date)) <= 120 THEN '91_120'
+          ELSE 'over_120'
+        END                                                                AS aging_bucket
+      FROM purchase_orders po
+      LEFT JOIN vendors v ON v.id = COALESCE(po.data->>'vendorId', po.data->>'toVendor')
+      WHERE LOWER(COALESCE(po.data->>'status', '')) NOT IN ('cancelled', 'draft')
+        AND COALESCE((po.data->>'totalAmount')::numeric, 0) > 0.01
+    $view$;
+  ELSE
+    RAISE NOTICE 'Skipping v_ap_aging: purchase_orders.company column missing';
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Skipping v_ap_aging: %', SQLERRM;
+END
+$reporting$;
 
 -- ── 4. Sales Analysis view ────────────────────────────────────────────────────
 -- Invoice lines rolled up by client + product + month for sales reports.
@@ -140,28 +156,43 @@ HAVING COALESCE(SUM(sl.qty_in) - SUM(sl.qty_out), 0) > 0;
 
 -- ── 6. Vendor Scorecard view ──────────────────────────────────────────────────
 -- PO count, total value and received rate per vendor.
--- Note: purchase_orders is JSONB-based; no flat delivery-date cols on POs.
-CREATE OR REPLACE VIEW v_vendor_scorecard AS
-SELECT
-  po.company,
-  COALESCE(po.data->>'vendorId', po.data->>'toVendor')           AS vendor_id,
-  COALESCE(v.name, po.data->>'vendorName', po.data->>'toVendor') AS vendor_name,
-  COUNT(po.id)                                                    AS total_pos,
-  COALESCE(SUM((po.data->>'totalAmount')::numeric), 0)           AS total_value,
-  COUNT(CASE WHEN LOWER(po.data->>'status') = 'received' THEN 1 END) AS received_pos,
-  ROUND(
-    100.0 * COUNT(CASE WHEN LOWER(po.data->>'status') = 'received' THEN 1 END)
-    / NULLIF(COUNT(po.id), 0),
-    1
-  )                                                               AS received_pct
-FROM purchase_orders po
-LEFT JOIN vendors v ON v.id = COALESCE(po.data->>'vendorId', po.data->>'toVendor')
-WHERE COALESCE(po.data->>'vendorId', po.data->>'toVendor') IS NOT NULL
-GROUP BY po.company,
-         COALESCE(po.data->>'vendorId', po.data->>'toVendor'),
-         v.name,
-         po.data->>'vendorName',
-         po.data->>'toVendor';
+-- Wrapped in DO block: same defensive check as v_ap_aging.
+DO $reporting$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'purchase_orders' AND column_name = 'company'
+  ) THEN
+    EXECUTE $view$
+      CREATE OR REPLACE VIEW v_vendor_scorecard AS
+      SELECT
+        po.company,
+        COALESCE(po.data->>'vendorId', po.data->>'toVendor')           AS vendor_id,
+        COALESCE(v.name, po.data->>'vendorName', po.data->>'toVendor') AS vendor_name,
+        COUNT(po.id)                                                    AS total_pos,
+        COALESCE(SUM((po.data->>'totalAmount')::numeric), 0)           AS total_value,
+        COUNT(CASE WHEN LOWER(po.data->>'status') = 'received' THEN 1 END) AS received_pos,
+        ROUND(
+          100.0 * COUNT(CASE WHEN LOWER(po.data->>'status') = 'received' THEN 1 END)
+          / NULLIF(COUNT(po.id), 0),
+          1
+        )                                                               AS received_pct
+      FROM purchase_orders po
+      LEFT JOIN vendors v ON v.id = COALESCE(po.data->>'vendorId', po.data->>'toVendor')
+      WHERE COALESCE(po.data->>'vendorId', po.data->>'toVendor') IS NOT NULL
+      GROUP BY po.company,
+               COALESCE(po.data->>'vendorId', po.data->>'toVendor'),
+               v.name,
+               po.data->>'vendorName',
+               po.data->>'toVendor'
+    $view$;
+  ELSE
+    RAISE NOTICE 'Skipping v_vendor_scorecard: purchase_orders.company column missing';
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Skipping v_vendor_scorecard: %', SQLERRM;
+END
+$reporting$;
 
 -- ── 7. Project Profitability view ─────────────────────────────────────────────
 -- Revenue vs COGS per quotation (quotations = sales-order equivalent here).
