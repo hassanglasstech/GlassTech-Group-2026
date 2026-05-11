@@ -148,11 +148,14 @@ function getPieceCostData(piece: any, company: Company): {
   const item = (order.items || [])[piece.itemIndex];
   if (!item) return { sqft: 0, materialId: null, map: 0, totalCost: 0 };
 
-  const sqft = item.totalSqFt || item.sqft || 0;
+  // QuotationItem field is `totalSqFt` — the `sqft` fallback referenced
+  // a non-existent field and would have always been undefined.
+  const sqft = item.totalSqFt || 0;
 
   // Find matching store item by glass type + thickness
   const store = InventoryService.getStore().filter((s: any) => s.company === company && s.category === 'Raw');
-  const thickness = item.glassThickness || item.glassSize || '';
+  // QuotationItem field is `glassSize` (e.g. "5mm"); `glassThickness` doesn't exist.
+  const thickness = item.glassSize || '';
   const glassType = (item.glassType || 'Plain').toLowerCase();
   const match = store.find((s: any) => {
     const name = (s.name || '').toLowerCase();
@@ -424,9 +427,12 @@ export function postTemperingInwardGL(params: {
     if (sqft <= 0) return;
 
     // Extract mm from thickness field: '6mm' → '6', '10' → '10'
-    // Check multiple field names — QuotationItem uses glassSize, others use thickness
+    // QuotationItem only has `glassSize`; piece thickness lives inside specs JSON.
+    const pieceSpecsThickness = (() => {
+      try { return JSON.parse(piece.specs || '{}').thickness || ''; } catch { return ''; }
+    })();
     const rawThickness = String(
-      item?.glassThickness || item?.glassSize || item?.thickness || piece.thickness || '',
+      item?.glassSize || pieceSpecsThickness || '',
     ).replace(/[^0-9.]/g, '').trim();
     const mm = rawThickness || '6';
 

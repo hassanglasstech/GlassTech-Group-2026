@@ -133,7 +133,7 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
       ]);
       setOrders(allQuotations.filter((q: Quotation) =>
         q.company === company &&
-        (q.status === 'Approved' || q.status === 'Invoiced' || q.status === 'Partial' || q.status === 'Paid')
+        (q.status === 'Approved' || q.status === 'Invoiced' || q.status === 'Partial Payment' || q.status === 'Paid')
       ));
       setPieces(ProductionService.getProductionPieces());
       setClients(allClients);
@@ -273,7 +273,7 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
     const allInvoices = await AsyncSalesService.getInvoices() as Invoice[];
     const newReceived = receiptModalInvoice.receivedAmount + receiptForm.amount;
     const newBalance  = receiptModalInvoice.totalAmount - newReceived;
-    const newStatus   = newBalance <= 0 ? 'Paid' : 'Partial';
+    const newStatus: Invoice['status'] = newBalance <= 0 ? 'Paid' : 'Partial';
 
     const payment: PaymentReceipt = {
       id: receiptId, invoiceId: receiptModalInvoice.id, date: new Date().toISOString().split('T')[0],

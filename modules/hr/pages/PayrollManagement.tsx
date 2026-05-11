@@ -239,6 +239,9 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
     const alreadyPaid = type === 'salary' ? pay.isSalaryPaid : pay.isOvertimePaid;
     if (alreadyPaid) { toast.error('Already marked as paid'); return; }
 
+    // Lifted out of try {} so the toast at line 281 can reference it
+    const label = type === 'salary' ? 'Salary' : 'Overtime';
+
     // GL clearing entry: Dr Salaries Payable (2211), Cr Cash (1111)
     try {
       const liabParent   = FinanceService.ensureAccount(company as any, 'CURRENT LIABILITIES', 2, null, 'Liability', '22');
@@ -249,7 +252,6 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
       const salaryAmt = (pay.basicPay + pay.allowances) - pay.absentDeduction - pay.lateDeduction - pay.loanDeduction - pay.advanceDeduction;
       const otAmt     = pay.overtimePay;
       const amount    = type === 'salary' ? salaryAmt : otAmt;
-      const label     = type === 'salary' ? 'Salary' : 'Overtime';
 
       const transaction = {
         id: `PAY-DISB-${pay.id}-${type}-${Date.now()}`,
@@ -426,7 +428,7 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
           const isFullyPaid = newRepaid >= loan.amount;
           return { ...loan, repaymentAmount: newRepaid, status: isFullyPaid ? 'Completed' as const : loan.status };
         });
-        HRService.saveLoans(updatedLoans);
+        HRService.saveLoans(updatedLoans as any);
       }
 
       // ── Gratuity Accrual (1 month basic per year = basic/12 per month) ──
@@ -464,7 +466,7 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
         }
       }
 
-      toast.success(`Payroll JV ${txId} posted — Basic: ${totalBasic.toLocaleString()}, Allow: ${totalAllowances.toLocaleString()}, OT: ${totalOvertime.toLocaleString()}, Loan Rec: ${totalLoanRec.toLocaleString()}${(() => { return ''; })()}`);
+      toast.success(`Payroll JV ${txId} posted — Basic: ${summary.totalBasic.toLocaleString()}, Allow: ${summary.totalAllowances.toLocaleString()}, OT: ${summary.totalOTAmount.toLocaleString()}, Loan Rec: ${totalLoanRec.toLocaleString()}`);
   };
 
   const renderSlip = (pay: any) => {

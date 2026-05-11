@@ -3,7 +3,7 @@ import { GlasscoPrintTemplate } from '@/modules/glassco/core/GlasscoPrintTemplat
 import { GlasscoList } from '@/modules/glassco/core/GlasscoList';
 import { GlasscoEditor } from '@/modules/glassco/core/GlasscoEditor';
 import GlasscoEditorUnified from '@/modules/glassco/core/GlasscoEditorUnified';   // Sprint 22
-import { useGlasscoQuotations } from './useGlasscoQuotations';
+import { useGlasscoQuotations } from '@/modules/sales/companies/glassco/useGlasscoQuotations';
 
 const GlasscoQuotationManager: React.FC = () => {
   const {

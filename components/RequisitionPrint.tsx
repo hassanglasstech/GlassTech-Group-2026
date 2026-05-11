@@ -62,13 +62,13 @@ const RequisitionPrint: React.FC<RequisitionPrintProps> = ({ requisitions }) => 
                   </div>
                   <div className="text-right">
                     {req.totalValue > 0 && <p><span className="font-bold">Total Value:</span> PKR {req.totalValue.toLocaleString()}</p>}
-                    {req.loanAmount > 0 && <p><span className="font-bold">Loan Amount:</span> PKR {req.loanAmount.toLocaleString()}</p>}
-                    {req.overtimeHours > 0 && <p><span className="font-bold">OT Hours:</span> {req.overtimeHours}</p>}
+                    {(req.loanAmount ?? 0) > 0 && <p><span className="font-bold">Loan Amount:</span> PKR {req.loanAmount!.toLocaleString()}</p>}
+                    {(req.overtimeHours ?? 0) > 0 && <p><span className="font-bold">OT Hours:</span> {req.overtimeHours}</p>}
                   </div>
                 </div>
 
                 {/* Items Table (if Material) */}
-                {['Material / Inventory', 'Maintenance / R&M', 'General Expense'].includes(req.subCategory || req.reqType) && req.items && req.items.length > 0 && (
+                {['Material / Inventory', 'Maintenance / R&M', 'General Expense'].includes(req.subCategory || req.reqType || '') && req.items && req.items.length > 0 && (
                   <table className="w-full text-left border-collapse border border-black mb-2 text-[10px]">
                     <thead>
                       <tr className="bg-gray-100">

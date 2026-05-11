@@ -119,8 +119,8 @@ export const Logger = {
     writeLog({ level: 'info', module, action: 'INFO', description: message, meta }),
 
   // Warning
-  warn: (module: LogModule | string, message: string, meta?: Record<string, any>) =>
-    writeLog({ level: 'warn', module, action: 'WARNING', description: message, meta }),
+  warn: (module: LogModule | string, message: string, meta?: unknown) =>
+    writeLog({ level: 'warn', module, action: 'WARNING', description: message, meta: meta as Record<string, any> | undefined }),
 
   // Error (with optional toast)
   error: (module: LogModule | string, message: string, err?: any, showToast = false) => {

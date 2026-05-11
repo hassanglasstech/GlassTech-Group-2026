@@ -23,9 +23,14 @@ export interface Product {
   serviceNick?: string; 
   brand?: string; 
   modelNo?: string; 
-  finishColor?: string; 
-  material?: string; 
-  imageUrl?: string; 
+  finishColor?: string;
+  material?: string;
+  imageUrl?: string;
+  /** Legacy aliases for runtime fields used by Nippon UI code.
+   *  `name` ≈ description, `itemCode` ≈ modelNo, `price` ≈ basePrice. */
+  name?: string;
+  itemCode?: string;
+  price?: number;
   direction?: string; 
   tongueLength?: string; 
   spindleLength?: string; 

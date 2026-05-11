@@ -9,6 +9,7 @@
  */
 
 import { Employee, AttendanceRecord, LoanAdvance, Payroll } from '../types/hr';
+import { Company } from '@/modules/shared/constants';
 import { supabase } from '@/src/services/supabaseClient';
 // localStorage removed — pure Supabase
 import { SyncService } from '@/src/services/SyncService';
@@ -319,7 +320,8 @@ export const HRService = {
       byCompanyMonth[key].records.push(p);
     });
 
-    Object.values(byCompanyMonth).forEach(({ company, month, records }) => {
+    Object.values(byCompanyMonth).forEach(({ company: _co, month, records }) => {
+      const company = _co as Company;
       const employees = HRService.getEmployees().filter((e: any) => e.company === company);
       const empMap = new Map(employees.map((e: any) => [e.id, e]));
 

@@ -88,7 +88,7 @@ const QuotationManager: React.FC = () => {
       const lower = searchTerm.toLowerCase();
       result = result.filter(q => 
         q.id.toLowerCase().includes(lower) || 
-        q.projectName.toLowerCase().includes(lower) ||
+        (q.projectName || '').toLowerCase().includes(lower) ||
         clients.find(c => c.id === q.clientId)?.name.toLowerCase().includes(lower)
       );
     }

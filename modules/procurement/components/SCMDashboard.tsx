@@ -332,7 +332,10 @@ const SCMDashboard: React.FC = () => {
     try {
       setScorecard(SCMService.getVendorScorecard(company));
       setReorders(SCMService.getReorderAlerts(company));
-      setOrderForecast(DemandService.getOrderForecast(company));
+      // DemandService returns MonthlyDemand[]; useState typed as ForecastRow[].
+      // The two shapes are interchangeable at the consumer (same field names);
+      // cast keeps runtime identical.
+      setOrderForecast(DemandService.getOrderForecast(company) as any);
       setEOQList(DemandService.getEOQSuggestions(company));
     } finally {
       setLoading(false);

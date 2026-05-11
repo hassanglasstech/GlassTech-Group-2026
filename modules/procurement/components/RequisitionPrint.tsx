@@ -75,13 +75,15 @@ const RequisitionPrint: React.FC<Props> = ({ data, company }) => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200">
-                                {data.items.map((item, idx) => (
+                                {data.items.map((item: any, idx) => (
                                     <tr key={item.id} className="border-b border-black">
                                         <td className="py-2 px-3 text-center font-bold border-r border-black">{idx + 1}</td>
-                                        <td className="py-2 px-3 font-black uppercase border-r border-black">{item.itemId}</td>
-                                        <td className="py-2 px-3 text-center font-bold border-r border-black">{item.quantity} {item.uom}</td>
-                                        <td className="py-2 px-3 text-right font-bold border-r border-black">{item.unitPrice?.toLocaleString()}</td>
-                                        <td className="py-2 px-3 text-right font-black">{item.totalPrice?.toLocaleString()}</td>
+                                        {/* RequisitionItem uses materialDesc/qty/unit/estimatedRate; cast to any
+                                            covers both old (itemId/quantity/uom/unitPrice) and new field names. */}
+                                        <td className="py-2 px-3 font-black uppercase border-r border-black">{item.itemId || item.materialDesc}</td>
+                                        <td className="py-2 px-3 text-center font-bold border-r border-black">{item.quantity ?? item.qty} {item.uom || item.unit}</td>
+                                        <td className="py-2 px-3 text-right font-bold border-r border-black">{(item.unitPrice ?? item.estimatedRate)?.toLocaleString()}</td>
+                                        <td className="py-2 px-3 text-right font-black">{(item.totalPrice ?? ((item.qty ?? item.quantity ?? 0) * (item.estimatedRate ?? item.unitPrice ?? 0)))?.toLocaleString()}</td>
                                     </tr>
                                 ))}
                             </tbody>

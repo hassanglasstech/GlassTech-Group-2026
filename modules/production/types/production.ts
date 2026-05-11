@@ -38,6 +38,17 @@ export interface QuotationItem {
   isSection?: boolean; 
   totalSqFt: number;
   pricePerUnit: number;
+  /** Legacy alias for pricePerUnit — 18+ runtime call sites use this name.
+   *  Keep both until call sites are migrated to pricePerUnit. */
+  rate?: number;
+  /** Legacy alias for totalSqFt used by some UI code. */
+  sqft?: number;
+  /** Legacy alias for glassSize — 7+ call sites use this name. */
+  glassThickness?: string;
+  /** Shape selector used in QuotationManager.tsx UI (Rectangle/Circle). */
+  shape?: 'Rectangle' | 'Circle' | string;
+  /** Base64/URL of attached design image — used in QuotationManager.tsx. */
+  designFile?: string;
   amount: number;
   subItems?: { description: string; price: number }[];
   isRevised?: boolean; 

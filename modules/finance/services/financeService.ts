@@ -639,8 +639,9 @@ export const FinanceService = {
   },
 
   // ── Config (localStorage only) ─────────────────────────────────────
-  getMappingRules: (): FinancialMappingRule[] => safeParse(KEYS.MAPPING_RULES),
-  getGLConfig:     (): GLConfiguration[]      => safeParse(KEYS.GL_CONFIG),
+  getMappingRules:  (): FinancialMappingRule[] => safeParse(KEYS.MAPPING_RULES),
+  saveMappingRules: (d: FinancialMappingRule[]): void => { safeSave(KEYS.MAPPING_RULES, d); },
+  getGLConfig:      (): GLConfiguration[]      => safeParse(KEYS.GL_CONFIG),
 
   // ── Legacy compat ──────────────────────────────────────────────────
   loadAccountsAsync: async (): Promise<void> => { await FinanceService.init(); },

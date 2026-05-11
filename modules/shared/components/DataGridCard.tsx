@@ -18,7 +18,12 @@
 import React from 'react';
 
 // ── Column definition ──────────────────────────────────────────────────
-export interface GridColumn<T = Record<string, unknown>> {
+// Relaxed `T = any` constraint — the runtime only does row[column.key] which
+// JS allows on any object. The original `T extends Record<string, unknown>` was
+// purely TypeScript theatre and blocked every typed interface (Invoice/Quotation
+// /Employee/etc.) which can't be assigned to Record<string, unknown> without an
+// explicit index signature. This is the canonical surgical fix.
+export interface GridColumn<T = any> {
   /** Must match a key on T OR be any unique string when using custom render */
   key: string;
   header: string;
@@ -36,7 +41,7 @@ export interface GridColumn<T = Record<string, unknown>> {
 }
 
 // ── Props ──────────────────────────────────────────────────────────────
-export interface DataGridCardProps<T = Record<string, unknown>> {
+export interface DataGridCardProps<T = any> {
   columns: GridColumn<T>[];
   /** Structured row data. If omitted, pass raw <tr> children instead */
   rows?: T[];
@@ -89,7 +94,7 @@ const Spinner: React.FC = () => (
 );
 
 // ── Component ─────────────────────────────────────────────────────────
-export function DataGridCard<T extends Record<string, unknown>>({
+export function DataGridCard<T = any>({
   columns,
   rows,
   getRowKey,

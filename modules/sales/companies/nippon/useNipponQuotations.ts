@@ -120,7 +120,12 @@ export const useNipponQuotations = () => {
       return { ...prev, items: next };
     });
     // ── Set suggestion: if product is part of a set, prompt user ──
-    if (prod.isSet && prod.setComponents && prod.setComponents.length > 0) {
+    // `prod` was orphaned from an earlier refactor — would have crashed at
+    // runtime as ReferenceError. Resolve from the value when the field
+    // looks like a product selection; bail out otherwise.
+    const maybeProduct = (field === 'productId' || field === 'product') ? value : null;
+    const prod = maybeProduct as any;
+    if (prod && prod.isSet && prod.setComponents && prod.setComponents.length > 0) {
       setPendingSetSuggestion({
         index,
         setProduct: prod,

@@ -99,7 +99,7 @@ const DEFAULT_THRESHOLDS: AlertThresholds = {
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────
-const _safe = (p: Promise<any>) => p.catch(() => null);
+const _safe = (p: PromiseLike<any>) => Promise.resolve(p).then(v => v, () => null);
 
 /** Insert alert — silently swallows duplicate dedup constraint errors */
 const _fire = async (alert: Omit<ERPAlert, 'id' | 'is_read' | 'is_dismissed' | 'created_at'>): Promise<void> => {
@@ -147,8 +147,9 @@ const checkOverdueInvoices = async (company: string, cfg: AlertThresholds): Prom
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - cfg.invoice_overdue_days);
 
+    // Sprint 35 bugfix: table is `invoices`, not `sales_invoices`
     const { data, error } = await supabase
-      .from('sales_invoices')
+      .from('invoices')
       .select('id, client_name, total_amount, invoice_date, due_date')
       .eq('company', company)
       .neq('status', 'Paid')
@@ -188,7 +189,9 @@ const checkGLImbalance = async (company: string, cfg: AlertThresholds): Promise<
 
     if (error || !data) return;
 
-    const balance = Math.abs(Number(data.balance ?? data.trial_balance ?? 0));
+    // RPC return shape isn't typed — narrow via cast to read either field name
+    const row = data as { balance?: number; trial_balance?: number };
+    const balance = Math.abs(Number(row.balance ?? row.trial_balance ?? 0));
     if (balance <= cfg.gl_imbalance_tolerance) return;
 
     const severity: AlertSeverity = balance > 1000 ? 'critical' : 'warning';

@@ -72,7 +72,8 @@ const FactoryRequisitions: React.FC<FactoryRequisitionsProps> = ({ requisitions,
               message:       notification.message,
               type:          'requisition_approved',
               referenceId:   req.id,
-              link:          notification.link,
+              // notification builder above doesn't set a link; deep-link to AP queue
+              link:          `#/finance/inbox?ref=${req.id}`,
             });
         }
 

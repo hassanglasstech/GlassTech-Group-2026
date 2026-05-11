@@ -15,7 +15,7 @@ export const useQuotations = () => {
   const [printingQuote, setPrintingQuote] = useState<Quotation | null>(null);
   
   const [modalTab, setModalTab] = useState<'items' | 'design' | 'upload'>('items');
-  const [selectedItemIndex, setSelectedItemIndex] = useState<number>(0);
+  const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const initialQuotation: Partial<Quotation> = {
