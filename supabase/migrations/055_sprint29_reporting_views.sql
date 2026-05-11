@@ -41,7 +41,7 @@ SELECT
   i.company,
   i.id                                                           AS invoice_id,
   COALESCE((i.data->>'invoiceNumber'), i.id)                    AS invoice_number,
-  COALESCE(c.business_name, i.client_name)                      AS client_name,
+  COALESCE(c.name, i.client_name, c.data->>'businessName')      AS client_name,
   COALESCE(i.total_amount, 0)                                    AS invoice_amount,
   COALESCE(SUM(r.amount), 0)                                     AS paid_amount,
   COALESCE(i.total_amount, 0) - COALESCE(SUM(r.amount), 0)      AS balance,
@@ -59,7 +59,7 @@ LEFT JOIN clients c           ON c.id = i.client_id
 LEFT JOIN payment_receipts r  ON r.invoice_id = i.id
 WHERE i.status NOT IN ('cancelled', 'draft', 'Cancelled', 'Draft')
   AND i.date IS NOT NULL
-GROUP BY i.company, i.id, i.data, i.client_name, c.business_name,
+GROUP BY i.company, i.id, i.data, i.client_name, c.name, c.data,
          i.total_amount, i.date
 HAVING (COALESCE(i.total_amount, 0) - COALESCE(SUM(r.amount), 0)) > 0.01;
 
@@ -96,7 +96,7 @@ CREATE OR REPLACE VIEW v_sales_analysis AS
 SELECT
   i.company,
   date_trunc('month', i.date::timestamp)::date AS month,
-  COALESCE(c.business_name, i.client_name)  AS client_name,
+  COALESCE(c.name, i.client_name, c.data->>'businessName') AS client_name,
   i.client_id,
   (item->>'productName')                    AS product_name,
   (item->>'productCode')                    AS product_code,
@@ -110,7 +110,7 @@ CROSS JOIN LATERAL jsonb_array_elements(
 ) AS item
 WHERE i.status NOT IN ('cancelled', 'draft', 'Cancelled', 'Draft')
   AND i.date IS NOT NULL
-GROUP BY i.company, date_trunc('month', i.date::timestamp), c.business_name, i.client_name,
+GROUP BY i.company, date_trunc('month', i.date::timestamp), c.name, c.data, i.client_name,
          i.client_id, item->>'productName', item->>'productCode';
 
 -- ── 5. Stock Aging view ───────────────────────────────────────────────────────
@@ -169,7 +169,7 @@ SELECT
   so.company,
   so.id                                             AS order_id,
   so.order_no                                       AS order_number,
-  COALESCE(c.business_name, so.data->>'clientName') AS client_name,
+  COALESCE(c.name, so.data->>'clientName', c.data->>'businessName') AS client_name,
   so.status,
   so.created_at::date                               AS order_date,
   COALESCE(i.total_amount, 0)                       AS revenue,
