@@ -133,26 +133,109 @@ GROUP BY i.company, date_trunc('month', i.date::timestamp), c.name, c.data, i.cl
 
 -- ── 5. Stock Aging view ───────────────────────────────────────────────────────
 -- Days-on-hand per material; flags slow-moving (>90d) and dead (>180d) stock.
-CREATE OR REPLACE VIEW v_stock_aging AS
-SELECT
-  sl.company,
-  sl.material_code,
-  sl.material_name,
-  sl.unit,
-  sl.warehouse,
-  COALESCE(SUM(sl.qty_in) - SUM(sl.qty_out), 0)  AS on_hand_qty,
-  MIN(sl.date)                                      AS first_movement,
-  MAX(sl.date)                                      AS last_movement,
-  (CURRENT_DATE - MAX(sl.date)::date)              AS days_since_last_movement,
-  CASE
-    WHEN (CURRENT_DATE - MAX(sl.date)::date) > 180 THEN 'dead'
-    WHEN (CURRENT_DATE - MAX(sl.date)::date) > 90  THEN 'slow_moving'
-    WHEN (CURRENT_DATE - MAX(sl.date)::date) > 30  THEN 'moderate'
-    ELSE 'active'
-  END                                               AS stock_status
-FROM stock_ledger sl
-GROUP BY sl.company, sl.material_code, sl.material_name, sl.unit, sl.warehouse
-HAVING COALESCE(SUM(sl.qty_in) - SUM(sl.qty_out), 0) > 0;
+--
+-- The real stock_ledger schema differs from older expectations:
+--   * material_id        (NOT material_code)
+--   * material_name      NOT a flat col; lives in data->>'materialName'
+--   * uom OR unit        either may exist depending on which migrations ran
+--   * quantity OR qty    same — pick whichever exists
+--   * posting_date OR date  same
+--   * storage_loc / warehouse / reference — fall through to whichever exists
+--
+-- We build the view dynamically and skip silently if the table is too thin.
+DO $reporting$
+DECLARE
+  v_qty_col  text;
+  v_date_col text;
+  v_unit_col text;
+  v_wh_col   text;
+  v_sql      text;
+BEGIN
+  -- qty
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'stock_ledger' AND column_name = 'quantity') THEN
+    v_qty_col := 'quantity';
+  ELSIF EXISTS (SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'stock_ledger' AND column_name = 'qty') THEN
+    v_qty_col := 'qty';
+  ELSE
+    RAISE NOTICE 'Skipping v_stock_aging: no quantity/qty column on stock_ledger';
+    RETURN;
+  END IF;
+
+  -- date
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'stock_ledger' AND column_name = 'posting_date') THEN
+    v_date_col := 'posting_date';
+  ELSIF EXISTS (SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'stock_ledger' AND column_name = 'date') THEN
+    v_date_col := 'date';
+  ELSE
+    v_date_col := 'created_at';
+  END IF;
+
+  -- unit
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'stock_ledger' AND column_name = 'uom') THEN
+    v_unit_col := 'sl.uom';
+  ELSIF EXISTS (SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'stock_ledger' AND column_name = 'unit') THEN
+    v_unit_col := 'sl.unit';
+  ELSE
+    v_unit_col := '(sl.data->>''unit'')';
+  END IF;
+
+  -- warehouse
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'stock_ledger' AND column_name = 'storage_loc') THEN
+    v_wh_col := 'sl.storage_loc';
+  ELSIF EXISTS (SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'stock_ledger' AND column_name = 'warehouse') THEN
+    v_wh_col := 'sl.warehouse';
+  ELSIF EXISTS (SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'stock_ledger' AND column_name = 'reference') THEN
+    v_wh_col := 'sl.reference';
+  ELSE
+    v_wh_col := '''Main''::text';
+  END IF;
+
+  v_sql := format($v$
+    CREATE OR REPLACE VIEW v_stock_aging AS
+    SELECT
+      sl.company,
+      sl.material_id                                          AS material_code,
+      COALESCE(sl.data->>'materialName', sl.material_id)     AS material_name,
+      %s                                                       AS unit,
+      %s                                                       AS warehouse,
+      COALESCE(SUM(sl.%I), 0)                                 AS on_hand_qty,
+      MIN(sl.%I)                                              AS first_movement,
+      MAX(sl.%I)                                              AS last_movement,
+      (CURRENT_DATE - MAX(sl.%I)::date)                       AS days_since_last_movement,
+      CASE
+        WHEN (CURRENT_DATE - MAX(sl.%I)::date) > 180 THEN 'dead'
+        WHEN (CURRENT_DATE - MAX(sl.%I)::date) > 90  THEN 'slow_moving'
+        WHEN (CURRENT_DATE - MAX(sl.%I)::date) > 30  THEN 'moderate'
+        ELSE 'active'
+      END                                                     AS stock_status
+    FROM stock_ledger sl
+    WHERE sl.material_id IS NOT NULL
+      AND sl.%I IS NOT NULL
+    GROUP BY sl.company, sl.material_id, sl.data, %s, %s
+    HAVING COALESCE(SUM(sl.%I), 0) > 0
+  $v$,
+    v_unit_col, v_wh_col,
+    v_qty_col,
+    v_date_col, v_date_col, v_date_col,
+    v_date_col, v_date_col, v_date_col,
+    v_date_col,
+    v_unit_col, v_wh_col,
+    v_qty_col);
+
+  EXECUTE v_sql;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Skipping v_stock_aging: %', SQLERRM;
+END
+$reporting$;
 
 -- ── 6. Vendor Scorecard view ──────────────────────────────────────────────────
 -- PO count, total value and received rate per vendor.
