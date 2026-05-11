@@ -79,6 +79,11 @@ const FinanceInbox      = React.lazy(() => import('./modules/finance/pages/Finan
 const VendorScorecard      = React.lazy(() => import('./modules/procurement/pages/VendorScorecard'));
 const StockAging           = React.lazy(() => import('./modules/procurement/pages/StockAging'));
 const ProjectProfitability = React.lazy(() => import('./modules/sales/pages/ProjectProfitability'));
+// Sprint 30 — Cutover / Go-Live Wizard + CSV importers
+const CutoverWizard        = React.lazy(() => import('./modules/finance/pages/CutoverWizard'));
+const AROpeningBalance     = React.lazy(() => import('./modules/finance/pages/AROpeningBalance'));
+const ClientImport         = React.lazy(() => import('./modules/sales/pages/ClientImport'));
+const ProductImport        = React.lazy(() => import('./modules/sales/pages/ProductImport'));
 // Sprint 12 — public mobile driver POD page (no auth — token-gated)
 const DriverScreen     = React.lazy(() => import('./src/pages/DriverScreen'));
 // Sprint 14 — live GPS dashboard (supervisor) + public customer tracking
@@ -578,6 +583,11 @@ const App: React.FC = () => {
                   <Route path="/procurement/vendor-scorecard"  element={<ModuleErrorBoundary moduleName="Vendor Scorecard"><VendorScorecard /></ModuleErrorBoundary>} />
                   <Route path="/procurement/stock-aging"       element={<ModuleErrorBoundary moduleName="Stock Aging"><StockAging /></ModuleErrorBoundary>} />
                   <Route path="/sales/project-profitability"   element={<ModuleErrorBoundary moduleName="Project Profitability"><ProjectProfitability /></ModuleErrorBoundary>} />
+                  {/* Sprint 30 — Cutover / Go-Live Wizard + bulk importers */}
+                  <Route path="/finance/cutover"               element={<ModuleErrorBoundary moduleName="Cutover Wizard"><CutoverWizard /></ModuleErrorBoundary>} />
+                  <Route path="/finance/ar-opening"            element={<ModuleErrorBoundary moduleName="AR Opening Balance"><AROpeningBalance /></ModuleErrorBoundary>} />
+                  <Route path="/sales/client-import"           element={<ModuleErrorBoundary moduleName="Client Import"><ClientImport /></ModuleErrorBoundary>} />
+                  <Route path="/sales/product-import"          element={<ModuleErrorBoundary moduleName="Product Import"><ProductImport /></ModuleErrorBoundary>} />
                   {/* Sprint 14 — Live GPS dashboard (supervisor) */}
                   <Route path="/dispatch/live"  element={<ModuleErrorBoundary moduleName="Live Dispatch Map"><LiveDispatchMap /></ModuleErrorBoundary>} />
                   {/* Sprint 15 — Production Workbench (single page) */}
