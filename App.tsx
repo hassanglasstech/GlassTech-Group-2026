@@ -28,6 +28,7 @@ import { HRService } from '@/modules/hr/services/hrService';
 import { loadShiftRules } from '@/modules/hr/pages/ShiftMaster';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { SalesService } from '@/modules/sales/services/salesService';
+import { BrandingService } from '@/modules/shared/services/brandingService'; // Sprint 33
 import LoginPage from '@/modules/auth/LoginPage';
 
 import NotificationCenter from './modules/shared/components/NotificationCenter';
@@ -89,6 +90,8 @@ const YearEndClose         = React.lazy(() => import('./modules/finance/pages/Ye
 const AuditorView          = React.lazy(() => import('./modules/admin/pages/AuditorView'));
 // Sprint 32 — DR Console (snapshot health + manual triggers + downloads)
 const DRConsole            = React.lazy(() => import('./modules/admin/pages/DRConsole'));
+// Sprint 33 — Print Document Compliance (branding + NTN/STRN + T&C)
+const BrandingSettings     = React.lazy(() => import('./modules/admin/pages/BrandingSettings'));
 // Sprint 12 — public mobile driver POD page (no auth — token-gated)
 const DriverScreen     = React.lazy(() => import('./src/pages/DriverScreen'));
 // Sprint 14 — live GPS dashboard (supervisor) + public customer tracking
@@ -375,6 +378,7 @@ const App: React.FC = () => {
       await loadShiftRules();            // prime shift rules cache
       await FinanceService.init();       // prime Finance GL cache (Supabase-primary)
       await SalesService.warmCache();    // prime Sales cache from Supabase
+      BrandingService.prefetchAll().catch(() => {}); // Sprint 33 — warm letterhead/footer cache
       AppService.checkAndTriggerAutoBackup();
       // Start Realtime AFTER initial fetch — live cross-device sync
       RealtimeService.start();
@@ -598,6 +602,8 @@ const App: React.FC = () => {
                   <Route path="/admin/auditor"                 element={<ModuleErrorBoundary moduleName="Auditor View"><AuditorView /></ModuleErrorBoundary>} />
                   {/* Sprint 32 — DR Console (admin) */}
                   <Route path="/admin/dr"                      element={<ModuleErrorBoundary moduleName="DR Console"><DRConsole /></ModuleErrorBoundary>} />
+                  {/* Sprint 33 — Branding Settings (admin) */}
+                  <Route path="/admin/branding"                element={<ModuleErrorBoundary moduleName="Branding Settings"><BrandingSettings /></ModuleErrorBoundary>} />
                   {/* Sprint 14 — Live GPS dashboard (supervisor) */}
                   <Route path="/dispatch/live"  element={<ModuleErrorBoundary moduleName="Live Dispatch Map"><LiveDispatchMap /></ModuleErrorBoundary>} />
                   {/* Sprint 15 — Production Workbench (single page) */}

@@ -1,4 +1,18 @@
+/**
+ * SalesInvoicePrint.tsx — Sprint 33 (Print Document Compliance)
+ *
+ * Pilot file for the new shared PrintHeader / PrintFooter components.
+ * Pulls letterhead (logo, NTN, STRN, address) + footer (bank details,
+ * terms, signatures) from the company_branding store via BrandingService.
+ *
+ * Operators edit branding at /admin/branding. Print components read
+ * synchronously from a localStorage cache that's hydrated on app boot
+ * (BrandingService.prefetchAll()).
+ */
+
 import React from 'react';
+import PrintHeader from '@/modules/shared/components/prints/PrintHeader';
+import PrintFooter from '@/modules/shared/components/prints/PrintFooter';
 
 interface InvoicePrintProps {
   invoice: any;
@@ -33,123 +47,123 @@ const SalesInvoicePrint: React.FC<InvoicePrintProps> = ({ invoice, company, onCl
 
         {/* Invoice body — scrollable */}
         <div className="flex-1 overflow-y-auto bg-slate-100 p-6">
-          <div className="bg-white w-[210mm] mx-auto shadow-lg" id="invoice-print">
+          <div className="bg-white w-[210mm] mx-auto shadow-lg" id="invoice-print" style={{ padding: '14mm' }}>
 
             <style>{`
               @media print {
                 @page { size: A4 portrait; margin: 12mm; }
                 body * { visibility: hidden; }
                 #invoice-print, #invoice-print * { visibility: visible; }
-                #invoice-print { position: fixed; left: 0; top: 0; width: 100%; }
+                #invoice-print { position: fixed; left: 0; top: 0; width: 100%; padding: 0 !important; }
                 .no-print { display: none !important; }
               }
             `}</style>
 
-            {/* Header */}
-            <div className="flex justify-between items-start px-10 pt-10 pb-6 border-b-2 border-slate-900">
-              <div>
-                <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">GlassTech Group</h1>
-                <p className="text-xs font-bold text-blue-700 uppercase tracking-widest">{company} Business Unit</p>
-                <p className="text-xs text-slate-500 mt-1">Karachi, Pakistan</p>
-              </div>
-              <div className="text-right">
-                <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight">TAX INVOICE</h2>
-                <p className="text-sm font-black text-blue-600 mt-1">{invoice.id}</p>
-                <p className="text-xs text-slate-500">Date: {invoice.date}</p>
-                <p className="text-xs text-slate-500">Due: {invoice.dueDate}</p>
-              </div>
-            </div>
+            {/* Sprint 33 — shared compliant letterhead */}
+            <PrintHeader
+              company={company}
+              docTitle="TAX INVOICE"
+              docNumber={invoice.id}
+              docMeta={[
+                { label: 'Date', value: invoice.date || '—' },
+                { label: 'Due',  value: invoice.dueDate || '—' },
+                ...(invoice.orderNo || invoice.orderId ? [{ label: 'Order', value: invoice.orderNo || invoice.orderId }] : []),
+              ]}
+            />
 
             {/* Bill To */}
-            <div className="px-10 py-5 grid grid-cols-2 gap-8 border-b border-slate-200">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', padding: '8px 0 14px 0', borderBottom: '1px solid #e2e8f0', marginBottom: '12px' }}>
               <div>
-                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Bill To</p>
-                <p className="font-black text-slate-900 text-sm uppercase">{invoice.clientName}</p>
+                <div style={{ fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8', marginBottom: '4px' }}>Bill To</div>
+                <div style={{ fontSize: '13px', fontWeight: 900, color: '#0f172a', textTransform: 'uppercase' }}>{invoice.clientName}</div>
                 {invoice.projectName && (
-                  <p className="text-xs font-bold text-slate-600 mt-0.5">Project: {invoice.projectName}</p>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginTop: '2px' }}>Project: {invoice.projectName}</div>
+                )}
+                {invoice.clientNtn && (
+                  <div style={{ fontSize: '10px', color: '#475569', marginTop: '2px' }}>NTN: <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{invoice.clientNtn}</span></div>
                 )}
               </div>
-              <div className="text-right">
-                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Order Reference</p>
-                <p className="font-bold text-xs text-slate-700">{invoice.orderNo || invoice.orderId}</p>
-                <p className="text-[9px] text-slate-400 mt-1">GL Ref: {invoice.glTxId}</p>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8', marginBottom: '4px' }}>Order Reference</div>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>{invoice.orderNo || invoice.orderId || '—'}</div>
+                {invoice.glTxId && (
+                  <div style={{ fontSize: '9px', color: '#94a3b8', marginTop: '2px' }}>GL Ref: {invoice.glTxId}</div>
+                )}
               </div>
             </div>
 
             {/* Items Table */}
-            <div className="px-10 py-5">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b-2 border-slate-900">
-                    <th className="text-left py-2 font-black uppercase text-[9px] tracking-widest text-slate-500">#</th>
-                    <th className="text-left py-2 font-black uppercase text-[9px] tracking-widest text-slate-500">Description</th>
-                    <th className="text-right py-2 font-black uppercase text-[9px] tracking-widest text-slate-500">Qty</th>
-                    <th className="text-right py-2 font-black uppercase text-[9px] tracking-widest text-slate-500">Rate</th>
-                    <th className="text-right py-2 font-black uppercase text-[9px] tracking-widest text-slate-500">Amount (PKR)</th>
+            <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', marginBottom: '8px' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #0f172a' }}>
+                  <th style={{ textAlign: 'left',  padding: '6px 4px', fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748b' }}>#</th>
+                  <th style={{ textAlign: 'left',  padding: '6px 4px', fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748b' }}>Description</th>
+                  <th style={{ textAlign: 'right', padding: '6px 4px', fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748b' }}>Qty</th>
+                  <th style={{ textAlign: 'right', padding: '6px 4px', fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748b' }}>Rate</th>
+                  <th style={{ textAlign: 'right', padding: '6px 4px', fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748b' }}>Amount (PKR)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item: any, idx: number) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '6px 4px', color: '#94a3b8' }}>{idx + 1}</td>
+                    <td style={{ padding: '6px 4px', color: '#334155', fontWeight: 700 }}>
+                      {item.description || item.glassType || item.profileCode || 'Item'}
+                      {(item.width || item.height) && (
+                        <span style={{ fontSize: '9px', color: '#94a3b8', marginLeft: '4px', fontWeight: 400 }}>
+                          {item.width}×{item.height}
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ padding: '6px 4px', textAlign: 'right', color: '#475569' }}>{item.qty || item.quantity || 1}</td>
+                    <td style={{ padding: '6px 4px', textAlign: 'right', color: '#475569' }}>{(item.rate || item.unitPrice || 0).toLocaleString()}</td>
+                    <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: 900, color: '#0f172a' }}>{(item.amount || 0).toLocaleString()}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {items.map((item: any, idx: number) => (
-                    <tr key={idx} className="border-b border-slate-100">
-                      <td className="py-2 text-slate-400">{idx + 1}</td>
-                      <td className="py-2 text-slate-700 font-bold">
-                        {item.description || item.glassType || item.profileCode || 'Item'}
-                        {(item.width || item.height) && (
-                          <span className="text-[9px] text-slate-400 ml-1 font-normal">
-                            {item.width}×{item.height}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-2 text-right text-slate-600">{item.qty || item.quantity || 1}</td>
-                      <td className="py-2 text-right text-slate-600">{(item.rate || item.unitPrice || 0).toLocaleString()}</td>
-                      <td className="py-2 text-right font-black text-slate-900">{(item.amount || 0).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                  {serviceCharges.map((sc: any, idx: number) => (
-                    <tr key={'sc' + idx} className="border-b border-slate-100">
-                      <td className="py-2 text-slate-400">{items.length + idx + 1}</td>
-                      <td className="py-2 text-slate-700 font-bold italic">{sc.description || 'Service Charge'}</td>
-                      <td className="py-2 text-right text-slate-400">—</td>
-                      <td className="py-2 text-right text-slate-400">—</td>
-                      <td className="py-2 text-right font-black text-slate-900">{(sc.amount || 0).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+                {serviceCharges.map((sc: any, idx: number) => (
+                  <tr key={'sc' + idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '6px 4px', color: '#94a3b8' }}>{items.length + idx + 1}</td>
+                    <td style={{ padding: '6px 4px', color: '#334155', fontWeight: 700, fontStyle: 'italic' }}>{sc.description || 'Service Charge'}</td>
+                    <td style={{ padding: '6px 4px', textAlign: 'right', color: '#94a3b8' }}>—</td>
+                    <td style={{ padding: '6px 4px', textAlign: 'right', color: '#94a3b8' }}>—</td>
+                    <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: 900, color: '#0f172a' }}>{(sc.amount || 0).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
 
             {/* Totals */}
-            <div className="px-10 pb-6 flex justify-end">
-              <div className="w-64 space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-500 font-bold">Subtotal</span>
-                  <span className="font-bold text-slate-700">PKR {subtotal.toLocaleString()}</span>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '14px' }}>
+              <div style={{ width: '260px', fontSize: '11px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                  <span style={{ color: '#64748b', fontWeight: 700 }}>Subtotal</span>
+                  <span style={{ fontWeight: 700, color: '#334155' }}>PKR {subtotal.toLocaleString()}</span>
                 </div>
                 {discount > 0 && (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-500 font-bold">Discount</span>
-                    <span className="font-bold text-rose-600">- PKR {discount.toLocaleString()}</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                    <span style={{ color: '#64748b', fontWeight: 700 }}>Discount</span>
+                    <span style={{ fontWeight: 700, color: '#e11d48' }}>- PKR {discount.toLocaleString()}</span>
                   </div>
                 )}
                 {gstAmount > 0 && (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-500 font-bold">GST ({gstPercent}%)</span>
-                    <span className="font-bold text-slate-700">PKR {gstAmount.toLocaleString()}</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                    <span style={{ color: '#64748b', fontWeight: 700 }}>GST ({gstPercent}%)</span>
+                    <span style={{ fontWeight: 700, color: '#334155' }}>PKR {gstAmount.toLocaleString()}</span>
                   </div>
                 )}
-                <div className="flex justify-between border-t-2 border-slate-900 pt-2 mt-2">
-                  <span className="font-black text-sm uppercase text-slate-900">Total Due</span>
-                  <span className="font-black text-sm text-slate-900">PKR {grandTotal.toLocaleString()}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px solid #0f172a', paddingTop: '6px', marginTop: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 900, textTransform: 'uppercase', color: '#0f172a' }}>Total Due</span>
+                  <span style={{ fontSize: '13px', fontWeight: 900, color: '#0f172a' }}>PKR {grandTotal.toLocaleString()}</span>
                 </div>
                 {invoice.receivedAmount > 0 && (
                   <>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-slate-500 font-bold">Received</span>
-                      <span className="font-bold text-emerald-600">PKR {invoice.receivedAmount.toLocaleString()}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                      <span style={{ color: '#64748b', fontWeight: 700 }}>Received</span>
+                      <span style={{ fontWeight: 700, color: '#059669' }}>PKR {invoice.receivedAmount.toLocaleString()}</span>
                     </div>
-                    <div className="flex justify-between border-t border-slate-200 pt-1">
-                      <span className="font-black text-xs uppercase text-rose-700">Balance Due</span>
-                      <span className="font-black text-xs text-rose-700">PKR {invoice.balance.toLocaleString()}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '4px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', color: '#be123c' }}>Balance Due</span>
+                      <span style={{ fontSize: '11px', fontWeight: 900, color: '#be123c' }}>PKR {invoice.balance.toLocaleString()}</span>
                     </div>
                   </>
                 )}
@@ -158,30 +172,19 @@ const SalesInvoicePrint: React.FC<InvoicePrintProps> = ({ invoice, company, onCl
 
             {/* Status Banner */}
             {invoice.status === 'Paid' && (
-              <div className="mx-10 mb-4 bg-emerald-50 border-2 border-emerald-500 rounded-xl p-3 text-center">
-                <p className="font-black text-emerald-700 uppercase tracking-widest text-sm">PAID IN FULL</p>
+              <div style={{ background: '#ecfdf5', border: '2px solid #10b981', borderRadius: '8px', padding: '8px', textAlign: 'center', marginBottom: '14px' }}>
+                <div style={{ fontWeight: 900, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.15em', fontSize: '13px' }}>PAID IN FULL</div>
               </div>
             )}
 
-            {/* Footer */}
-            <div className="px-10 pb-10 pt-4 border-t border-slate-200">
-              <div className="flex justify-between items-end mt-12">
-                <div className="text-center">
-                  <div className="border-t border-slate-400 w-40 pt-2">
-                    <p className="text-[9px] font-bold uppercase text-slate-400">Received By</p>
-                  </div>
-                </div>
-                <div className="text-center text-[9px] text-slate-400 italic">
-                  <p>This is a computer-generated invoice.</p>
-                  <p>GlassTech Group ERP 2026</p>
-                </div>
-                <div className="text-center">
-                  <div className="border-t border-slate-900 w-40 pt-2">
-                    <p className="text-[9px] font-black uppercase text-slate-700">Authorized Signatory</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/* Sprint 33 — shared compliant footer (bank + terms + signatures) */}
+            <PrintFooter
+              company={company}
+              termsKey="termsInvoice"
+              showBank
+              signatureLines={['Received By', 'Authorised Signatory']}
+              footerNote="This is a computer-generated invoice. GlassTech Group ERP 2026."
+            />
 
           </div>
         </div>
