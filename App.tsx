@@ -29,6 +29,7 @@ import { loadShiftRules } from '@/modules/hr/pages/ShiftMaster';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { BrandingService } from '@/modules/shared/services/brandingService'; // Sprint 33
+import perfMonitor from '@/modules/shared/services/perfMonitor'; // Sprint 34
 import LoginPage from '@/modules/auth/LoginPage';
 
 import NotificationCenter from './modules/shared/components/NotificationCenter';
@@ -92,6 +93,8 @@ const AuditorView          = React.lazy(() => import('./modules/admin/pages/Audi
 const DRConsole            = React.lazy(() => import('./modules/admin/pages/DRConsole'));
 // Sprint 33 — Print Document Compliance (branding + NTN/STRN + T&C)
 const BrandingSettings     = React.lazy(() => import('./modules/admin/pages/BrandingSettings'));
+// Sprint 34 — Performance at Scale (perf telemetry dashboard)
+const HealthMetrics        = React.lazy(() => import('./modules/admin/pages/HealthMetrics'));
 // Sprint 12 — public mobile driver POD page (no auth — token-gated)
 const DriverScreen     = React.lazy(() => import('./src/pages/DriverScreen'));
 // Sprint 14 — live GPS dashboard (supervisor) + public customer tracking
@@ -367,17 +370,27 @@ const App: React.FC = () => {
       return;
     }
     const init = async () => {
+      // Sprint 34 — start boot timer + check storage on every login
+      perfMonitor.startBootTimer();
+      perfMonitor.checkStorageAndWarn();
       // Schema version check + data integrity repair on startup
       checkSchemaVersion();
       DataIntegrity.autoRepairOnStartup();
+      perfMonitor.markBoot('schema_check');
       await SyncService.fetchFromCloud();
+      perfMonitor.markBoot('sync_fetch');
       await prefetchCriticalTables();   // prime Supabase cache on login
+      perfMonitor.markBoot('prefetch_critical');
       await flushOfflineQueue();         // push any offline writes
       await AppService.seedInitialData();
+      perfMonitor.markBoot('seed_data');
       await HRService.loadCache();        // prime HR in-memory cache
       await loadShiftRules();            // prime shift rules cache
+      perfMonitor.markBoot('hr_cache');
       await FinanceService.init();       // prime Finance GL cache (Supabase-primary)
+      perfMonitor.markBoot('finance_init');
       await SalesService.warmCache();    // prime Sales cache from Supabase
+      perfMonitor.markBoot('sales_warm');
       BrandingService.prefetchAll().catch(() => {}); // Sprint 33 — warm letterhead/footer cache
       AppService.checkAndTriggerAutoBackup();
       // Start Realtime AFTER initial fetch — live cross-device sync
@@ -385,6 +398,9 @@ const App: React.FC = () => {
       // Sprint 3: bridge gtk_realtime_update events into TanStack cache
       // so hooks (useClients/useInvoices/...) refetch on remote changes.
       startRealtimeQueryBridge();
+      perfMonitor.markBoot('realtime_started');
+      // Sprint 34 — optional cloud upload of perf samples (off unless VITE_PERF_UPLOAD=1)
+      perfMonitor.startCloudUpload();
     };
     init();
     return () => { RealtimeService.stop(); };
@@ -604,6 +620,8 @@ const App: React.FC = () => {
                   <Route path="/admin/dr"                      element={<ModuleErrorBoundary moduleName="DR Console"><DRConsole /></ModuleErrorBoundary>} />
                   {/* Sprint 33 — Branding Settings (admin) */}
                   <Route path="/admin/branding"                element={<ModuleErrorBoundary moduleName="Branding Settings"><BrandingSettings /></ModuleErrorBoundary>} />
+                  {/* Sprint 34 — Performance Metrics (admin) */}
+                  <Route path="/admin/health-metrics"          element={<ModuleErrorBoundary moduleName="Health Metrics"><HealthMetrics /></ModuleErrorBoundary>} />
                   {/* Sprint 14 — Live GPS dashboard (supervisor) */}
                   <Route path="/dispatch/live"  element={<ModuleErrorBoundary moduleName="Live Dispatch Map"><LiveDispatchMap /></ModuleErrorBoundary>} />
                   {/* Sprint 15 — Production Workbench (single page) */}
