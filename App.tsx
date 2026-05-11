@@ -377,10 +377,21 @@ const App: React.FC = () => {
       checkSchemaVersion();
       DataIntegrity.autoRepairOnStartup();
       perfMonitor.markBoot('schema_check');
-      // Sprint 34 hotfix: await only the 8 priority tables in parallel (~1-2s)
-      // then fire full sync in background — cuts boot from 17s → ~2s
-      await SyncService.fetchCritical();
-      perfMonitor.markBoot('sync_critical');
+      // Sprint 34 hotfix-4: skip fetchCritical() if cache is fresh (<30 min).
+      // Returning users already have warm localStorage — no need to block boot
+      // with 8 Supabase round-trips. New sessions (cold cache) still get full sync.
+      const lastSync = localStorage.getItem('gtk_erp_last_sync');
+      const cacheAgeMs = lastSync ? Date.now() - new Date(lastSync).getTime() : Infinity;
+      const CACHE_FRESH_MS = 30 * 60 * 1000; // 30 minutes
+      if (cacheAgeMs > CACHE_FRESH_MS) {
+        // Cold cache (new device / first login / >30 min ago) — await priority tables
+        await SyncService.fetchCritical();
+        perfMonitor.markBoot('sync_critical');
+      } else {
+        // Warm cache — skip await, just fire background sync immediately
+        perfMonitor.markBoot('sync_critical_skipped');
+      }
+      // Always run full sync in background regardless
       SyncService.fetchFromCloud().then(() => perfMonitor.markBoot('sync_full_done')).catch(() => {});
       // Sprint 34 hotfix-3: prefetchCriticalTables is a redundant double-fetch —
       // fetchCritical() already pulled the same 8/10 tables into localStorage.
