@@ -148,4 +148,113 @@ export const PeriodService = {
       Logger.warn('Period', 'Supabase load failed', e);
     }
   },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Sprint 31 — 4-state period model + Year-End Close wrappers.
+  //
+  // The legacy 2-state methods above (openPeriod / closePeriod) keep
+  // working — `status` column is preserved. The new column
+  // `fiscal_periods.period_state` carries the richer 4-state value used
+  // by the Sprint-31 trigger + UIs.
+  // ─────────────────────────────────────────────────────────────────────
+
+  /** Read the 4-state period_state directly from Supabase. */
+  getPeriodState: async (company: Company, month: string): Promise<PeriodState> => {
+    try {
+      const { data } = await supabase
+        .from('fiscal_periods')
+        .select('period_state, status')
+        .eq('company', company)
+        .eq('month', month)
+        .limit(1)
+        .single();
+      if (!data) return 'Open';
+      const ps = (data as any).period_state as PeriodState | null;
+      if (ps) return ps;
+      // Fallback for legacy rows where period_state hasn't been backfilled
+      const legacy = (data as any).status as string | null;
+      if (legacy === 'Closed') return 'Hard-Close';
+      return 'Open';
+    } catch {
+      return 'Open';                           // fail open — local writes still queue
+    }
+  },
+
+  /** Move a period into a new 4-state value. Caller is responsible for
+   * confirming with the user before transitioning to Hard-Close / Locked. */
+  setPeriodState: async (
+    company: Company,
+    month:   string,
+    next:    PeriodState,
+    actor:   string,
+  ): Promise<{ ok: true } | { ok: false; error: string }> => {
+    try {
+      const id = `${company}-${month}`;
+      const now = new Date().toISOString();
+      const patch: Record<string, unknown> = {
+        period_state: next,
+        // Mirror into legacy `status` so PeriodManager continues to work
+        status: next === 'Open' ? 'Open' : 'Closed',
+        updated_at: now,
+      };
+      if (next === 'Soft-Close') { patch.soft_closed_at = now; patch.soft_closed_by = actor; }
+      if (next === 'Hard-Close') { patch.hard_closed_at = now; patch.hard_closed_by = actor; }
+      if (next === 'Locked')     { patch.locked_at      = now; patch.locked_by      = actor; }
+      // Make sure the row exists first (use upsert with insert defaults).
+      const { error } = await supabase
+        .from('fiscal_periods')
+        .upsert({
+          id, company, month,
+          opened_by: actor,
+          opened_at: now,
+          ...patch,
+        }, { onConflict: 'id' });
+      if (error) return { ok: false, error: error.message };
+      return { ok: true };
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'unknown' };
+    }
+  },
+
+  /**
+   * Sprint 31 Year-End Close wizard backend call. Posts the consolidated
+   * P&L → Retained Earnings JV and locks all 12 months. Idempotent on the
+   * server (re-running returns the existing JV id without re-posting).
+   */
+  runYearEndClose: async (
+    company: Company,
+    year:    number,
+    actor:   string,
+  ): Promise<{
+    ok:                       boolean;
+    jvId?:                    string;
+    status?:                  'posted' | 'already_posted';
+    accountsZeroed?:          number;
+    retainedEarningsDelta?:   number;
+    periodsLocked?:           number;
+    error?:                   string;
+  }> => {
+    try {
+      const { data, error } = await supabase.rpc('year_end_close', {
+        p_company: company,
+        p_year:    year,
+        p_actor:   actor,
+      });
+      if (error) return { ok: false, error: error.message };
+      const r: any = data || {};
+      return {
+        ok:                       true,
+        jvId:                     r.jv_id,
+        status:                   r.status,
+        accountsZeroed:           Number(r.accounts_zeroed || 0),
+        retainedEarningsDelta:    Number(r.retained_earnings_delta || 0),
+        periodsLocked:            Number(r.periods_locked || 0),
+      };
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'unknown' };
+    }
+  },
 };
+
+/** Sprint 31 — 4-state period model. */
+export type PeriodState = 'Open' | 'Soft-Close' | 'Hard-Close' | 'Locked';

@@ -35,6 +35,7 @@ import { toast } from 'sonner';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import { CompactPageHeader } from '@/modules/shared/components/CompactPageHeader';
 import { DataGridCard, GridColumn } from '@/modules/shared/components/DataGridCard';
+import RowHistoryButton from '@/modules/finance/components/RowHistoryButton';   // Sprint 31
 
 // ── Invoice status chip ───────────────────────────────────────────────
 const InvoiceStatus: React.FC<{ status: string; isOverdue: boolean }> = ({ status, isOverdue }) => (
@@ -493,6 +494,8 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
           >
             <Printer size={13} />
           </button>
+          {/* Sprint 31 — change history modal (uses activity_log_summary) */}
+          <RowHistoryButton table="invoices" rowId={inv.id} variant="icon"/>
           {inv.status !== 'Paid' && (
             <button
               onClick={() => { setReceiptModalInvoice(inv); setReceiptForm({ amount: inv.balance, method: 'Bank Transfer', reference: '' }); }}

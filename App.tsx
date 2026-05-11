@@ -84,6 +84,9 @@ const CutoverWizard        = React.lazy(() => import('./modules/finance/pages/Cu
 const AROpeningBalance     = React.lazy(() => import('./modules/finance/pages/AROpeningBalance'));
 const ClientImport         = React.lazy(() => import('./modules/sales/pages/ClientImport'));
 const ProductImport        = React.lazy(() => import('./modules/sales/pages/ProductImport'));
+// Sprint 31 — Period Lock + Year-End Close + Audit Trail
+const YearEndClose         = React.lazy(() => import('./modules/finance/pages/YearEndClose'));
+const AuditorView          = React.lazy(() => import('./modules/admin/pages/AuditorView'));
 // Sprint 12 — public mobile driver POD page (no auth — token-gated)
 const DriverScreen     = React.lazy(() => import('./src/pages/DriverScreen'));
 // Sprint 14 — live GPS dashboard (supervisor) + public customer tracking
@@ -588,6 +591,9 @@ const App: React.FC = () => {
                   <Route path="/finance/ar-opening"            element={<ModuleErrorBoundary moduleName="AR Opening Balance"><AROpeningBalance /></ModuleErrorBoundary>} />
                   <Route path="/sales/client-import"           element={<ModuleErrorBoundary moduleName="Client Import"><ClientImport /></ModuleErrorBoundary>} />
                   <Route path="/sales/product-import"          element={<ModuleErrorBoundary moduleName="Product Import"><ProductImport /></ModuleErrorBoundary>} />
+                  {/* Sprint 31 — Period Lock + Year-End Close + Auditor Read-only View */}
+                  <Route path="/finance/year-end"              element={<ModuleErrorBoundary moduleName="Year-End Close"><YearEndClose /></ModuleErrorBoundary>} />
+                  <Route path="/admin/auditor"                 element={<ModuleErrorBoundary moduleName="Auditor View"><AuditorView /></ModuleErrorBoundary>} />
                   {/* Sprint 14 — Live GPS dashboard (supervisor) */}
                   <Route path="/dispatch/live"  element={<ModuleErrorBoundary moduleName="Live Dispatch Map"><LiveDispatchMap /></ModuleErrorBoundary>} />
                   {/* Sprint 15 — Production Workbench (single page) */}
