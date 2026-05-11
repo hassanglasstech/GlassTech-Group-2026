@@ -30,6 +30,7 @@ import { FinanceService } from '@/modules/finance/services/financeService';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { BrandingService } from '@/modules/shared/services/brandingService'; // Sprint 33
 import perfMonitor from '@/modules/shared/services/perfMonitor'; // Sprint 34
+import { AlertService } from '@/modules/shared/services/alertService'; // Sprint 35
 import LoginPage from '@/modules/auth/LoginPage';
 
 import NotificationCenter from './modules/shared/components/NotificationCenter';
@@ -95,6 +96,8 @@ const DRConsole            = React.lazy(() => import('./modules/admin/pages/DRCo
 const BrandingSettings     = React.lazy(() => import('./modules/admin/pages/BrandingSettings'));
 // Sprint 34 — Performance at Scale (perf telemetry dashboard)
 const HealthMetrics        = React.lazy(() => import('./modules/admin/pages/HealthMetrics'));
+// Sprint 35 — Notifications + Alerts (threshold config)
+const NotificationSettings = React.lazy(() => import('./modules/admin/pages/NotificationSettings'));
 // Sprint 12 — public mobile driver POD page (no auth — token-gated)
 const DriverScreen     = React.lazy(() => import('./src/pages/DriverScreen'));
 // Sprint 14 — live GPS dashboard (supervisor) + public customer tracking
@@ -428,9 +431,16 @@ const App: React.FC = () => {
       perfMonitor.markBoot('realtime_started');
       // Sprint 34 — optional cloud upload of perf samples (off unless VITE_PERF_UPLOAD=1)
       perfMonitor.startCloudUpload();
+      // Sprint 35 — fire ERP alert checks on boot (background, non-blocking)
+      AlertService.runChecks(selectedCompany).catch(() => {});
+      perfMonitor.markBoot('alert_checks');
     };
     init();
-    return () => { RealtimeService.stop(); };
+    // Sprint 35 — repeat alert checks every 15 minutes (non-blocking)
+    const alertInterval = window.setInterval(() => {
+      AlertService.runChecks(selectedCompany).catch(() => {});
+    }, 15 * 60 * 1000);
+    return () => { RealtimeService.stop(); clearInterval(alertInterval); };
   }, [user?.id]); // only when user changes
 
   useEffect(() => {
@@ -649,6 +659,8 @@ const App: React.FC = () => {
                   <Route path="/admin/branding"                element={<ModuleErrorBoundary moduleName="Branding Settings"><BrandingSettings /></ModuleErrorBoundary>} />
                   {/* Sprint 34 — Performance Metrics (admin) */}
                   <Route path="/admin/health-metrics"          element={<ModuleErrorBoundary moduleName="Health Metrics"><HealthMetrics /></ModuleErrorBoundary>} />
+                  {/* Sprint 35 — Alert / Notification Settings (admin) */}
+                  <Route path="/admin/alert-settings"          element={<ModuleErrorBoundary moduleName="Alert Settings"><NotificationSettings /></ModuleErrorBoundary>} />
                   {/* Sprint 14 — Live GPS dashboard (supervisor) */}
                   <Route path="/dispatch/live"  element={<ModuleErrorBoundary moduleName="Live Dispatch Map"><LiveDispatchMap /></ModuleErrorBoundary>} />
                   {/* Sprint 15 — Production Workbench (single page) */}
