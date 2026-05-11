@@ -276,7 +276,8 @@ const QuotationWastageTab: React.FC<Props> = ({ items, onSaveDecision }) => {
             value={`${selectedSize.w}x${selectedSize.h}`}
             onChange={e => {
               const [w, h] = e.target.value.split('x').map(Number);
-              setSelectedSize({ w, h });
+              const found = SHEET_SIZES.find(s => s.w === w && s.h === h);
+              setSelectedSize(found ?? { label: `${w}x${h}`, w, h });
               setPackingResult(null);
               setIsConfirmed(false);
             }}

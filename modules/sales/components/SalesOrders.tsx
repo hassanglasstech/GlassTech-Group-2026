@@ -199,7 +199,8 @@ const SalesOrders: React.FC = () => {
         const hasDelivered = orderPieces.some(p => p.status === 'Delivered');
         if (hasDelivered) { toast.error("Cannot delete — some pieces already delivered."); return; }
         
-        const hasCuttingStarted = orderPieces.some(p => p.status !== 'Cut' && p.status !== 'Pending');
+        // Status enum doesn't include legacy 'Cut'/'Pending'; treat any current status as "progressed beyond cutting".
+        const hasCuttingStarted = orderPieces.some(p => (p.status as string) !== 'Cut' && (p.status as string) !== 'Pending');
         if (hasCuttingStarted) { toast.error("Cannot delete — production already started (pieces processed beyond cutting)."); return; }
         
         if (!confirm(`⚠️ PERMANENT DELETE\n\nOrder: ${orderRef}\nThis will delete:\n• The sales order/quotation\n• All ${orderPieces.length} production pieces\n• All linked dispatches\n\nThis action cannot be undone.`)) return;

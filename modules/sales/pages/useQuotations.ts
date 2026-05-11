@@ -4,6 +4,7 @@ import { AsyncSalesService } from '../services/asyncSalesService';
 import { ProductionService } from '../../production/services/productionService';
 import { AppService } from '../../shared/services/appService';
 import { useAppStore } from '../../shared/store/appStore';
+import { toast } from 'sonner';
 
 export const useQuotations = () => {
   const company = useAppStore(state => state.selectedCompany);
@@ -226,6 +227,7 @@ export const useQuotations = () => {
     const reader = new FileReader();
     reader.onload = (event) => {
       const base64 = event.target?.result as string;
+      if (selectedItemIndex === null) return;
       updateGlassItem(selectedItemIndex, 'designFile', base64);
     };
     reader.readAsDataURL(file);

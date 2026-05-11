@@ -117,7 +117,7 @@ export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName }) =>
                             );
                         }
                         serialNum++;
-                        const servicesList = formatServices(item.selectedServices);
+                        const servicesList = formatServices(item.selectedServices ?? []);
                         const isDoubleGlazed = item.selectedServices?.some((s: string) => s === 'Double Glaze' || s === 'D/G' || s === 'Double Glazing');
                         const qtyDisplay = isDoubleGlazed ? `${item.qty} Set` : item.qty;
                         const description = formatGlassDescription(item);

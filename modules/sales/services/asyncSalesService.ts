@@ -8,20 +8,14 @@ import { Logger } from '@/modules/shared/services/logger';
 import { supabase } from '../../../src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { SyncService } from '../../../src/services/SyncService';
-
-// Phase 0 type-safety helpers — narrow unknown errors to readable strings
-// without leaking `any` through the codebase.
-type SbRow = Record<string, unknown>;
-const errMsg = (e: unknown): string =>
-  e instanceof Error ? e.message : typeof e === 'string' ? e : JSON.stringify(e);
-const str = (v: unknown, fallback = ''): string =>
-  v === null || v === undefined ? fallback : String(v);
-const num = (v: unknown, fallback = 0): number => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-};
-const obj = (v: unknown): SbRow =>
-  v && typeof v === 'object' && !Array.isArray(v) ? (v as SbRow) : {};
+import { errMsg } from '@/modules/shared/services/utils';
+// Phase 0 Round 2 — typed Supabase row interfaces (replaces (r: any) callbacks)
+import {
+  SbBaseRow, SbClientRow, SbProductRow, SbQuotationRow, SbInvoiceRow,
+  SbVendorRow, SbProjectRow, SbPaymentReceiptRow, SbCreditNoteRow,
+  SbJsonb,
+  sbStr as str, sbNum as num, sbObj as obj, sbArr,
+} from '@/modules/shared/types/supabaseRows';
 
 // Helper — gets current user email at call time (outside React, so we use getState)
 const _currentUser = () => useAuthStore.getState().profile?.email ?? useAuthStore.getState().user?.email ?? 'unknown';
@@ -102,22 +96,22 @@ export const AsyncSalesService = {
         return safeParse(KEYS.CLIENTS);
       }
       if (data && data.length > 0) {
-        const mapped = data.map((r: any) => {
+        const mapped = (data as SbClientRow[]).map((r) => {
           // Merge JSONB `data` blob (forward-compat) with flat columns
-          const base = (r as any).data && typeof (r as any).data === 'object' ? (r as any).data : {};
+          const base = obj(r.data);
           return {
             ...base,
             id: r.id,
             company: r.company,
-            name: r.name ?? base.name ?? '',
-            contactPerson: r.contact_person ?? base.contactPerson ?? '',
-            email:         r.email          ?? base.email          ?? '',
-            phone:         r.phone          ?? base.phone          ?? '',
-            address:       r.address        ?? base.address        ?? '',
-            ntn:           r.ntn            ?? base.ntn            ?? '',
-            creditLimit:   r.credit_limit   ?? base.creditLimit    ?? 0,
-            status:        r.status         ?? base.status         ?? 'Active',
-            createdAt:     r.created_at     ?? base.createdAt      ?? '',
+            name: r.name ?? str(base.name),
+            contactPerson: r.contact_person ?? str(base.contactPerson),
+            email:         r.email          ?? str(base.email),
+            phone:         r.phone          ?? str(base.phone),
+            address:       r.address        ?? str(base.address),
+            ntn:           r.ntn            ?? str(base.ntn),
+            creditLimit:   r.credit_limit   ?? num(base.creditLimit),
+            status:        r.status         ?? str(base.status, 'Active'),
+            createdAt:     r.created_at     ?? str(base.createdAt),
           };
         });
         safeSave(KEYS.CLIENTS, mapped);
@@ -135,19 +129,19 @@ export const AsyncSalesService = {
     _mergeIntoLocal<Client>(KEYS.CLIENTS, data);
     // Upsert to Supabase (snake_case mapping + JSONB blob for forward-compat)
     try {
-      const rows = data.map((c: any) => ({
+      const rows = data.map((c) => ({
         id: c.id,
         company: c.company,
         name: c.name,
-        contact_person: c.contactPerson ?? c.contact_person ?? '',
+        contact_person: c.contactPerson ?? '',
         email: c.email ?? '',
         phone: c.phone ?? '',
         address: c.address ?? '',
         ntn: c.ntn ?? '',
-        credit_limit: c.creditLimit ?? c.credit_limit ?? 0,
+        credit_limit: c.creditLimit ?? 0,
         status: c.status ?? 'Active',
-        data: c,                                                  // forward-compat blob
-        created_at: c.createdAt ?? c.created_at ?? new Date().toISOString(),
+        data: c as unknown as SbJsonb,                            // forward-compat blob
+        created_at: (c as Client & { createdAt?: string }).createdAt ?? new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }));
       if (rows.length > 0) {
@@ -415,7 +409,7 @@ export const AsyncSalesService = {
     try {
       const { data, error } = await supabase.from('vendors').select('*').eq('company', company);
       if (error || !data || data.length === 0) return safeParse(KEYS.VENDORS);
-      const mapped = data.map((r: any) => ({ ...r }));
+      const mapped = data.map((r) => ({ ...r }));
       safeSave(KEYS.VENDORS, mapped);
       return mapped as Vendor[];
     } catch {
@@ -615,7 +609,7 @@ export const AsyncSalesService = {
   saveProjects: async (data: Project[]): Promise<void> => {
     safeSave(KEYS.PROJECTS, data);
     try {
-      const { error } = await supabase.from('projects').upsert(data.map((p: any) => ({ ...p })));
+      const { error } = await supabase.from('projects').upsert(data.map((p) => ({ ...p })));
       if (error) { Logger.error('Sales', 'saveProjects failed', error); _queueRetry('projects'); }
     } catch (err: unknown) {
       Logger.error('Sales', 'saveProjects exception', err);

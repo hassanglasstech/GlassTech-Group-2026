@@ -42,7 +42,7 @@ export function getVendorTATSummaries(company: string): VendorTATSummary[] {
 
   const summaries: VendorTATSummary[] = [];
 
-  vendors.filter(v => v.type === 'Tempering' || v.type === 'Lamination').forEach(v => {
+  vendors.filter(v => v.type === 'Tempering' || (v.type as string) === 'Lamination').forEach(v => {
     const vendorDisps = dispatches.filter(d =>
       d.plantName?.toUpperCase() === v.name?.toUpperCase()
     );
@@ -109,7 +109,8 @@ export function calculateDeliveryPromise(params: {
   // 1. Cutting backlog
   let cuttingPieces: any[] = [];
   try {
-    cuttingPieces = ProductionService.getProductionPieces().filter(p => p.company === company && p.status === 'Cut');
+    // ProductionPiece type lacks `company` flat field; access via cast.
+    cuttingPieces = ProductionService.getProductionPieces().filter(p => (p as unknown as { company: string }).company === company && (p.status as string) === 'Cut');
   } catch {}
 
   // Estimate total pending sqft in queue

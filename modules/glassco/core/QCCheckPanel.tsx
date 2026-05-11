@@ -140,11 +140,14 @@ const QCCheckPanel: React.FC<{
       const defectiveScan = session?.sheetsScanned?.find((sc: any) => sc.isDefective);
       const sheetEntry = defectiveScan ? sheetDb[defectiveScan.tagId] : undefined;
 
-      // Cutter's per-piece defect assessment
-      const cutterDefectAssessment = session?.sheetsScanned
-        ?.find((sc: any) => sc.pieceDefectAssessments)
+      // Cutter's per-piece defect assessment.
+      // pieceDefectAssessments is added at runtime by the cutter workbench;
+      // the SheetScan type doesn't declare it. Use a structural cast.
+      type ScanWithAssessments = { pieceDefectAssessments?: Array<{ pieceNo: number; hasDefect: boolean }> };
+      const cutterDefectAssessment = (session?.sheetsScanned as ScanWithAssessments[] | undefined)
+        ?.find(sc => sc.pieceDefectAssessments)
         ?.pieceDefectAssessments
-        ?.find((a: any) => a.pieceNo === p.itemIndex + 1)?.hasDefect ?? null;
+        ?.find(a => a.pieceNo === p.itemIndex + 1)?.hasDefect ?? null;
 
       const isFromDefective = !!defectiveScan;
       const isMandatory = isFromDefective || randomSampleIds.has(p.id);

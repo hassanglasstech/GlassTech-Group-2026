@@ -840,7 +840,7 @@ const GTKQuotationManager: React.FC = () => {
       {/* ═══ PREVIEW ═══ */}
       {activeView === 'preview_quote' && (
         <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-          <PrintQuotation header={header} items={items} totals={totals} clientName={header.clientName} />
+          <PrintQuotation header={header} items={items} totals={{ ...totals, installationAmt: totals.installAmt }} clientName={header.clientName} />
         </div>
       )}
 
