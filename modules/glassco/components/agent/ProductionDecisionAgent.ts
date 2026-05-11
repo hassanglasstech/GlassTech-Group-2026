@@ -31,16 +31,16 @@ export const assessRushOrder = async (orderId: string): Promise<ProductionDecisi
   const order = quotations.find((q: any) => q.id === orderId);
   if (!order) return makeDecision('rush_order_priority', { orderId }, 'REJECT', 'Order not found', [], 0.50);
 
-  // Client payment history
-  const clientOrders = quotations.filter((q: any) => q.clientName === order.clientName);
+  // Client payment history — Quotation has clientId (not clientName); group by it
+  const clientOrders = quotations.filter((q: any) => q.clientId === (order as any).clientId);
   const avgPayDays = clientOrders.length > 1
     ? clientOrders.reduce((s: number, q: any) => s + (q.paymentDays || 30), 0) / clientOrders.length
     : 30;
 
-  // Order margin estimation
-  const totalAmount = order.totalAmount || 0;
-  const items = order.items || [];
-  const totalSqft = items.reduce((s: number, i: any) => s + (i.totalSqFt || 0), 0);
+  // Order margin estimation — Quotation has no totalAmount field, derive from items
+  const items = (order as any).items || [];
+  const totalAmount = items.reduce((s: number, i: any) => s + (i.amount || 0), 0);
+  const totalSqft  = items.reduce((s: number, i: any) => s + (i.totalSqFt || 0), 0);
 
   // Current queue depth
   const pieces = ProductionService.getProductionPieces();
@@ -64,7 +64,7 @@ export const assessRushOrder = async (orderId: string): Promise<ProductionDecisi
 
   return makeDecision('rush_order_priority', {
     order_id: orderId,
-    client: order.clientName,
+    client: (order as any).clientId,
     total_amount: totalAmount,
     total_sqft: totalSqft,
     avg_pay_days: Math.round(avgPayDays),
@@ -85,17 +85,18 @@ export const matchRemnantToOrder = async (orderId: string): Promise<ProductionDe
   const order = quotations.find((q: any) => q.id === orderId);
   if (!order) return makeDecision('remnant_match', { orderId }, 'NO_MATCH', 'Order not found', [], 0.50);
 
-  const matches: { remnant_id: string; thickness: string; sqft: number; fits_item: number }[] = [];
+  const matches: { remnant_id: string; thickness: string; sqft: number; fits_item: string }[] = [];
 
-  for (const item of (order.items || [])) {
-    const needed = { width: item.inchW || item.width, height: item.inchH || item.height, thickness: item.glassSize || item.thickness };
+  for (const item of ((order as any).items || []) as any[]) {
+    // QuotationItem has `glassSize` (e.g. "5mm"), not `thickness`
+    const needed = { width: item.inchW || item.width, height: item.inchH || item.height, thickness: item.glassSize || '' };
     for (const rem of remnants) {
       if (rem.thickness !== needed.thickness) continue;
       const dims = rem.dimensions || {};
       const remW = dims.widthInch || 0;
       const remH = dims.heightInch || 0;
       if (remW >= needed.width && remH >= needed.height) {
-        matches.push({ remnant_id: rem.id, thickness: rem.thickness, sqft: rem.sqft, fits_item: item.id || 0 });
+        matches.push({ remnant_id: rem.id, thickness: rem.thickness, sqft: rem.sqft, fits_item: String(item.id || '') });
       }
     }
   }

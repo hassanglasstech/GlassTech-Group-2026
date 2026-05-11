@@ -43,7 +43,7 @@ const ProcessingView: React.FC = () => {
     let totalKg = 0;
     loadedPcs.forEach((p: any) => {
       const storeItem = store.find((si: any) => si.company === company && si.name?.includes(getGlassSize(p.specs || '')));
-      const sqFt = p.totalSqFt || 0;
+      const sqFt = p.sqft || 0;
       totalKg += sqFt * (storeItem?.perSqftWeightKg || 0.14);
     });
     totalKg = Math.round(totalKg * 10) / 10;
@@ -210,7 +210,10 @@ const ProcessingView: React.FC = () => {
               <QCCheckPanel
                 pieces={pieces}
                 jobOrders={jobOrders}
-                handleUpdatePieceStatus={handleUpdatePieceStatus}
+                /* QCCheckPanel prop is looser (id, status: string, extra?: any) => void;
+                   context provides strict (id, status: PieceStatus, ...) => Promise<void>.
+                   Cast keeps runtime identical, narrows TS noise. */
+                handleUpdatePieceStatus={handleUpdatePieceStatus as any}
               />
             </div>
         )}
@@ -269,7 +272,7 @@ const ProcessingView: React.FC = () => {
                           const vendorRates = vendor?.rates?.sort((a, b) => (b.effectiveDate || '').localeCompare(a.effectiveDate || '')) || [];
 
                           loadedPcs.forEach(p => {
-                            const sqFt = p.totalSqFt || 0;
+                            const sqFt = p.sqft || 0;
                             totalSqFt += sqFt;
                             // Match piece thickness to vendor rate
                             const thickness = getGlassSize(p.specs || ''); // e.g. "5mm"
@@ -285,7 +288,7 @@ const ProcessingView: React.FC = () => {
                                 const storeItem = InventoryService.getStore().find((si: any) =>
                                   si.company === company && si.name?.includes(getGlassSize(p.specs || ''))
                                 );
-                                const sqFt = p.totalSqFt || 0;
+                                const sqFt = p.sqft || 0;
                                 return s + sqFt * (storeItem?.perSqftWeightKg || 0.14);
                               }, 0)
                             : 0;
@@ -294,7 +297,7 @@ const ProcessingView: React.FC = () => {
                             const storeItem = InventoryService.getStore().find((si: any) =>
                               si.company === company && si.name?.includes(getGlassSize(p.specs || ''))
                             );
-                            const pieceWeightKg = (p.totalSqFt || 0) * (storeItem?.perSqftWeightKg || 0.14);
+                            const pieceWeightKg = (p.sqft || 0) * (storeItem?.perSqftWeightKg || 0.14);
                             const allocatedFare = Number((pieceWeightKg * farePerKg).toFixed(2));
                             // Save on piece for job cost reporting (stored in specs extension)
                             const existingSpecs = (() => { try { return JSON.parse(p.specs || '{}'); } catch { return {}; } })();
@@ -382,7 +385,7 @@ const ProcessingView: React.FC = () => {
                        </div>
                        <div className="flex items-center space-x-4 text-right">
                          <div><p className="text-[9px] font-black text-slate-400 uppercase">Loaded</p><p className="text-sm font-black text-rose-600">{lp.length} Pcs</p></div>
-                         <div><p className="text-[9px] font-black text-slate-400 uppercase">Area</p><p className="text-sm font-black text-slate-700">{lp.reduce((s, p) => s + (p.totalSqFt || 0), 0).toFixed(1)} Ft²</p></div>
+                         <div><p className="text-[9px] font-black text-slate-400 uppercase">Area</p><p className="text-sm font-black text-slate-700">{lp.reduce((s, p) => s + (p.sqft || 0), 0).toFixed(1)} Ft²</p></div>
                        </div>
                      </div>
 
@@ -493,7 +496,7 @@ const ProcessingView: React.FC = () => {
                                return (
                                  <tr key={p.id} className="bg-slate-50/50 border-t border-dashed border-slate-200">
                                    <td className="pl-10 pr-5 py-2 text-[10px] font-bold text-slate-500">{p.id}</td>
-                                   <td className="px-5 py-2 text-[10px] text-slate-500">{getGlassSize(p.specs)} | {p.specs?.thickness || ''}mm</td>
+                                   <td className="px-5 py-2 text-[10px] text-slate-500">{getGlassSize(p.specs)} | {(() => { try { return JSON.parse(p.specs || '{}').thickness || ''; } catch { return ''; } })()}mm</td>
                                    <td className="px-5 py-2 text-center text-[10px] text-slate-400">{p.status}</td>
                                    <td className="px-5 py-2 text-center">{isLoaded && <CheckCircle2 size={14} className="text-rose-600 mx-auto"/>}</td>
                                    {selectedTrip && <td className="px-5 py-2 text-right"><button onClick={() => togglePieceToDispatch(p.id)} className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase min-h-[36px] ${isLoaded ? 'bg-slate-200 text-slate-600' : 'bg-blue-600 text-white'}`}>{isLoaded ? 'Unload' : 'Load'}</button></td>}
@@ -538,7 +541,7 @@ const ProcessingView: React.FC = () => {
                     // Show if currently dispatched to an external plant for tempering
                     if (p.status === 'Dispatched' && p.dispatchId) {
                         const dispatch = dispatches.find(d => d.id === p.dispatchId);
-                        return dispatch && !isInternal(dispatch.plantName) && dispatch.serviceType === 'Tempering';
+                        return !!(dispatch && !isInternal(dispatch.plantName) && dispatch.serviceType === 'Tempering');
                     }
                     
                     return false;
