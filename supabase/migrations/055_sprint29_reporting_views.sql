@@ -309,9 +309,9 @@ LEFT JOIN LATERAL (
     COALESCE(l.details, l.data->'details', '[]'::jsonb)
   ) AS d
   JOIN accounts a ON a.id::text = (d->>'accountId')
-  WHERE l.company   = so.company
-    AND l.reference = so.order_no
+  WHERE l.company      = so.company
+    AND l.reference_id = so.order_no
     AND a.name ILIKE '%COGS%'
-    AND l.status    = 'Posted'
+    AND l.status       = 'Posted'
 ) cogs ON true
 WHERE so.status NOT IN ('Draft', 'Cancelled', 'cancelled');
