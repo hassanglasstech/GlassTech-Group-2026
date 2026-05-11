@@ -387,13 +387,23 @@ const App: React.FC = () => {
       await flushOfflineQueue();         // push any offline writes
       await AppService.seedInitialData();
       perfMonitor.markBoot('seed_data');
-      await HRService.loadCache();        // prime HR in-memory cache
-      await loadShiftRules();            // prime shift rules cache
-      perfMonitor.markBoot('hr_cache');
-      await FinanceService.init();       // prime Finance GL cache (Supabase-primary)
-      perfMonitor.markBoot('finance_init');
-      await SalesService.warmCache();    // prime Sales cache from Supabase
-      perfMonitor.markBoot('sales_warm');
+      // Sprint 34 hotfix-2: fire HR / Finance / Sales warm in background.
+      // These services read from localStorage if available (sync already
+      // seeded it via fetchCritical), falling back to Supabase only when
+      // cache is cold. Awaiting them was blocking boot by 10-12s needlessly.
+      HRService.loadCache()
+        .then(() => loadShiftRules())
+        .then(() => perfMonitor.markBoot('hr_cache_done'))
+        .catch(() => {});
+      perfMonitor.markBoot('hr_cache');   // marks immediately — async
+      FinanceService.init()
+        .then(() => perfMonitor.markBoot('finance_init_done'))
+        .catch(() => {});
+      perfMonitor.markBoot('finance_init'); // marks immediately — async
+      SalesService.warmCache()
+        .then(() => perfMonitor.markBoot('sales_warm_done'))
+        .catch(() => {});
+      perfMonitor.markBoot('sales_warm');   // marks immediately — async
       BrandingService.prefetchAll().catch(() => {}); // Sprint 33 — warm letterhead/footer cache
       AppService.checkAndTriggerAutoBackup();
       // Start Realtime AFTER initial fetch — live cross-device sync
