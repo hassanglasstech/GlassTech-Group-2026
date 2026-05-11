@@ -98,6 +98,8 @@ const BrandingSettings     = React.lazy(() => import('./modules/admin/pages/Bran
 const HealthMetrics        = React.lazy(() => import('./modules/admin/pages/HealthMetrics'));
 // Sprint 35 — Notifications + Alerts (threshold config)
 const NotificationSettings = React.lazy(() => import('./modules/admin/pages/NotificationSettings'));
+// Sprint 36 — Go-Live Readiness Dashboard (final sprint)
+const GoLiveDashboard      = React.lazy(() => import('./modules/admin/pages/GoLiveDashboard'));
 // Sprint 12 — public mobile driver POD page (no auth — token-gated)
 const DriverScreen     = React.lazy(() => import('./src/pages/DriverScreen'));
 // Sprint 14 — live GPS dashboard (supervisor) + public customer tracking
@@ -661,6 +663,8 @@ const App: React.FC = () => {
                   <Route path="/admin/health-metrics"          element={<ModuleErrorBoundary moduleName="Health Metrics"><HealthMetrics /></ModuleErrorBoundary>} />
                   {/* Sprint 35 — Alert / Notification Settings (admin) */}
                   <Route path="/admin/alert-settings"          element={<ModuleErrorBoundary moduleName="Alert Settings"><NotificationSettings /></ModuleErrorBoundary>} />
+                  {/* Sprint 36 — Go-Live Readiness Dashboard (final sprint) */}
+                  <Route path="/admin/go-live"                 element={<ModuleErrorBoundary moduleName="Go-Live Readiness"><GoLiveDashboard /></ModuleErrorBoundary>} />
                   {/* Sprint 14 — Live GPS dashboard (supervisor) */}
                   <Route path="/dispatch/live"  element={<ModuleErrorBoundary moduleName="Live Dispatch Map"><LiveDispatchMap /></ModuleErrorBoundary>} />
                   {/* Sprint 15 — Production Workbench (single page) */}
