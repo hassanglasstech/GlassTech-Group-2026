@@ -23,6 +23,7 @@ import { convertQuotationToJobOrder } from '@/modules/sales/services/gtkJobOrder
 import GTKJobOrderRegister from './GTKJobOrderRegister';
 import { toast } from 'sonner';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
+import { errMsg } from '@/modules/shared/services/utils';
 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-PK');
 
@@ -617,8 +618,8 @@ const GTKQuotationManager: React.FC = () => {
                 const jo = await convertQuotationToJobOrder(header, activeOption!, 'GTK');
                 toast.success(`Job Order ${jo.id} created — ${jo.items.length} items.`, { duration: 8000 });
                 setShowJobRegister(true);
-              } catch (e: any) {
-                toast.error('Job Order creation failed: ' + e.message);
+              } catch (e: unknown) {
+                toast.error('Job Order creation failed: ' + errMsg(e));
               } finally { setConverting(false); }
             }}
             className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${

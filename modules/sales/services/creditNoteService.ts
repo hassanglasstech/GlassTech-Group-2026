@@ -22,6 +22,7 @@ import { SalesService }   from '@/modules/sales/services/salesService';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { allocateSerial } from '@/modules/sales/services/serialAllocator';
 import { reverseDeliveryCOGS } from '@/modules/procurement/services/glasscoGLService';
+import { errMsg } from '@/modules/shared/services/utils';
 
 // ── CreditNote record type ────────────────────────────────────────────────────
 export interface CreditNote {
@@ -183,8 +184,8 @@ export async function issueCreditNote(params: {
       reason: `CN ${cnId}`,
       reversalSuffix: cnId,
     });
-  } catch (e: any) {
-    console.warn(`[issueCreditNote] COGS reversal skipped for ${cnId}: ${e?.message}`);
+  } catch (e: unknown) {
+    console.warn(`[issueCreditNote] COGS reversal skipped for ${cnId}: ${errMsg(e)}`);
   }
 
   // ── Financial Event ───────────────────────────────────────────────────────
@@ -248,8 +249,8 @@ export async function voidInvoice(params: {
       reason: `Void by ${voidedBy}`,
       reversalSuffix: voidId,
     });
-  } catch (e: any) {
-    console.warn(`[voidInvoice] COGS reversal skipped for ${invoice.id}: ${e?.message}`);
+  } catch (e: unknown) {
+    console.warn(`[voidInvoice] COGS reversal skipped for ${invoice.id}: ${errMsg(e)}`);
   }
 
   // ── Mark invoice Voided (preserve prior status for restore) ──────────────

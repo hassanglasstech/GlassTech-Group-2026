@@ -25,7 +25,7 @@ const KEYS = {
 const _push = async (label: string, fn: () => Promise<void>): Promise<void> => {
   try {
     await fn();
-  } catch (err: any) {
+  } catch (err: unknown) {
     Logger.error('Sales', `${label} sync failed`, err);
     toast.error(`Cloud sync failed (${label}) — data saved locally.`, {
       id: `sales-sync-${label}`, duration: 5000,
@@ -112,7 +112,7 @@ export const SalesService = {
       saveIfNonEmpty(KEYS.VENDORS,          vendors);
       saveIfNonEmpty(KEYS.INVOICES,         invoices);
       saveIfNonEmpty(KEYS.PAYMENT_RECEIPTS, receipts);
-    } catch (err: any) {
+    } catch (err: unknown) {
       Logger.warn('Sales', 'warmCache failed — using local data', err);
     }
   },

@@ -24,6 +24,7 @@ import { useAppStore } from '../../shared/store/appStore';
 import { useAuthStore } from '../../auth/authStore';
 import { toast } from 'sonner';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
+import { errMsg } from '@/modules/shared/services/utils';
 
 const SalesOrders: React.FC = () => {
     const company = useAppStore(state => state.selectedCompany);
@@ -294,9 +295,9 @@ const SalesOrders: React.FC = () => {
                 if (!result.alreadyInvoiced) {
                     toast.success(`Invoice ${result.invoiceId} generated — PKR ${result.grandTotal.toLocaleString('en-PK')}`);
                 }
-            } catch (err: any) {
+            } catch (err: unknown) {
                 // Phase-2 F3: credit-limit failures now THROW — surface them so user knows why invoice didn't post.
-                toast.error(`Invoice generation failed: ${err?.message || 'unknown error'}`, { duration: 8000 });
+                toast.error(`Invoice generation failed: ${errMsg(err)}`, { duration: 8000 });
             }
         }
 
@@ -516,8 +517,8 @@ const SalesOrders: React.FC = () => {
                 window.print();
                 setPrintingReceipt(null);
             }, 500);
-        } catch (err: any) {
-            toast.error(`Receipt posting failed: ${err?.message || 'unknown error'}`, { duration: 8000 });
+        } catch (err: unknown) {
+            toast.error(`Receipt posting failed: ${errMsg(err)}`, { duration: 8000 });
             console.error('[handlePrintReceipt] failed:', err);
         } finally {
             setPostingPayment(false);

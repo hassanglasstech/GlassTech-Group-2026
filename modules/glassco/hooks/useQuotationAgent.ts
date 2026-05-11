@@ -22,6 +22,7 @@ import {
 } from '@/modules/glassco/components/agent/QuotationAgent';
 import { Quotation } from '@/modules/shared/types';
 import { Company } from '@/modules/shared/types/core';
+import { errMsg as toErrorString } from '@/modules/shared/services/utils';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -110,11 +111,11 @@ export function useQuotationAgent(
       };
       setMessages(prev => [...prev, assistantMsg]);
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       const errMsg: AgentChatMessage = {
         id:        `msg-err-${Date.now()}`,
         role:      'assistant',
-        content:   `Agent error: ${err?.message || 'Something went wrong. Please try again.'}`,
+        content:   `Agent error: ${toErrorString(err, 'Something went wrong. Please try again.')}`,
         timestamp: new Date().toISOString(),
         isError:   true,
       };

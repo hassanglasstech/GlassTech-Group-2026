@@ -5,6 +5,7 @@ import { allocateSerial } from '@/modules/sales/services/serialAllocator';
 import { toast } from 'sonner';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { calculateAutoRate, calculateLineItemTotal } from '@/modules/glassco/core/GlasscoUtils';
+import { errMsg } from '@/modules/shared/services/utils';
 import * as XLSX from 'xlsx';
 
 export const useGlasscoQuotations = () => {
@@ -190,8 +191,8 @@ export const useGlasscoQuotations = () => {
         const dup = existing.find(x => x.orderNo === finalOrderNo && x.id !== finalId && x.id !== originalId);
         if (dup) await AsyncSalesService.deleteQuotation(dup.id);
       }
-    } catch (e: any) {
-      toast.error(`Save failed: ${e?.message || 'unknown error'}`, { duration: 8000 });
+    } catch (e: unknown) {
+      toast.error(`Save failed: ${errMsg(e)}`, { duration: 8000 });
       return;
     }
 
@@ -279,10 +280,10 @@ export const useGlasscoQuotations = () => {
         }
 
         await ProductionService.saveProductionPieces([...otherOrderPieces, ...newOrderPieces]);
-      } catch (pieceErr: any) {
+      } catch (pieceErr: unknown) {
         // Roll back: revert the order to Draft so the user can fix and retry.
         toast.error(
-          `Order ${finalOrderNo} saved but production pieces failed: ${pieceErr?.message || 'unknown error'}. ` +
+          `Order ${finalOrderNo} saved but production pieces failed: ${errMsg(pieceErr)}. ` +
           `Order rolled back to Draft — review and re-approve.`,
           { duration: 12000 }
         );
@@ -418,8 +419,8 @@ export const useGlasscoQuotations = () => {
       await AsyncSalesService.saveQuotations([updated]);
       toast.success(`${q.id} → ${next}`, { duration: 3000 });
       await refreshData();
-    } catch (e: any) {
-      toast.error(`Status update failed: ${e?.message || 'unknown error'}`);
+    } catch (e: unknown) {
+      toast.error(`Status update failed: ${errMsg(e)}`);
     }
   };
 

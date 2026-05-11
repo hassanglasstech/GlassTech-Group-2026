@@ -14,6 +14,7 @@ import {
   Clock, AlertTriangle, XCircle, RotateCcw
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { errMsg } from '@/modules/shared/services/utils';
 
 interface Props { company: Company; }
 
@@ -161,8 +162,8 @@ const CustomerComplaintModule: React.FC<Props> = ({ company }) => {
       await AsyncSalesService.saveCustomerComplaints([cc]);
       setComplaints(prev => [cc, ...prev]);
       toast.success(`Complaint ${cc.id} logged.`);
-    } catch (err: any) {
-      toast.error(`Save failed: ${err?.message || 'unknown error'}`, { duration: 6000 });
+    } catch (err: unknown) {
+      toast.error(`Save failed: ${errMsg(err)}`, { duration: 6000 });
       return;
     }
     setShowForm(false);
@@ -186,8 +187,8 @@ const CustomerComplaintModule: React.FC<Props> = ({ company }) => {
       setSelected(null);
       setResolution('');
       toast.success(`Complaint updated → ${newStatus}`);
-    } catch (err: any) {
-      toast.error(`Update failed: ${err?.message || 'unknown error'}`, { duration: 6000 });
+    } catch (err: unknown) {
+      toast.error(`Update failed: ${errMsg(err)}`, { duration: 6000 });
     }
   };
 

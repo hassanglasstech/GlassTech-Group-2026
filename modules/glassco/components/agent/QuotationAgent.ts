@@ -37,6 +37,7 @@ import {
 } from '@/modules/glassco/core/GlasscoUtils';
 import { Quotation, QuotationItem, GlassServiceCharge, Product } from '@/modules/shared/types';
 import { Company } from '@/modules/shared/types/core';
+import { errMsg } from '@/modules/shared/services/utils';
 
 // ── Constants ────────────────────────────────────────────────────────────
 const AGENT_ID = 'quotation-agent';
@@ -717,8 +718,8 @@ async function agenticLoop(
       let result: unknown;
       try {
         result = executeTool(block.name, block.input || {}, company);
-      } catch (err: any) {
-        result = { error: err?.message || 'Tool execution failed' };
+      } catch (err: unknown) {
+        result = { error: errMsg(err, 'Tool execution failed') };
       }
 
       toolResults.push({

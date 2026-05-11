@@ -16,6 +16,7 @@
  */
 
 import { supabase } from '../../../src/services/supabaseClient';
+import { errMsg } from '@/modules/shared/services/utils';
 
 const localKey = (company: string, docType: string, year: number) =>
   `gtk_erp_serial_${company}_${docType}_${year}`;
@@ -60,8 +61,8 @@ export async function allocateSerial(
       return data;
     }
     return allocateLocal(company, docType, year, minSeed);
-  } catch (err: any) {
-    console.warn(`[serialAllocator] RPC exception for ${company}/${docType}/${year}: ${err?.message} — falling back to local counter`);
+  } catch (err: unknown) {
+    console.warn(`[serialAllocator] RPC exception for ${company}/${docType}/${year}: ${errMsg(err)} — falling back to local counter`);
     return allocateLocal(company, docType, year, minSeed);
   }
 }

@@ -9,6 +9,20 @@ import { supabase } from '../../../src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { SyncService } from '../../../src/services/SyncService';
 
+// Phase 0 type-safety helpers — narrow unknown errors to readable strings
+// without leaking `any` through the codebase.
+type SbRow = Record<string, unknown>;
+const errMsg = (e: unknown): string =>
+  e instanceof Error ? e.message : typeof e === 'string' ? e : JSON.stringify(e);
+const str = (v: unknown, fallback = ''): string =>
+  v === null || v === undefined ? fallback : String(v);
+const num = (v: unknown, fallback = 0): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
+const obj = (v: unknown): SbRow =>
+  v && typeof v === 'object' && !Array.isArray(v) ? (v as SbRow) : {};
+
 // Helper — gets current user email at call time (outside React, so we use getState)
 const _currentUser = () => useAuthStore.getState().profile?.email ?? useAuthStore.getState().user?.email ?? 'unknown';
 
@@ -58,8 +72,8 @@ const _deleteRow = async (table: string, localKey: string, id: string): Promise<
   try {
     const existing = safeParse(localKey) as Array<{ id: string }>;
     safeSave(localKey, existing.filter((r) => r.id !== id));
-  } catch (e: any) {
-    console.warn(`[AsyncSalesService] _deleteRow local prune failed for ${table}/${id}: ${e?.message}`);
+  } catch (e: unknown) {
+    console.warn(`[AsyncSalesService] _deleteRow local prune failed for ${table}/${id}: ${errMsg(e)}`);
   }
   // Cloud delete
   try {
@@ -68,7 +82,7 @@ const _deleteRow = async (table: string, localKey: string, id: string): Promise<
       Logger.error('Sales', `delete ${table}/${id} cloud failed`, error);
       _queueRetry(table);
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     Logger.error('Sales', `delete ${table}/${id} exception`, err);
     _queueRetry(table);
   }
@@ -111,8 +125,8 @@ export const AsyncSalesService = {
       }
       // Supabase empty — fall back to localStorage
       return safeParse(KEYS.CLIENTS);
-    } catch (err: any) {
-      console.error('[AsyncSalesService] getClients exception:', err.message);
+    } catch (err: unknown) {
+      console.error('[AsyncSalesService] getClients exception:', errMsg(err));
       return safeParse(KEYS.CLIENTS);
     }
   },
@@ -143,8 +157,8 @@ export const AsyncSalesService = {
           _queueRetry('clients');                                   // D5: queue for retry
         }
       }
-    } catch (err: any) {
-      console.error('[AsyncSalesService] saveClients exception:', err.message);
+    } catch (err: unknown) {
+      console.error('[AsyncSalesService] saveClients exception:', errMsg(err));
       _queueRetry('clients');
     }
   },
@@ -181,8 +195,8 @@ export const AsyncSalesService = {
       frameColor: r.frame_color ?? '', meshColor: r.mesh_color ?? '',
       subDescription: r.sub_description ?? '',
     }));
-    } catch (err: any) {
-      console.error('[AsyncSalesService] getProducts exception:', err.message);
+    } catch (err: unknown) {
+      console.error('[AsyncSalesService] getProducts exception:', errMsg(err));
       toast.error('Failed to load products.', { id: 'get-products-err', duration: 3000 });
       return safeParse('gtk_erp_products');
     }
@@ -303,8 +317,8 @@ export const AsyncSalesService = {
         return mapped;
       }
       return safeParse(KEYS.QUOTATIONS);
-    } catch (err: any) {
-      console.error('[AsyncSalesService] getQuotations exception:', err.message);
+    } catch (err: unknown) {
+      console.error('[AsyncSalesService] getQuotations exception:', errMsg(err));
       return safeParse(KEYS.QUOTATIONS);
     }
   },
@@ -367,8 +381,8 @@ export const AsyncSalesService = {
           toast.success('Synced to Cloud', { id: 'sync-success' });
         }
       }
-    } catch (err: any) {
-      console.error('[AsyncSalesService] saveQuotations exception:', err.message);
+    } catch (err: unknown) {
+      console.error('[AsyncSalesService] saveQuotations exception:', errMsg(err));
       _queueRetry('quotations');
     }
   },
@@ -390,7 +404,7 @@ export const AsyncSalesService = {
         return data as Project[];
       }
       return safeParse(KEYS.PROJECTS);
-    } catch (err: any) {
+    } catch (err: unknown) {
       return safeParse(KEYS.PROJECTS);
     }
   },
@@ -419,7 +433,7 @@ export const AsyncSalesService = {
       }));
       const { error } = await supabase.from('vendors').upsert(mapped, { onConflict: 'id' });
       if (error) { Logger.error('Sales', 'saveVendors failed', error); _queueRetry('vendors'); }
-    } catch (err: any) {
+    } catch (err: unknown) {
       Logger.error('Sales', 'saveVendors exception', err);
       _queueRetry('vendors');
     }
@@ -530,7 +544,7 @@ export const AsyncSalesService = {
         const { error } = await supabase.from('invoices').upsert(rows, { onConflict: 'id' });
         if (error) { Logger.error('Sales', 'saveInvoices failed', error); _queueRetry('invoices'); }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       Logger.error('Sales', 'saveInvoices exception', err);
       _queueRetry('invoices');
     }
@@ -592,7 +606,7 @@ export const AsyncSalesService = {
           if (upsertErr) _queueRetry('payment_receipts');
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       Logger.error('Sales', 'savePaymentReceipts exception', err);
       _queueRetry('payment_receipts');
     }
@@ -603,7 +617,7 @@ export const AsyncSalesService = {
     try {
       const { error } = await supabase.from('projects').upsert(data.map((p: any) => ({ ...p })));
       if (error) { Logger.error('Sales', 'saveProjects failed', error); _queueRetry('projects'); }
-    } catch (err: any) {
+    } catch (err: unknown) {
       Logger.error('Sales', 'saveProjects exception', err);
       _queueRetry('projects');
     }
@@ -668,7 +682,7 @@ export const AsyncSalesService = {
         const { error } = await supabase.from('credit_notes').upsert(rows, { onConflict: 'id' });
         if (error) { Logger.error('Sales', 'saveCreditNotes failed', error); _queueRetry('credit_notes'); }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       Logger.error('Sales', 'saveCreditNotes exception', err);
       _queueRetry('credit_notes');
     }
@@ -744,7 +758,7 @@ export const AsyncSalesService = {
         const { error } = await supabase.from('customer_complaints').upsert(rows, { onConflict: 'id' });
         if (error) { Logger.error('Sales', 'saveCustomerComplaints failed', error); _queueRetry('customer_complaints'); }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       Logger.error('Sales', 'saveCustomerComplaints exception', err);
       _queueRetry('customer_complaints');
     }
@@ -793,7 +807,7 @@ export const AsyncSalesService = {
         const { error } = await supabase.from('price_lists').upsert(rows, { onConflict: 'id' });
         if (error) { Logger.error('Sales', 'savePriceLists failed', error); _queueRetry('price_lists'); }
       }
-    } catch (err: any) { Logger.error('Sales', 'savePriceLists exception', err); _queueRetry('price_lists'); }
+    } catch (err: unknown) { Logger.error('Sales', 'savePriceLists exception', err); _queueRetry('price_lists'); }
   },
   deletePriceList: async (id: string): Promise<void> => {
     await _deleteRow('price_lists', KEYS.PRICE_LISTS, id);
@@ -837,7 +851,7 @@ export const AsyncSalesService = {
         const { error } = await supabase.from('price_list_items').upsert(rows, { onConflict: 'id' });
         if (error) { Logger.error('Sales', 'savePriceListItems failed', error); _queueRetry('price_list_items'); }
       }
-    } catch (err: any) { Logger.error('Sales', 'savePriceListItems exception', err); _queueRetry('price_list_items'); }
+    } catch (err: unknown) { Logger.error('Sales', 'savePriceListItems exception', err); _queueRetry('price_list_items'); }
   },
   deletePriceListItem: async (id: string): Promise<void> => {
     await _deleteRow('price_list_items', KEYS.PRICE_LIST_ITEMS, id);
@@ -902,7 +916,7 @@ export const AsyncSalesService = {
         const { error } = await supabase.from('work_orders').upsert(rows, { onConflict: 'id' });
         if (error) { Logger.error('Sales', 'saveWorkOrders failed', error); _queueRetry('work_orders'); }
       }
-    } catch (err: any) { Logger.error('Sales', 'saveWorkOrders exception', err); _queueRetry('work_orders'); }
+    } catch (err: unknown) { Logger.error('Sales', 'saveWorkOrders exception', err); _queueRetry('work_orders'); }
   },
   deleteWorkOrder: async (id: string): Promise<void> => {
     await _deleteRow('work_orders', KEYS.WORK_ORDERS, id);
@@ -969,7 +983,7 @@ export const AsyncSalesService = {
         const { error } = await supabase.from('leads').upsert(rows, { onConflict: 'id' });
         if (error) { Logger.error('Sales', 'saveLeads failed', error); _queueRetry('leads'); }
       }
-    } catch (err: any) { Logger.error('Sales', 'saveLeads exception', err); _queueRetry('leads'); }
+    } catch (err: unknown) { Logger.error('Sales', 'saveLeads exception', err); _queueRetry('leads'); }
   },
   deleteLead: async (id: string): Promise<void> => {
     await _deleteRow('leads', KEYS.LEADS, id);

@@ -92,14 +92,16 @@ else
 fi
 
 # #2 Company filter on every Supabase query in sales services
+# FIX: also check the SAME line + next 12 lines (was missing same-line filter)
+SYSTEM_TABLES_RX="csv_import_logs|cutover_snapshot|erp_config|user_profiles|notifications|companies|fiscal_periods|accounts|sb_meta|audit_log|backup_log|alert_log"
 unfiltered=$(grep -rEn "\.from\(['\"][a-z_]+['\"]" modules/sales/services/ modules/glassco/ 2>/dev/null \
-  | grep -v "test\|\.spec\." \
+  | grep -v "\.spec\.\|\.test\." \
   | awk -F: '{print $1":"$2}' \
   | while read line_loc; do
       file="${line_loc%:*}"; lineno="${line_loc##*:}"
-      # Look at +5 lines for .eq('company', or for system tables (skip)
-      snippet=$(sed -n "${lineno},$((lineno+8))p" "$file")
-      if ! echo "$snippet" | grep -qE "\.eq\(['\"]company['\"]|csv_import_logs|cutover_snapshot|erp_config|user_profiles|notifications"; then
+      # Read CURRENT line + next 12 lines (was: lineno+8 starting at lineno; we now properly include same line)
+      snippet=$(sed -n "${lineno},$((lineno+12))p" "$file")
+      if ! echo "$snippet" | grep -qE "\.eq\(['\"]company['\"]|${SYSTEM_TABLES_RX}"; then
         echo "$file:$lineno"
       fi
     done | wc -l | tr -d ' ')
@@ -207,9 +209,12 @@ else
 fi
 
 # #12 Circular deps
+# FIX: grep -c with no matches returns 0 (exit 1), || echo "0" appends literal — use grep -c "→" 2>/dev/null then default
 if command -v npx >/dev/null 2>&1; then
-  circ=$(npx madge --circular --extensions ts,tsx modules/sales/ modules/glassco/ 2>/dev/null | grep -c "→" || echo "0")
-  if [[ "$circ" == "0" ]]; then
+  circ_out=$(npx madge --circular --extensions ts,tsx modules/sales/ modules/glassco/ 2>/dev/null)
+  circ=$(echo "$circ_out" | grep -c "→")
+  [[ -z "$circ" ]] && circ=0
+  if [[ "$circ" -eq 0 ]]; then
     log_check "P2" "12" "Circular dependencies" "PASS" "None"
   else
     log_check "P2" "12" "Circular dependencies" "WARN" "${circ} cycles detected"

@@ -2,6 +2,19 @@ import { initDB } from './db';
 import { toast } from 'sonner';
 import { dbRead, dbWrite } from './supabaseDB';
 
+// ── Phase 0 type-safety: narrow unknown errors to readable strings ────
+// Use this instead of `(e as any).message` after `catch (e: unknown)`.
+export const errMsg = (e: unknown, fallback: string = 'unknown error'): string => {
+  if (e === null || e === undefined) return fallback;
+  if (e instanceof Error) return e.message || fallback;
+  if (typeof e === 'string') return e || fallback;
+  if (typeof e === 'object' && 'message' in e) {
+    const m = (e as { message: unknown }).message;
+    return m ? String(m) : fallback;
+  }
+  try { return JSON.stringify(e) || fallback; } catch { return fallback; }
+};
+
 // ── ASYNC: Fetch fresh data from Supabase, update cache ───────────────
 // Use this in useEffect / component mount for live data
 export const safeFetch = async (key: string): Promise<any[]> => {
