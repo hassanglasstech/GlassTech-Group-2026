@@ -87,6 +87,8 @@ const ProductImport        = React.lazy(() => import('./modules/sales/pages/Prod
 // Sprint 31 — Period Lock + Year-End Close + Audit Trail
 const YearEndClose         = React.lazy(() => import('./modules/finance/pages/YearEndClose'));
 const AuditorView          = React.lazy(() => import('./modules/admin/pages/AuditorView'));
+// Sprint 32 — DR Console (snapshot health + manual triggers + downloads)
+const DRConsole            = React.lazy(() => import('./modules/admin/pages/DRConsole'));
 // Sprint 12 — public mobile driver POD page (no auth — token-gated)
 const DriverScreen     = React.lazy(() => import('./src/pages/DriverScreen'));
 // Sprint 14 — live GPS dashboard (supervisor) + public customer tracking
@@ -594,6 +596,8 @@ const App: React.FC = () => {
                   {/* Sprint 31 — Period Lock + Year-End Close + Auditor Read-only View */}
                   <Route path="/finance/year-end"              element={<ModuleErrorBoundary moduleName="Year-End Close"><YearEndClose /></ModuleErrorBoundary>} />
                   <Route path="/admin/auditor"                 element={<ModuleErrorBoundary moduleName="Auditor View"><AuditorView /></ModuleErrorBoundary>} />
+                  {/* Sprint 32 — DR Console (admin) */}
+                  <Route path="/admin/dr"                      element={<ModuleErrorBoundary moduleName="DR Console"><DRConsole /></ModuleErrorBoundary>} />
                   {/* Sprint 14 — Live GPS dashboard (supervisor) */}
                   <Route path="/dispatch/live"  element={<ModuleErrorBoundary moduleName="Live Dispatch Map"><LiveDispatchMap /></ModuleErrorBoundary>} />
                   {/* Sprint 15 — Production Workbench (single page) */}
