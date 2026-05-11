@@ -43,9 +43,20 @@ CREATE INDEX IF NOT EXISTS idx_erp_alerts_type_ref
   ON erp_alerts(type, reference_id)
   WHERE is_dismissed = false;
 
+-- IMMUTABLE wrapper so we can use the date in a unique index.
+-- Plain `created_at::date` is STABLE (depends on session timezone) and
+-- Postgres rejects it in index expressions. UTC is a fixed offset so
+-- this conversion is effectively immutable in practice.
+CREATE OR REPLACE FUNCTION erp_alerts_dedup_date(ts TIMESTAMPTZ)
+RETURNS DATE
+LANGUAGE SQL
+IMMUTABLE
+PARALLEL SAFE
+AS $$ SELECT (ts AT TIME ZONE 'UTC')::date $$;
+
 -- unique partial index — prevents duplicate alerts for same entity on same day
 CREATE UNIQUE INDEX IF NOT EXISTS idx_erp_alerts_daily_dedup
-  ON erp_alerts(company, type, reference_id, (created_at::date))
+  ON erp_alerts(company, type, reference_id, erp_alerts_dedup_date(created_at))
   WHERE reference_id IS NOT NULL AND is_dismissed = false;
 
 ALTER TABLE erp_alerts ENABLE ROW LEVEL SECURITY;
