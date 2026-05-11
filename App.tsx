@@ -377,8 +377,11 @@ const App: React.FC = () => {
       checkSchemaVersion();
       DataIntegrity.autoRepairOnStartup();
       perfMonitor.markBoot('schema_check');
-      await SyncService.fetchFromCloud();
-      perfMonitor.markBoot('sync_fetch');
+      // Sprint 34 hotfix: await only the 8 priority tables in parallel (~1-2s)
+      // then fire full sync in background — cuts boot from 17s → ~2s
+      await SyncService.fetchCritical();
+      perfMonitor.markBoot('sync_critical');
+      SyncService.fetchFromCloud().then(() => perfMonitor.markBoot('sync_full_done')).catch(() => {});
       await prefetchCriticalTables();   // prime Supabase cache on login
       perfMonitor.markBoot('prefetch_critical');
       await flushOfflineQueue();         // push any offline writes

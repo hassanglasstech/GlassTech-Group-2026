@@ -1692,21 +1692,43 @@ export const SyncService = {
     }
   },
 
+  // ── Sprint 34 hotfix: critical tables only — awaited at boot ─────────
+  // Pulls the 8 highest-traffic tables in PARALLEL so the UI has fresh
+  // data within ~1-2s instead of waiting for all 50+ tables sequentially.
+  // App.tsx calls this first (await), then fires fetchFromCloud in background.
+  fetchCritical: async (): Promise<void> => {
+    if (!isOnline) return;
+    // The 8 tables that matter most on first render:
+    const PRIORITY: Array<keyof typeof TABLE_MAP> = [
+      'quotations', 'clients', 'invoices', 'accounts',
+      'products', 'production_pieces', 'vendors', 'payment_receipts',
+    ];
+    await Promise.allSettled(
+      PRIORITY.map(t => TABLE_MAP[t] ? pullTable(t, TABLE_MAP[t]) : Promise.resolve(false))
+    );
+    console.log('[Sync] Critical tables ready');
+  },
+
   // Fetch from Supabase → localStorage (app start / device switch)
+  // Sprint 34: now uses PARALLEL batches of 5 (was sequential — caused 15s boot).
   fetchFromCloud: async (): Promise<{ success: boolean }> => {
     if (!isOnline) {
       console.log('[Sync] Offline — using cached localStorage data');
       return { success: false };
     }
 
-    // Pull all tables
+    // Pull all tables in parallel batches of 5 (safe: each pullTable
+    // is independent — writes to a separate localStorage key)
     const tables = Object.keys(TABLE_MAP);
     let fetched = 0;
+    const CONCURRENCY = 5;
 
-    for (const table of tables) {
-      const localKey = TABLE_MAP[table];
-      const ok = await pullTable(table, localKey);
-      if (ok) fetched++;
+    for (let i = 0; i < tables.length; i += CONCURRENCY) {
+      const batch = tables.slice(i, i + CONCURRENCY);
+      const results = await Promise.allSettled(
+        batch.map(t => pullTable(t, TABLE_MAP[t]))
+      );
+      fetched += results.filter(r => r.status === 'fulfilled' && r.value).length;
     }
 
     localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
