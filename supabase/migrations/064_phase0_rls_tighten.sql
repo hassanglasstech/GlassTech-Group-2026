@@ -76,12 +76,17 @@ BEGIN
     -- (RLS policies removed = default deny, but explicit REVOKE is safer
     -- in case a future migration adds a permissive policy by mistake)
     EXECUTE format('REVOKE INSERT, UPDATE, DELETE ON %I FROM anon', t);
-    -- Sequence updates would also fail without GRANT, but no harm reaffirming
-    BEGIN
+    -- Sequence revoke — only attempt if the BIGSERIAL sequence actually exists.
+    -- Most tables use TEXT primary keys (no sequence). Check pg_class first
+    -- instead of relying on PL/pgSQL exception handling, because the error
+    -- code is `undefined_table` (42P01) not `undefined_object` (42704) and
+    -- a swallowed exception in the DO block aborts the whole transaction.
+    IF EXISTS (
+      SELECT 1 FROM pg_class
+      WHERE relkind = 'S' AND relname = t || '_id_seq'
+    ) THEN
       EXECUTE format('REVOKE USAGE, UPDATE ON SEQUENCE %I FROM anon', t || '_id_seq');
-    EXCEPTION WHEN undefined_object THEN
-      NULL; -- table uses TEXT primary key, no sequence
-    END;
+    END IF;
 
     RAISE NOTICE '✓ Locked anon writes on %', t;
   END LOOP;
