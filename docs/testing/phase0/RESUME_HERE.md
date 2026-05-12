@@ -94,7 +94,8 @@ docs/testing/
     ├── PHASE0_REPORT.md         ← auto-generated audit output
     ├── PHASE0_FIX_LOG.md        ← round-by-round changelog
     ├── MANUAL_SQL_CHECKS.md     ← 9 Supabase queries (TODO: run these)
-    └── KNOWN_DEBT.md            ← accepted/deferred items
+    ├── KNOWN_DEBT.md            ← accepted/deferred items
+    └── NPM_CVE_BREAKDOWN.md     ← detail on the 4 HIGH npm CVEs (deferred)
 
 scripts/
 └── phase0_audit.sh              ← 20-check static audit (run anytime)
