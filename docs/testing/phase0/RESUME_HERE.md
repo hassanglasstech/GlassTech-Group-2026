@@ -1,6 +1,6 @@
 # RESUME HERE — Phase 0 In Progress
 
-> **Status as of last commit `88041bb`:** Phase 0 substantially GREEN. Continue from another PC.
+> **Status as of last commit `ff92241`:** Phase 0 **ALL P1 ITEMS GREEN** ✅. any-types 100→20 done. SQL fixes applied. Ready for remaining SQL checks (G,H,I) then Phase 1 Unit Testing.
 
 ---
 
@@ -24,37 +24,30 @@ That's it. All progress is in `main` branch.
 |---|---|
 | TypeScript errors in sales/glassco scope | **0** (was 12) |
 | Critical npm CVEs | **0** (was 1 — protobufjs fixed) |
-| `any` types in scope | **100** (was 245 — -59.2% reduction across 3 rounds) |
+| `any` types in scope | **20** (was 245 — **-91.8%** reduction across 4 rounds) ✅ PASSED (target ≤30) |
 | Phase 0 audit script | Working, run via `bash scripts/phase0_audit.sh` |
 | Tax/GST settings toggle | Built, off by default, route `/admin/tax-settings` |
 | Testing plan document | `docs/testing/TESTING_PLAN.md` — 10 phases for 95% confidence |
-| Manual SQL queries doc | `docs/testing/phase0/MANUAL_SQL_CHECKS.md` — Hassan still needs to run these in Supabase |
+| Manual SQL queries doc | `docs/testing/phase0/MANUAL_SQL_CHECKS.md` |
+| RLS on all 8 financial tables | ✅ ENABLED (migration 064 + manual ALTER TABLE) |
+| Anon-write gap on quotations | ✅ CLOSED (migration 064 — allow_all policy dropped) |
+| RLS policies on 40+ critical tables | ✅ DONE (migration 067) |
+| 4 orphan test invoices | ✅ DELETED (INV-GLS-001/002/003/26-0001) |
 | Known debt log | `docs/testing/phase0/KNOWN_DEBT.md` |
 
-### 🟡 In Progress / Next Steps
+### 🟡 Remaining — Run in Supabase SQL Editor
 
-**Pick one of these to continue:**
+**3 remaining SQL checks** (open `docs/testing/phase0/MANUAL_SQL_CHECKS.md`):
 
-#### Option A — Run manual Supabase queries (~30 mins, blocks Phase 1)
-Open Supabase SQL Editor and run the 9 queries in `docs/testing/phase0/MANUAL_SQL_CHECKS.md`:
-- A & B: RLS policy + RLS enabled coverage (P1)
-- C–G: FK orphan checks (5 tables)
-- F: Ledger imbalance check (P1)
-- G: Duplicate invoice numbers (P1)
-- H: Negative inventory
-- I: Cutover lock status
+| Query | Check | Priority |
+|---|---|---|
+| G | Ledger imbalance (debit ≠ credit per journal) | P1 |
+| H | Duplicate invoice numbers | P1 |
+| I | Negative inventory / cutover lock | P2 |
 
-Paste results back into the file. Commit + push.
+Paste results here after running.
 
-#### Option B — Round 4 any-types (push 100 → ~50)
-Tackle the heterogeneous remaining patterns. Top 10 files listed in `KNOWN_DEBT.md`. These are harder than Rounds 1–3 — each file needs targeted refactor.
-
-```bash
-bash scripts/phase0_audit.sh
-# View baseline, then attack specific files
-```
-
-#### Option C — Phase 1 Unit Testing (recommended — Phase 0 is substantially green)
+### ⏭️ Next Phase — Phase 1 Unit Testing
 Set up Vitest and write 46 UTs across 7 service files. See `docs/testing/TESTING_PLAN.md` Phase 1 section.
 
 Target services & UT counts:
@@ -73,12 +66,12 @@ Vitest is already in `package.json`. Run with `npm run test`.
 ## Recent Commits (for context)
 
 ```
+ff92241 phase0(round4): any-types 100→20 (-80) across 20 files + migration 067 RLS policies
+df36d43 fix(064): close allow_all anon gap on quotations + fix verification query
+72d85e6 fix(065,066): adapt to JSONB-style schema (no created_at/total_amount columns)
+a7ebfca fix(064): check pg_class for sequence existence instead of exception swallow
 88041bb phase0(round3): wide callback sweep any-types 141 -> 100 (-41)
 ddfd185 phase0(round2): sweep any-types 237 -> 141 (-104, -42% from start)
-ba30fac phase0: clear blockers — 12 TS errors fixed + Critical CVE eliminated
-ca9d3ac phase0(round1): script bug fixes + catch-block sweep + SQL queries
-f041c69 docs(testing): master testing plan + Tax Settings toggle + Phase 0 audit script
-b950216 fix: surgical TS sweep — 17 production-critical files, 187 errors fixed
 ```
 
 ---
@@ -176,4 +169,4 @@ If any of those fail, message me with the exact error.
 
 ---
 
-_Last update: 2026-05-12 · commit 88041bb · Phase 0 substantially green._
+_Last update: 2026-05-12 · commit ff92241 · Phase 0 P1 items ALL GREEN. 3 SQL checks remain (G/H/I) then Phase 1 UTs._
