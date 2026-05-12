@@ -48,12 +48,12 @@ const ClientStatementModal: React.FC<ClientStatementProps> = ({ clientId, client
       ]);
 
       const clientInvoices = (invoices as any[])
-        .filter((i: any) => i.clientId === clientId && i.company === company && i.date <= asOfDate && i.date >= fromDate)
+        .filter((i) => i.clientId === clientId && i.company === company && i.date <= asOfDate && i.date >= fromDate)
         .sort((a: any, b: any) => a.date.localeCompare(b.date));
 
       const clientReceipts = (receipts as any[])
-        .filter((r: any) => {
-          const inv = (invoices as any[]).find((i: any) => i.id === r.invoiceId);
+        .filter((r) => {
+          const inv = (invoices as any[]).find((i) => i.id === r.invoiceId);
           return inv?.clientId === clientId && r.date <= asOfDate && r.date >= fromDate;
         })
         .sort((a: any, b: any) => a.date.localeCompare(b.date));
@@ -61,12 +61,12 @@ const ClientStatementModal: React.FC<ClientStatementProps> = ({ clientId, client
       // Merge and sort by date
       type Entry = { date: string; type: 'Invoice' | 'Payment'; ref: string; desc: string; amount: number };
       const entries: Entry[] = [
-        ...clientInvoices.map((i: any) => ({
+        ...clientInvoices.map((i) => ({
           date: i.date, type: 'Invoice' as const,
           ref: i.id, desc: `Invoice — ${i.orderNo || i.orderId || ''}`,
           amount: i.totalAmount || 0,
         })),
-        ...clientReceipts.map((r: any) => ({
+        ...clientReceipts.map((r) => ({
           date: r.date, type: 'Payment' as const,
           ref: r.id, desc: `Payment received via ${r.method || 'Cash'}${r.reference ? ' (' + r.reference + ')' : ''}`,
           amount: r.amount || 0,

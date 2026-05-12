@@ -69,7 +69,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
 
     // Auto-scroll to bottom only when rows exceed 7
     useEffect(() => {
-      const nonSectionItems = (formData.items || []).filter((i: any) => !i.isSection);
+      const nonSectionItems = (formData.items || []).filter((i) => !i.isSection);
       if (nonSectionItems.length > 7 && tableRef.current) {
         tableRef.current.scrollTop = tableRef.current.scrollHeight;
       }

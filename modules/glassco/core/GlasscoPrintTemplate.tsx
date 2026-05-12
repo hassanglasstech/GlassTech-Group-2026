@@ -83,7 +83,7 @@ export const GlasscoPrintTemplate: React.FC<GlasscoPrintTemplateProps> = ({
                 .then(({ data, error }) => {
                     if (error) { console.warn('[GlasscoPrint] production_pieces fetch failed:', error.message); return; }
                     if (data && data.length > 0) {
-                        setFetchedPieces(data.map((r: any) => ({
+                        setFetchedPieces(data.map((r) => ({
                             id: r.id, orderId: r.order_id, itemIndex: Number(r.item_index || 0),
                             specs: r.specs || '', status: r.status || 'Cut',
                             lastUpdated: r.last_updated || new Date().toISOString(),
@@ -97,13 +97,13 @@ export const GlasscoPrintTemplate: React.FC<GlasscoPrintTemplateProps> = ({
                 .then(({ data, error }) => {
                     if (error) { console.warn('[GlasscoPrint] products fetch failed:', error.message); return; }
                     if (data && data.length > 0) {
-                        setFetchedProducts(data.map((r: any) => ({
+                        setFetchedProducts(data.map((r) => ({
                             ...r, serviceNick: r.service_nick, profileCode: r.profile_code,
                             sheetSize: r.sheet_size, costPrice: r.cost_price, basePrice: r.base_price,
                             glassType: r.glass_type, subCategory: r.sub_category, temperingPrice: r.tempering_price,
                             mainCategory: r.main_category, finishColor: r.finish_color,
                             modelNo: r.model_no, variants: r.variants || [],
-                        })).filter((p: any) => (p.company || '').toLowerCase() === 'glassco'));
+                        })).filter((p) => (p.company || '').toLowerCase() === 'glassco'));
                     }
                 })
                 .then(undefined, (err) => console.warn('[GlasscoPrint] products promise rejected:', err));

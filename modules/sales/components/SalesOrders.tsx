@@ -284,7 +284,7 @@ const SalesOrders: React.FC = () => {
 
         // Auto-generate invoice ONLY when we have a real ISO date, the order
         // isn't already invoiced, and the field isn't garbage.
-        const alreadyInvoiced = SalesService.getInvoices().some((i: any) => i.orderId === updatedOrder.id);
+        const alreadyInvoiced = SalesService.getInvoices().some((i) => i.orderId === updatedOrder.id);
         if (deliveryFieldFilledButInvalid) {
             toast.warning(
                 `Delivery date "${rawDate}" is not a valid date — order saved but invoice was NOT generated. Use YYYY-MM-DD or DD-MM-YYYY.`,
@@ -360,7 +360,7 @@ const SalesOrders: React.FC = () => {
         const today        = new Date().toISOString().split('T')[0];
         const orderRef     = selectedOrder.orderNo || selectedOrder.id;
         const allInvoices  = SalesService.getInvoices();
-        const existingInvoice: any = allInvoices.find((i: any) => i.orderId === selectedOrder.id);
+        const existingInvoice: any = allInvoices.find((i) => i.orderId === selectedOrder.id);
 
         // Validate we don't over-pay the invoice (PKR 1 tolerance)
         if (existingInvoice) {
@@ -435,7 +435,7 @@ const SalesOrders: React.FC = () => {
             if (paymentMethod === 'Cash') {
                 const cashEntries = FinanceService.getPettyCashEntries();
                 const lastBalance = cashEntries
-                    .filter((e: any) => e.company === company)
+                    .filter((e) => e.company === company)
                     .sort((a: any, b: any) => String(b.id).localeCompare(String(a.id)))[0]?.balance || 0;
                 FinanceService.savePettyCashEntries([
                     ...cashEntries,

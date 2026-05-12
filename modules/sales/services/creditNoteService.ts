@@ -273,7 +273,7 @@ export async function voidInvoice(params: {
   // ── Revert quotation to Approved ──────────────────────────────────────────
   const allQ = SalesService.getQuotations();
   SalesService.saveQuotations(
-    allQ.map((q: any) =>
+    allQ.map((q) =>
       q.id === invoice.orderId ? { ...q, status: 'Approved', invoiceNo: undefined } : q
     )
   );

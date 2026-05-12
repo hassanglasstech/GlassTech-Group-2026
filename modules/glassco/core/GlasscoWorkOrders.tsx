@@ -67,7 +67,7 @@ const GlasscoWorkOrders: React.FC = () => {
       AsyncSalesService.getClients(),
     ]);
     setWorkOrders((wos as any[]).filter(w => w.company === company));
-    setSalesOrders((qs as any[]).filter((q: any) => q.company === company && q.status === 'Approved'));
+    setSalesOrders((qs as any[]).filter((q) => q.company === company && q.status === 'Approved'));
     setClients((cs as any[]).filter(c => c.company === company));
   }, [company]);
 
@@ -101,9 +101,9 @@ const GlasscoWorkOrders: React.FC = () => {
         row.clientName = clients.find(c => c.id === so.clientId)?.name || row.clientName;
         row.projectName = so.projectName || row.projectName;
         // Compute pieces total from production_pieces under this SO
-        const pcs = ProductionService.getProductionPieces().filter((p: any) => p.orderId === row.salesOrderId);
+        const pcs = ProductionService.getProductionPieces().filter((p) => p.orderId === row.salesOrderId);
         if (pcs.length > 0 && !row.piecesTotal) row.piecesTotal = pcs.length;
-        const done = pcs.filter((p: any) => p.status === 'Delivered').length;
+        const done = pcs.filter((p) => p.status === 'Delivered').length;
         if (done > 0 && !row.piecesDone) row.piecesDone = done;
       }
     }
@@ -226,7 +226,7 @@ const GlasscoWorkOrders: React.FC = () => {
                 <label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Sales Order (link)</label>
                 <select className="sap-input w-full text-xs" value={editing.salesOrderId || ''} onChange={e => setEditing({ ...editing, salesOrderId: e.target.value })}>
                   <option value="">— None (independent WO) —</option>
-                  {salesOrders.map((q: any) => <option key={q.id} value={q.orderNo || q.id}>{q.orderNo || q.id} — {clients.find(c => c.id === q.clientId)?.name || q.projectName || 'No project'}</option>)}
+                  {salesOrders.map((q) => <option key={q.id} value={q.orderNo || q.id}>{q.orderNo || q.id} — {clients.find(c => c.id === q.clientId)?.name || q.projectName || 'No project'}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-3">

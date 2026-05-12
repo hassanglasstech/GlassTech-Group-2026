@@ -17,7 +17,7 @@ export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName }) =>
     // Glass subtotal = item.amount minus notch (which is shown as its own line)
     const subTotal = quote.items.reduce((s, i) => s + (i.amount - ((i as any).notchCharges || 0)), 0);
     const aptChargesTotal = quote.items.reduce((s, i) => s + ((i as any).aptCharges || 0), 0);
-    const serviceChargesTotal = ((quote as any).serviceCharges || []).reduce((s: number, sc: any) => s + (sc.amount || 0), 0);
+    const serviceChargesTotal = (((quote as Quotation & { serviceCharges?: Array<{ amount?: number }> }).serviceCharges) || []).reduce((s: number, sc) => s + (sc.amount || 0), 0);
     const grossBeforeDiscount = subTotal + notchChargesTotal + aptChargesTotal + serviceChargesTotal;
     const attachments: string[] = Array.isArray((quote as any).attachments) ? (quote as any).attachments : [];
     const discountAmount = quote.discountAmount !== undefined && quote.discountAmount > 0

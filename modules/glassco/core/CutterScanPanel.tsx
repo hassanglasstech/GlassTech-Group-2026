@@ -105,8 +105,8 @@ const CutterScanPanel: React.FC = () => {
 
   // ── Data ─────────────────────────────────────────────────────────────
   const openJobs: JobOrder[] = useMemo(() =>
-    ProductionService.getJobOrders().filter((j: any) =>
-      (j.company === company || j.fromCompany === company) &&
+    ProductionService.getJobOrders().filter((j) =>
+      (j.company === company || (j as JobOrder & { fromCompany?: string }).fromCompany === company) &&
       !['Completed', 'Cancelled', 'Delivered'].includes(j.status)
     ).sort((a: any, b: any) => (b.date || '').localeCompare(a.date || '')),
   [company, activeSession]);

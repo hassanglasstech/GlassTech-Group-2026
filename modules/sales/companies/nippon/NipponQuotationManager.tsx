@@ -81,7 +81,7 @@ const NipponQuotationManager: React.FC = () => {
     const idx = pendingSetSuggestion.index;
     const comps = pendingSetSuggestion.remainingComponents;
     const newLines = comps.map((c: any, ci: number) => {
-      const matchProd = products.find((p: any) =>
+      const matchProd = products.find((p) =>
         p.id === c.id || p.description.toUpperCase() === c.description.toUpperCase()
       );
       return {

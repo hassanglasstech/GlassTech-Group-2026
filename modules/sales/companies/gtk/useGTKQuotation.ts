@@ -154,7 +154,7 @@ export const listGTKQuotations = async (company = 'GTK'): Promise<GTKQuotation[]
 
     if (error || !data) return getLocalQuotations();
 
-    const mapped: GTKQuotation[] = data.map((r: any) => ({
+    const mapped: GTKQuotation[] = data.map((r) => ({
       ...r.data,
       id: r.id,
       company: r.company,

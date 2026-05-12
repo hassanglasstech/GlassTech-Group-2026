@@ -149,12 +149,12 @@ const GlasscoProductMaster: React.FC = () => {
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
-        const data = JSON.parse(evt.target?.result as string);
+        const data = JSON.parse(evt.target?.result as string) as { products?: Array<Record<string, unknown>> };
         if (!data.products || !Array.isArray(data.products)) throw new Error("Invalid structure");
-        
+
         const otherProds = SalesService.getProducts().filter(p => p.company !== company);
-        const importedProds = data.products.map((p: any) => ({ ...p, company })); // Ensure company safety
-        
+        const importedProds = data.products.map((p) => ({ ...p, company })) as unknown as Product[];
+
         SalesService.saveProducts([...otherProds, ...importedProds]);
         refreshData();
         toast.success(`Successfully imported ${importedProds.length} products from JSON.`);

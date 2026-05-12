@@ -83,8 +83,8 @@ export const GlasscoServiceOrderPrint: React.FC<Props> = ({ po }) => {
                         const groupedItems: { orderId: string, items: any[] }[] = [];
                         const orderMap = new Map<string, any[]>();
                         
-                        po.items.forEach((item: any) => {
-                            const oId = item.orderId || 'General';
+                        po.items.forEach((item) => {
+                            const oId = (item as typeof item & { orderId?: string }).orderId || 'General';
                             if (!orderMap.has(oId)) {
                                 orderMap.set(oId, []);
                             }

@@ -34,7 +34,7 @@ const UniversalSalesOrderPrint: React.FC<Props> = ({ quotation, company, clientN
   const serviceCharges: any[] = Array.isArray(quotation.serviceCharges) ? quotation.serviceCharges : [];
 
   const itemsTotal = items.reduce((s, i) => s + (i.amount || 0), 0);
-  const servicesTotal = serviceCharges.reduce((s: number, sc: any) => s + (sc.amount || 0), 0);
+  const servicesTotal = serviceCharges.reduce((s: number, sc) => s + (sc.amount || 0), 0);
   const subtotal = itemsTotal + servicesTotal;
   const discount = quotation.discountAmount || (subtotal * ((quotation.discountPercent || 0) / 100));
   const grandTotal = subtotal - discount;

@@ -131,7 +131,7 @@ const CustomerComplaintModule: React.FC<Props> = ({ company }) => {
     setComplaints([...cloudForCo, ...legacyOnly].sort((a, b) =>
       (b.createdAt || '').localeCompare(a.createdAt || '')
     ));
-    setClients(cls.filter((c: any) => c.company === company || !c.company));
+    setClients(cls.filter((c) => c.company === company || !c.company));
     setInvoices((invs as any[]).filter(i => i.company === company));
   };
   useEffect(() => { load(); }, [company]);

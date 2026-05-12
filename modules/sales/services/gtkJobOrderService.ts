@@ -206,7 +206,7 @@ export const getGTKJobOrders = async (company: Company = 'GTK'): Promise<GTKJobO
 
     if (error || !data) return getLocal().filter(jo => jo.company === company);
 
-    const mapped: GTKJobOrder[] = data.map((r: any) => ({ ...r.data, id: r.id, company: r.company }));
+    const mapped: GTKJobOrder[] = data.map((r) => ({ ...r.data, id: r.id, company: r.company }));
     saveLocal([...mapped, ...getLocal().filter(jo => jo.company !== company)]);
     return mapped;
   } catch {

@@ -135,9 +135,9 @@ const QCCheckPanel: React.FC<{
       // Find if this piece's sheet was defective
       const session = cutterSessions.find(s =>
         s.jobOrderId === p.orderId &&
-        s.sheetsScanned?.some((sc: any) => sc.isDefective)
+        s.sheetsScanned?.some((sc) => sc.isDefective)
       );
-      const defectiveScan = session?.sheetsScanned?.find((sc: any) => sc.isDefective);
+      const defectiveScan = session?.sheetsScanned?.find((sc) => sc.isDefective);
       const sheetEntry = defectiveScan ? sheetDb[defectiveScan.tagId] : undefined;
 
       // Cutter's per-piece defect assessment.

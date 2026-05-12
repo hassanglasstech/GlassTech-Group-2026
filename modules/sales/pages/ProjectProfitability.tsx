@@ -49,7 +49,7 @@ const ProjectProfitability: React.FC = () => {
       if (soErr) throw soErr;
 
       // Load invoices for these orders
-      const orderIds = (orders ?? []).map((o: any) => o.id);
+      const orderIds = (orders ?? []).map((o) => o.id);
       let invoiceMap = new Map<string, number>();
 
       if (orderIds.length > 0) {
@@ -60,14 +60,14 @@ const ProjectProfitability: React.FC = () => {
           .in('order_id', orderIds)
           .not('status', 'in', '("cancelled","draft")');
 
-        (invData ?? []).forEach((inv: any) => {
+        (invData ?? []).forEach((inv) => {
           const cur = invoiceMap.get(inv.order_id) ?? 0;
           invoiceMap.set(inv.order_id, cur + (Number(inv.grand_total) || 0));
         });
       }
 
       // Load GL COGS entries linked by order number
-      const orderNumbers = (orders ?? []).map((o: any) => o.order_number).filter(Boolean);
+      const orderNumbers = (orders ?? []).map((o) => o.order_number).filter(Boolean);
       const cogsMap = new Map<string, number>();
 
       if (orderNumbers.length > 0) {
@@ -78,9 +78,9 @@ const ProjectProfitability: React.FC = () => {
           .eq('status', 'Posted')
           .in('reference', orderNumbers);
 
-        (glData ?? []).forEach((tx: any) => {
+        (glData ?? []).forEach((tx) => {
           const details: any[] = tx.details ?? tx.data?.details ?? [];
-          details.forEach((d: any) => {
+          details.forEach((d) => {
             if ((d.accountName ?? '').toLowerCase().includes('cogs') ||
                 (d.accountCode ?? '').startsWith('5')) {
               const cur = cogsMap.get(tx.reference) ?? 0;
@@ -90,7 +90,7 @@ const ProjectProfitability: React.FC = () => {
         });
       }
 
-      const parsed: ProjectRow[] = (orders ?? []).map((so: any) => {
+      const parsed: ProjectRow[] = (orders ?? []).map((so) => {
         const revenue    = invoiceMap.get(so.id) ?? 0;
         const cogs       = cogsMap.get(so.order_number) ?? 0;
         const gp         = revenue - cogs;
@@ -98,7 +98,8 @@ const ProjectProfitability: React.FC = () => {
         return {
           orderId:        so.id,
           orderNumber:    so.order_number ?? '—',
-          clientName:     so.clients?.business_name ?? so.client_id ?? '—',
+          // Supabase join returns clients as array; pick first row's business_name
+          clientName:     (Array.isArray(so.clients) ? so.clients[0]?.business_name : (so.clients as { business_name?: string } | null)?.business_name) ?? so.client_id ?? '—',
           orderDate:      (so.created_at ?? '').slice(0, 10),
           status:         so.status ?? '—',
           revenue,

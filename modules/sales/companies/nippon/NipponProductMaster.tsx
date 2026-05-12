@@ -148,11 +148,11 @@ const NipponProductMaster: React.FC = () => {
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
-        const data = JSON.parse(evt.target?.result as string);
+        const data = JSON.parse(evt.target?.result as string) as { products?: Array<Record<string, unknown>> };
         if (!data.products || !Array.isArray(data.products)) throw new Error("Invalid structure");
-        
+
         const otherProds = (await AsyncSalesService.getProducts()).filter(p => p.company !== company);
-        const importedProds = data.products.map((p: any) => ({ ...p, company: 'Nippon' }));
+        const importedProds = data.products.map((p) => ({ ...p, company: 'Nippon' })) as unknown as Product[];
         
         await AsyncSalesService.saveProducts([...otherProds, ...importedProds]);
         await refreshData();

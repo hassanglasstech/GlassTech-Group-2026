@@ -67,7 +67,7 @@ const GlasscoPriceLists: React.FC = () => {
 
   const selectedList = lists.find(l => l.id === selectedId) || null;
   const itemsForSelected = items.filter(i => i.priceListId === selectedId);
-  const clientsForSelected = clients.filter((c: any) => c.priceListId === selectedId);
+  const clientsForSelected = clients.filter((c) => c.priceListId === selectedId);
 
   const handleSaveList = async () => {
     if (!editingList) return;
@@ -135,7 +135,7 @@ const GlasscoPriceLists: React.FC = () => {
             {lists.length === 0 && <div className="p-10 text-center text-slate-300 italic font-bold text-xs">No price lists yet.</div>}
             {lists.map(l => {
               const itemCount = items.filter(i => i.priceListId === l.id).length;
-              const clientCount = clients.filter((c: any) => c.priceListId === l.id).length;
+              const clientCount = clients.filter((c) => c.priceListId === l.id).length;
               return (
                 <div key={l.id} onClick={() => setSelectedId(l.id || null)}
                   className={`p-4 border-b cursor-pointer ${selectedId === l.id ? 'bg-amber-50 border-l-4 border-l-amber-600' : 'hover:bg-slate-50'}`}>
@@ -177,7 +177,7 @@ const GlasscoPriceLists: React.FC = () => {
                 <div className="bg-emerald-50 border-b border-emerald-200 px-4 py-2 flex items-center gap-2">
                   <Users size={11} className="text-emerald-700"/>
                   <span className="text-[10px] font-black text-emerald-800 uppercase tracking-widest">{clientsForSelected.length} client(s) on this list:</span>
-                  <span className="text-[10px] text-emerald-900 font-bold truncate">{clientsForSelected.map((c: any) => c.name).join(', ')}</span>
+                  <span className="text-[10px] text-emerald-900 font-bold truncate">{clientsForSelected.map((c) => c.name).join(', ')}</span>
                 </div>
               )}
 

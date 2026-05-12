@@ -105,17 +105,17 @@ export function useQuotationWastage(items: QuotationItem[], company: string) {
   const historicalAvg = useMemo(() => {
     try {
       const sessions = InventoryService.getCuttingSessions()
-        .filter((s: any) => s.company === company && s.status === 'Closed' && s.actualWastagePct != null);
+        .filter((s) => s.company === company && s.status === 'Closed' && s.actualWastagePct != null);
       if (sessions.length === 0) return null;
-      return Number((sessions.reduce((sum: number, s: any) => sum + (s.actualWastagePct || 0), 0) / sessions.length).toFixed(1));
+      return Number((sessions.reduce((sum: number, s) => sum + (s.actualWastagePct || 0), 0) / sessions.length).toFixed(1));
     } catch { return null; }
   }, [company]);
 
   const stockBySizeKey = useMemo(() => {
     try {
-      const store = InventoryService.getStore().filter((i: any) => i.company === company && i.category === 'Raw');
+      const store = InventoryService.getStore().filter((i) => i.company === company && i.category === 'Raw');
       const map: Record<string, number> = {};
-      store.forEach((item: any) => {
+      store.forEach((item) => {
         const m = item.name.match(/(\d+)\s*x\s*(\d+)/i);
         if (!m) return;
         map[`${m[1]}x${m[2]}`] = (map[`${m[1]}x${m[2]}`] || 0) + (item.unrestrictedQty || item.quantity || 0);
