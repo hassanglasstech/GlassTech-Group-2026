@@ -33,7 +33,7 @@ interface ColumnMapping {
 }
 
 interface ExtractedRow {
-  [key: string]: any;
+  [key: string]: unknown;
   _image?: string; // base64
 }
 
@@ -100,7 +100,7 @@ const NipponSmartImporter: React.FC<{ onComplete: () => void }> = ({ onComplete 
         const fileHeaders = jsonData[0].map(h => String(h || ''));
         setHeaders(fileHeaders);
         const rows = jsonData.slice(1).map(row => {
-          const obj: any = {};
+          const obj: Record<string, unknown> = {};
           fileHeaders.forEach((h, i) => {
             obj[h] = row[i];
           });
@@ -179,7 +179,7 @@ const NipponSmartImporter: React.FC<{ onComplete: () => void }> = ({ onComplete 
 
     try {
       const result = JSON.parse(pdfResponseText);
-      const extractedRows = (result.rows || []).map((row: any, idx: number) => ({
+      const extractedRows = (result.rows || []).map((row: Record<string, unknown>, idx: number) => ({
         ...row,
         _image: images[idx] || images[0] || undefined // Try to match or fallback
       }));
@@ -194,7 +194,7 @@ const NipponSmartImporter: React.FC<{ onComplete: () => void }> = ({ onComplete 
     }
   };
 
-  const suggestMappings = async (fileHeaders: string[], sampleData: any[], rowsForSplitting: ExtractedRow[]) => {
+  const suggestMappings = async (fileHeaders: string[], sampleData: unknown[], rowsForSplitting: ExtractedRow[]) => {
     setLoading(true);
     setLoadingMessage('AI is mapping columns and identifying mixed data...');
     
@@ -329,7 +329,7 @@ const NipponSmartImporter: React.FC<{ onComplete: () => void }> = ({ onComplete 
     }
 
     const transformed: Product[] = processedRows.map((row, idx) => {
-      const p: any = {
+      const p: Partial<Product> & { technicalSpecs: Record<string, string> } = {
         id: `NIP-IMP-${Date.now()}-${idx}`,
         company: 'Nippon',
         category: 'Hardware',
@@ -369,7 +369,7 @@ const NipponSmartImporter: React.FC<{ onComplete: () => void }> = ({ onComplete 
     setLoading(false);
   };
 
-  const handleUpdateFinalItem = (idx: number, field: string, value: any) => {
+  const handleUpdateFinalItem = (idx: number, field: string, value: unknown) => {
     setFinalData(prev => {
       const next = [...prev];
       const item = { ...next[idx] };

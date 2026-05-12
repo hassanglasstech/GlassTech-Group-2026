@@ -99,7 +99,7 @@ export const useGlasscoQuotations = () => {
       //   outstanding AR + this quotation grand total > client.creditLimit
       if (action === 'approve') {
         const clientList = await AsyncSalesService.getClients();
-        const clientRow: any = clientList.find((c) => c.id === dataToSave.clientId && c.company === company);
+        const clientRow = clientList.find((c) => c.id === dataToSave.clientId && c.company === company);
         const creditLimit = Number(clientRow?.creditLimit ?? 0);
         if (creditLimit > 0) {
           const subtotal = (dataToSave.items || [])
@@ -309,7 +309,7 @@ export const useGlasscoQuotations = () => {
     }
   };
 
-  const updateGlassItem = async (index: number, field: string, value: any) => {
+  const updateGlassItem = async (index: number, field: string, value: unknown) => {
     if (formData.status === 'Approved' && index !== -1) return;
 
     if (index === -1) {
@@ -412,7 +412,7 @@ export const useGlasscoQuotations = () => {
   // were unmeasurable. These handlers + GlasscoList buttons close the loop.
   // Per-row save (2.6 pattern) — never overwrite the full table.
   const _transitionStatus = async (q: Quotation, next: 'Sent' | 'Rejected' | 'Lost' | 'Draft' | 'Expired', reason?: string) => {
-    const updated: any = { ...q, status: next };
+    const updated: Quotation & Record<string, unknown> = { ...q, status: next };
     if (reason) updated.statusReason = reason;
     updated.statusChangedAt = new Date().toISOString();
     try {
@@ -455,7 +455,7 @@ export const useGlasscoQuotations = () => {
     return _transitionStatus(q, 'Draft');
   };
 
-  // Auto-expire: any non-terminal quotation past dueDate gets flipped to Expired.
+  // Auto-expire: non-terminal quotations past dueDate get flipped to Expired.
   // Runs once per refreshData. Idempotent — only touches Draft/Sent rows.
   const _autoExpire = async (all: Quotation[]) => {
     const today = new Date().toISOString().split('T')[0];
@@ -545,7 +545,7 @@ export const useGlasscoQuotations = () => {
   };
 
   const handleBulkExportExcel = () => {
-    const data: any[] = [];
+    const data: Record<string, unknown>[] = [];
     quotations.forEach(q => {
       const clientName = clients.find(c => c.id === q.clientId)?.name || 'Unknown';
       q.items.forEach(item => {

@@ -6,6 +6,7 @@
 
 import { Client, Vendor } from '../types/crm';
 import { Product, Quotation, Project } from '../../shared/types';
+import { Invoice, PaymentReceipt } from '../../finance/types/finance';
 import { safeParse, safeSave } from '../../shared/services/utils';
 import { AsyncSalesService } from './asyncSalesService';
 import { Logger } from '@/modules/shared/services/logger';
@@ -70,15 +71,15 @@ export const SalesService = {
   },
 
   // ── Invoices ───────────────────────────────────────────────────────
-  getInvoices: (): any[] => safeParse(KEYS.INVOICES),
-  saveInvoices: (data: any[]): void => {
+  getInvoices: (): Invoice[] => safeParse(KEYS.INVOICES),
+  saveInvoices: (data: Invoice[]): void => {
     safeSave(KEYS.INVOICES, data);
     _push('invoices', () => AsyncSalesService.saveInvoices(data));
   },
 
   // ── Payment Receipts ───────────────────────────────────────────────
-  getPaymentReceipts: (): any[] => safeParse(KEYS.PAYMENT_RECEIPTS),
-  savePaymentReceipts: (data: any[]): void => {
+  getPaymentReceipts: (): PaymentReceipt[] => safeParse(KEYS.PAYMENT_RECEIPTS),
+  savePaymentReceipts: (data: PaymentReceipt[]): void => {
     safeSave(KEYS.PAYMENT_RECEIPTS, data);
     _push('payment_receipts', () => AsyncSalesService.savePaymentReceipts(data));
   },
@@ -98,7 +99,7 @@ export const SalesService = {
         AsyncSalesService.getPaymentReceipts(),
       ]);
       // Guard against empty cloud → don't wipe local unsaved data
-      const saveIfNonEmpty = (key: string, data: any[]) => {
+      const saveIfNonEmpty = (key: string, data: unknown[]) => {
         if (Array.isArray(data) && data.length > 0) safeSave(key, data);
         else {
           const existing = safeParse(key);

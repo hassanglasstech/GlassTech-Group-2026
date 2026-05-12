@@ -105,7 +105,7 @@ export const useNipponQuotations = () => {
     });
   };
 
-  const updateItem = (index: number, field: string, value: any) => {
+  const updateItem = (index: number, field: string, value: unknown) => {
     setFormData(prev => {
       const next = [...(prev.items || [])];
       const item = { ...next[index], [field]: value };
@@ -124,7 +124,7 @@ export const useNipponQuotations = () => {
     // runtime as ReferenceError. Resolve from the value when the field
     // looks like a product selection; bail out otherwise.
     const maybeProduct = (field === 'productId' || field === 'product') ? value : null;
-    const prod = maybeProduct as any;
+    const prod = maybeProduct as Product | null;
     if (prod && prod.isSet && prod.setComponents && prod.setComponents.length > 0) {
       setPendingSetSuggestion({
         index,
@@ -137,11 +137,11 @@ export const useNipponQuotations = () => {
   // ── Set suggestion state ───────────────────────────────────────────
   const [pendingSetSuggestion, setPendingSetSuggestion] = useState<{
     index: number;
-    setProduct: any;
-    remainingComponents: any[];
+    setProduct: Product;
+    remainingComponents: unknown[];
   } | null>(null);
 
-  const addFullSet = (index: number, setProduct: any, allProducts: any[]) => {
+  const addFullSet = (index: number, setProduct: Product, allProducts: Product[]) => {
     // Find all products that belong to this set (by setId / profileCode match)
     const setMembers = allProducts.filter(p =>
       p.setId === setProduct.id || p.id === setProduct.id ||
@@ -160,7 +160,7 @@ export const useNipponQuotations = () => {
         setId: setProduct.id,
       };
       // Replace current line with set header + members
-      const memberItems = setMembers.map((mp: any, mi: number) => ({
+      const memberItems = setMembers.map((mp: Product, mi: number) => ({
         id: `SET-ITM-${Date.now()}-${mi}`,
         description: mp.description,
         locationCode: mp.profileCode || '',
@@ -180,7 +180,7 @@ export const useNipponQuotations = () => {
     setPendingSetSuggestion(null);
   };
 
-  const selectProduct = (index: number, prod: any) => {
+  const selectProduct = (index: number, prod: Product) => {
     setFormData(prev => {
       const next = [...(prev.items || [])];
       const item = { ...next[index] };

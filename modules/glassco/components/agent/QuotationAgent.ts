@@ -466,7 +466,7 @@ function executeTool(
         .filter((q) => q.company === co && q.clientId === client.id);
 
       const recentQuotes = allQuotations
-        .sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''))
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
         .slice(0, 3)
         .map((q) => ({
           id:          q.id,
@@ -650,9 +650,9 @@ function executeTool(
       SalesService.saveQuotations([...existing, newQuotation]);
 
       const gross = (params.items || []).reduce(
-        (s: number, i: any) => s + (i.amount || 0) + (i.aptCharges || 0), 0
+        (s: number, i: { amount?: number; aptCharges?: number }) => s + (i.amount || 0) + (i.aptCharges || 0), 0
       ) + (params.serviceCharges || []).reduce(
-        (s: number, sc: any) => s + (sc.amount || 0), 0
+        (s: number, sc: { amount?: number }) => s + (sc.amount || 0), 0
       );
       const discount = Number(params.discountAmount) || (gross * (Number(params.discountPercent) || 0) / 100);
       const netAmount = gross - discount;

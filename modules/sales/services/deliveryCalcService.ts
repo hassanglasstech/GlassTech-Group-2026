@@ -35,7 +35,7 @@ export interface DeliveryEstimate {
 export function getVendorTATSummaries(company: string): VendorTATSummary[] {
   const vendors = SalesService.getVendors().filter(v => v.company === company || !v.company);
   
-  let dispatches: any[] = [];
+  let dispatches: Record<string, unknown>[] = [];
   try {
     dispatches = ProductionService.getTemperingDispatches().filter(d => d.company === company);
   } catch { dispatches = []; }
@@ -107,7 +107,7 @@ export function calculateDeliveryPromise(params: {
   const notes: string[] = [];
 
   // 1. Cutting backlog
-  let cuttingPieces: any[] = [];
+  let cuttingPieces: Record<string, unknown>[] = [];
   try {
     // ProductionPiece type lacks `company` flat field; access via cast.
     cuttingPieces = ProductionService.getProductionPieces().filter(p => (p as unknown as { company: string }).company === company && (p.status as string) === 'Cut');

@@ -49,14 +49,14 @@ const ClientStatementModal: React.FC<ClientStatementProps> = ({ clientId, client
 
       const clientInvoices = (invoices as any[])
         .filter((i) => i.clientId === clientId && i.company === company && i.date <= asOfDate && i.date >= fromDate)
-        .sort((a: any, b: any) => a.date.localeCompare(b.date));
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)));
 
       const clientReceipts = (receipts as any[])
         .filter((r) => {
           const inv = (invoices as any[]).find((i) => i.id === r.invoiceId);
           return inv?.clientId === clientId && r.date <= asOfDate && r.date >= fromDate;
         })
-        .sort((a: any, b: any) => a.date.localeCompare(b.date));
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)));
 
       // Merge and sort by date
       type Entry = { date: string; type: 'Invoice' | 'Payment'; ref: string; desc: string; amount: number };

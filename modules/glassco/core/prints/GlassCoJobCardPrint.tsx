@@ -1,5 +1,5 @@
 import React from 'react';
-import { Quotation, ProductionPiece, Product } from '@/modules/shared/types';
+import { Quotation, ProductionPiece, Product, QuotationItem } from '@/modules/shared/types';
 import QrTag from '@/modules/glassco/core/QrTag';
 
 interface Props {
@@ -11,7 +11,7 @@ interface Props {
 
 export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces, products }) => {
     if (!quote) return <div className="p-8 text-slate-500 italic">No quotation data available to print.</div>;
-    const safeItems: any[] = Array.isArray(quote.items)
+    const safeItems: QuotationItem[] = Array.isArray(quote.items)
         ? quote.items
         : (typeof quote.items === 'string' ? (() => { try { return JSON.parse(quote.items as any); } catch { return []; } })() : []);
     quote = { ...quote, items: safeItems };
@@ -47,7 +47,7 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
     const displayId = quote.orderNo || quote.id;
     const isMMGlobal = quote.items.some(i => !i.isSection && (i.mmW || i.mmH));
 
-    const printableItems: any[] = [];
+    const printableItems: (QuotationItem & Record<string, unknown>)[] = [];
     quote.items.forEach((item, itemIdx) => {
         if (item.isSection) printableItems.push({ isSection: true, description: item.description });
         const itemPieces = jobPieces.filter(p => Number(p.itemIndex) === itemIdx);
@@ -57,7 +57,7 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
             : `${item.inchW || 0}.${item.sootW || 0} x ${item.inchH || 0}.${item.sootH || 0}`;
         const holes = Array.isArray(item.holes) ? item.holes : [];
         const holesSummary = holes.length > 0
-            ? holes.map((h: any, i: number) => {
+            ? holes.map((h: Record<string, unknown>, i: number) => {
                 const posKey = (() => {
                     // reverse-map x,y to TL/TC/TR etc.
                     const POS: Array<[string, number, number]> = [

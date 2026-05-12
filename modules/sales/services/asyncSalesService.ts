@@ -13,7 +13,7 @@ import { errMsg } from '@/modules/shared/services/utils';
 import {
   SbBaseRow, SbClientRow, SbProductRow, SbQuotationRow, SbInvoiceRow,
   SbVendorRow, SbProjectRow, SbPaymentReceiptRow, SbCreditNoteRow,
-  SbJsonb,
+  SbJsonb, SbLooseRow,
   sbStr as str, sbNum as num, sbObj as obj, sbArr,
 } from '@/modules/shared/types/supabaseRows';
 
@@ -627,7 +627,7 @@ export const AsyncSalesService = {
   },
 
   // ── Credit Notes (D3 — new Supabase table from migration 032) ─────────
-  getCreditNotes: async (): Promise<any[]> => {
+  getCreditNotes: async (): Promise<SbLooseRow[]> => {
     const company = useAuthStore.getState().profile?.company ?? '';
     try {
       const { data, error } = await supabase
@@ -662,9 +662,9 @@ export const AsyncSalesService = {
 
   // Generic helper: { id, company } is the minimum every loose row must have.
   // Other fields fall through to `c[key]` via index signature.
-  saveCreditNotes: async (data: any[]): Promise<void> => {
+  saveCreditNotes: async (data: SbLooseRow[]): Promise<void> => {
     // Phase-2 (2.6): per-row merge save (preserves siblings)
-    _mergeIntoLocal<any>(KEYS.CREDIT_NOTES, data);
+    _mergeIntoLocal<SbLooseRow>(KEYS.CREDIT_NOTES, data);
     try {
       const rows = data.map((c) => ({
         id:           c.id,
@@ -698,7 +698,7 @@ export const AsyncSalesService = {
   },
 
   // ── Customer Complaints (Phase-3 / 3.8 — was localStorage-only) ───────
-  getCustomerComplaints: async (): Promise<any[]> => {
+  getCustomerComplaints: async (): Promise<SbLooseRow[]> => {
     const company = useAuthStore.getState().profile?.company ?? '';
     try {
       const { data, error } = await supabase
@@ -734,9 +734,9 @@ export const AsyncSalesService = {
     }
   },
 
-  saveCustomerComplaints: async (data: any[]): Promise<void> => {
+  saveCustomerComplaints: async (data: SbLooseRow[]): Promise<void> => {
     // Phase-3 (2.6 pattern): per-row merge save (preserves siblings)
-    _mergeIntoLocal<any>(KEYS.CUSTOMER_COMPLAINTS, data);
+    _mergeIntoLocal<SbLooseRow>(KEYS.CUSTOMER_COMPLAINTS, data);
     try {
       const rows = data.map((c) => ({
         id:           c.id,
@@ -776,7 +776,7 @@ export const AsyncSalesService = {
   // ─────────────────────────────────────────────────────────────────────
   // Phase-6 (6.4) — Customer-tier price lists
   // ─────────────────────────────────────────────────────────────────────
-  getPriceLists: async (): Promise<any[]> => {
+  getPriceLists: async (): Promise<SbLooseRow[]> => {
     const company = useAuthStore.getState().profile?.company ?? '';
     try {
       const { data, error } = await supabase.from('price_lists').select('*').eq('company', company);
@@ -794,8 +794,8 @@ export const AsyncSalesService = {
       return mapped;
     } catch { return safeParse(KEYS.PRICE_LISTS); }
   },
-  savePriceLists: async (data: any[]): Promise<void> => {
-    _mergeIntoLocal<any>(KEYS.PRICE_LISTS, data);
+  savePriceLists: async (data: SbLooseRow[]): Promise<void> => {
+    _mergeIntoLocal<SbLooseRow>(KEYS.PRICE_LISTS, data);
     try {
       const rows = data.map((p) => ({
         id: p.id, company: p.company, name: p.name,
@@ -818,7 +818,7 @@ export const AsyncSalesService = {
     await _deleteRow('price_lists', KEYS.PRICE_LISTS, id);
   },
 
-  getPriceListItems: async (): Promise<any[]> => {
+  getPriceListItems: async (): Promise<SbLooseRow[]> => {
     const company = useAuthStore.getState().profile?.company ?? '';
     try {
       const { data, error } = await supabase.from('price_list_items').select('*').eq('company', company);
@@ -838,8 +838,8 @@ export const AsyncSalesService = {
       return mapped;
     } catch { return safeParse(KEYS.PRICE_LIST_ITEMS); }
   },
-  savePriceListItems: async (data: any[]): Promise<void> => {
-    _mergeIntoLocal<any>(KEYS.PRICE_LIST_ITEMS, data);
+  savePriceListItems: async (data: SbLooseRow[]): Promise<void> => {
+    _mergeIntoLocal<SbLooseRow>(KEYS.PRICE_LIST_ITEMS, data);
     try {
       const rows = data.map((p) => ({
         id: p.id, price_list_id: p.priceListId, company: p.company,
@@ -865,7 +865,7 @@ export const AsyncSalesService = {
   // ─────────────────────────────────────────────────────────────────────
   // Phase-6 (6.2) — Work Orders
   // ─────────────────────────────────────────────────────────────────────
-  getWorkOrders: async (): Promise<any[]> => {
+  getWorkOrders: async (): Promise<SbLooseRow[]> => {
     const company = useAuthStore.getState().profile?.company ?? '';
     try {
       const { data, error } = await supabase.from('work_orders').select('*').eq('company', company);
@@ -893,8 +893,8 @@ export const AsyncSalesService = {
       return mapped;
     } catch { return safeParse(KEYS.WORK_ORDERS); }
   },
-  saveWorkOrders: async (data: any[]): Promise<void> => {
-    _mergeIntoLocal<any>(KEYS.WORK_ORDERS, data);
+  saveWorkOrders: async (data: SbLooseRow[]): Promise<void> => {
+    _mergeIntoLocal<SbLooseRow>(KEYS.WORK_ORDERS, data);
     try {
       const rows = data.map((w) => ({
         id: w.id, company: w.company,
@@ -930,7 +930,7 @@ export const AsyncSalesService = {
   // ─────────────────────────────────────────────────────────────────────
   // Phase-6 (6.3) — Leads
   // ─────────────────────────────────────────────────────────────────────
-  getLeads: async (): Promise<any[]> => {
+  getLeads: async (): Promise<SbLooseRow[]> => {
     const company = useAuthStore.getState().profile?.company ?? '';
     try {
       const { data, error } = await supabase.from('leads').select('*').eq('company', company);
@@ -959,8 +959,8 @@ export const AsyncSalesService = {
       return mapped;
     } catch { return safeParse(KEYS.LEADS); }
   },
-  saveLeads: async (data: any[]): Promise<void> => {
-    _mergeIntoLocal<any>(KEYS.LEADS, data);
+  saveLeads: async (data: SbLooseRow[]): Promise<void> => {
+    _mergeIntoLocal<SbLooseRow>(KEYS.LEADS, data);
     try {
       const rows = data.map((l) => ({
         id: l.id, company: l.company, name: l.name,

@@ -31,7 +31,7 @@ const COMPANY_INFO: Record<string, { name: string; address: string; phone: strin
 const UniversalSalesOrderPrint: React.FC<Props> = ({ quotation, company, clientName, printMode = 'SalesOrder' }) => {
   const info = COMPANY_INFO[company] || COMPANY_INFO['GTK'];
   const items = quotation.items || [];
-  const serviceCharges: any[] = Array.isArray(quotation.serviceCharges) ? quotation.serviceCharges : [];
+  const serviceCharges: { description?: string; amount?: number }[] = Array.isArray(quotation.serviceCharges) ? quotation.serviceCharges : [];
 
   const itemsTotal = items.reduce((s, i) => s + (i.amount || 0), 0);
   const servicesTotal = serviceCharges.reduce((s: number, sc) => s + (sc.amount || 0), 0);
@@ -104,7 +104,7 @@ const UniversalSalesOrderPrint: React.FC<Props> = ({ quotation, company, clientN
               <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 'bold' }}>{PKR(item.amount || 0)}</td>
             </tr>
           ))}
-          {serviceCharges.map((sc: any, idx: number) => (
+          {serviceCharges.map((sc, idx: number) => (
             <tr key={`sc-${idx}`} style={{ borderBottom: '0.5px solid #e0e0e0', background: '#fff8f0' }}>
               <td style={{ padding: '7px 8px', color: '#888' }}>—</td>
               <td style={{ padding: '7px 8px', color: '#b45309' }}>{sc.description || sc.label || 'Service Charge'}</td>

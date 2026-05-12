@@ -167,7 +167,7 @@ const GlasscoProductMaster: React.FC = () => {
   };
 
   const handleExportExcel = () => {
-    let dataToExport: any[] = [];
+    let dataToExport: Record<string, unknown>[] = [];
     
     if (activeTab === 'services') {
         dataToExport = products.filter(p => p.category === 'Service').map(p => ({
@@ -211,7 +211,7 @@ const GlasscoProductMaster: React.FC = () => {
         const bstr = evt.target?.result;
         const wb = XLSX.read(bstr, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const rawData: any[] = XLSX.utils.sheet_to_json(ws);
+        const rawData: Record<string, unknown>[] = XLSX.utils.sheet_to_json(ws);
 
         const newProducts: Product[] = rawData.map((row, idx) => {
             const commonFields = {

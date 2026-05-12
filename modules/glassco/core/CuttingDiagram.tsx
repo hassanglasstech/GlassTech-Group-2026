@@ -388,7 +388,7 @@ const CuttingDiagram: React.FC<CuttingDiagramProps> = ({
 export default CuttingDiagram;
 
 // ── Helper: build PackingPiece array from quotation items ─────────────────
-export function buildPackingPiecesFromQuotation(items: any[]): PackingPiece[] {
+export function buildPackingPiecesFromQuotation(items: Record<string, unknown>[]): PackingPiece[] {
   const pieces: PackingPiece[] = [];
   let pieceNo = 1;
 
@@ -413,7 +413,7 @@ export function buildPackingPiecesFromQuotation(items: any[]): PackingPiece[] {
     const hasNotches = item.selectedServices?.includes('Notch') || item.selectedServices?.includes('Notching');
 
     // Build holes from holeSpecs if present
-    const holes: HoleSpec[] = (item.holeSpecs || []).map((h: any, i: number) => ({
+    const holes: HoleSpec[] = ((item.holeSpecs as Record<string, unknown>[]) || []).map((h: Record<string, unknown>, i: number) => ({
       id: `hole-${pieceNo}-${i}`,
       diameterInch: h.diameterInch || 0.5,
       xFromLeft:    h.xFromLeft || widthInch / 2,
@@ -425,7 +425,7 @@ export function buildPackingPiecesFromQuotation(items: any[]): PackingPiece[] {
       holes.push({ id: `hole-${pieceNo}-0`, diameterInch: 0.5, xFromLeft: widthInch / 2, yFromTop: heightInch / 2 });
     }
 
-    const notches: NotchSpec[] = (item.notchSpecs || []).map((n: any, i: number) => ({
+    const notches: NotchSpec[] = ((item.notchSpecs as Record<string, unknown>[]) || []).map((n: Record<string, unknown>, i: number) => ({
       id: `notch-${pieceNo}-${i}`,
       widthInch:  n.widthInch  || 1,
       heightInch: n.heightInch || 1,

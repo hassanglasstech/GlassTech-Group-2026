@@ -145,6 +145,15 @@ export interface SbCreditNoteRow extends SbBaseRow {
   status?:     string | null;
 }
 
+// ── Loose row for tables without a strict schema (JSONB-primary) ─────────────
+// Use for generic CRUD functions (credit_notes, customer_complaints, price_lists,
+// work_orders, leads, etc.) instead of `any[]`.
+export interface SbLooseRow {
+  id: string;
+  company: string;
+  [key: string]: unknown;
+}
+
 // ── Helper accessors — narrow unknown JSONB fields safely ────────────────────
 export const sbStr = (v: unknown, fallback = ''): string =>
   v === null || v === undefined ? fallback : String(v);

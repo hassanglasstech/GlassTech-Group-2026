@@ -1,4 +1,4 @@
-export const formatGlassDescription = (item: any) => {
+export const formatGlassDescription = (item: Record<string, unknown>) => {
     if (item.isSection) return item.description;
     
     let type = item.glassType || 'Plain';
@@ -44,7 +44,7 @@ export const formatServices = (services: string[]) => {
     return services.map(s => SERVICE_FULL_NAMES[s] || s).join(', ');
 };
 
-export const formatGlassSize = (item: any) => {
+export const formatGlassSize = (item: Record<string, unknown>) => {
     if (item.isSection) return '';
     if (item.inputUnit === 'MM' || item.mmW || item.mmH) {
         const w = item.mmW || Math.round((item.width || 0) * 25.4);
@@ -54,7 +54,7 @@ export const formatGlassSize = (item: any) => {
     return `${item.inchW || 0}.${item.sootW || 0}" x ${item.inchH || 0}.${item.sootH || 0}"`;
 };
 
-export const formatBillingSize = (item: any) => {
+export const formatBillingSize = (item: Record<string, unknown>) => {
     if (item.isSection) return '';
     if (item.isManualSqFt) return 'Manual Sq.Ft';
     

@@ -17,13 +17,13 @@ interface GlasscoEditorProps {
     setIsMM: (val: boolean) => void;
     lastSerial?: number;
     onClose: () => void;
-    onUpdateItem: (idx: number, field: string, val: any) => void;
+    onUpdateItem: (idx: number, field: string, val: unknown) => void;
     onAddItem: () => void;
     onAddSection: () => void;
     onDuplicateItem: (idx: number) => void;
     onRemoveItem: (idx: number) => void;
-    onSave: (action: 'draft' | 'save' | 'approve') => void | Promise<any>;
-    onSaveWastageDecision?: (decision: any) => void;
+    onSave: (action: 'draft' | 'save' | 'approve') => void | Promise<void>;
+    onSaveWastageDecision?: (decision: Record<string, unknown>) => void;
 }
 
 export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
@@ -165,7 +165,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
     }, [formData.date]);
 
     // Enhanced Update Item to Check for Wastage Logic
-    const handleUpdateItemWithLogic = (idx: number, field: string, val: any) => {
+    const handleUpdateItemWithLogic = (idx: number, field: string, val: unknown) => {
         onUpdateItem(idx, field, val);
         setIsDirty(true);
         

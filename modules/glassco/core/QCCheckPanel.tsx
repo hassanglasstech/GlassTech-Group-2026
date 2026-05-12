@@ -89,9 +89,9 @@ function getServices(specs: string): string[] {
 
 // ══════════════════════════════════════════════════════════════════════════
 const QCCheckPanel: React.FC<{
-  pieces: any[];
-  jobOrders: any[];
-  handleUpdatePieceStatus: (id: string, status: string, extra?: any) => void;
+  pieces: Record<string, unknown>[];
+  jobOrders: Record<string, unknown>[];
+  handleUpdatePieceStatus: (id: string, status: string, extra?: Record<string, unknown>) => void;
 }> = ({ pieces, jobOrders, handleUpdatePieceStatus }) => {
   const company  = useAppStore(s => s.selectedCompany);
   const qcName   = useAppStore(s => (s as any).currentUser?.name || 'QC');

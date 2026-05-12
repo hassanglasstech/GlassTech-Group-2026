@@ -14,8 +14,21 @@ import React from 'react';
 import PrintHeader from '@/modules/shared/components/prints/PrintHeader';
 import PrintFooter from '@/modules/shared/components/prints/PrintFooter';
 
+interface InvoiceItem {
+  description?: string; glassType?: string; profileCode?: string;
+  width?: number; height?: number; qty?: number; quantity?: number;
+  rate?: number; unitPrice?: number; amount?: number;
+}
+interface ServiceCharge { description?: string; amount?: number; }
+interface InvoiceForPrint {
+  id: string; date?: string; dueDate?: string; orderId?: string; orderNo?: string;
+  clientName?: string; clientNtn?: string; projectName?: string; glTxId?: string;
+  subtotal?: number; totalAmount?: number; gstAmount?: number; gstPercent?: number;
+  discountAmount?: number; receivedAmount?: number; balance?: number; status?: string;
+  items?: InvoiceItem[]; serviceCharges?: ServiceCharge[];
+}
 interface InvoicePrintProps {
-  invoice: any;
+  invoice: InvoiceForPrint;
   company: string;
   onClose: () => void;
 }
@@ -29,8 +42,8 @@ const SalesInvoicePrint: React.FC<InvoicePrintProps> = ({ invoice, company, onCl
   const discount   = invoice.discountAmount || 0;
   const grandTotal = invoice.totalAmount || 0;
 
-  const items: any[] = invoice.items || [];
-  const serviceCharges: any[] = invoice.serviceCharges || [];
+  const items: InvoiceItem[] = invoice.items || [];
+  const serviceCharges: ServiceCharge[] = invoice.serviceCharges || [];
 
   return (
     <div className="fixed inset-0 bg-slate-900/70 flex items-center justify-center z-[500] p-4">
@@ -104,7 +117,7 @@ const SalesInvoicePrint: React.FC<InvoicePrintProps> = ({ invoice, company, onCl
                 </tr>
               </thead>
               <tbody>
-                {items.map((item: any, idx: number) => (
+                {items.map((item: InvoiceItem, idx: number) => (
                   <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                     <td style={{ padding: '6px 4px', color: '#94a3b8' }}>{idx + 1}</td>
                     <td style={{ padding: '6px 4px', color: '#334155', fontWeight: 700 }}>
@@ -120,7 +133,7 @@ const SalesInvoicePrint: React.FC<InvoicePrintProps> = ({ invoice, company, onCl
                     <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: 900, color: '#0f172a' }}>{(item.amount || 0).toLocaleString()}</td>
                   </tr>
                 ))}
-                {serviceCharges.map((sc: any, idx: number) => (
+                {serviceCharges.map((sc: ServiceCharge, idx: number) => (
                   <tr key={'sc' + idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                     <td style={{ padding: '6px 4px', color: '#94a3b8' }}>{items.length + idx + 1}</td>
                     <td style={{ padding: '6px 4px', color: '#334155', fontWeight: 700, fontStyle: 'italic' }}>{sc.description || 'Service Charge'}</td>

@@ -211,7 +211,7 @@ export async function generateDeliveryInvoice(
   const today     = new Date().toISOString().split('T')[0];
 
   // ── GL Entry — Posted directly ────────────────────────────────────
-  const details: any[] = [
+  const details: { accountId: string; debit: number; credit: number; text: string }[] = [
     {
       accountId: clientAR.id,
       debit: grandTotal,
@@ -303,7 +303,7 @@ export async function generateDeliveryInvoice(
   const dueDate = new Date();
   dueDate.setDate(dueDate.getDate() + 30);
 
-  const invoice: any = {
+  const invoice: Invoice & Record<string, unknown> = {
     id: invoiceId, company,
     orderId: order.id, orderNo: order.orderNo || order.id,
     clientId: order.clientId, clientName,
@@ -326,10 +326,10 @@ export async function generateDeliveryInvoice(
 
   // ── Build quotation patch ─────────────────────────────────────────
   const orderRow = SalesService.getQuotations().find((q: Quotation) => q.id === order.id);
-  let quotationPatch: { id: string; patch: any } | null = null;
+  let quotationPatch: { id: string; patch: Record<string, unknown> } | null = null;
   let quotationFullUpdated: Record<string, unknown> | null = null;
   if (orderRow) {
-    const updated: any = {
+    const updated: Quotation & Record<string, unknown> = {
       ...orderRow,
       status: 'Invoiced',
       invoiceNo: invoiceId,

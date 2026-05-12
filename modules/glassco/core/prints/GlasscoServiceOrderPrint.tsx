@@ -10,7 +10,7 @@ export const GlasscoServiceOrderPrint: React.FC<Props> = ({ po }) => {
     const summary = useMemo(() => {
         return {
             totalQty: po.items.reduce((acc, i) => acc + (i.qty || 0), 0),
-            totalSqFt: po.items.reduce((acc, i: any) => acc + (i.sqFt || 0), 0),
+            totalSqFt: po.items.reduce((acc, i) => acc + ((i as Record<string, unknown>).sqFt as number || 0), 0),
             totalAmount: po.totalAmount
         };
     }, [po.items]);
@@ -80,7 +80,7 @@ export const GlasscoServiceOrderPrint: React.FC<Props> = ({ po }) => {
                 <div className="flex-1 mt-4">
                     {(() => {
                         // Group items by orderId
-                        const groupedItems: { orderId: string, items: any[] }[] = [];
+                        const groupedItems: { orderId: string, items: Record<string, unknown>[] }[] = [];
                         const orderMap = new Map<string, any[]>();
                         
                         po.items.forEach((item) => {
