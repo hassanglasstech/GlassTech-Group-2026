@@ -76,14 +76,17 @@ BEGIN
       ADD COLUMN IF NOT EXISTS fbr_retry_count    INT      DEFAULT 0,
       ADD COLUMN IF NOT EXISTS fbr_last_error     TEXT;
 
-    -- Index for the operator's "what's pending FBR submission?" query
+    -- Index for the operator's "what's pending FBR submission?" query.
+    -- Single-column on the partial filter — invoices schema is JSONB-style
+    -- so created_at/invoice_date may live inside data->>... Don't assume
+    -- proper columns exist. Single-column partial index is sufficient.
     CREATE INDEX IF NOT EXISTS idx_invoices_fbr_status
-      ON invoices(fbr_status, created_at DESC)
+      ON invoices(fbr_status)
       WHERE fbr_status IN ('pending', 'rejected');
 
     -- Index for the buyer-side reconciliation (find all invoices for a STRN)
     CREATE INDEX IF NOT EXISTS idx_invoices_buyer_strn
-      ON invoices(buyer_strn, invoice_date DESC)
+      ON invoices(buyer_strn)
       WHERE buyer_strn IS NOT NULL;
 
     RAISE NOTICE '✓ Added FBR fields to invoices';
@@ -111,16 +114,19 @@ BEGIN
 END$$;
 
 -- ── 4. Operator dashboard view: pending FBR submissions ─────────────
+-- Note: invoices table is JSONB-style — total_amount and invoice_date
+-- live inside the `data` JSONB column, NOT as proper columns. Use
+-- ->> extraction so the view works regardless of schema evolution.
 CREATE OR REPLACE VIEW v_fbr_pending AS
 SELECT
   company,
   fbr_status,
-  COUNT(*)                                            AS invoice_count,
-  COALESCE(SUM(total_amount), 0)                      AS total_amount_pkr,
-  MIN(invoice_date)                                   AS oldest_invoice_date,
-  MAX(invoice_date)                                   AS newest_invoice_date,
-  COUNT(*) FILTER (WHERE fbr_retry_count > 0)         AS retried_count,
-  MAX(fbr_last_error)                                 AS sample_error
+  COUNT(*)                                                          AS invoice_count,
+  COALESCE(SUM(NULLIF(data->>'total_amount','')::numeric), 0)       AS total_amount_pkr,
+  MIN(data->>'invoice_date')                                        AS oldest_invoice_date,
+  MAX(data->>'invoice_date')                                        AS newest_invoice_date,
+  COUNT(*) FILTER (WHERE fbr_retry_count > 0)                       AS retried_count,
+  MAX(fbr_last_error)                                               AS sample_error
 FROM invoices
 WHERE fbr_status IN ('pending', 'rejected')
 GROUP BY company, fbr_status

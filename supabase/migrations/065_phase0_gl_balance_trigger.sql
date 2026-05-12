@@ -116,20 +116,52 @@ CREATE TRIGGER trg_enforce_ledger_balance
 -- ── Audit existing rows so Hassan knows the current state ───────────
 -- This view shows any historical imbalance the trigger would have caught.
 -- It does NOT modify data — just exposes the gap.
-CREATE OR REPLACE VIEW v_ledger_imbalance_audit AS
-SELECT
-  id,
-  company,
-  doc_type,
-  doc_date,
-  description,
-  reference_id,
-  status,
-  ledger_row_imbalance(status, details, data) AS imbalance_pkr,
-  created_at
-FROM ledger
-WHERE status IN ('Posted', 'posted')
-  AND ABS(ledger_row_imbalance(status, details, data)) > 0.01;
+--
+-- Note: built dynamically because the ledger table's metadata columns
+-- (created_at, posted_at, updated_at) vary across deployments depending
+-- on migration history. We pick whichever timestamp column exists, in
+-- preference order.
+DO $$
+DECLARE
+  ts_col TEXT;
+BEGIN
+  -- Pick the best available timestamp column for the audit view
+  SELECT column_name INTO ts_col
+  FROM   information_schema.columns
+  WHERE  table_schema = 'public'
+    AND  table_name   = 'ledger'
+    AND  column_name IN ('posted_at', 'created_at', 'updated_at', 'doc_date')
+  ORDER BY CASE column_name
+    WHEN 'posted_at'  THEN 1
+    WHEN 'created_at' THEN 2
+    WHEN 'updated_at' THEN 3
+    WHEN 'doc_date'   THEN 4
+  END
+  LIMIT 1;
+
+  IF ts_col IS NULL THEN
+    ts_col := 'NULL::timestamp';  -- view still works, just no timestamp
+  END IF;
+
+  EXECUTE format($view$
+    CREATE OR REPLACE VIEW v_ledger_imbalance_audit AS
+    SELECT
+      id,
+      company,
+      doc_type,
+      doc_date,
+      description,
+      reference_id,
+      status,
+      ledger_row_imbalance(status, details, data) AS imbalance_pkr,
+      %s AS audit_at
+    FROM ledger
+    WHERE status IN ('Posted', 'posted')
+      AND ABS(ledger_row_imbalance(status, details, data)) > 0.01
+  $view$, ts_col);
+
+  RAISE NOTICE '✓ Built v_ledger_imbalance_audit using % as audit_at column', ts_col;
+END$$;
 
 GRANT SELECT ON v_ledger_imbalance_audit TO authenticated, anon;
 
