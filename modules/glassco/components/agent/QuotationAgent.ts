@@ -418,17 +418,18 @@ function executeTool(
         }));
 
       // Group by serviceNick for easier reading
-      const byNick: Record<string, any[]> = {};
-      services.forEach((s: any) => {
-        if (!byNick[s.serviceNick]) byNick[s.serviceNick] = [];
-        byNick[s.serviceNick].push(s);
+      const byNick: Record<string, typeof services[number][]> = {};
+      services.forEach((s) => {
+        const nick = s.serviceNick ?? 'Unknown';
+        if (!byNick[nick]) byNick[nick] = [];
+        byNick[nick].push(s);
       });
 
       // If thickness specified, also return matched rates
       const matched: Record<string, number> = {};
       if (thickness) {
         const normalize = (s: string) => String(s || '').trim().toLowerCase();
-        services.forEach((s: any) => {
+        services.forEach((s) => {
           const thkMatch = normalize(s.thickness) === normalize(thickness) ||
                            normalize(s.thickness) === 'all' ||
                            !s.thickness;
@@ -450,35 +451,35 @@ function executeTool(
     case 'get_client_info': {
       const search = (params.clientName || '').toLowerCase();
       const allClients = SalesService.getClients()
-        .filter((c: any) => !c.company || c.company === co);
+        .filter((c) => !c.company || c.company === co);
 
-      const matched = allClients.filter((c: any) =>
+      const matched = allClients.filter((c) =>
         (c.name || '').toLowerCase().includes(search)
       );
 
       if (matched.length === 0) {
-        return { found: false, message: `No client found matching "${params.clientName}"`, suggestions: allClients.slice(0, 5).map((c: any) => c.name) };
+        return { found: false, message: `No client found matching "${params.clientName}"`, suggestions: allClients.slice(0, 5).map((c) => c.name) };
       }
 
       const client = matched[0];
       const allQuotations = SalesService.getQuotations()
-        .filter((q: any) => q.company === co && q.clientId === client.id);
+        .filter((q) => q.company === co && q.clientId === client.id);
 
       const recentQuotes = allQuotations
         .sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''))
         .slice(0, 3)
-        .map((q: any) => ({
+        .map((q) => ({
           id:          q.id,
           orderNo:     q.orderNo,
           date:        q.date,
           projectName: q.projectName,
           status:      q.status,
-          totalAmount: (q.items || []).reduce((s: number, i: any) => s + (i.amount || 0), 0),
+          totalAmount: (q.items || []).reduce((s: number, i) => s + (i.amount || 0), 0),
         }));
 
       const outstanding = SalesService.getInvoices()
-        .filter((i: any) => i.clientId === client.id && i.status !== 'Paid')
-        .reduce((s: number, i: any) => s + (i.balance || 0), 0);
+        .filter((i) => i.clientId === client.id && i.status !== 'Paid')
+        .reduce((s: number, i) => s + (i.balance || 0), 0);
 
       return {
         found:        true,
@@ -491,7 +492,7 @@ function executeTool(
         availableCredit: Math.max(0, ((client as any).creditLimit || 0) - outstanding),
         recentQuotes,
         totalQuotes:  allQuotations.length,
-        multiplePossibleMatches: matched.length > 1 ? matched.map((c: any) => c.name) : undefined,
+        multiplePossibleMatches: matched.length > 1 ? matched.map((c) => c.name) : undefined,
       };
     }
 
@@ -501,7 +502,7 @@ function executeTool(
       const thickness = (params.thickness || '').replace('mm', '').trim();
 
       const stock = InventoryService.getStore()
-        .filter((s: any) => {
+        .filter((s) => {
           if (s.company !== co) return false;
           if ((s.category || '').toLowerCase() !== 'raw') return false;
           const name = (s.name || '').toLowerCase();
@@ -511,18 +512,23 @@ function executeTool(
           const thkOk  = thickness ? name.includes(thickness) : true;
           return typeOk && thkOk;
         })
-        .map((s: any) => ({
-          id:                s.id,
-          name:              s.name,
-          thickness:         s.thickness || thickness,
-          availableQty:      s.unrestrictedQty || s.quantity || 0,
-          unit:              s.unit || 'Sheet',
-          movingAveragePrice: s.movingAveragePrice || 0,
-          sheetSize:         s.dimensions || s.size || 'N/A',
-          lastMovement:      s.lastMovementDate,
-        }));
+        .map((s) => {
+          // StoreItem strict type lacks `thickness`/`dimensions`/`size`/`movingAveragePrice` —
+          // these are runtime extensions populated by InventoryService. Cast for access.
+          const sExt = s as typeof s & { thickness?: string; dimensions?: string; size?: string; movingAveragePrice?: number; unrestrictedQty?: number; lastMovementDate?: string };
+          return {
+            id:                s.id,
+            name:              s.name,
+            thickness:         sExt.thickness || thickness,
+            availableQty:      sExt.unrestrictedQty || s.quantity || 0,
+            unit:              s.unit || 'Sheet',
+            movingAveragePrice: sExt.movingAveragePrice || 0,
+            sheetSize:         sExt.dimensions || sExt.size || 'N/A',
+            lastMovement:      sExt.lastMovementDate,
+          };
+        });
 
-      const totalSheets = stock.reduce((s: number, i: any) => s + i.availableQty, 0);
+      const totalSheets = stock.reduce((s: number, i) => s + i.availableQty, 0);
       return {
         items:       stock,
         totalSheets,
@@ -612,7 +618,7 @@ function executeTool(
       const now      = new Date();
       const mmyy     = `${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getFullYear()).slice(-2)}`;
       const existing = SalesService.getQuotations();
-      const seqNum   = String(existing.filter((q: any) => q.company === co).length + 1).padStart(4, '0');
+      const seqNum   = String(existing.filter((q) => q.company === co).length + 1).padStart(4, '0');
       const qId      = `QT-GLS-${mmyy}-${seqNum}`;
 
       const dueDate  = new Date(now);

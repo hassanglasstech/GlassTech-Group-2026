@@ -81,12 +81,12 @@ export const useGlasscoQuotations = () => {
 
     // Validation: formal save/approve requires non-empty items + positive total
     if (action === 'save' || action === 'approve') {
-      const nonSectionItems = (dataToSave.items || []).filter((i: any) => !i.isSection);
+      const nonSectionItems = (dataToSave.items || []).filter((i) => !i.isSection);
       if (nonSectionItems.length === 0) {
         toast.error("At least one line item is required before saving.", { duration: 4000 });
         return;
       }
-      const totalAmount = nonSectionItems.reduce((s: number, i: any) => s + (Number(i.amount) || 0), 0);
+      const totalAmount = nonSectionItems.reduce((s: number, i) => s + (Number(i.amount) || 0), 0);
       if (totalAmount <= 0) {
         toast.error("Quotation total must be greater than 0.", { duration: 4000 });
         return;
@@ -99,12 +99,12 @@ export const useGlasscoQuotations = () => {
       //   outstanding AR + this quotation grand total > client.creditLimit
       if (action === 'approve') {
         const clientList = await AsyncSalesService.getClients();
-        const clientRow: any = clientList.find((c: any) => c.id === dataToSave.clientId && c.company === company);
+        const clientRow: any = clientList.find((c) => c.id === dataToSave.clientId && c.company === company);
         const creditLimit = Number(clientRow?.creditLimit ?? 0);
         if (creditLimit > 0) {
           const subtotal = (dataToSave.items || [])
-            .filter((i: any) => !i.isSection)
-            .reduce((s: number, i: any) => s + (Number(i.amount) || 0), 0);
+            .filter((i) => !i.isSection)
+            .reduce((s: number, i) => s + (Number(i.amount) || 0), 0);
           const discount = Number(dataToSave.discountAmount || 0)
             + (subtotal * (Number(dataToSave.discountPercent || 0) / 100));
           const newOrderValue = Math.max(0, subtotal - discount);

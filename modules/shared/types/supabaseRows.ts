@@ -35,15 +35,44 @@ export interface SbClientRow extends SbBaseRow {
   status?:         string | null;
 }
 
-// ── products table ───────────────────────────────────────────────────────────
+// ── products table (extended — covers all flat columns added by migrations) ──
 export interface SbProductRow extends SbBaseRow {
-  name?:           string | null;
-  thickness?:      string | null;
-  unit?:           string | null;
-  rate_per_unit?:  number | null;
-  tempering_rate?: number | null;
-  glass_type?:     string | null;
-  active?:         boolean | null;
+  name?:            string | null;
+  category?:        string | null;
+  description?:     string | null;
+  thickness?:       string | null;
+  unit?:            string | null;
+  rate_per_unit?:   number | null;
+  tempering_rate?:  number | null;
+  glass_type?:      string | null;
+  active?:          boolean | null;
+  // GTK / Nippon product fields
+  service_nick?:    string | null;
+  profile_code?:    string | null;
+  sheet_size?:      string | null;
+  cost_price?:      number | null;
+  base_price?:      number | null;
+  tempering_price?: number | null;
+  variants?:        SbJsonb | SbJsonb[] | null;
+  model_no?:        string | null;
+  brand?:           string | null;
+  main_category?:   string | null;
+  sub_category?:    string | null;
+  finish_color?:    string | null;
+  material?:        string | null;
+  direction?:       string | null;
+  tongue_length?:   string | null;
+  spindle_length?:  string | null;
+  image_url?:       string | null;
+  hs_code?:         string | null;
+  is_set?:          boolean | null;
+  set_components?:  SbJsonb[] | null;
+  technical_specs?: SbJsonb | null;
+  width?:           number | null;
+  height?:          number | null;
+  frame_color?:     string | null;
+  mesh_color?:      string | null;
+  sub_description?: string | null;
 }
 
 // ── quotations table ─────────────────────────────────────────────────────────

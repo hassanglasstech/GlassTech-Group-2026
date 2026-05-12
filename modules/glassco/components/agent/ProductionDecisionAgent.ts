@@ -12,6 +12,7 @@ import { supabase } from '@/src/services/supabaseClient';
 import { askClaude } from '@/modules/factory/services/claudeAgentService';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { ProductionService } from '@/modules/production/services/productionService';
+import { Quotation } from '@/modules/shared/types';
 
 // ── Types ────────────────────────────────────────────────────────────
 export interface ProductionDecision {
@@ -27,20 +28,20 @@ export interface ProductionDecision {
 
 // ── Rush Order Priority ──────────────────────────────────────────────
 export const assessRushOrder = async (orderId: string): Promise<ProductionDecision> => {
-  const quotations = SalesService.getQuotations().filter((q: any) => q.company === 'Glassco');
-  const order = quotations.find((q: any) => q.id === orderId);
+  const quotations = SalesService.getQuotations().filter((q) => q.company === 'Glassco');
+  const order = quotations.find((q) => q.id === orderId);
   if (!order) return makeDecision('rush_order_priority', { orderId }, 'REJECT', 'Order not found', [], 0.50);
 
   // Client payment history — Quotation has clientId (not clientName); group by it
-  const clientOrders = quotations.filter((q: any) => q.clientId === (order as any).clientId);
+  const clientOrders = quotations.filter((q) => q.clientId === (order as any).clientId);
   const avgPayDays = clientOrders.length > 1
-    ? clientOrders.reduce((s: number, q: any) => s + (q.paymentDays || 30), 0) / clientOrders.length
+    ? clientOrders.reduce((s: number, q) => s + ((q as Quotation & { paymentDays?: number }).paymentDays || 30), 0) / clientOrders.length
     : 30;
 
   // Order margin estimation — Quotation has no totalAmount field, derive from items
-  const items = (order as any).items || [];
-  const totalAmount = items.reduce((s: number, i: any) => s + (i.amount || 0), 0);
-  const totalSqft  = items.reduce((s: number, i: any) => s + (i.totalSqFt || 0), 0);
+  const items = ((order as Quotation & { items?: Array<{ amount?: number; totalSqFt?: number }> }).items || []);
+  const totalAmount = items.reduce((s: number, i) => s + (i.amount || 0), 0);
+  const totalSqft  = items.reduce((s: number, i) => s + (i.totalSqFt || 0), 0);
 
   // Current queue depth
   const pieces = ProductionService.getProductionPieces();
@@ -78,11 +79,11 @@ export const assessRushOrder = async (orderId: string): Promise<ProductionDecisi
 
 // ── Remnant Size Match ───────────────────────────────────────────────
 export const matchRemnantToOrder = async (orderId: string): Promise<ProductionDecision> => {
-  const remnants = JSON.parse(localStorage.getItem('gtk_erp_remnants') || '[]')
-    .filter((r: any) => r.company === 'Glassco' && r.status === 'Available');
+  const remnants = (JSON.parse(localStorage.getItem('gtk_erp_remnants') || '[]') as Array<{ id?: string; company: string; status: string; width?: number; height?: number; thickness?: string; dimensions?: string; sqft?: number }>)
+    .filter((r) => r.company === 'Glassco' && r.status === 'Available');
 
-  const quotations = SalesService.getQuotations().filter((q: any) => q.company === 'Glassco');
-  const order = quotations.find((q: any) => q.id === orderId);
+  const quotations = SalesService.getQuotations().filter((q) => q.company === 'Glassco');
+  const order = quotations.find((q) => q.id === orderId);
   if (!order) return makeDecision('remnant_match', { orderId }, 'NO_MATCH', 'Order not found', [], 0.50);
 
   const matches: { remnant_id: string; thickness: string; sqft: number; fits_item: string }[] = [];
@@ -92,11 +93,11 @@ export const matchRemnantToOrder = async (orderId: string): Promise<ProductionDe
     const needed = { width: item.inchW || item.width, height: item.inchH || item.height, thickness: item.glassSize || '' };
     for (const rem of remnants) {
       if (rem.thickness !== needed.thickness) continue;
-      const dims = rem.dimensions || {};
+      const dims = (rem.dimensions as unknown as { widthInch?: number; heightInch?: number }) || {};
       const remW = dims.widthInch || 0;
       const remH = dims.heightInch || 0;
       if (remW >= needed.width && remH >= needed.height) {
-        matches.push({ remnant_id: rem.id, thickness: rem.thickness, sqft: rem.sqft, fits_item: String(item.id || '') });
+        matches.push({ remnant_id: rem.id ?? '', thickness: rem.thickness ?? '', sqft: rem.sqft ?? 0, fits_item: String(item.id || '') });
       }
     }
   }
@@ -154,10 +155,10 @@ export const getProductionKPIs = () => {
   const active = glassco.filter(p => !['Delivered', 'Broken'].includes(p.status)).length;
   const qcPassed = glassco.filter(p => p.status === 'QC-Passed' || p.status === 'Ready to Dispatch').length;
 
-  const remnants = JSON.parse(localStorage.getItem('gtk_erp_remnants') || '[]')
-    .filter((r: any) => r.company === 'Glassco');
-  const availableRemnants = remnants.filter((r: any) => r.status === 'Available').length;
-  const scrappedRemnants = remnants.filter((r: any) => r.status === 'Scrapped').length;
+  const remnants = (JSON.parse(localStorage.getItem('gtk_erp_remnants') || '[]') as Array<{ company: string; status: string }>)
+    .filter((r) => r.company === 'Glassco');
+  const availableRemnants = remnants.filter((r) => r.status === 'Available').length;
+  const scrappedRemnants = remnants.filter((r) => r.status === 'Scrapped').length;
 
   return {
     breakageRate:       Math.round((broken / total) * 100 * 10) / 10,

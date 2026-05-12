@@ -145,7 +145,7 @@ export const useNipponQuotations = () => {
     // Find all products that belong to this set (by setId / profileCode match)
     const setMembers = allProducts.filter(p =>
       p.setId === setProduct.id || p.id === setProduct.id ||
-      (setProduct.setComponents || []).some((c: any) => c.id === p.id || c.description === p.description)
+      ((setProduct.setComponents as Array<{ id?: string; description?: string }> | undefined) || []).some((c) => c.id === p.id || c.description === p.description)
     );
     setFormData(prev => {
       const newItems = [...(prev.items || [])];
@@ -204,7 +204,7 @@ export const useNipponQuotations = () => {
       let desc = `${prod.itemCode || prod.profileCode ? (prod.itemCode || prod.profileCode) + ' ' : ''}${prod.name || prod.description || ''} ${specs ? `(${specs})` : ''}`;
       
       if (prod.isSet && prod.setComponents && prod.setComponents.length > 0) {
-          const compNames = prod.setComponents.map((c: any) => `${c.description} (${c.qtyPerSet} ${c.unit})`).join(', ');
+          const compNames = (prod.setComponents as Array<{ description?: string; qtyPerSet?: number; unit?: string }>).map((c) => `${c.description} (${c.qtyPerSet} ${c.unit})`).join(', ');
           desc += `\n[Includes: ${compNames}]`;
       }
 

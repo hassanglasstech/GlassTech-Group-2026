@@ -129,7 +129,7 @@ const NipponSmartImporter: React.FC<{ onComplete: () => void }> = ({ onComplete 
       
       // Text Extraction
       const textContent = await page.getTextContent();
-      const pageText = textContent.items.map((item: any) => item.str).join(' ');
+      const pageText = textContent.items.map((item) => (item as { str?: string }).str ?? '').join(' ');
       fullText += pageText + '\n';
 
       // Image Extraction
@@ -223,7 +223,9 @@ const NipponSmartImporter: React.FC<{ onComplete: () => void }> = ({ onComplete 
     );
 
     try {
-      const result = JSON.parse(mappingResponseText);
+      interface VirtualColumn { name: string; originalColumn: string; targetField: string; reason?: string }
+      interface MappingResult { mappings?: ColumnMapping[]; virtualColumns?: VirtualColumn[] }
+      const result: MappingResult = JSON.parse(mappingResponseText);
       const initialMappings: ColumnMapping[] = result.mappings || [];
       
       // Add virtual columns to headers and mappings
@@ -231,7 +233,7 @@ const NipponSmartImporter: React.FC<{ onComplete: () => void }> = ({ onComplete 
         const newHeaders = [...fileHeaders];
         const newMappings = [...initialMappings];
         
-        result.virtualColumns.forEach((vc: any) => {
+        result.virtualColumns.forEach((vc) => {
           if (!newHeaders.includes(vc.name)) {
             newHeaders.push(vc.name);
             newMappings.push({
@@ -250,7 +252,7 @@ const NipponSmartImporter: React.FC<{ onComplete: () => void }> = ({ onComplete 
         setLoadingMessage('Splitting mixed data columns...');
         const splitRows = rowsForSplitting.map(row => {
           const newRow = { ...row };
-          result.virtualColumns.forEach((vc: any) => {
+          (result.virtualColumns ?? []).forEach((vc) => {
             newRow[vc.name] = `[Extracting from ${vc.originalColumn}...]`;
           });
           return newRow;
@@ -307,8 +309,9 @@ const NipponSmartImporter: React.FC<{ onComplete: () => void }> = ({ onComplete 
 
         try {
           const chunkResponseText = await callGeminiProxy(prompt);
-          const updates = JSON.parse(chunkResponseText);
-          updates.forEach((update: any) => {
+          interface ChunkUpdate { id: number; updates: Record<string, string>; cleanedDescription?: string }
+          const updates: ChunkUpdate[] = JSON.parse(chunkResponseText);
+          updates.forEach((update) => {
             const rowIndex = i + update.id;
             if (processedRows[rowIndex]) {
               processedRows[rowIndex] = { 

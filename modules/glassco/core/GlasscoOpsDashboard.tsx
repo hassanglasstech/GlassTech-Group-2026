@@ -87,22 +87,22 @@ const GlasscoOpsDashboard: React.FC = () => {
   const [tick, setTick] = useState(0);                  // bump to refresh
 
   const data = useMemo(() => {
-    const quotations  = SalesService.getQuotations().filter((q: any) => q.company === 'Glassco');
+    const quotations  = SalesService.getQuotations().filter((q) => q.company === 'Glassco');
     const invoices    = (SalesService.getInvoices() as any[]).filter(i => i.company === 'Glassco');
     const receipts    = (SalesService.getPaymentReceipts() as any[]);
     const pieces      = ProductionService.getProductionPieces();
-    const dispatches  = ProductionService.getTemperingDispatches().filter((d: any) => d.company === 'Glassco' || d.company === 'Factory');
-    const ncrs        = NCRService.getNCREvents().filter((n: any) => n.company === 'Glassco');
+    const dispatches  = ProductionService.getTemperingDispatches().filter((d) => d.company === 'Glassco' || d.company === 'Factory');
+    const ncrs        = NCRService.getNCREvents().filter((n) => n.company === 'Glassco');
     const creditNotes = getCreditNotes('Glassco' as any);
 
     // ─ SALES KPIs ─
-    const newQuotations = quotations.filter((q: any) => _within(q.date, win));
-    const approvedThis  = quotations.filter((q: any) => q.status === 'Approved' && _within((q as any).statusChangedAt || q.date, win));
-    const lostThis      = quotations.filter((q: any) => (q.status === 'Lost' || q.status === 'Rejected' || q.status === 'Expired') && _within((q as any).statusChangedAt || q.date, win));
+    const newQuotations = quotations.filter((q) => _within(q.date, win));
+    const approvedThis  = quotations.filter((q) => q.status === 'Approved' && _within((q as any).statusChangedAt || q.date, win));
+    const lostThis      = quotations.filter((q) => (q.status === 'Lost' || q.status === 'Rejected' || q.status === 'Expired') && _within((q as any).statusChangedAt || q.date, win));
     const winRateDenom  = approvedThis.length + lostThis.length;
     const winRate       = winRateDenom > 0 ? Math.round((approvedThis.length / winRateDenom) * 100) : 0;
-    const orderValue    = approvedThis.reduce((s: number, q: any) =>
-      s + ((q.items || []).reduce((sum: number, it: any) => sum + (Number(it.amount) || 0), 0)), 0);
+    const orderValue    = approvedThis.reduce((s: number, q) =>
+      s + ((q.items || []).reduce((sum: number, it) => sum + (Number(it.amount) || 0), 0)), 0);
 
     // ─ FINANCE KPIs ─
     const invoicedThis  = invoices.filter(i => _within(i.date, win));
@@ -113,8 +113,8 @@ const GlasscoOpsDashboard: React.FC = () => {
       .reduce((s, i) => s + Number(i.balance || 0), 0);
     const overdueAR     = invoices.filter(i => i.status !== 'Paid' && i.status !== 'Voided' && i.dueDate && i.dueDate < new Date().toISOString().split('T')[0])
       .reduce((s, i) => s + Number(i.balance || 0), 0);
-    const cnThis        = creditNotes.filter((c: any) => _within(c.date, win))
-      .reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
+    const cnThis        = creditNotes.filter((c) => _within(c.date, win))
+      .reduce((s: number, c) => s + Number(c.amount || 0), 0);
 
     // ─ PRODUCTION KPIs ─
     const piecesCutThis = pieces.filter(p => _within((p as any).lastUpdated, win) && p.status === 'Cut').length;
@@ -122,13 +122,13 @@ const GlasscoOpsDashboard: React.FC = () => {
     const piecesInProgress = pieces.filter(p =>
       ['Cut','Service-Pending','QC-Pending','QC-Passed','Ready to Dispatch','Dispatched','Tempered','Received-From-Tempering'].includes(p.status)
     ).length;
-    const dispatchesThis = dispatches.filter((d: any) => _within(d.date, win)).length;
+    const dispatchesThis = dispatches.filter((d) => _within(d.date, win)).length;
 
     // ─ QUALITY KPIs ─
-    const ncrOpen   = ncrs.filter((n: any) => n.status === 'Open' || n.status === 'Reproduce-Pending' || n.status === 'Claim-Pending').length;
-    const ncrThis   = ncrs.filter((n: any) => _within(n.reportedAt || n.date, win)).length;
-    const sqftLost  = ncrs.filter((n: any) => _within(n.reportedAt || n.date, win))
-      .reduce((s: number, n: any) => s + Number(n.sqftLost || 0), 0);
+    const ncrOpen   = ncrs.filter((n) => n.status === 'Open' || n.status === 'Reproduce-Pending' || n.status === 'Claim-Pending').length;
+    const ncrThis   = ncrs.filter((n) => _within(n.reportedAt || (n as typeof n & { date?: string }).date, win)).length;
+    const sqftLost  = ncrs.filter((n) => _within(n.reportedAt || (n as typeof n & { date?: string }).date, win))
+      .reduce((s: number, n) => s + Number(n.sqftLost || 0), 0);
 
     return {
       newQuotations: newQuotations.length,

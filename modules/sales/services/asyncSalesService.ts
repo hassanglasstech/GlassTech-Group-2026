@@ -170,13 +170,13 @@ export const AsyncSalesService = {
         toast.error('Cloud sync failed — using local products.', { id: 'get-products', duration: 3000 });
         return safeParse('gtk_erp_products');
       }
-      return (data ?? []).map((r: any) => ({
-      id: r.id, company: r.company, category: r.category, description: r.description,
+      return ((data ?? []) as SbProductRow[]).map((r): Product => ({
+      id: r.id, company: r.company, category: r.category ?? '', description: r.description ?? '',
       serviceNick: r.service_nick ?? '', profileCode: r.profile_code ?? '',
       thickness: r.thickness ?? '', sheetSize: r.sheet_size ?? '',
       costPrice: r.cost_price ?? 0, basePrice: r.base_price ?? 0,
       temperingPrice: r.tempering_price ?? 0,
-      unit: r.unit ?? 'PCS', variants: r.variants ?? [],
+      unit: r.unit ?? 'PCS', variants: (r.variants as SbJsonb[]) ?? [],
       modelNo: r.model_no ?? '', brand: r.brand ?? '',
       mainCategory: r.main_category ?? '', subCategory: r.sub_category ?? '',
       glassType: r.glass_type ?? '',
@@ -188,7 +188,7 @@ export const AsyncSalesService = {
       width: r.width ?? 0, height: r.height ?? 0,
       frameColor: r.frame_color ?? '', meshColor: r.mesh_color ?? '',
       subDescription: r.sub_description ?? '',
-    }));
+    } as unknown as Product));
     } catch (err: unknown) {
       console.error('[AsyncSalesService] getProducts exception:', errMsg(err));
       toast.error('Failed to load products.', { id: 'get-products-err', duration: 3000 });
@@ -196,7 +196,7 @@ export const AsyncSalesService = {
     }
   },
   saveProducts: async (data: Product[]): Promise<void> => {
-    const mapped = data.map((p: any) => {
+    const mapped = (data as Array<Product & Record<string, unknown>>).map((p) => {
       const isNippon = p.company === 'Nippon';
 
       // ── Core (every company) ───────────────────────────────────────────
@@ -276,8 +276,10 @@ export const AsyncSalesService = {
         // Restore full object: JSONB `data` blob first, then flat columns override.
         // Flat columns are authoritative for indexed fields (status, client_id, etc.)
         // because they may be updated by RPCs / SyncService independently of `data`.
-        const mapped = data.map((r: any) => {
-          const base = r.data && typeof r.data === 'object' ? r.data : {};
+        // Use intersection with Record<string, unknown> because quotations table
+        // has many runtime-only columns not in SbQuotationRow's strict schema.
+        const mapped = (data as Array<SbQuotationRow & Record<string, unknown>>).map((r) => {
+          const base = obj(r.data) as Record<string, unknown>;
           return {
             ...base,
             id:                 r.id,
@@ -308,7 +310,7 @@ export const AsyncSalesService = {
           };
         });
         safeSave(KEYS.QUOTATIONS, mapped);
-        return mapped;
+        return mapped as unknown as Quotation[];
       }
       return safeParse(KEYS.QUOTATIONS);
     } catch (err: unknown) {
@@ -321,9 +323,10 @@ export const AsyncSalesService = {
     // merge into existing localStorage by id rather than overwriting.
     // SAL-1: server-side discount cap — last line of defence before DB write.
     for (const q of data) {
-      const subTotal = ((q as any).items ?? []).reduce((s: number, i: any) => s + (Number(i.amount) || 0), 0);
-      const discPct  = Number((q as any).discountPercent ?? 0);
-      const discAmt  = Number((q as any).discountAmount  ?? 0);
+      const qExt = q as Quotation & { discountPercent?: number; discountAmount?: number };
+      const subTotal = (qExt.items ?? []).reduce((s: number, i) => s + (Number((i as { amount?: number }).amount) || 0), 0);
+      const discPct  = Number(qExt.discountPercent ?? 0);
+      const discAmt  = Number(qExt.discountAmount  ?? 0);
       if (discPct > 99.99)
         throw new Error(`SAL-1: Discount percent ${discPct}% exceeds 99.99% on quotation ${q.id}`);
       if (subTotal > 0 && discAmt > subTotal)
@@ -336,7 +339,8 @@ export const AsyncSalesService = {
     try {
       // D7: Dual-write — JSONB `data` (zero fields lost) AND flat columns
       // (indexable querying + compatible with SyncService TABLE_PUSH).
-      const mapped = data.map((q: any) => ({
+      // Quotation has many runtime-extension fields; intersect with Record.
+      const mapped = (data as Array<Quotation & Record<string, unknown>>).map((q) => ({
         id:                     q.id,
         company:                q.company,
         data:                   q,                              // ← full object
@@ -347,7 +351,7 @@ export const AsyncSalesService = {
         project_name:           q.projectName                    || '',
         subject:                q.subject                        || '',
         items:                  q.items                          || [],
-        status:                 (q.status === 'Pending' ? 'Draft' : q.status) || 'Draft',
+        status:                 ((q.status as string) === 'Pending' ? 'Draft' : q.status) || 'Draft',
         is_already_dispatched:  q.isAlreadyDispatched            || false,
         discount_percent:       q.discountPercent                || 0,
         discount_amount:        q.discountAmount                 || 0,
@@ -419,10 +423,10 @@ export const AsyncSalesService = {
   saveVendors: async (data: Vendor[]): Promise<void> => {
     safeSave(KEYS.VENDORS, data);
     try {
-      const mapped = data.map((v: any) => ({
+      const mapped = data.map((v) => ({
         id: v.id,
         company: v.company || '',
-        data: v,
+        data: v as unknown as SbJsonb,
         updated_at: new Date().toISOString(),
       }));
       const { error } = await supabase.from('vendors').upsert(mapped, { onConflict: 'id' });
@@ -438,8 +442,9 @@ export const AsyncSalesService = {
     try {
       const { data, error } = await supabase.from('invoices').select('*').eq('company', company);
       if (error || !data || data.length === 0) return safeParse('gtk_erp_invoices');
-      const mapped = data.map((r: any) => {
-        const base = (r as any).data && typeof (r as any).data === 'object' ? (r as any).data : {};
+      // Intersect with Record because invoices has many extension fields beyond SbInvoiceRow
+      const mapped = (data as Array<SbInvoiceRow & Record<string, unknown>>).map((r) => {
+        const base = obj(r.data) as Record<string, unknown>;
         return {
           ...base,
           id: r.id, company: r.company,
@@ -464,7 +469,7 @@ export const AsyncSalesService = {
         };
       });
       safeSave('gtk_erp_invoices', mapped);
-      return mapped as Invoice[];
+      return mapped as unknown as Invoice[];
     } catch {
       return safeParse('gtk_erp_invoices');
     }
@@ -480,7 +485,7 @@ export const AsyncSalesService = {
         .eq('client_id', clientId)
         .neq('status', 'Paid');
       if (error || !data) return 0;
-      return data.reduce((s: number, r: any) => s + (Number(r.balance) || 0), 0);
+      return (data as Array<{ balance?: number | null }>).reduce((s, r) => s + (Number(r.balance) || 0), 0);
     } catch {
       return 0; // Fail open for offline mode — credit check blocked anyway in UI
     }
@@ -503,10 +508,11 @@ export const AsyncSalesService = {
       // (e.g. CSV import, manual edit) could persist a 110% discount and produce
       // a negative AR posting. SAL-2 above catches `< 0` total but not bad
       // discount inputs that happen to net to a positive total.
-      const subTotal = ((inv as any).items ?? []).reduce(
-        (s: number, i: any) => s + (Number(i.amount) || 0), 0
+      const invExt = inv as Invoice & { discountAmount?: number; items?: Array<{ amount?: number }> };
+      const subTotal = (invExt.items ?? []).reduce(
+        (s: number, i) => s + (Number(i.amount) || 0), 0
       );
-      const discAmt = Number((inv as any).discountAmount ?? 0);
+      const discAmt = Number(invExt.discountAmount ?? 0);
       if (subTotal > 0 && discAmt > subTotal) {
         throw new Error(
           `SAL-1: Discount amount PKR ${discAmt} exceeds subtotal PKR ${subTotal} on invoice ${inv.id}.`
@@ -516,7 +522,7 @@ export const AsyncSalesService = {
     // Phase-2 (2.6): per-row merge save (preserves siblings)
     _mergeIntoLocal<Invoice>(KEYS.INVOICES, data);
     try {
-      const rows = data.map((i: any) => ({
+      const rows = (data as Array<Invoice & Record<string, unknown>>).map((i) => ({
         id: i.id, company: i.company,
         order_id: i.orderId, order_no: i.orderNo,
         client_id: i.clientId, client_name: i.clientName,
@@ -525,12 +531,14 @@ export const AsyncSalesService = {
         status: i.status, gl_tx_id: i.glTxId, payments: i.payments || [],
         items: i.items || [], service_charges: i.serviceCharges || [],
         project_name: i.projectName || '',
-        discount_amount: i.discountAmount || 0,
-        gst_percent: i.gstPercent || 0, gst_amount: i.gstAmount || 0,
-        voided_by: i.voidedBy || null, voided_at: i.voidedAt || null,
-        reverted_status: i.revertedStatus || null,
-        data: i,                                                 // forward-compat blob
-        created_by: i.createdBy ?? i.created_by ?? null,
+        discount_amount: (i as Invoice & { discountAmount?: number }).discountAmount || 0,
+        gst_percent: (i as Invoice & { gstPercent?: number }).gstPercent || 0,
+        gst_amount: (i as Invoice & { gstAmount?: number }).gstAmount || 0,
+        voided_by: (i as Invoice & { voidedBy?: string }).voidedBy || null,
+        voided_at: (i as Invoice & { voidedAt?: string }).voidedAt || null,
+        reverted_status: (i as Invoice & { revertedStatus?: string }).revertedStatus || null,
+        data: i as unknown as SbJsonb,                            // forward-compat blob
+        created_by: (i.createdBy as string) ?? null,
         updated_by: _currentUser(),
         updated_at: new Date().toISOString(),
       }));
@@ -553,9 +561,10 @@ export const AsyncSalesService = {
     try {
       const { data, error } = await supabase.from('payment_receipts').select('*').eq('company', company);
       if (error || !data || data.length === 0) return safeParse('gtk_erp_payment_receipts');
-      const mapped = data.map((r: any) => ({
-        id: r.id, invoiceId: r.invoice_id, date: r.date, amount: r.amount,
-        method: r.method, reference: r.reference, glTxId: r.gl_tx_id,
+      const mapped = (data as SbPaymentReceiptRow[]).map((r) => ({
+        id: r.id, invoiceId: r.invoice_id ?? '', date: r.date ?? '', amount: r.amount ?? 0,
+        method: r.method ?? '', reference: r.reference ?? '',
+        glTxId: (r as SbPaymentReceiptRow & { gl_tx_id?: string }).gl_tx_id ?? '',
       }));
       safeSave('gtk_erp_payment_receipts', mapped);
       return mapped as PaymentReceipt[];
@@ -580,7 +589,7 @@ export const AsyncSalesService = {
           method:     r.method,
           reference:  r.reference,
           gl_tx_id:   r.glTxId,
-          created_by: (r as any).createdBy ?? (r as any).created_by ?? null,
+          created_by: (r as PaymentReceipt & { createdBy?: string }).createdBy ?? null,
         };
         const { error } = await supabase.rpc('process_payment_receipt', {
           receipt_data: receiptPayload,
@@ -593,7 +602,7 @@ export const AsyncSalesService = {
           const { error: upsertErr } = await supabase.from('payment_receipts').upsert({
             id: r.id, invoice_id: r.invoiceId, date: r.date, amount: r.amount,
             method: r.method, reference: r.reference, gl_tx_id: r.glTxId,
-            created_by: (r as any).createdBy ?? null,
+            created_by: (r as PaymentReceipt & { createdBy?: string }).createdBy ?? null,
             updated_by: _currentUser(),
             updated_at: new Date().toISOString(),
           }, { onConflict: 'id' });
@@ -625,7 +634,7 @@ export const AsyncSalesService = {
         .from('credit_notes').select('*').eq('company', company);
       if (error || !data) return safeParse(KEYS.CREDIT_NOTES);
       if (data.length === 0) return safeParse(KEYS.CREDIT_NOTES);
-      const mapped = data.map((r: any) => {
+      const mapped = data.map((r) => {
         const base = r.data && typeof r.data === 'object' ? r.data : {};
         return {
           ...base,
@@ -651,26 +660,28 @@ export const AsyncSalesService = {
     }
   },
 
+  // Generic helper: { id, company } is the minimum every loose row must have.
+  // Other fields fall through to `c[key]` via index signature.
   saveCreditNotes: async (data: any[]): Promise<void> => {
     // Phase-2 (2.6): per-row merge save (preserves siblings)
     _mergeIntoLocal<any>(KEYS.CREDIT_NOTES, data);
     try {
-      const rows = data.map((c: any) => ({
+      const rows = data.map((c) => ({
         id:           c.id,
         company:      c.company,
-        invoice_id:   c.invoiceId  ?? c.invoice_id  ?? null,
-        invoice_no:   c.invoiceNo  ?? c.invoice_no  ?? null,
-        client_id:    c.clientId   ?? c.client_id   ?? null,
-        client_name:  c.clientName ?? c.client_name ?? null,
-        date:         c.date       || null,
-        reason:       c.reason     || '',
+        invoice_id:   (c.invoiceId ?? c.invoice_id ?? null) as string | null,
+        invoice_no:   (c.invoiceNo ?? c.invoice_no ?? null) as string | null,
+        client_id:    (c.clientId  ?? c.client_id  ?? null) as string | null,
+        client_name:  (c.clientName ?? c.client_name ?? null) as string | null,
+        date:         (c.date as string | null) || null,
+        reason:       (c.reason as string) || '',
         amount:       Number(c.amount || 0),
-        gl_tx_id:     c.glTxId     ?? c.gl_tx_id    ?? null,
-        status:       c.status     || 'Posted',
-        created_by:   c.createdBy  ?? c.created_by  ?? _currentUser(),
-        created_at:   c.createdAt  ?? c.created_at  ?? new Date().toISOString(),
+        gl_tx_id:     (c.glTxId ?? c.gl_tx_id ?? null) as string | null,
+        status:       (c.status as string) || 'Posted',
+        created_by:   (c.createdBy ?? c.created_by ?? _currentUser()) as string,
+        created_at:   (c.createdAt ?? c.created_at ?? new Date().toISOString()) as string,
         updated_at:   new Date().toISOString(),
-        data:         c,                                          // forward-compat blob
+        data:         c as unknown as SbJsonb,                    // forward-compat blob
       }));
       if (rows.length > 0) {
         const { error } = await supabase.from('credit_notes').upsert(rows, { onConflict: 'id' });
@@ -693,7 +704,7 @@ export const AsyncSalesService = {
       const { data, error } = await supabase
         .from('customer_complaints').select('*').eq('company', company);
       if (error || !data || data.length === 0) return safeParse(KEYS.CUSTOMER_COMPLAINTS);
-      const mapped = data.map((r: any) => {
+      const mapped = data.map((r) => {
         const base = r.data && typeof r.data === 'object' ? r.data : {};
         return {
           ...base,
@@ -727,26 +738,26 @@ export const AsyncSalesService = {
     // Phase-3 (2.6 pattern): per-row merge save (preserves siblings)
     _mergeIntoLocal<any>(KEYS.CUSTOMER_COMPLAINTS, data);
     try {
-      const rows = data.map((c: any) => ({
+      const rows = data.map((c) => ({
         id:           c.id,
         company:      c.company,
-        date:         c.date         || null,
-        client_id:    c.clientId     ?? c.client_id    ?? null,
-        client_name:  c.clientName   ?? c.client_name  ?? null,
-        invoice_id:   c.invoiceId    ?? c.invoice_id   ?? null,
-        order_no:     c.orderNo      ?? c.order_no     ?? null,
-        category:     c.category     ?? 'Other',
-        description:  c.description  ?? '',
-        status:       c.status       ?? 'Open',
-        priority:     c.priority     ?? 'Medium',
-        assigned_to:  c.assignedTo   ?? c.assigned_to  ?? null,
-        resolution:   c.resolution   ?? null,
-        resolved_at:  c.resolvedAt   ?? c.resolved_at  ?? null,
-        resolved_by:  c.resolvedBy   ?? c.resolved_by  ?? null,
-        created_by:   c.createdBy    ?? c.created_by   ?? _currentUser(),
-        created_at:   c.createdAt    ?? c.created_at   ?? new Date().toISOString(),
+        date:         (c.date as string | null) || null,
+        client_id:    (c.clientId  ?? c.client_id  ?? null) as string | null,
+        client_name:  (c.clientName ?? c.client_name ?? null) as string | null,
+        invoice_id:   (c.invoiceId ?? c.invoice_id ?? null) as string | null,
+        order_no:     (c.orderNo   ?? c.order_no   ?? null) as string | null,
+        category:     (c.category    ?? 'Other')   as string,
+        description:  (c.description ?? '')        as string,
+        status:       (c.status      ?? 'Open')    as string,
+        priority:     (c.priority    ?? 'Medium')  as string,
+        assigned_to:  (c.assignedTo ?? c.assigned_to ?? null) as string | null,
+        resolution:   (c.resolution ?? null) as string | null,
+        resolved_at:  (c.resolvedAt ?? c.resolved_at ?? null) as string | null,
+        resolved_by:  (c.resolvedBy ?? c.resolved_by ?? null) as string | null,
+        created_by:   (c.createdBy  ?? c.created_by  ?? _currentUser()) as string,
+        created_at:   (c.createdAt  ?? c.created_at  ?? new Date().toISOString()) as string,
         updated_at:   new Date().toISOString(),
-        data:         c,
+        data:         c as unknown as SbJsonb,
       }));
       if (rows.length > 0) {
         const { error } = await supabase.from('customer_complaints').upsert(rows, { onConflict: 'id' });
@@ -770,7 +781,7 @@ export const AsyncSalesService = {
     try {
       const { data, error } = await supabase.from('price_lists').select('*').eq('company', company);
       if (error || !data) return safeParse(KEYS.PRICE_LISTS);
-      const mapped = data.map((r: any) => ({
+      const mapped = data.map((r) => ({
         id: r.id, company: r.company, name: r.name,
         description: r.description ?? '',
         effectiveFrom: r.effective_from ?? '',
@@ -786,7 +797,7 @@ export const AsyncSalesService = {
   savePriceLists: async (data: any[]): Promise<void> => {
     _mergeIntoLocal<any>(KEYS.PRICE_LISTS, data);
     try {
-      const rows = data.map((p: any) => ({
+      const rows = data.map((p) => ({
         id: p.id, company: p.company, name: p.name,
         description: p.description ?? null,
         effective_from: p.effectiveFrom || null,
@@ -812,7 +823,7 @@ export const AsyncSalesService = {
     try {
       const { data, error } = await supabase.from('price_list_items').select('*').eq('company', company);
       if (error || !data) return safeParse(KEYS.PRICE_LIST_ITEMS);
-      const mapped = data.map((r: any) => ({
+      const mapped = data.map((r) => ({
         id: r.id, company: r.company,
         priceListId:  r.price_list_id,
         glassType:    r.glass_type ?? '',
@@ -830,7 +841,7 @@ export const AsyncSalesService = {
   savePriceListItems: async (data: any[]): Promise<void> => {
     _mergeIntoLocal<any>(KEYS.PRICE_LIST_ITEMS, data);
     try {
-      const rows = data.map((p: any) => ({
+      const rows = data.map((p) => ({
         id: p.id, price_list_id: p.priceListId, company: p.company,
         glass_type: p.glassType || null,
         thickness:  p.thickness || null,
@@ -859,7 +870,7 @@ export const AsyncSalesService = {
     try {
       const { data, error } = await supabase.from('work_orders').select('*').eq('company', company);
       if (error || !data) return safeParse(KEYS.WORK_ORDERS);
-      const mapped = data.map((r: any) => ({
+      const mapped = data.map((r) => ({
         id: r.id, company: r.company,
         salesOrderId: r.sales_order_id ?? '',
         clientId:     r.client_id ?? '',
@@ -885,7 +896,7 @@ export const AsyncSalesService = {
   saveWorkOrders: async (data: any[]): Promise<void> => {
     _mergeIntoLocal<any>(KEYS.WORK_ORDERS, data);
     try {
-      const rows = data.map((w: any) => ({
+      const rows = data.map((w) => ({
         id: w.id, company: w.company,
         sales_order_id: w.salesOrderId || null,
         client_id:      w.clientId || null,
@@ -924,7 +935,7 @@ export const AsyncSalesService = {
     try {
       const { data, error } = await supabase.from('leads').select('*').eq('company', company);
       if (error || !data) return safeParse(KEYS.LEADS);
-      const mapped = data.map((r: any) => ({
+      const mapped = data.map((r) => ({
         id: r.id, company: r.company, name: r.name,
         contactPerson: r.contact_person ?? '',
         phone:         r.phone ?? '',
@@ -951,7 +962,7 @@ export const AsyncSalesService = {
   saveLeads: async (data: any[]): Promise<void> => {
     _mergeIntoLocal<any>(KEYS.LEADS, data);
     try {
-      const rows = data.map((l: any) => ({
+      const rows = data.map((l) => ({
         id: l.id, company: l.company, name: l.name,
         contact_person: l.contactPerson || null,
         phone: l.phone || null,

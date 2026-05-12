@@ -98,18 +98,18 @@ export async function generateDeliveryInvoice(
 
   // ── Calculate amounts ─────────────────────────────────────────────
   const clients = SalesService.getClients();
-  const client = clients.find((c: any) => c.id === order.clientId);
+  const client = clients.find((c) => c.id === order.clientId);
   const clientName = client?.name || order.clientId || 'Walk-in';
 
   // ── Apply wastage decision if override/review ─────────────────────
-  const wDec: any = (order as any).wastageDecision;
+  const wDec: Record<string, unknown> = (order as any).wastageDecision;
   const applyWastage =
     wDec &&
     (wDec.decision === 'review' || wDec.decision === 'override') &&
     Number(wDec.suggestedNewRatePerSqft) > 0;
 
   const effectiveItems = applyWastage
-    ? items.map((i: any) => {
+    ? items.map((i) => {
         if (i.isSection) return i;
         const newRate = Number(wDec.suggestedNewRatePerSqft);
         const currentRate = Number(i.pricePerUnit) || 0;
@@ -120,10 +120,10 @@ export async function generateDeliveryInvoice(
     : items;
 
   const totalRevenue = effectiveItems.reduce(
-    (s: number, i: any) => s + (Number(i.amount) || 0), 0
+    (s: number, i) => s + (Number(i.amount) || 0), 0
   );
   const serviceCharges = serviceChargesArr.reduce(
-    (s: number, sc: any) => s + (Number(sc.amount) || 0), 0
+(s: number, sc) => s + (Number(sc.amount) || 0), 0
   );
   const subtotal = totalRevenue + serviceCharges;
   const discount = order.discountAmount ||
@@ -146,8 +146,8 @@ export async function generateDeliveryInvoice(
     const creditLimit = (client as any).creditLimit || 0;
     if (creditLimit > 0) {
       const outstanding = SalesService.getInvoices()
-        .filter((i: any) => i.clientId === order.clientId && i.status !== 'Paid' && i.status !== 'Voided')
-        .reduce((s: number, i: any) => s + (Number(i.balance) || 0), 0);
+        .filter((i) => i.clientId === order.clientId && i.status !== 'Paid' && i.status !== 'Voided')
+        .reduce((s: number, i) => s + (Number(i.balance) || 0), 0);
       if (outstanding + grandTotal > creditLimit) {
         throw new Error(
           `Credit limit exceeded for ${clientName}: outstanding PKR ${outstanding.toLocaleString('en-PK')} + ` +
@@ -164,11 +164,11 @@ export async function generateDeliveryInvoice(
   // were linked, permanently inflating gross profit. Validate UPFRONT — before
   // any GL or DB writes — so the books stay clean if pieces are missing.
   const hasGlassItems = effectiveItems.some(
-    (i: any) => !i.isSection && (Number(i.totalSqFt) || Number(i.sqft) || 0) > 0
+    (i) => !i.isSection && (Number(i.totalSqFt) || Number(i.sqft) || 0) > 0
   );
   const linkedPieceIds = ProductionService.getProductionPieces()
-    .filter((p: any) => p.orderId === order.id || p.orderId === order.orderNo)
-    .map((p: any) => p.id);
+    .filter((p) => p.orderId === order.id || p.orderId === order.orderNo)
+    .map((p) => p.id);
 
   if (hasGlassItems && linkedPieceIds.length === 0) {
     throw new Error(
@@ -197,7 +197,7 @@ export async function generateDeliveryInvoice(
   const revenueAcc = FinanceService.ensureAccount(company, 'SERVICE INCOME',            5, revGlass.id,    'Revenue', '41110');
 
   // ── GST Payable account ───────────────────────────────────────────
-  let gstPayableAcc: any = null;
+  let gstPayableAcc: ReturnType<typeof FinanceService.ensureAccount> | null = null;
   if (gstAmount > 0) {
     const liabParent = FinanceService.ensureAccount(company, 'LIABILITIES',         1, null,           'Liability', '20');
     const liabCurr   = FinanceService.ensureAccount(company, 'CURRENT LIABILITIES', 2, liabParent.id,  'Liability', '22');
@@ -274,14 +274,14 @@ export async function generateDeliveryInvoice(
   let mirrorTx: LedgerTransaction | null = null;
   if (targetCompany && targetCompany !== company) {
     const targetAccounts = FinanceService.getAccounts().filter(
-      (a: any) => a.company === targetCompany
+      (a) => a.company === targetCompany
     );
     const costAcc = targetAccounts.find(
-      (a: any) => a.name.includes('CONSUMED') || a.name.includes('MATERIAL') || (a.code || '').startsWith('511')
-    ) || targetAccounts.find((a: any) => a.type === 'Expense');
+      (a) => a.name.includes('CONSUMED') || a.name.includes('MATERIAL') || (a.code || '').startsWith('511')
+    ) || targetAccounts.find((a) => a.type === 'Expense');
     const payableAcc = targetAccounts.find(
-      (a: any) => a.name.includes('PAYABLE') || (a.code || '').startsWith('221')
-    ) || targetAccounts.find((a: any) => a.type === 'Liability');
+      (a) => a.name.includes('PAYABLE') || (a.code || '').startsWith('221')
+    ) || targetAccounts.find((a) => a.type === 'Liability');
 
     if (costAcc && payableAcc) {
       mirrorTx = {
@@ -327,7 +327,7 @@ export async function generateDeliveryInvoice(
   // ── Build quotation patch ─────────────────────────────────────────
   const orderRow = SalesService.getQuotations().find((q: Quotation) => q.id === order.id);
   let quotationPatch: { id: string; patch: any } | null = null;
-  let quotationFullUpdated: any = null;
+  let quotationFullUpdated: Record<string, unknown> | null = null;
   if (orderRow) {
     const updated: any = {
       ...orderRow,
@@ -413,21 +413,21 @@ export async function generateDeliveryInvoice(
   // sync push.
   try {
     const localInvoices = safeParse(LS_INVOICES) as any[];
-    safeSave(LS_INVOICES, [...localInvoices.filter((i: any) => i.id !== invoice.id), invoice]);
+    safeSave(LS_INVOICES, [...localInvoices.filter((i) => i.id !== invoice.id), invoice]);
 
     const localLedger = safeParse(LS_LEDGER) as any[];
-    const newLedgerEntries: any[] = [{ ...glTx }];
+    const newLedgerEntries: LedgerTransaction[] = [{ ...glTx }];
     if (cogsPlan && cogsPlan.ledgerTx) newLedgerEntries.push({ ...cogsPlan.ledgerTx });
     if (mirrorTx) newLedgerEntries.push({ ...mirrorTx });
     const ledgerWithoutNew = localLedger.filter(
-      (t: any) => !newLedgerEntries.some(n => n.id === t.id)
+      (t) => !newLedgerEntries.some(n => n.id === t.id)
     );
     safeSave(LS_LEDGER, [...ledgerWithoutNew, ...newLedgerEntries]);
 
     if (quotationFullUpdated) {
       const localQuotes = safeParse(LS_QUOTATIONS) as any[];
       safeSave(LS_QUOTATIONS, [
-        ...localQuotes.filter((q: any) => q.id !== quotationFullUpdated.id),
+        ...localQuotes.filter((q) => q.id !== quotationFullUpdated.id),
         quotationFullUpdated,
       ]);
     }
