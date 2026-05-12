@@ -92,6 +92,27 @@ BEGIN
   END LOOP;
 END$$;
 
+-- ── Extra: drop non-standard anon policies missed by name-pattern loop ──
+-- quotations had a policy named "allow_all" (not matching *_anon_rw / anon_* patterns)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables
+             WHERE table_schema = 'public' AND table_name = 'quotations') THEN
+    DROP POLICY IF EXISTS "allow_all" ON quotations;
+    REVOKE INSERT, UPDATE, DELETE ON quotations FROM anon;
+    -- Ensure authenticated still has access
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_policies
+      WHERE tablename = 'quotations' AND schemaname = 'public'
+        AND 'authenticated' = ANY(roles)
+    ) THEN
+      CREATE POLICY "quotations_rw" ON quotations
+        FOR ALL TO authenticated USING (true) WITH CHECK (true);
+    END IF;
+    RAISE NOTICE '✓ Closed allow_all gap on quotations';
+  END IF;
+END$$;
+
 -- ── Re-grant anon SELECT only on tables the UI needs to read pre-login ──
 -- v_alert_unread is the bell-badge counter — used by NotificationCenter
 -- which polls every 15s. It's a derived view; safe to expose.
@@ -141,12 +162,12 @@ NOTIFY pgrst, 'reload schema';
 -- VERIFICATION QUERIES (run in Supabase SQL editor after migration)
 --
 -- 1. Confirm no anon FOR ALL policies remain on financial tables:
--- SELECT tablename, polname, polcmd, polroles
+--    NOTE: pg_policies view uses `roles` text[] and `cmd`, NOT `polroles`/`polcmd`
+-- SELECT tablename, policyname, cmd, roles
 --   FROM pg_policies
---   JOIN pg_roles ON pg_roles.oid = ANY(polroles)
---  WHERE pg_roles.rolname = 'anon'
+--  WHERE 'anon' = ANY(roles)
 --    AND tablename IN ('invoices','payment_receipts','ledger','quotations','payroll')
---    AND polcmd = 'ALL';
+--    AND cmd = 'ALL';
 -- → expected: 0 rows
 --
 -- 2. Confirm anon CANNOT write to invoices:
