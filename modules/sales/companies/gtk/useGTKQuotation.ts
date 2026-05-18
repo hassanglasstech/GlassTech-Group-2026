@@ -9,6 +9,8 @@ import { WindowTypeId } from './gtkQuotationConstants';
 import { supabase } from '@/src/services/supabaseClient';
 import { Logger } from '@/modules/shared/services/logger';
 import { toast } from 'sonner';
+import { NotificationService } from '@/modules/shared/services/notificationService';
+import { SalesService } from '@/modules/sales/services/salesService';
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -382,10 +384,42 @@ export const useGTKQuotation = () => {
   }, []);
 
   // ── Phase 3: Update status ────────────────────────────────────────────────
+  // GAP-01: Quotation Rejection Workflow — on transition to Rejected, generate
+  // a WhatsApp notification for the client + dashboard tracking entry. Without
+  // this, a sales rep could mark Rejected and the client would never know
+  // their proposal was officially closed.
   const updateStatus = useCallback(async (status: GTKQuotation['status']) => {
+    const prevStatus = quotationStatus;
     setQuotationStatus(status);
     await saveQuotation(status);
-  }, [saveQuotation]);
+
+    if (status === 'Rejected' && prevStatus !== 'Rejected' && quotationId) {
+      try {
+        const client = SalesService.getClients().find((c: any) => c.id === header.clientId);
+        const phone = client?.phone || client?.contactPhone;
+        NotificationService.create({
+          eventType: 'custom',
+          orderRef: quotationId,
+          targetCompany: 'GTK',
+          recipientName: header.clientName || client?.name || 'Client',
+          recipientPhone: phone,
+          title: `Quotation ${quotationId} — Rejected`,
+          templateData: {
+            message:
+              `Dear ${header.clientName || 'Sir/Madam'},\n\n` +
+              `Quotation *${quotationId}* (${header.subject || header.site || 'your project'}) ` +
+              `has been closed without acceptance. If you would like to revise scope or ` +
+              `request a fresh offer, please reach out to your account manager.\n\n` +
+              `— GlassTech (GTK)`,
+          },
+          link: `/sales?quotation=${quotationId}`,
+        });
+        Logger.action('Sales', 'QUOTATION_REJECTED', `${quotationId} → ${header.clientName}`);
+      } catch (e) {
+        Logger.warn('Sales', 'Rejection notification failed', e);
+      }
+    }
+  }, [saveQuotation, quotationId, quotationStatus, header.clientId, header.clientName, header.subject, header.site]);
 
   // ── Totals (active option) ────────────────────────────────────────────────
   const totalSqft   = items.reduce((s, i) => s + i.totalSqft, 0);

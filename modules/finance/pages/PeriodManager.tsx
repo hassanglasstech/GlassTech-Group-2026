@@ -19,7 +19,25 @@ const PeriodManager: React.FC<{ company: Company }> = ({ company }) => {
   }, [company]);
 
   const handleOpen = async (month: string) => {
-    await PeriodService.openPeriod(company, month, actor);
+    const existing = periods.find(p => p.month === month);
+    if (existing && existing.status === 'Closed') {
+      const reason = window.prompt(
+        `Re-open closed period ${month}?\n\n` +
+        `Enter a reason (mandatory — logged to Control Exception Register):`
+      );
+      if (!reason || !reason.trim()) {
+        toast.error('Re-open cancelled — reason is mandatory.');
+        return;
+      }
+      try {
+        await PeriodService.openPeriod(company, month, actor, reason.trim());
+      } catch (e: any) {
+        toast.error(e?.message || 'Re-open failed.');
+        return;
+      }
+    } else {
+      await PeriodService.openPeriod(company, month, actor);
+    }
     refresh();
   };
 

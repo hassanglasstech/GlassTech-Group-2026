@@ -807,11 +807,16 @@ export const FinanceService = {
   },
 
   // ── Settle Advance on GRN ───────────────────────────────────────────
+  // GAP-04: `cfoOverride` lets a CFO/Finance Manager approve a settlement
+  // that exceeds the 1.5× FIN-1 cap. The override is logged to bypass_log
+  // (Control Exception Register) with mandatory reason + approver — no
+  // silent overruns. Without the override, the original hard cap stands.
   settleAdvance: (params: {
     company: Company; reqId: string; grnId: string;
     actualAmount: number; categoryTotals: Record<string, number>; purchaserName?: string;
+    cfoOverride?: { approver: string; reason: string };
   }): { settlementId: string; variance: number; status: 'Exact' | 'Under-spend' | 'Over-spend' } => {
-    const { company, reqId, grnId, actualAmount, categoryTotals, purchaserName } = params;
+    const { company, reqId, grnId, actualAmount, categoryTotals, purchaserName, cfoOverride } = params;
     const today = new Date().toISOString().split('T')[0];
     const allGL = FinanceService.getLedger();
 
@@ -837,16 +842,41 @@ export const FinanceService = {
     }
 
     // FIN-1: Hard cap on advance overclaiming.
-    // If actual spend > 1.5× the approved advance, reject immediately.
-    // The 50% buffer covers legitimate price fluctuations; beyond that,
-    // CFO-level approval via a separate workflow is mandatory.
+    // If actual spend > 1.5× the approved advance, reject immediately
+    // UNLESS cfoOverride is provided (GAP-04). Override path writes a
+    // bypass_log entry so the exception register tracks every breach.
     const MAX_ADVANCE_VARIANCE_MULTIPLIER = 1.5;
     if (advanceAmount > 0 && actualAmount > advanceAmount * MAX_ADVANCE_VARIANCE_MULTIPLIER) {
       const maxAllowed = Math.floor(advanceAmount * MAX_ADVANCE_VARIANCE_MULTIPLIER);
-      throw new Error(
-        `AdvanceOverclaimError: Actual PKR ${actualAmount} exceeds ${MAX_ADVANCE_VARIANCE_MULTIPLIER}× ` +
-        `the advance (PKR ${advanceAmount}). Maximum claimable without CFO approval: PKR ${maxAllowed}. ` +
-        `Raise a CFO approval request for the excess PKR ${actualAmount - maxAllowed}.`
+      if (!cfoOverride || !cfoOverride.approver || !cfoOverride.reason) {
+        throw new Error(
+          `AdvanceOverclaimError: Actual PKR ${actualAmount} exceeds ${MAX_ADVANCE_VARIANCE_MULTIPLIER}× ` +
+          `the advance (PKR ${advanceAmount}). Maximum claimable without CFO approval: PKR ${maxAllowed}. ` +
+          `Raise a CFO approval request for the excess PKR ${actualAmount - maxAllowed}.`
+        );
+      }
+      // Log the CFO-approved breach to bypass_log (fire-and-forget; offline-safe).
+      try {
+        supabase.from('bypass_log').insert({
+          user_name: cfoOverride.approver,
+          module: 'Finance',
+          rule_bypassed: 'FIN-1',
+          record_id: `${reqId}::${grnId}`,
+          bypass_reason:
+            `Advance overclaim approved: actual PKR ${actualAmount} vs advance PKR ${advanceAmount} ` +
+            `(excess PKR ${actualAmount - maxAllowed}). Reason: ${cfoOverride.reason}`,
+          status: 'Open',
+          company,
+          addressing_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+        }).then(({ error }: any) => {
+          if (error) Logger.warn('Finance', 'FIN-1 bypass_log insert failed', error);
+        });
+      } catch (e) {
+        Logger.warn('Finance', 'FIN-1 bypass_log threw', e);
+      }
+      Logger.action(
+        'Finance', 'FIN1_OVERRIDE',
+        `${reqId}/${grnId} — Approver ${cfoOverride.approver} — PKR ${actualAmount} vs ${advanceAmount}`
       );
     }
 

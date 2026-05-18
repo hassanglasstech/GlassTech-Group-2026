@@ -170,9 +170,37 @@ export const ProductionService = {
         .in('id', orderIds);
 
       if (error) {
-        // If we cannot reach Supabase (offline), fall through to cache write
-        // rather than blocking production — but log prominently.
-        console.error('[ProductionService] MFG-1 order existence check failed:', error.message);
+        // GAP-02: Offline ghost-order prevention. Previously, when Supabase
+        // was unreachable, the check fell through silently — pieces could be
+        // saved against quotation IDs that had been deleted while offline.
+        // Now: fall back to the localStorage quotations + job_orders cache as
+        // the authoritative offline source. Only allow the save if every
+        // orderId exists in at least one of those caches.
+        console.warn('[ProductionService] MFG-1 Supabase unreachable, using local cache:', error.message);
+        try {
+          const localQ = JSON.parse(localStorage.getItem('gtk_erp_quotations') || '[]') as any[];
+          const localJO = JSON.parse(localStorage.getItem('gtk_erp_gtk_job_orders') || '[]') as any[];
+          const knownIds = new Set<string>([
+            ...localQ.map((q: any) => q.id),
+            ...localJO.map((j: any) => j.id),
+          ]);
+          const ghostIds = orderIds.filter(id => !knownIds.has(id));
+          if (ghostIds.length > 0) {
+            const msg =
+              `MFG-1 GhostOrderError (offline): orderIds [${ghostIds.join(', ')}] ` +
+              `not found in local quotation/job-order cache. Pieces NOT saved. ` +
+              `Reconnect and retry, or restore the order locally first.`;
+            toast.error(msg, { duration: 12000 });
+            throw new Error(msg);
+          }
+        } catch (cacheErr: any) {
+          // If the cache itself is corrupt, refuse rather than write blindly.
+          if (cacheErr?.message?.startsWith('MFG-1')) throw cacheErr;
+          throw new Error(
+            `MFG-1 GhostOrderError: cannot verify orderIds offline (cache unreadable). ` +
+            `Pieces NOT saved.`
+          );
+        }
       } else {
         const foundIds = new Set((foundOrders ?? []).map((r: any) => r.id));
         const ghostIds = orderIds.filter(id => !foundIds.has(id));

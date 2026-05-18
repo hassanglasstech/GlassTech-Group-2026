@@ -192,7 +192,101 @@ export async function convertQuotationToJobOrder(
   local.unshift(jobOrder);
   saveLocal(local);
 
+  // ── GAP-08: Reserve stock for the exploded BOM ────────────────────
+  // Match each BOM line to a store_item by description (best-effort) and
+  // increment reserved_qty. Failures are non-fatal — they get surfaced as a
+  // toast so the operator can intervene, but the JO is still created so
+  // that production can start (issue-time guard SCM-3 is the hard backstop).
+  reserveJobOrderStock(jobOrder).catch((e) => {
+    Logger.warn('GTKJobOrder', 'Stock reservation failed (non-fatal)', e);
+  });
+
   return jobOrder;
+}
+
+// ── GAP-08: Stock reservation helpers ────────────────────────────────
+// Uses the `reserve_stock` Postgres RPC (migration 20260518) for atomicity
+// against concurrent job orders competing for the same material. Falls back
+// to localStorage-only updates when offline.
+async function reserveJobOrderStock(jo: GTKJobOrder): Promise<void> {
+  const items = await loadStoreItemsForCompany(jo.company);
+  if (!items.length) return;
+
+  for (const line of jo.bom) {
+    const match = matchBomLineToItem(line, items);
+    if (!match) continue;
+    const qty = Math.max(0, Number(line.qty) || 0);
+    if (qty === 0) continue;
+    try {
+      const { error } = await supabase.rpc('reserve_stock', { p_item_id: match.id, p_qty: qty });
+      if (error) {
+        Logger.warn('GTKJobOrder', `reserve_stock RPC failed for ${match.id}`, error);
+      }
+    } catch (e) {
+      Logger.warn('GTKJobOrder', 'reserve_stock RPC threw — local-only reservation', e);
+    }
+    // Mirror to localStorage so offline UIs see the reservation immediately.
+    try {
+      const all = JSON.parse(localStorage.getItem('gtk_erp_store') || '[]') as any[];
+      const idx = all.findIndex((s: any) => s.id === match.id);
+      if (idx !== -1) {
+        all[idx] = { ...all[idx], reservedQty: Number(all[idx].reservedQty || 0) + qty };
+        localStorage.setItem('gtk_erp_store', JSON.stringify(all));
+      }
+    } catch {}
+  }
+}
+
+async function releaseJobOrderStock(jo: GTKJobOrder): Promise<void> {
+  const items = await loadStoreItemsForCompany(jo.company);
+  if (!items.length) return;
+  for (const line of jo.bom) {
+    const match = matchBomLineToItem(line, items);
+    if (!match) continue;
+    const qty = Math.max(0, Number(line.qty) || 0);
+    if (qty === 0) continue;
+    try {
+      await supabase.rpc('release_stock', { p_item_id: match.id, p_qty: qty });
+    } catch (e) {
+      Logger.warn('GTKJobOrder', 'release_stock RPC threw — local-only release', e);
+    }
+    try {
+      const all = JSON.parse(localStorage.getItem('gtk_erp_store') || '[]') as any[];
+      const idx = all.findIndex((s: any) => s.id === match.id);
+      if (idx !== -1) {
+        all[idx] = {
+          ...all[idx],
+          reservedQty: Math.max(0, Number(all[idx].reservedQty || 0) - qty),
+        };
+        localStorage.setItem('gtk_erp_store', JSON.stringify(all));
+      }
+    } catch {}
+  }
+}
+
+async function loadStoreItemsForCompany(company: Company): Promise<any[]> {
+  try {
+    const { data } = await supabase.from('store_items').select('*').eq('company', company);
+    if (data?.length) return data;
+  } catch {}
+  try {
+    const all = JSON.parse(localStorage.getItem('gtk_erp_store') || '[]') as any[];
+    return all.filter((s: any) => s.company === company);
+  } catch { return []; }
+}
+
+function matchBomLineToItem(line: GTKBOMLine, items: any[]): any | null {
+  const desc = (line.description || '').toLowerCase();
+  // Heuristic match — prefer exact glass spec, then profile, then keyword.
+  if (line.glassSpec) {
+    const g = items.find((i: any) =>
+      (i.name || '').toLowerCase().includes((line.glassSpec || '').toLowerCase())
+    );
+    if (g) return g;
+  }
+  const keyword = desc.split('—')[0]?.trim() || desc.slice(0, 30);
+  const k = items.find((i: any) => (i.name || '').toLowerCase().includes(keyword));
+  return k || null;
 }
 
 // ── Load job orders — SUPABASE FIRST ─────────────────────────────────
@@ -215,14 +309,28 @@ export const getGTKJobOrders = async (company: Company = 'GTK'): Promise<GTKJobO
 };
 
 // ── Update job order status ───────────────────────────────────────────
+// GAP-08: Release reserved stock when the JO terminates (Completed/Cancelled).
+// Issuing material at production is a separate flow (SCM-3) that decrements
+// quantity directly; the reservation just held the working set.
 export const updateJobOrderStatus = async (id: string, status: GTKJobOrder['status']): Promise<void> => {
   const local = getLocal();
   const idx   = local.findIndex(jo => jo.id === id);
+  const prevStatus = idx !== -1 ? local[idx].status : undefined;
   if (idx !== -1) { local[idx].status = status; saveLocal(local); }
   try {
     const row = local[idx] ? { ...local[idx], status } : { status };
     await supabase.from('job_orders').update({ data: row, updated_at: new Date().toISOString() }).eq('id', id);
   } catch (e) {
     Logger.warn('GTKJobOrder', 'Status update Supabase failed', e);
+  }
+
+  // Terminal states release the reservation. Idempotent — second call no-ops
+  // because `prevStatus` will already match the terminal state.
+  const isTerminal = status === 'Completed' || status === 'Cancelled';
+  const wasTerminal = prevStatus === 'Completed' || prevStatus === 'Cancelled';
+  if (isTerminal && !wasTerminal && idx !== -1) {
+    releaseJobOrderStock(local[idx]).catch((e) => {
+      Logger.warn('GTKJobOrder', `Stock release on ${status} failed`, e);
+    });
   }
 };

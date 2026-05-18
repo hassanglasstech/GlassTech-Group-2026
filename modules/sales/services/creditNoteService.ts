@@ -25,6 +25,9 @@ import { reverseDeliveryCOGS } from '@/modules/procurement/services/glasscoGLSer
 import { errMsg } from '@/modules/shared/services/utils';
 
 // ── CreditNote record type ────────────────────────────────────────────────────
+// GAP-07: Maker-Checker. A CN starts as 'Pending Approval' (no GL impact) and
+// only posts to GL once an approver — distinct from the maker — calls
+// `approveCreditNote`. This mirrors the JV maker-checker pattern (FIN module).
 export interface CreditNote {
   id:          string;
   company:     Company;
@@ -35,10 +38,15 @@ export interface CreditNote {
   date:        string;
   reason:      string;
   amount:      number;        // amount being credited
-  glTxId:      string;
-  status:      'Posted' | 'Void';
+  glTxId:      string;        // empty until approved
+  status:      'Pending Approval' | 'Posted' | 'Void' | 'Rejected';
   createdBy:   string;
   createdAt:   string;
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
 }
 
 // ── Sequential CN numbering (Phase-2: atomic via Postgres allocate_serial) ──
@@ -68,9 +76,12 @@ export const getCreditNotes = (company: Company): CreditNote[] => {
 };
 
 const persistCreditNote = (company: Company, cn: CreditNote): void => {
-  // 1) Legacy per-company key (back-compat with anything still reading it)
+  // 1) Legacy per-company key (back-compat). Dedupe by id — GAP-07 introduces
+  //    multi-stage CN lifecycle (Pending → Posted/Rejected), and a plain append
+  //    would produce duplicate rows across status transitions.
   const legacy = (() => { try { return JSON.parse(localStorage.getItem(CN_KEY(company)) || '[]'); } catch { return []; } })();
-  localStorage.setItem(CN_KEY(company), JSON.stringify([...legacy, cn]));
+  const legacyNext = [...legacy.filter((c: CreditNote) => c.id !== cn.id), cn];
+  localStorage.setItem(CN_KEY(company), JSON.stringify(legacyNext));
 
   // 2) Unified key + Supabase push (new in migration 032)
   const unified = (() => { try { return JSON.parse(localStorage.getItem('gtk_erp_credit_notes') || '[]'); } catch { return []; } })();
@@ -80,20 +91,75 @@ const persistCreditNote = (company: Company, cn: CreditNote): void => {
   AsyncSalesService.saveCreditNotes(next).catch(() => { /* queued for retry */ });
 };
 
-// ── Issue Credit Note ─────────────────────────────────────────────────────────
+// ── Issue Credit Note (Maker step — no GL yet) ──────────────────────────────
+// GAP-07: This now creates a pending CN only. Call `approveCreditNote` from
+// a separate user to actually post the GL reversal and reduce the invoice
+// balance. To preserve callers that expect single-step issuance, pass
+// `approve: { approver, role }` and we'll auto-approve in the same call.
 export async function issueCreditNote(params: {
   invoice:   Invoice;
   amount:    number;
   reason:    string;
   company:   Company;
   createdBy: string;
+  /** Same-call auto-approve. Approver must be DIFFERENT from maker. */
+  approve?:  { approver: string };
 }): Promise<CreditNote> {
-  const { invoice, amount, reason, company, createdBy } = params;
+  const { invoice, amount, reason, company, createdBy, approve } = params;
 
   if (amount <= 0)              throw new Error('Credit note amount must be positive.');
   if (amount > invoice.balance) throw new Error(`Amount (${amount}) exceeds outstanding balance (${invoice.balance}).`);
 
-  const cnId  = await getNextCNNumber(company);
+  const today = new Date().toISOString().split('T')[0];
+
+  // Persist the pending CN first — GL only posts after approval.
+  const pendingCN: CreditNote = {
+    id: cnId, company,
+    invoiceId:  invoice.id,
+    invoiceNo:  invoice.id,
+    clientId:   invoice.clientId,
+    clientName: invoice.clientName,
+    date: today, reason, amount,
+    glTxId: '',
+    status: 'Pending Approval',
+    createdBy,
+    createdAt: new Date().toISOString(),
+  };
+  persistCreditNote(company, pendingCN);
+
+  if (!approve) return pendingCN;
+
+  if (approve.approver === createdBy) {
+    throw new Error(
+      `Maker-Checker violation: approver (${approve.approver}) must differ from maker (${createdBy}).`
+    );
+  }
+  return approveCreditNote({ cnId, company, approver: approve.approver, invoice });
+}
+
+// ── Approve Credit Note (Checker step — posts GL + reduces balance) ─────────
+export async function approveCreditNote(params: {
+  cnId:     string;
+  company:  Company;
+  approver: string;
+  /** Pass the live invoice so we don't re-read a stale localStorage copy. */
+  invoice:  Invoice;
+}): Promise<CreditNote> {
+  const { cnId, company, approver, invoice } = params;
+
+  const cn = getCreditNotes(company).find(c => c.id === cnId);
+  if (!cn) throw new Error(`Credit note ${cnId} not found.`);
+  if (cn.status !== 'Pending Approval') {
+    throw new Error(`Credit note ${cnId} is "${cn.status}" — only Pending Approval CNs can be approved.`);
+  }
+  if (cn.createdBy === approver) {
+    throw new Error(
+      `Maker-Checker violation: approver (${approver}) must differ from maker (${cn.createdBy}).`
+    );
+  }
+
+  const amount = cn.amount;
+  const reason = cn.reason;
   const txId  = `GL-${cnId}`;
   const today = new Date().toISOString().split('T')[0];
 
@@ -155,20 +221,15 @@ export async function issueCreditNote(params: {
     )
   );
 
-  // ── Persist CN record (Supabase + localStorage) ──────────────────────────
-  const cn: CreditNote = {
-    id: cnId, company,
-    invoiceId:  invoice.id,
-    invoiceNo:  invoice.id,
-    clientId:   invoice.clientId,
-    clientName: invoice.clientName,
-    date: today, reason, amount,
+  // ── Persist approved CN record (Supabase + localStorage) ────────────────
+  const approvedCN: CreditNote = {
+    ...cn,
     glTxId: txId,
     status: 'Posted',
-    createdBy,
-    createdAt: new Date().toISOString(),
+    approvedBy: approver,
+    approvedAt: new Date().toISOString(),
   };
-  persistCreditNote(company, cn);
+  persistCreditNote(company, approvedCN);
 
   // ── Phase-3 (3.6): reverse COGS proportionally to the CN amount ──
   // Audit I6: previously gross profit was overstated forever after a CN
@@ -185,7 +246,7 @@ export async function issueCreditNote(params: {
       reversalSuffix: cnId,
     });
   } catch (e: unknown) {
-    console.warn(`[issueCreditNote] COGS reversal skipped for ${cnId}: ${errMsg(e)}`);
+    console.warn(`[approveCreditNote] COGS reversal skipped for ${cnId}: ${errMsg(e)}`);
   }
 
   // ── Financial Event ───────────────────────────────────────────────────────
@@ -194,12 +255,41 @@ export async function issueCreditNote(params: {
     {
       id: `EVT-${cnId}`, company, date: today,
       sourceModule: 'Sales',
-      description: `Credit Note ${cnId} — ${invoice.clientName} — PKR ${amount.toLocaleString()}`,
+      description: `Credit Note ${cnId} — ${invoice.clientName} — PKR ${amount.toLocaleString()} — Approver: ${approver}`,
       amount, referenceId: cnId, status: 'Posted',
     },
   ]);
 
-  return cn;
+  return approvedCN;
+}
+
+// ── Reject Credit Note (Checker may also reject instead of approving) ──────
+export async function rejectCreditNote(params: {
+  cnId:     string;
+  company:  Company;
+  rejecter: string;
+  reason:   string;
+}): Promise<CreditNote> {
+  const { cnId, company, rejecter, reason } = params;
+  const cn = getCreditNotes(company).find(c => c.id === cnId);
+  if (!cn) throw new Error(`Credit note ${cnId} not found.`);
+  if (cn.status !== 'Pending Approval') {
+    throw new Error(`Cannot reject a "${cn.status}" credit note — only Pending Approval.`);
+  }
+  if (cn.createdBy === rejecter) {
+    throw new Error(
+      `Maker-Checker violation: rejecter (${rejecter}) must differ from maker (${cn.createdBy}).`
+    );
+  }
+  const rejected: CreditNote = {
+    ...cn,
+    status: 'Rejected',
+    rejectedBy: rejecter,
+    rejectedAt: new Date().toISOString(),
+    rejectionReason: reason,
+  };
+  persistCreditNote(company, rejected);
+  return rejected;
 }
 
 // ── Void Invoice (BA-01) ──────────────────────────────────────────────────────

@@ -82,17 +82,52 @@ export const PeriodService = {
   },
 
   // ── Open a period ─────────────────────────────────────────────────
-  openPeriod: async (company: Company, month: string, actor: string): Promise<void> => {
+  // GAP-03: Re-opening a CLOSED period is an audit-sensitive action. Every
+  // such re-open is now logged to `bypass_log` (Control Exception Register)
+  // with a mandatory reason — CFO/auditor can see WHY a closed period was
+  // re-opened. First-time opens of a fresh month skip the bypass entry.
+  openPeriod: async (
+    company: Company,
+    month: string,
+    actor: string,
+    reopenReason?: string,
+  ): Promise<void> => {
     const all = _load();
     const id = `${company}-${month}`;
     const idx = all.findIndex(p => p.id === id);
+    const isReopen = idx !== -1 && all[idx].status === 'Closed';
+
+    if (isReopen && !reopenReason) {
+      const msg = `Period ${month} is CLOSED — a reason is mandatory to re-open.`;
+      toast.error(msg);
+      throw new Error(`PeriodReopenError: ${msg}`);
+    }
+
     if (idx !== -1) {
       all[idx] = { ...all[idx], status: 'Open', openedBy: actor, openedAt: new Date().toISOString() };
     } else {
       all.push({ id, company, month, status: 'Open', openedBy: actor, openedAt: new Date().toISOString() });
     }
     await _save(all);
-    toast.success(`Period ${month} opened.`);
+
+    if (isReopen && reopenReason) {
+      try {
+        await supabase.from('bypass_log').insert({
+          user_name: actor,
+          module: 'Finance',
+          rule_bypassed: 'FIN-PERIOD-LOCK',
+          record_id: id,
+          bypass_reason: `Re-opened closed period ${month}: ${reopenReason}`,
+          status: 'Open',
+          company,
+          addressing_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+        });
+      } catch (e) {
+        Logger.warn('Period', 'bypass_log insert failed for period re-open', e);
+      }
+    }
+
+    toast.success(`Period ${month} ${isReopen ? 're-opened (logged)' : 'opened'}.`);
   },
 
   // ── Close a period ────────────────────────────────────────────────

@@ -209,8 +209,26 @@ export const NCRService = {
     NCRService.getVendorClaims().filter(c => c.company === company),
 
   createVendorClaim: (data: Omit<NCRVendorClaim, 'id'>): NCRVendorClaim => {
-    const claim: NCRVendorClaim = { ...data, id: genClaimId() };
+    // GAP-05: One claim per NCR event. The previous behaviour allowed multiple
+    // claims to be raised for the same ncrId, which produced double GL recovery
+    // entries when both got settled. We enforce uniqueness at the app boundary
+    // (DB-level UNIQUE constraint to be added by migration). 'Rejected' claims
+    // are excluded so a vendor's refusal does not permanently block recovery —
+    // operator can raise a fresh claim only after the previous one is rejected.
     const all = NCRService.getVendorClaims();
+    const dup = all.find(c =>
+      c.ncrId === data.ncrId &&
+      c.status !== 'Rejected'
+    );
+    if (dup) {
+      const msg =
+        `Duplicate vendor claim blocked — NCR ${data.ncrId} already has claim ${dup.id} ` +
+        `(status: ${dup.status}). Settle, void, or reject the existing claim before raising a new one.`;
+      toast.error(msg, { duration: 10000 });
+      Logger.warn('Production', 'Duplicate NCR claim blocked', { ncrId: data.ncrId, existingClaim: dup.id });
+      throw new Error(`DuplicateVendorClaimError: ${msg}`);
+    }
+    const claim: NCRVendorClaim = { ...data, id: genClaimId() };
     NCRService.saveVendorClaims([...all, claim]);
     return claim;
   },
