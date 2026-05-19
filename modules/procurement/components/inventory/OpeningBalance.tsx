@@ -153,6 +153,22 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
   const allStore = useMemo(() => InventoryService.getStore().filter(s => s.company === company), [company]);
   const allLedger = useMemo(() => InventoryService.getStockLedger().filter(l => l.company === company), [company]);
 
+  // Glass-only entry flow: Glassco sells per-sheet glass measured in sqft,
+  // so its OB needs Sheet Count × Sheet Size → Total SqFt × Rate/SqFt.
+  // Nippon (trading) and GTK/GTI (aluminium) don't measure stock in sqft —
+  // they enter Quantity × Rate directly. Toggle the form per-company.
+  const isGlassCompany = company === 'Glassco' || company === 'GlassCo';
+
+  // Initial line for non-glass companies uses PCS + sqftPerSheet=1 so the
+  // value pipeline collapses to qty × rate without requiring sheet size.
+  React.useEffect(() => {
+    if (isGlassCompany) return;
+    setLines(prev => prev.length === 1 && prev[0].sheetCount === 0 && prev[0].rate === 0
+      ? [{ ...prev[0], unit: 'PCS', sqftPerSheet: 1 }]
+      : prev);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGlassCompany]);
+
   // ── Product Search ─────────────────────────────────────────────────────
   const getFilteredProducts = useCallback((query: string) => {
     if (!query || query.length < 2) return [];
@@ -170,13 +186,15 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
     setLines(prev => prev.map((l, i) => {
       if (i !== idx) return l;
       const updated = { ...l, ...patch };
-      // Recalc sqft from sheetSize if changed
       if ('sheetSize' in patch && patch.sheetSize) {
         updated.sqftPerSheet = sqftOf(patch.sheetSize);
       }
-      // Recalc totalSqft and totalValue on any quantity/rate change
+      // Non-glass companies: there is no per-sheet sqft conversion, so
+      // sqftPerSheet stays at 1 and totalSqft tracks quantity directly.
+      // Glass company: classic sheet × sqft-per-sheet × rate.
+      if (!isGlassCompany) updated.sqftPerSheet = 1;
       if ('sheetCount' in patch || 'sqftPerSheet' in patch || 'rate' in patch || 'sheetSize' in patch) {
-        updated.totalSqft = Number(((updated.sheetCount || 0) * (updated.sqftPerSheet || 0)).toFixed(2));
+        updated.totalSqft = Number(((updated.sheetCount || 0) * (updated.sqftPerSheet || 1)).toFixed(2));
         updated.totalValue = Number(((updated.totalSqft || 0) * (updated.rate || 0)).toFixed(2));
       }
       return updated;
@@ -184,21 +202,30 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
   };
 
   const selectProduct = (idx: number, product: Product) => {
-    const spf = sqftOf(product.sheetSize || '');
+    // For non-glass companies, default sqftPerSheet to 1 so the existing
+    // value-calc pipeline (totalSqft = qty × sqftPerSheet, totalValue =
+    // totalSqft × rate) collapses to qty × rate without needing UI changes
+    // downstream of updateLine.
+    const spf = isGlassCompany ? sqftOf(product.sheetSize || '') : 1;
     updateLine(idx, {
       productId: product.id,
       description: product.description,
-      category: product.category || 'Raw',
-      unit: product.unit || 'SqFt',
+      category: product.category || (isGlassCompany ? 'Raw' : 'Hardware'),
+      unit: product.unit || (isGlassCompany ? 'SqFt' : 'PCS'),
       thickness: product.thickness,
-      sheetSize: product.sheetSize,
+      sheetSize: isGlassCompany ? product.sheetSize : '',
       sqftPerSheet: spf,
       searchQuery: product.description,
       showSuggestions: false,
     });
   };
 
-  const addLine = () => setLines(prev => [...prev, emptyLine()]);
+  const addLine = () => setLines(prev => [...prev, {
+    ...emptyLine(),
+    // Default new-line shape for non-glass companies: PCS-based, sqftPerSheet=1
+    // so the value pipeline collapses to qty × rate.
+    ...(isGlassCompany ? {} : { unit: 'PCS', sqftPerSheet: 1 }),
+  }]);
   const removeLine = (idx: number) => {
     if (lines.length <= 1) return;
     setLines(prev => prev.filter((_, i) => i !== idx));
@@ -259,11 +286,12 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
       if (!l.description)
         errors.push(`Line ${i + 1}: Material description is required`);
       if (l.sheetCount <= 0 && l.totalSqft <= 0)
-        errors.push(`Line ${i + 1}: Sheet count or total sqft must be > 0`);
+        errors.push(`Line ${i + 1}: ${isGlassCompany ? 'Sheet count or total sqft' : 'Quantity'} must be > 0`);
       if (l.rate <= 0)
         errors.push(`Line ${i + 1}: Rate must be > 0`);
-      // FIX 1: catch missing sheet size — would cause 0 totalValue & no GL entry
-      if (l.sheetCount > 0 && l.totalSqft <= 0)
+      // Sheet-size requirement is glass-only. Non-glass companies enter
+      // quantity directly, no per-sheet conversion needed.
+      if (isGlassCompany && l.sheetCount > 0 && l.totalSqft <= 0)
         errors.push(`Line ${i + 1}: Sheet size required (e.g. 84x144) — needed to compute SqFt & value`);
     });
     if (errors.length > 0) {
@@ -840,10 +868,13 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                   </div>
                 </div>
 
-                {/* Second Row: Sheets, Sheet Size, SqFt/Sheet, Total SqFt, Rate, Value */}
-                <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                {/* Second Row — glass: Sheets / Sheet Size / SqFt/Sheet / Total SqFt / Rate / Value
+                                    non-glass: Quantity / Rate / Value */}
+                <div className={`grid grid-cols-2 ${isGlassCompany ? 'md:grid-cols-6' : 'md:grid-cols-3'} gap-3`}>
                   <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Sheets *</label>
+                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">
+                      {isGlassCompany ? 'Sheets' : `Quantity (${line.unit || 'PCS'})`} *
+                    </label>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -856,6 +887,7 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                       className="w-full px-3 py-2 border rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
+                  {isGlassCompany && (
                   <div>
                     <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">
                       Sheet Size (W×H)
@@ -871,20 +903,27 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                       className={`w-full px-3 py-2 border rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500 ${!line.sheetSize && line.sheetCount > 0 ? 'border-amber-400 bg-amber-50' : ''}`}
                     />
                   </div>
+                  )}
+                  {isGlassCompany && (
                   <div>
                     <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">SqFt/Sheet</label>
                     <div className={`px-3 py-2 border rounded-lg text-xs font-black ${line.sqftPerSheet > 0 ? 'bg-blue-50 text-blue-700' : 'bg-slate-50 text-slate-300'}`}>
                       {line.sqftPerSheet > 0 ? line.sqftPerSheet.toFixed(2) : '—'}
                     </div>
                   </div>
+                  )}
+                  {isGlassCompany && (
                   <div>
                     <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Total SqFt</label>
                     <div className={`px-3 py-2 border rounded-lg text-xs font-black ${line.totalSqft > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-300'}`}>
                       {line.totalSqft > 0 ? line.totalSqft.toLocaleString() : '—'}
                     </div>
                   </div>
+                  )}
                   <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Rate/SqFt (PKR) *</label>
+                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">
+                      {isGlassCompany ? 'Rate/SqFt (PKR)' : `Rate per ${line.unit || 'PCS'} (PKR)`} *
+                    </label>
                     <input
                       type="text"
                       inputMode="decimal"

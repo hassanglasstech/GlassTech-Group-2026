@@ -240,6 +240,12 @@ export const AsyncSalesService = {
 
       // ── Nippon-only hardware columns ───────────────────────────────────
       if (isNippon) {
+        // Bulk-import flow generates rich main/sub categories for trading
+        // hardware (Window Hardware / Door Hardware / Sliding Hardware / …).
+        // GTK/GTI already get main_category mapped above; Nippon also needs
+        // it or the Material Management cascading filter sees nothing.
+        row.main_category  = p.mainCategory  ?? p.main_category  ?? '';
+        row.finish_color   = p.finishColor   ?? p.finish_color   ?? '';
         row.direction      = p.direction     ?? '';
         row.tongue_length  = p.tongueLength  ?? p.tongue_length  ?? '';
         row.spindle_length = p.spindleLength ?? p.spindle_length ?? '';
@@ -255,11 +261,25 @@ export const AsyncSalesService = {
       return row;
     });
 
-    const { error } = await supabase.from('products').upsert(mapped);
-    if (error) {
-      Logger.error('Sales', 'saveProducts failed', error);
-      console.error('[AsyncSalesService] saveProducts Supabase error:', error.message, error.details);
-      toast.error(`Products cloud sync failed: ${error.message}`, { id: 'save-products', duration: 6000 });
+    // ── Batched upsert ───────────────────────────────────────────────────
+    // Bulk-imported product rows can carry base64 image_url payloads of
+    // ~50 KB each. A 280-row Nippon import (47 embedded images) lands at
+    // ~2.4 MB, which exceeds Supabase's default body limit and the upsert
+    // silently fails — sync then re-hydrates empty on next reload, which
+    // is why the user had to re-upload repeatedly. Chunk to 50 rows max.
+    const CHUNK = 50;
+    const failures: string[] = [];
+    for (let i = 0; i < mapped.length; i += CHUNK) {
+      const slice = mapped.slice(i, i + CHUNK);
+      const { error } = await supabase.from('products').upsert(slice);
+      if (error) {
+        Logger.error('Sales', `saveProducts chunk ${i}-${i + slice.length}`, error);
+        console.error('[AsyncSalesService] saveProducts chunk error:', error.message, error.details);
+        failures.push(`rows ${i + 1}-${i + slice.length}: ${error.message}`);
+      }
+    }
+    if (failures.length > 0) {
+      toast.error(`Products cloud sync — ${failures.length} chunk(s) failed: ${failures[0]}`, { id: 'save-products', duration: 8000 });
       _queueRetry('products');
     }
   },
