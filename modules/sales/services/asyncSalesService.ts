@@ -164,7 +164,7 @@ export const AsyncSalesService = {
   getProducts: async (): Promise<Product[]> => {
     const company = useAuthStore.getState().profile?.company ?? '';
     try {
-      const { data, error } = await supabase.from('products').select('*').eq('company', company);
+      const { data, error } = await supabase.from('products').select('*').eq('company', company || 'GTK')
       if (error) {
         console.error('[AsyncSalesService] getProducts:', error.message);
         toast.error('Cloud sync failed — using local products.', { id: 'get-products', duration: 3000 });
