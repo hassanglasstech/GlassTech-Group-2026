@@ -293,7 +293,15 @@ const NipponQuotationManager: React.FC = () => {
                                      (p.name || p.description || '').toLowerCase().includes(item.description.toLowerCase()) || 
                                      (p.itemCode || p.profileCode || '').toLowerCase().includes(item.description.toLowerCase())
                                    ).map(p => {
-                                     const storeItem = storeItems.find(s => s.id === (p.itemCode || p.profileCode));
+                                     // Store item key resolution — older Nippon code keyed by
+                                     // itemCode/profileCode; bulk-imported products use the same
+                                     // id on both Product and StoreItem rows. Match either to
+                                     // keep historic items and freshly imported ones both
+                                     // showing live qty in the dropdown.
+                                     const storeItem = storeItems.find(s =>
+                                         s.id === p.id ||
+                                         s.id === (p.itemCode || p.profileCode)
+                                     );
                                      const available = storeItem?.unrestrictedQty || 0;
                                      const total = storeItem?.quantity || 0;
                                      

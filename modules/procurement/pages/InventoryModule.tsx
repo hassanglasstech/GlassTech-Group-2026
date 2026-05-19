@@ -131,20 +131,29 @@ const InventoryModule: React.FC = () => {
   const isAluminiumCompany = company === 'GTK' || company === 'GTI';
 
   // ── Sprint 24: 5 main groups (Stock / Master / Movements / GRN / Planning) ──
-  // Old `tabs` array preserved here as `subTabs` for the inner row.
+  // Sub-tab visibility — three audiences:
+  //   isAluminiumCompany (GTK/GTI): Tool Register + Cash Advances
+  //   isGlassCompany    (Glassco):  everything non-aluminium PLUS MRP +
+  //                                 glass-specific Remnants, Weight Master,
+  //                                 and Project Consumption
+  //   isNippon          (trading):  cleaner cut — no production / glass-cutting
+  //                                 leftovers, so Remnants, Weight Master, and
+  //                                 Project Consumption are hidden. KIN LONG
+  //                                 hardware doesn't have remnants or weight-
+  //                                 per-sqft accounting.
   const subTabs = [
     { id: 'overview',        label: 'Stock Balances',     icon: LayoutGrid },
     { id: 'master',          label: 'Material Master',    icon: Database },
     { id: 'opening',         label: 'Opening Balance',    icon: PackageOpen },
     { id: 'issuance',        label: 'Goods Issue',        icon: ArrowUpRight },
-    { id: 'consumption',     label: 'Project Consumption', icon: BarChart3 },
-    ...(isAluminiumCompany ? [{ id: 'tools',     label: 'Tool Register',  icon: Wrench  }] : []),
-    ...(isAluminiumCompany ? [{ id: 'advances',  label: 'Cash Advances',  icon: Banknote }] : []),
-    ...(!isAluminiumCompany ? [{ id: 'remnants',     label: 'Remnants',     icon: Layers       }] : []),
-    ...(!isAluminiumCompany ? [{ id: 'grnRegister',  label: 'GRN Register', icon: ClipboardList}] : []),
-    ...(!isAluminiumCompany ? [{ id: 'weightMaster', label: 'Weight Master',icon: Scale        }] : []),
-    ...(isGlassCompany      ? [{ id: 'mrp',          label: 'MRP',          icon: TrendingDown }] : []),
-    ...(!isAluminiumCompany ? [{ id: 'purchase_return', label: 'Purchase Return', icon: ArrowUpRight }] : []),
+    ...(isGlassCompany      ? [{ id: 'consumption',  label: 'Project Consumption', icon: BarChart3 }] : []),
+    ...(isAluminiumCompany  ? [{ id: 'tools',        label: 'Tool Register',       icon: Wrench       }] : []),
+    ...(isAluminiumCompany  ? [{ id: 'advances',     label: 'Cash Advances',       icon: Banknote     }] : []),
+    ...(isGlassCompany      ? [{ id: 'remnants',     label: 'Remnants',            icon: Layers       }] : []),
+    ...(!isAluminiumCompany ? [{ id: 'grnRegister',  label: 'GRN Register',        icon: ClipboardList}] : []),
+    ...(isGlassCompany      ? [{ id: 'weightMaster', label: 'Weight Master',       icon: Scale        }] : []),
+    ...(isGlassCompany      ? [{ id: 'mrp',          label: 'MRP',                 icon: TrendingDown }] : []),
+    ...(!isAluminiumCompany ? [{ id: 'purchase_return', label: 'Purchase Return',  icon: ArrowUpRight }] : []),
   ];
 
   // Filter sub-tabs to those in the active main group
@@ -194,11 +203,18 @@ const InventoryModule: React.FC = () => {
             </button>
           ))}
 
-          {/* Action buttons — promoted to top tier alongside main groups */}
+          {/* Action buttons — promoted to top tier alongside main groups.
+              Label and second-button visibility depend on the company:
+                - GTK / GTI: "GRN (Stock In)" + Local Purchase GRN (aluminium flow)
+                - Glassco:   "Glass GRN" + Local Purchase GRN (mixed glass-cutting + local)
+                - Nippon:    "Hardware GRN" only — NipponGoodsReceipt already
+                             handles both incoming KIN LONG shipments and any
+                             local purchases. The Local Purchase button is
+                             redundant + uses an aluminium-flow component. */}
           <button onClick={() => setIsMigoOpen(true)} className="bg-slate-900 text-white px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center space-x-2 shadow-xl hover:bg-blue-600 transition-all whitespace-nowrap">
-            <Truck size={16} /><span>{isAluminiumCompany ? 'GRN (Stock In)' : 'Glass GRN'}</span>
+            <Truck size={16} /><span>{isAluminiumCompany ? 'GRN (Stock In)' : isNippon ? 'Hardware GRN' : 'Glass GRN'}</span>
           </button>
-          {!isAluminiumCompany && (
+          {isGlassCompany && (
             <button onClick={() => setIsStoreMigoOpen(true)} className="bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center space-x-2 shadow-xl hover:bg-emerald-800 transition-all whitespace-nowrap">
               <PackageOpen size={16} /><span>Local Purchase GRN</span>
             </button>
@@ -329,10 +345,10 @@ const InventoryModule: React.FC = () => {
             />
           );
       })()}
-      {/* P6-1: Local Purchase GRN for non-aluminium companies (Glassco/Nippon).
-          Reuses GTKStoreReceipt — same component already settles advance PV
-          via FinanceService.settleAdvance() when linkedReqId is provided. */}
-      {!isAluminiumCompany && (
+      {/* P6-1: Local Purchase GRN — Glassco only. Nippon's NipponGoodsReceipt
+          handles its full incoming flow so the second button is hidden for
+          Nippon (mounting GTKStoreReceipt here would be dead UI). */}
+      {isGlassCompany && (
         <GTKStoreReceipt
           isOpen={isStoreMigoOpen}
           onClose={() => setIsStoreMigoOpen(false)}
