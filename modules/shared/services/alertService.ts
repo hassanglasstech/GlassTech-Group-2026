@@ -146,22 +146,43 @@ const checkOverdueInvoices = async (company: string, cfg: AlertThresholds): Prom
   try {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - cfg.invoice_overdue_days);
+    const cutoffISO = cutoff.toISOString().slice(0, 10);
 
-    // Sprint 35 bugfix: table is `invoices`, not `sales_invoices`
+    // The `invoices` table is JSONB-style: (id, company, data jsonb, ...).
+    // Fields like status / due_date / client_name / total_amount live
+    // inside `data`, so filter via `data->>field` selectors and then
+    // narrow in JS — flat-column filters would 400 against this schema.
     const { data, error } = await supabase
       .from('invoices')
-      .select('id, client_name, total_amount, invoice_date, due_date')
+      .select('id, company, data')
       .eq('company', company)
-      .neq('status', 'Paid')
-      .neq('status', 'Cancelled')
-      .lt('due_date', cutoff.toISOString().slice(0, 10))
-      .limit(20);
+      .limit(200);
 
     if (error || !data) return;
 
-    for (const inv of data) {
+    const overdue = data
+      .map((row: { id: string; company: string; data: Record<string, unknown> }) => {
+        const d = row.data || {};
+        return {
+          id: row.id,
+          status:       d.status as string | undefined,
+          due_date:     (d.dueDate || d.due_date) as string | undefined,
+          invoice_date: (d.invoiceDate || d.invoice_date || d.date) as string | undefined,
+          client_name:  (d.clientName || d.client_name) as string | undefined,
+          total_amount: Number(d.totalAmount ?? d.total_amount ?? 0),
+        };
+      })
+      .filter(inv => {
+        if (inv.status === 'Paid' || inv.status === 'Cancelled') return false;
+        const due = inv.due_date || inv.invoice_date;
+        return due && due < cutoffISO;
+      })
+      .slice(0, 20);
+
+    for (const inv of overdue) {
+      const dueDateStr = inv.due_date || inv.invoice_date || cutoffISO;
       const overdueDays = Math.floor(
-        (Date.now() - new Date(inv.due_date || inv.invoice_date).getTime()) / 86400000
+        (Date.now() - new Date(dueDateStr).getTime()) / 86400000
       );
       const severity: AlertSeverity = overdueDays > 60 ? 'critical' : overdueDays > 30 ? 'warning' : 'info';
       const alert = {
@@ -169,7 +190,7 @@ const checkOverdueInvoices = async (company: string, cfg: AlertThresholds): Prom
         type:         'overdue_invoice' as AlertType,
         severity,
         title:        `Invoice overdue ${overdueDays}d — ${inv.client_name || 'Client'}`,
-        body:         `Invoice ${inv.id} • PKR ${(inv.total_amount || 0).toLocaleString()} • Due: ${inv.due_date || inv.invoice_date}`,
+        body:         `Invoice ${inv.id} • PKR ${(inv.total_amount || 0).toLocaleString()} • Due: ${dueDateStr}`,
         link:         '#/finance/billing',
         reference_id: inv.id,
         data:         { overdue_days: overdueDays, amount: inv.total_amount },
@@ -182,12 +203,24 @@ const checkOverdueInvoices = async (company: string, cfg: AlertThresholds): Prom
 
 const checkGLImbalance = async (company: string, cfg: AlertThresholds): Promise<void> => {
   try {
-    // Sum all DR - CR from ledger
+    // RPC `erp_trial_balance` is optional — only present in environments
+    // where its migration has been applied. If missing, Supabase returns
+    // 404. Swallow that silently so the alert engine stays quiet on prod
+    // until the RPC is deployed.
     const { data, error } = await supabase
       .rpc('erp_trial_balance', { p_company: company })
-      .single();
+      .maybeSingle();
 
-    if (error || !data) return;
+    if (error) {
+      // Suppress 404 / "function not found" / PGRST202 noise
+      const code = (error as { code?: string }).code;
+      const msg  = error.message || '';
+      const is404Like = code === 'PGRST202' || code === '42883'
+        || /not found|does not exist|no function/i.test(msg);
+      if (!is404Like) console.warn('[alertService] erp_trial_balance error:', msg);
+      return;
+    }
+    if (!data) return;
 
     // RPC return shape isn't typed — narrow via cast to read either field name
     const row = data as { balance?: number; trial_balance?: number };
@@ -264,18 +297,32 @@ const checkPRPending = async (company: string, cfg: AlertThresholds): Promise<vo
   try {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - cfg.pr_approval_overdue_days);
+    const cutoffISO = cutoff.toISOString();
 
+    // `requisitions` is JSONB-style — status / description / requested_by
+    // live inside `data`. created_at is a real column on the table so
+    // filter it there, then narrow status in JS.
     const { data, error } = await supabase
       .from('requisitions')
-      .select('id, description, created_at, requested_by')
+      .select('id, company, data, created_at')
       .eq('company', company)
-      .eq('status', 'Pending')
-      .lt('created_at', cutoff.toISOString())
-      .limit(10);
+      .lt('created_at', cutoffISO)
+      .limit(50);
 
     if (error || !data) return;
 
-    for (const pr of data) {
+    const pending = data
+      .map((row: { id: string; data: Record<string, unknown>; created_at: string }) => ({
+        id: row.id,
+        created_at: row.created_at,
+        status:        row.data?.status as string | undefined,
+        description:   (row.data?.description || row.data?.headerText) as string | undefined,
+        requested_by:  (row.data?.requestedBy || row.data?.requester || row.data?.requisitioner) as string | undefined,
+      }))
+      .filter(pr => pr.status === 'Pending')
+      .slice(0, 10);
+
+    for (const pr of pending) {
       const days = Math.floor((Date.now() - new Date(pr.created_at).getTime()) / 86400000);
       await _fire({
         company,

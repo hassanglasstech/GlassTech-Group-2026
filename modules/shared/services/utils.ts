@@ -80,8 +80,37 @@ export const safeSave = (key: string, data: any): boolean => {
       });
     }
 
-    // 1. Write to localStorage cache immediately — UI stays instant
-    try { localStorage.setItem(key, JSON.stringify(toSave)); } catch { /* quota ok — Supabase is primary */ }
+    // 1. Write to localStorage cache immediately — UI stays instant.
+    //    Quota fallback: when base64 image payloads push the products
+    //    cache past the ~5 MB quota, drop image_url and retry. Images
+    //    stay safe in Supabase (source of truth); the UI just lazy-loads
+    //    them on demand when missing locally.
+    try {
+      localStorage.setItem(key, JSON.stringify(toSave));
+    } catch (quotaErr: unknown) {
+      const isQuota = (quotaErr instanceof Error)
+        && (quotaErr.name === 'QuotaExceededError' || /quota/i.test(quotaErr.message));
+      if (!isQuota || !Array.isArray(toSave)) {
+        /* non-quota failure — Supabase is primary, swallow silently */
+      } else {
+        // Strip the largest bloat field per known table and retry once.
+        const HEAVY_FIELD: Record<string, string> = {
+          gtk_erp_products: 'imageUrl',
+          gtk_erp_clients:  'attachments',
+        };
+        const heavy = HEAVY_FIELD[key];
+        if (heavy) {
+          const slim = (toSave as Array<Record<string, unknown>>).map(item => {
+            const { [heavy]: _drop, ...rest } = item || {};
+            return rest;
+          });
+          try {
+            localStorage.setItem(key, JSON.stringify(slim));
+            console.warn(`[safeSave] ${key}: quota exceeded — dropped "${heavy}" from local cache (${(toSave as unknown[]).length} rows). Images remain in Supabase.`);
+          } catch { /* still over quota — give up local cache, Supabase wins */ }
+        }
+      }
+    }
 
     // 2. Push to Supabase in background — non-blocking, won't slow UI
     if (Array.isArray(toSave)) {

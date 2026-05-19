@@ -1643,7 +1643,28 @@ const pullTable = async (table: string, localKey: string): Promise<boolean> => {
         }));
       }
       
-      localStorage.setItem(localKey, JSON.stringify(data));
+      try {
+        localStorage.setItem(localKey, JSON.stringify(data));
+      } catch (quotaErr: unknown) {
+        // Bulk-imported Nippon products carry base64 image_url payloads
+        // that can blow the ~5 MB localStorage quota during pull. Retry
+        // once with image_url stripped — Supabase still holds the real
+        // images so the UI can lazy-fetch them when needed.
+        const isQuota = (quotaErr instanceof Error)
+          && (quotaErr.name === 'QuotaExceededError' || /quota/i.test(quotaErr.message));
+        if (isQuota && table === 'products') {
+          const slim = data.map((p: { imageUrl?: string }) => {
+            const { imageUrl: _drop, ...rest } = p;
+            return rest;
+          });
+          try {
+            localStorage.setItem(localKey, JSON.stringify(slim));
+            console.warn(`[Sync] ${table}: quota exceeded — cached ${data.length} rows without imageUrl. Supabase still holds full data.`);
+          } catch { /* still over quota — give up local cache, Supabase wins */ }
+        } else {
+          throw quotaErr;
+        }
+      }
     }
     return true;
   } catch (err: any) {
