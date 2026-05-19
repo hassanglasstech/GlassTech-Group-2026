@@ -10,12 +10,13 @@ interface Props {
 }
 
 export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, printType = 'Glasstech' }) => {
-    const subTotal = quote.items.reduce((s, i) => s + i.amount, 0);
-    const discountAmount = quote.discountAmount !== undefined && quote.discountAmount > 0 
-        ? quote.discountAmount 
+    const items = quote.items || [];
+    const subTotal = items.reduce((s, i) => s + (i.amount || 0), 0);
+    const discountAmount = quote.discountAmount !== undefined && quote.discountAmount > 0
+        ? quote.discountAmount
         : (subTotal * (quote.discountPercent || 0)) / 100;
     const netAmount = subTotal - discountAmount;
-    
+
     const advanceAmount = quote.receivedAmount || 0;
     const displayId = quote.orderNo || quote.id;
 
@@ -25,17 +26,17 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
             breakdown: {} as Record<string, number>
         };
 
-        quote.items.forEach(item => {
+        items.forEach(item => {
             if (item.isSection) return;
             const qty = Number(item.qty) || 0;
             stats.totalQty += qty;
-            
+
             const key = (item.glassSize || 'PCS').toUpperCase();
             stats.breakdown[key] = (stats.breakdown[key] || 0) + qty;
         });
 
         return stats;
-    }, [quote.items]);
+    }, [items]);
 
     const renderHeader = () => {
         if (printType === 'KinLong') {
@@ -210,9 +211,9 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                     {(() => {
                         let serialNum = 0;
                         const MAX_ROWS = 10;
-                        const itemsToChunk = quote.items;
-                        const chunks: typeof quote.items[] = [];
-                        let currentChunk: typeof quote.items = [];
+                        const itemsToChunk = items;
+                        const chunks: typeof items[] = [];
+                        let currentChunk: typeof items = [];
 
                         itemsToChunk.forEach((item) => {
                             currentChunk.push(item);

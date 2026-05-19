@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
+import { Product, Quotation, QuotationItem } from '@/modules/shared/types';
 import { NipponPrintTemplate } from '@/modules/nippon/prints/NipponPrintTemplate';
 import { SharedQuotationList } from '@/modules/sales/components/SharedQuotationList';
 import { getBrandNick } from '@/modules/shared/utils/brandUtils';
-import { 
-  Printer, X, Plus, Trash2, FileSignature, 
+import {
+  Printer, X, Plus, Trash2, FileSignature,
   Search, Calendar, Edit2, FileCheck, Eye, Save, ArrowLeft, Layers, Copy
 } from 'lucide-react';
 import { useNipponQuotations } from './useNipponQuotations';
@@ -39,7 +40,8 @@ const NipponQuotationManager: React.FC = () => {
     handleSave,
     handleDelete,
     selectProduct,
-    initialQuotation
+    initialQuotation,
+    isSaving,
   } = useNipponQuotations();
 
   const isLocked = formData.status === 'Approved';
@@ -409,26 +411,26 @@ const NipponQuotationManager: React.FC = () => {
                     </div>
 
                     <div className="flex items-center space-x-3">
-                      <button 
-                        disabled={isLocked} 
-                        onClick={() => handleSave(false)} 
-                        className={`text-[10px] py-2.5 px-6 flex items-center space-x-2 shadow-sm font-black uppercase tracking-widest transition-all rounded-lg border ${isLocked ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+                      <button
+                        disabled={isLocked || isSaving}
+                        onClick={() => handleSave(false)}
+                        className={`text-[10px] py-2.5 px-6 flex items-center space-x-2 shadow-sm font-black uppercase tracking-widest transition-all rounded-lg border ${(isLocked || isSaving) ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
                       >
-                        <Save size={16}/> <span>Save Draft</span>
+                        <Save size={16}/> <span>{isSaving ? 'Saving…' : 'Save Draft'}</span>
                       </button>
-                      <button 
-                        disabled={isLocked} 
-                        onClick={() => handleSave(false)} 
-                        className={`text-[10px] py-2.5 px-6 flex items-center space-x-2 shadow-sm font-black uppercase tracking-widest transition-all rounded-lg border ${isLocked ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100'}`}
+                      <button
+                        disabled={isLocked || isSaving}
+                        onClick={() => handleSave(false)}
+                        className={`text-[10px] py-2.5 px-6 flex items-center space-x-2 shadow-sm font-black uppercase tracking-widest transition-all rounded-lg border ${(isLocked || isSaving) ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100'}`}
                       >
-                        <Save size={16}/> <span>Save Quotation</span>
+                        <Save size={16}/> <span>{isSaving ? 'Saving…' : 'Save Quotation'}</span>
                       </button>
-                      <button 
-                        disabled={isLocked} 
-                        onClick={() => handleSave(true)} 
-                        className={`text-[10px] py-2.5 px-8 flex items-center space-x-2 shadow-xl font-black uppercase tracking-widest transition-all rounded-lg ${isLocked ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-100'}`}
+                      <button
+                        disabled={isLocked || isSaving}
+                        onClick={() => handleSave(true)}
+                        className={`text-[10px] py-2.5 px-8 flex items-center space-x-2 shadow-xl font-black uppercase tracking-widest transition-all rounded-lg ${(isLocked || isSaving) ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-100'}`}
                       >
-                        <FileCheck size={16}/> <span>Approve Order</span>
+                        <FileCheck size={16}/> <span>{isSaving ? 'Approving…' : 'Approve Order'}</span>
                       </button>
                     </div>
                   </div>

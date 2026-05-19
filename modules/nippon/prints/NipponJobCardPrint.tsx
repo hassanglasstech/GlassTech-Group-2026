@@ -10,7 +10,8 @@ interface Props {
 }
 
 export const NipponJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces, products }) => {
-    const jobPieces = pieces.filter(p => p.orderId === quote.orderNo);
+    const items = quote.items || [];
+    const jobPieces = (pieces || []).filter(p => p.orderId === quote.orderNo);
     const displayId = quote.orderNo || quote.id;
 
     return (
@@ -69,7 +70,7 @@ export const NipponJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces,
                 
                 {(() => {
                     const printableItems: any[] = [];
-                    quote.items.forEach((item, itemIdx) => {
+                    items.forEach((item, itemIdx) => {
                         if (item.isSection) {
                             printableItems.push({ isSection: true, description: item.description });
                         }

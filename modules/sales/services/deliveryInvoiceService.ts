@@ -15,6 +15,7 @@ import {
   buildDeliveryCOGSPlan,
   applyDeliveryCOGSStoreUpdates,
 } from '@/modules/procurement/services/glasscoGLService';
+import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { allocateSerial } from '@/modules/sales/services/serialAllocator';
 import { supabase } from '../../../src/services/supabaseClient';
@@ -47,6 +48,99 @@ const buildInvoiceNumber = (company: Company, seq: number): string => {
   }
   return `INV-${prefix}-${year}-${String(seq).padStart(4, '0')}`;
 };
+
+// ── P1-2 (Nippon): trading COGS plan ─────────────────────────────────
+// Nippon sells hardware from on-hand inventory. At invoice time:
+//   Dr COGS — General Hardware  (sum of qty × moving-avg-price)
+//   Cr Hardware Inventory — General Hardware
+// Inventory quantity itself was already decremented at SO approval
+// (useNipponQuotations.handleSave), so we ONLY post the value entry here
+// — no double decrement of stock. If MAP shifted between approval and
+// invoice, the value uses MAP-at-invoice, which is the conservative
+// IFRS-consistent choice.
+interface NipponTradingCOGSPlan {
+  ledgerTx: LedgerTransaction | null;
+  totalCogs: number;
+  alreadyPosted: boolean;
+}
+
+// Mirror the Glassco delivery COGS plan shape so cogsPlan can be assigned
+// from either builder without downstream branching.
+type NipponTradingCOGSPlanCompat = {
+  ledgerTx: LedgerTransaction | null;
+  storeUpdates: never[];
+  totalSqft: 0;
+  rawGlassCOGS: number;
+  totalCuttingCost: 0;
+  totalProcessingCost: 0;
+  alreadyPosted: boolean;
+};
+
+function buildNipponTradingCOGSPlan(params: {
+  company: Company;
+  invoiceId: string;
+  orderId: string;
+  items: Quotation['items'];
+  date: string;
+  clientName: string;
+}): NipponTradingCOGSPlan {
+  const { company, invoiceId, orderId, items, date, clientName } = params;
+  const txId = `GL-COGS-${invoiceId}`;
+
+  const ledger = FinanceService.getLedger();
+  if (ledger.some((t) => t.id === txId)) {
+    return { ledgerTx: null, totalCogs: 0, alreadyPosted: true };
+  }
+
+  const store = InventoryService.getStore();
+  let totalCogs = 0;
+  (items || []).forEach((item) => {
+    if (item.isSection) return;
+    const qty = Number(item.qty) || 0;
+    if (qty <= 0) return;
+    const si = store.find((s) => s.id === item.locationCode);
+    const unitCost = si?.movingAveragePrice || 0;
+    totalCogs += qty * unitCost;
+  });
+
+  if (totalCogs <= 0) {
+    return { ledgerTx: null, totalCogs: 0, alreadyPosted: false };
+  }
+
+  const invParent  = FinanceService.ensureAccount(company, 'ASSETS',               1, null,            'Asset',   '10');
+  const invCurrent = FinanceService.ensureAccount(company, 'CURRENT ASSETS',       2, invParent.id,    'Asset',   '11');
+  const invRoot    = FinanceService.ensureAccount(company, 'INVENTORY',            3, invCurrent.id,   'Asset',   '115');
+  const invHw      = FinanceService.ensureAccount(company, 'HARDWARE INVENTORY',   4, invRoot.id,      'Asset',   '1151');
+  const invGen     = FinanceService.ensureAccount(company, 'GENERAL HARDWARE — STOCK', 5, invHw.id,    'Asset',   '11514');
+
+  const expParent  = FinanceService.ensureAccount(company, 'EXPENSES',             1, null,            'Expense', '50');
+  const cogsRoot   = FinanceService.ensureAccount(company, 'COST OF GOODS SOLD',   2, expParent.id,    'Expense', '51');
+  const cogsGroup  = FinanceService.ensureAccount(company, 'COGS',                 3, cogsRoot.id,     'Expense', '511');
+  const cogsGen    = FinanceService.ensureAccount(company, 'GENERAL HARDWARE — COGS', 4, cogsGroup.id, 'Expense', '5114');
+
+  const ledgerTx: LedgerTransaction = {
+    id: txId,
+    company,
+    docType: 'DR',
+    docDate: date,
+    date,
+    description: `COGS @ delivery — ${orderId} → ${clientName}`,
+    referenceId: invoiceId,
+    status: 'Posted',
+    reqId: orderId,
+    details: [
+      { accountId: cogsGen.id, debit: totalCogs, credit: 0,
+        text: `Trading COGS — General Hardware: ${(items || []).filter(i => !i.isSection).length} lines` },
+      { accountId: invGen.id, debit: 0, credit: totalCogs,
+        text: `Inventory relief — General Hardware → ${clientName}` },
+    ],
+    createdBy: 'system-auto',
+  };
+
+  FinanceService.assertGLBalance(ledgerTx);
+
+  return { ledgerTx, totalCogs, alreadyPosted: false };
+}
 
 // Phase-2: atomic Postgres-issued invoice number (RC-8 fix).
 // Falls back to local counter when RPC unavailable (offline mode).
@@ -163,12 +257,21 @@ export async function generateDeliveryInvoice(
   // invoices used to post Revenue with zero COGS when no production pieces
   // were linked, permanently inflating gross profit. Validate UPFRONT — before
   // any GL or DB writes — so the books stay clean if pieces are missing.
-  const hasGlassItems = effectiveItems.some(
+  //
+  // P1-3 (Nippon go-live): trading companies don't produce anything — they
+  // sell from on-hand inventory. The pieces gate must be skipped for them;
+  // COGS for trading flows comes from inventory (handled in the trading
+  // revenue branch below).
+  const isTradingCompany = company === 'Nippon';
+
+  const hasGlassItems = !isTradingCompany && effectiveItems.some(
     (i) => !i.isSection && (Number(i.totalSqFt) || Number(i.sqft) || 0) > 0
   );
-  const linkedPieceIds = ProductionService.getProductionPieces()
-    .filter((p) => p.orderId === order.id || p.orderId === order.orderNo)
-    .map((p) => p.id);
+  const linkedPieceIds = isTradingCompany
+    ? []
+    : ProductionService.getProductionPieces()
+        .filter((p) => p.orderId === order.id || p.orderId === order.orderNo)
+        .map((p) => p.id);
 
   if (hasGlassItems && linkedPieceIds.length === 0) {
     throw new Error(
@@ -190,11 +293,20 @@ export async function generateDeliveryInvoice(
     5, arControl.id, 'Asset', '12210'
   );
 
+  // P1-1 (Nippon go-live): trading revenue chain differs from glass services.
+  // Nippon sells hardware — revenue must hit "HARDWARE SALES" under SALES
+  // REVENUE, not "GLASS PROCESSING SERVICES". Wrong chain = wrong P&L from day 1.
   const revParent  = FinanceService.ensureAccount(company, 'REVENUE',                    1, null,           'Revenue', '40');
   const revSales   = FinanceService.ensureAccount(company, 'SALES REVENUE',              2, revParent.id,   'Revenue', '41');
-  const revService = FinanceService.ensureAccount(company, 'SERVICE REVENUE',            3, revSales.id,    'Revenue', '411');
-  const revGlass   = FinanceService.ensureAccount(company, 'GLASS PROCESSING SERVICES', 4, revService.id,  'Revenue', '4111');
-  const revenueAcc = FinanceService.ensureAccount(company, 'SERVICE INCOME',            5, revGlass.id,    'Revenue', '41110');
+  let revenueAcc;
+  if (isTradingCompany) {
+    const revHardware = FinanceService.ensureAccount(company, 'HARDWARE SALES',          3, revSales.id,    'Revenue', '412');
+    revenueAcc        = FinanceService.ensureAccount(company, 'HARDWARE SALES INCOME',   4, revHardware.id, 'Revenue', '4120');
+  } else {
+    const revService = FinanceService.ensureAccount(company, 'SERVICE REVENUE',            3, revSales.id,    'Revenue', '411');
+    const revGlass   = FinanceService.ensureAccount(company, 'GLASS PROCESSING SERVICES', 4, revService.id,  'Revenue', '4111');
+    revenueAcc       = FinanceService.ensureAccount(company, 'SERVICE INCOME',            5, revGlass.id,    'Revenue', '41110');
+  }
 
   // ── GST Payable account ───────────────────────────────────────────
   let gstPayableAcc: ReturnType<typeof FinanceService.ensureAccount> | null = null;
@@ -355,8 +467,27 @@ export async function generateDeliveryInvoice(
   }
 
   // ── Build COGS plan (without writing) ────────────────────────────
-  let cogsPlan: ReturnType<typeof buildDeliveryCOGSPlan> = null;
-  if (linkedPieceIds.length > 0) {
+  // Glassco path = production-pieces driven. Nippon (trading) path =
+  // qty × MAP from inventory. Both produce the same shape for the RPC
+  // payload (ledgerTx + storeUpdates), so downstream code stays uniform.
+  let cogsPlan: ReturnType<typeof buildDeliveryCOGSPlan> | NipponTradingCOGSPlanCompat = null;
+  if (isTradingCompany) {
+    const tradingPlan = buildNipponTradingCOGSPlan({
+      company, invoiceId,
+      orderId: order.orderNo || order.id,
+      items: effectiveItems,
+      date: today, clientName,
+    });
+    cogsPlan = {
+      ledgerTx: tradingPlan.ledgerTx,
+      storeUpdates: [],
+      totalSqft: 0,
+      rawGlassCOGS: tradingPlan.totalCogs,
+      totalCuttingCost: 0,
+      totalProcessingCost: 0,
+      alreadyPosted: tradingPlan.alreadyPosted,
+    };
+  } else if (linkedPieceIds.length > 0) {
     cogsPlan = buildDeliveryCOGSPlan({
       company, invoiceId,
       orderId: order.orderNo || order.id,

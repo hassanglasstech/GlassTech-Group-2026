@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { toast } from 'sonner';
 import { Company, Client, Quotation, QuotationItem, Product } from '@/modules/shared/types';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { StoreItem } from '@/modules/procurement/types/inventory';
+import { Logger } from '@/modules/shared/services/logger';
 
 export const useNipponQuotations = () => {
   const company: Company = 'Nippon';
@@ -14,6 +16,7 @@ export const useNipponQuotations = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [printingQuote, setPrintingQuote] = useState<Quotation | null>(null);
   const [activeDropdown, setActiveDropdown] = useState<number | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const initialQuotation: Partial<Quotation> = {
@@ -240,62 +243,105 @@ export const useNipponQuotations = () => {
   };
 
   const handleSave = async (approve: boolean) => {
-    if (!formData.clientId) return alert("Client is required.");
-    if (!formData.manualSerial) return alert("Serial Number is required.");
-    
-    const now = new Date();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const yy = String(now.getFullYear()).slice(-2);
-    const mmyy = `${mm}${yy}`;
+    if (isSaving) return;
 
-    const all = await AsyncSalesService.getQuotations();
+    // P1-4: required-field + business validation
+    if (!formData.clientId) return toast.error("Client is required.");
+    if (!formData.manualSerial) return toast.error("Serial Number is required.");
 
-    const isDuplicate = all.some(q => 
-        q.company === company && 
-        q.manualSerial === formData.manualSerial && 
-        q.id !== formData.id
-    );
-    if (isDuplicate) return alert(`Serial Number ${formData.manualSerial} is already used!`);
-    
-    let finalId = formData.id;
-    if (!finalId) finalId = `QT-${mmyy}-${formData.manualSerial}`;
+    const lineItems = (formData.items || []).filter(i => !i.isSection);
+    if (lineItems.length === 0) return toast.error("Add at least one item before saving.");
 
-    const finalQuo: Quotation = { 
-      ...(formData as Quotation), 
-      id: finalId!, 
-      company, 
-      status: approve ? 'Approved' : 'Draft',
-      orderNo: approve ? `SO-${mmyy}-${formData.manualSerial}` : undefined
-    };
+    const itemsSubtotal = lineItems.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+    if (itemsSubtotal <= 0) return toast.error("Quotation total must be greater than zero.");
 
-    if (approve) {
-      const currentStore = InventoryService.getStore();
-      const updatedStore = [...currentStore];
-      
-      finalQuo.items.forEach(item => {
-        if (item.isSection) return;
-        const storeIdx = updatedStore.findIndex(s => s.id === item.locationCode);
-        if (storeIdx !== -1) {
-          updatedStore[storeIdx] = {
-            ...updatedStore[storeIdx],
-            unrestrictedQty: (updatedStore[storeIdx].unrestrictedQty || 0) - (Number(item.qty) || 0),
-            quantity: (updatedStore[storeIdx].quantity || 0) - (Number(item.qty) || 0)
-          };
-        }
-      });
-      InventoryService.saveStore(updatedStore);
+    // P1-5: block edit-after-approval to prevent inventory double-decrement.
+    // Once approved, the quote becomes a Sales Order — edits must go through
+    // credit notes / amendments, not direct re-save.
+    if (formData.status === 'Approved') {
+      return toast.error("This quote is already approved. Use a Credit Note to amend.");
     }
 
-    await AsyncSalesService.saveQuotations([...all.filter(x => x.id !== finalQuo.id), finalQuo]);
-    await refreshData();
-    setView('list');
+    setIsSaving(true);
+    try {
+      const now = new Date();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const yy = String(now.getFullYear()).slice(-2);
+      const mmyy = `${mm}${yy}`;
+
+      const all = await AsyncSalesService.getQuotations();
+
+      const isDuplicate = all.some(q =>
+          q.company === company &&
+          q.manualSerial === formData.manualSerial &&
+          q.id !== formData.id
+      );
+      if (isDuplicate) {
+        toast.error(`Serial Number ${formData.manualSerial} is already used.`);
+        return;
+      }
+
+      let finalId = formData.id;
+      if (!finalId) finalId = `QT-${mmyy}-${formData.manualSerial}`;
+
+      const finalQuo: Quotation = {
+        ...(formData as Quotation),
+        id: finalId!,
+        company,
+        status: approve ? 'Approved' : 'Draft',
+        orderNo: approve ? `SO-${mmyy}-${formData.manualSerial}` : undefined
+      };
+
+      // P1-7: persist quote FIRST, then decrement inventory only on success.
+      // Previous order (inventory → quote) left stock out of sync when the
+      // quote save failed.
+      await AsyncSalesService.saveQuotations([...all.filter(x => x.id !== finalQuo.id), finalQuo]);
+
+      if (approve) {
+        const currentStore = InventoryService.getStore();
+        const updatedStore = [...currentStore];
+
+        finalQuo.items.forEach(item => {
+          if (item.isSection) return;
+          const storeIdx = updatedStore.findIndex(s => s.id === item.locationCode);
+          if (storeIdx !== -1) {
+            updatedStore[storeIdx] = {
+              ...updatedStore[storeIdx],
+              unrestrictedQty: (updatedStore[storeIdx].unrestrictedQty || 0) - (Number(item.qty) || 0),
+              quantity: (updatedStore[storeIdx].quantity || 0) - (Number(item.qty) || 0)
+            };
+          }
+        });
+        InventoryService.saveStore(updatedStore);
+      }
+
+      Logger.action('SALES', approve ? 'NIPPON_QUOTE_APPROVED' : 'NIPPON_QUOTE_SAVED',
+        `${finalQuo.id} (${company}) total=${itemsSubtotal}`,
+        { referenceId: finalQuo.id, amount: itemsSubtotal, extra: { company } });
+      toast.success(approve ? `Sales Order ${finalQuo.orderNo} created.` : 'Quotation saved.');
+
+      await refreshData();
+      setView('list');
+    } catch (err) {
+      Logger.error('NipponQuotations', 'handleSave failed', err);
+      toast.error(`Save failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm("Delete this quotation?")) {
+    if (!confirm("Delete this quotation?")) return;
+    try {
       const all = await AsyncSalesService.getQuotations();
       await AsyncSalesService.saveQuotations(all.filter(x => x.id !== id));
+      Logger.action('SALES', 'NIPPON_QUOTE_DELETED', `${id} (${company})`,
+        { referenceId: id, extra: { company } });
+      toast.success('Quotation deleted.');
       await refreshData();
+    } catch (err) {
+      Logger.error('NipponQuotations', 'handleDelete failed', err);
+      toast.error(`Delete failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
@@ -328,6 +374,7 @@ export const useNipponQuotations = () => {
     handleSave,
     handleDelete,
     selectProduct,
-    initialQuotation
+    initialQuotation,
+    isSaving,
   };
 };
