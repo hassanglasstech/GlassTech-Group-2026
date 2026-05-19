@@ -372,11 +372,12 @@ const checkLastBackup = async (_company: string): Promise<CheckResult> => {
 
 const checkOpenAlerts = async (company: string): Promise<CheckResult> => {
   try {
+    // maybeSingle: avoids 406 when no alerts exist for this company yet
     const { data, error } = await supabase
       .from('v_alert_unread')
       .select('total_unread, critical_count')
       .eq('company', company)
-      .single();
+      .maybeSingle();
     if (error || !data) {
       return { key: 'ops_open_alerts', label: 'No critical alerts open', category: 'operations', status: 'pass', message: '0 critical alerts', ran_at: _now() };
     }

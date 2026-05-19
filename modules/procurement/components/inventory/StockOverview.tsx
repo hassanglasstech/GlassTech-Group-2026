@@ -17,11 +17,42 @@ interface StockOverviewProps {
 
 const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSearchTerm }) => {
     const company = useAppStore(state => state.selectedCompany);
-    const [typeFilter, setTypeFilter] = useState('All');
+    const [mainFilter, setMainFilter] = useState('All');
+    const [subFilter, setSubFilter]   = useState('All');
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 20;
-    
+
     const allProducts = SalesService.getProducts();
+
+    // Category tree — derived from actual products so the dropdowns always
+    // reflect what's in the database, not a hardcoded list. Falls back to
+    // a sensible default ordering when alphabetic doesn't match the
+    // domain hierarchy (Window → Door → Sliding first).
+    const categoryTree = useMemo(() => {
+        const tree = new Map<string, Set<string>>();
+        const companyProducts = allProducts.filter(p => p.company === company);
+        for (const p of companyProducts) {
+            const main = p.mainCategory?.trim();
+            const sub  = p.subCategory?.trim();
+            if (!main) continue;
+            if (!tree.has(main)) tree.set(main, new Set());
+            if (sub) tree.get(main)!.add(sub);
+        }
+        const MAIN_ORDER = [
+            'Window Hardware', 'Door Hardware', 'Sliding Hardware',
+            'Profile & Frame Hardware', 'Silicon & Sealants',
+            'Mesh & Screens', 'Fasteners & Consumables',
+        ];
+        const ordered = new Map<string, string[]>();
+        for (const m of MAIN_ORDER) if (tree.has(m)) ordered.set(m, [...tree.get(m)!].sort());
+        for (const [m, subs] of tree) if (!ordered.has(m)) ordered.set(m, [...subs].sort());
+        return ordered;
+    }, [allProducts, company]);
+
+    const availableSubs = useMemo(() => {
+        if (mainFilter === 'All') return [];
+        return categoryTree.get(mainFilter) || [];
+    }, [mainFilter, categoryTree]);
 
     // Phase 11 — Low stock alerts
     const lowStockAlerts = useMemo(() =>
@@ -33,16 +64,23 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
     // Reset pagination when filter changes
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, typeFilter]);
+    }, [searchTerm, mainFilter, subFilter]);
+
+    // Reset subFilter when mainFilter changes — a sub selected under one
+    // main should not silently linger when the user switches main.
+    React.useEffect(() => {
+        setSubFilter('All');
+    }, [mainFilter]);
 
     const filteredItems = useMemo(() => {
         return items.filter(i => {
             const product = allProducts.find(p => p.id === i.id);
             const matchesSearch = i.name.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchesType = typeFilter === 'All' || product?.subCategory === typeFilter;
-            return matchesSearch && matchesType;
+            const matchesMain = mainFilter === 'All' || product?.mainCategory === mainFilter;
+            const matchesSub  = subFilter  === 'All' || product?.subCategory  === subFilter;
+            return matchesSearch && matchesMain && matchesSub;
         });
-    }, [items, searchTerm, typeFilter, allProducts]);
+    }, [items, searchTerm, mainFilter, subFilter, allProducts]);
 
     const paginatedItems = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
@@ -58,25 +96,38 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                         <input type="text" placeholder="Filter Inventory..." className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                     </div>
-                    {/* Nippon Specific Filter */}
+                    {/* Nippon — Cascading Main → Sub Category filters,
+                        driven by actual product taxonomy (Window/Door/Sliding/etc.) */}
                     {company === 'Nippon' && (
-                        <div className="relative">
-                            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                            <select 
-                                className="pl-10 pr-8 py-3 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none cursor-pointer hover:border-blue-300 transition-all appearance-none"
-                                value={typeFilter}
-                                onChange={(e) => setTypeFilter(e.target.value)}
-                            >
-                                <option value="All">All Types</option>
-                                <option value="Handle">Handles</option>
-                                <option value="Hinge">Hinges</option>
-                                <option value="Lock">Locks</option>
-                                <option value="Roller">Rollers</option>
-                                <option value="Spider Fitting">Spiders</option>
-                                <option value="Mesh">Meshes</option>
-                                <option value="Accessory">Accessories</option>
-                            </select>
-                        </div>
+                        <>
+                            <div className="relative">
+                                <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                <select
+                                    className="pl-10 pr-8 py-3 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none cursor-pointer hover:border-blue-300 transition-all appearance-none"
+                                    value={mainFilter}
+                                    onChange={(e) => setMainFilter(e.target.value)}
+                                >
+                                    <option value="All">All Categories</option>
+                                    {[...categoryTree.keys()].map(main => (
+                                        <option key={main} value={main}>{main}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            {mainFilter !== 'All' && availableSubs.length > 0 && (
+                                <div className="relative">
+                                    <select
+                                        className="pl-4 pr-8 py-3 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none cursor-pointer hover:border-blue-300 transition-all appearance-none"
+                                        value={subFilter}
+                                        onChange={(e) => setSubFilter(e.target.value)}
+                                    >
+                                        <option value="All">All Sub-Types</option>
+                                        {availableSubs.map(sub => (
+                                            <option key={sub} value={sub}>{sub}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
                 <div className="flex space-x-4">
@@ -145,9 +196,14 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                             </td>
                             <td className="px-6 py-4">
                                 <p className="font-bold text-slate-700 text-xs uppercase">{item.name}</p>
-                                {product?.subCategory && (
-                                    <span className="inline-block mt-1 px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-[9px] font-black uppercase">{product.subCategory}</span>
-                                )}
+                                <div className="flex gap-1 mt-1 flex-wrap">
+                                    {product?.mainCategory && (
+                                        <span className="inline-block px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[9px] font-black uppercase border border-blue-100">{product.mainCategory}</span>
+                                    )}
+                                    {product?.subCategory && (
+                                        <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-[9px] font-black uppercase">{product.subCategory}</span>
+                                    )}
+                                </div>
                             </td>
                             <td className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase">
                                 {hasImportSpecs ? (

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import NipponProductForm from '@/modules/nippon/components/NipponProductForm';
 import NipponSmartImporter from './components/NipponSmartImporter';
+import NipponDirectImporter from './components/NipponDirectImporter';
 import { NipponCatalogPrint } from '@/modules/nippon/prints/NipponCatalogPrint';
 import * as XLSX from 'xlsx';
 
@@ -22,7 +23,7 @@ const NipponProductMaster: React.FC = () => {
   const [catFilter, setCatFilter] = useState('All');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'catalog'>('table');
-  const [activeTab, setActiveTab] = useState<'list' | 'import'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'import' | 'direct'>('list');
   const [isPrintingCatalog, setIsPrintingCatalog] = useState(false);
 
   const jsonInputRef = useRef<HTMLInputElement>(null);
@@ -262,15 +263,26 @@ const NipponProductMaster: React.FC = () => {
         >
           Material Registry
         </button>
-        <button 
+        <button
+          onClick={() => setActiveTab('direct')}
+          className={`px-6 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${activeTab === 'direct' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          Bulk Import
+        </button>
+        <button
           onClick={() => setActiveTab('import')}
           className={`px-6 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${activeTab === 'import' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
         >
-          Smart Import
+          Smart Import (AI)
         </button>
       </div>
 
-      {activeTab === 'import' ? (
+      {activeTab === 'direct' ? (
+        <NipponDirectImporter onComplete={() => {
+          setActiveTab('list');
+          refreshData();
+        }} />
+      ) : activeTab === 'import' ? (
         <NipponSmartImporter onComplete={() => {
           setActiveTab('list');
           refreshData();

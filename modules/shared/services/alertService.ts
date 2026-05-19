@@ -419,11 +419,14 @@ export const AlertService = {
   getUnreadCount: async (company: string): Promise<AlertUnread> => {
     const empty: AlertUnread = { company, total_unread: 0, critical_count: 0, warning_count: 0, info_count: 0, latest_at: '' };
     try {
+      // maybeSingle: 0 rows → null (no error). Plain .single() returns
+      // 406 from PostgREST when the company has no alerts yet, spamming
+      // the console for every page load.
       const { data, error } = await supabase
         .from('v_alert_unread')
         .select('*')
         .eq('company', company)
-        .single();
+        .maybeSingle();
       return (error || !data) ? empty : data as AlertUnread;
     } catch { return empty; }
   },
