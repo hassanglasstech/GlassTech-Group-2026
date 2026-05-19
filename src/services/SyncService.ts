@@ -654,44 +654,77 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     skip_month: l.skipMonth||l.skip_month||null,
     company: l.company||'',
   }),
-  payroll: (p: any) => ({
-    id: p.id, employee_id: p.employeeId||p.employee_id||'',
-    month: p.month||'',
-    basic_pay: p.basicPay||p.basic_pay||0,
-    allowances: p.allowances||0,
-    overtime_pay: p.overtimePay||p.overtime_pay||0,
-    overtime_hours: p.overtimeHours||p.overtime_hours||0,
-    early_deduction_hours: p.earlyDeductionHours||p.early_deduction_hours||0,
-    late_deduction: p.lateDeduction||p.late_deduction||0,
-    absent_deduction: p.absentDeduction||p.absent_deduction||0,
-    loan_deduction: p.loanDeduction||p.loan_deduction||0,
-    advance_deduction: p.advanceDeduction||p.advance_deduction||0,
-    net_salary: p.netSalary||p.net_salary||0,
-    absent_dates: p.absentDates||p.absent_dates||[],
-    late_dates: p.lateDates||p.late_dates||[],
-    loan_repayments: p.loanRepayments||p.loan_repayments||[],
-    is_salary_paid: p.isSalaryPaid||p.is_salary_paid||false,
-    is_overtime_paid: p.isOvertimePaid||p.is_overtime_paid||false,
-    allowed_absent_count: p.allowedAbsentCount||p.allowed_absent_count||0,
-    loan_waived: p.loanWaived||p.loan_waived||false,
-    company: p.company||'',
-  }),
+  payroll: (p: any) => {
+    // Cause of "invalid input syntax for type numeric: 'false'":
+    // legacy payroll rows in localStorage can have numeric fields
+    // accidentally storing the string "false" (or other non-numbers)
+    // from a prior buggy CSV import. `false || 0` → 0 (safe), but
+    // `"false" || 0` → "false" (truthy string) → Postgres rejects.
+    // Wrap every numeric in num() to coerce to a real number.
+    const num = (v: unknown): number => {
+      const n = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const bool = (v: unknown): boolean =>
+      v === true || v === 'true' || v === 1 || v === '1';
+    return {
+      id: p.id, employee_id: p.employeeId||p.employee_id||'',
+      month: p.month||'',
+      basic_pay: num(p.basicPay ?? p.basic_pay),
+      allowances: num(p.allowances),
+      overtime_pay: num(p.overtimePay ?? p.overtime_pay),
+      overtime_hours: num(p.overtimeHours ?? p.overtime_hours),
+      early_deduction_hours: num(p.earlyDeductionHours ?? p.early_deduction_hours),
+      late_deduction: num(p.lateDeduction ?? p.late_deduction),
+      absent_deduction: num(p.absentDeduction ?? p.absent_deduction),
+      loan_deduction: num(p.loanDeduction ?? p.loan_deduction),
+      advance_deduction: num(p.advanceDeduction ?? p.advance_deduction),
+      net_salary: num(p.netSalary ?? p.net_salary),
+      absent_dates: p.absentDates||p.absent_dates||[],
+      late_dates: p.lateDates||p.late_dates||[],
+      loan_repayments: p.loanRepayments||p.loan_repayments||[],
+      is_salary_paid: bool(p.isSalaryPaid ?? p.is_salary_paid),
+      is_overtime_paid: bool(p.isOvertimePaid ?? p.is_overtime_paid),
+      allowed_absent_count: num(p.allowedAbsentCount ?? p.allowed_absent_count),
+      loan_waived: bool(p.loanWaived ?? p.loan_waived),
+      company: p.company||'',
+    };
+  },
   // ── Tags Push Mappers ──
+  // tag_master / departments use the JSONB-style schema (id, company, data,
+  // timestamps) — the prior flat-column mappers tried to write `color`,
+  // `label`, `name`, `parent_dept`, etc. which don't exist on those tables.
+  // Bundle everything into `data` so push succeeds against actual schema.
   tag_master: (t: any) => ({
-    id: t.id, company: t.company||'', category: t.category||'job_title',
-    label: t.label||'', color: t.color||'', text_color: t.textColor||t.text_color||'',
-    is_active: t.isActive!==false,
+    id: t.id,
+    company: t.company||'',
+    data: {
+      category: t.category||'job_title',
+      label: t.label||'',
+      color: t.color||'',
+      textColor: t.textColor||t.text_color||'',
+      isActive: t.isActive!==false,
+    },
     updated_at: t._updatedAt||new Date().toISOString(),
   }),
   employee_tags: (et: any) => ({
-    id: et.id, employee_id: et.employeeId||et.employee_id||'',
-    tag_id: et.tagId||et.tag_id||'', is_primary: et.isPrimary||et.is_primary||false,
+    id: et.id,
+    company: et.company||'',
+    data: {
+      employeeId: et.employeeId||et.employee_id||'',
+      tagId: et.tagId||et.tag_id||'',
+      isPrimary: et.isPrimary||et.is_primary||false,
+    },
     updated_at: et._updatedAt||new Date().toISOString(),
   }),
   departments: (d: any) => ({
-    id: d.id, company: d.company||'', name: d.name||'',
-    parent_dept: d.parentDept||d.parent_dept||null,
-    is_active: d.isActive!==false,
+    id: d.id,
+    company: d.company||'',
+    data: {
+      name: d.name||'',
+      parentDept: d.parentDept||d.parent_dept||null,
+      isActive: d.isActive!==false,
+    },
     updated_at: d._updatedAt||new Date().toISOString(),
   }),
   // ── GlassCo Procurement Push Mappers ──
@@ -804,10 +837,19 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     updated_at: a._updatedAt||a.updatedAt||new Date().toISOString(),
   }),
   cost_centers: (c: any) => ({
-    id: c.id, company: c.company||'',
-    code: c.code||'', name: c.name||'',
-    department: c.department||'', manager: c.manager||'',
-    category: c.category||'F', hierarchy_area: c.hierarchyArea||c.hierarchy_area||'',
+    // JSONB-style schema — `manager`, `code`, `name`, etc. live inside the
+    // data blob, not as flat columns. Prior mapper was hitting "Could not
+    // find the 'manager' column" on every push.
+    id: c.id,
+    company: c.company||'',
+    data: {
+      code: c.code||'',
+      name: c.name||'',
+      department: c.department||'',
+      manager: c.manager||'',
+      category: c.category||'F',
+      hierarchyArea: c.hierarchyArea||c.hierarchy_area||'',
+    },
     updated_at: c._updatedAt||c.updatedAt||new Date().toISOString(),
   }),
   petty_cash: (p: any) => ({
@@ -1285,21 +1327,28 @@ const TABLE_PULL: Record<string, (row: any) => any> = {
     loanWaived: r.loan_waived,
   }),
   // ── Tags Pull Mappers ──
+  // tag_master / departments use JSONB-style schema — unpack `data` so the
+  // domain shape (camelCase fields) is restored on read. Falls back to
+  // flat columns to stay compatible with any rows that may have been
+  // written under the old (broken) flat-column attempt.
   tag_master: (r: any) => ({
     ...r,
-    textColor: r.text_color,
-    isActive: r.is_active,
+    ...(r.data || {}),
+    textColor: (r.data?.textColor) ?? r.text_color,
+    isActive:  (r.data?.isActive)  ?? r.is_active,
   }),
   employee_tags: (r: any) => ({
     ...r,
-    employeeId: r.employee_id,
-    tagId: r.tag_id,
-    isPrimary: r.is_primary,
+    ...(r.data || {}),
+    employeeId: (r.data?.employeeId) ?? r.employee_id,
+    tagId:      (r.data?.tagId)      ?? r.tag_id,
+    isPrimary:  (r.data?.isPrimary)  ?? r.is_primary,
   }),
   departments: (r: any) => ({
     ...r,
-    parentDept: r.parent_dept,
-    isActive: r.is_active,
+    ...(r.data || {}),
+    parentDept: (r.data?.parentDept) ?? r.parent_dept,
+    isActive:   (r.data?.isActive)   ?? r.is_active,
   }),
   // ── GlassCo Procurement Pull Mappers ──
   grn_sheet_entries: (r: any) => ({
@@ -1368,8 +1417,12 @@ const TABLE_PULL: Record<string, (row: any) => any> = {
     parentId: r.parent_id,
   }),
   cost_centers: (r: any) => ({
+    // JSONB-style schema — unpack `data` so code/name/department/manager
+    // come back as plain fields. Falls back to flat columns for any rows
+    // still written under legacy mapping.
     ...r,
-    hierarchyArea: r.hierarchy_area,
+    ...(r.data || {}),
+    hierarchyArea: (r.data?.hierarchyArea) ?? r.hierarchy_area,
   }),
   petty_cash: (r: any) => ({
     ...r,
@@ -1455,6 +1508,30 @@ const pushTable = async (table: string, localKey: string): Promise<boolean> => {
     // This is safe: Supabase will ignore unknown columns
     data = rawData.map(mapToSupabase).filter((r: any) => r.id);
     if (data.length === 0) return true;
+  }
+
+  // ── FK pre-flight: drop orphans before push ─────────────────────────────
+  // Some tables (payment_receipts, credit_notes) reference invoices.id via
+  // a foreign key. If the parent invoice was deleted locally OR never
+  // synced, the entire batch upsert fails with a 23503 / 409. Previously
+  // the error was just suppressed, which silently dropped ALL the valid
+  // rows in the batch too. Filter orphans up front so the good rows go
+  // through and the bad ones are logged once for cleanup.
+  if (table === 'payment_receipts' || table === 'credit_notes') {
+    const invoices = safeParse('gtk_erp_invoices') as Array<{ id: string }>;
+    const validInvoiceIds = new Set(invoices.map(i => i.id));
+    const before = data.length;
+    data = data.filter((r: any) => {
+      const invId = r.invoice_id;
+      // Allow null invoice_id (some credit notes can be standalone)
+      if (table === 'credit_notes' && !invId) return true;
+      return invId && validInvoiceIds.has(invId);
+    });
+    const dropped = before - data.length;
+    if (dropped > 0) {
+      console.warn(`[Sync] ${table}: filtered ${dropped} orphan row(s) — parent invoice missing locally`);
+    }
+    if (data.length === 0) return true;  // nothing valid to push
   }
 
   // ── M-6: Stamp every outgoing record with the Supabase server clock ──────
