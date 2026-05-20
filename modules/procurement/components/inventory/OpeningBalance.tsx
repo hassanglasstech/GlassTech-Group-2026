@@ -347,15 +347,22 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
         if (itemIdx !== -1) {
           item = { ...store[itemIdx] };
         } else {
-          // FIX 8b: For glass products, ensure category is set as 'Glass' so they appear in GlasscoEditor
-          const itemCategory = (line.category || 'Raw') === 'Raw' ? 'Glass' : (line.category || 'Raw');
+          // Category defaults differ per company:
+          //   Glassco: blank/Raw → Glass (so it appears in GlasscoEditor)
+          //   Nippon / GTK / GTI: blank → Hardware (trading / fabrication default)
+          let itemCategory: StoreItem['category'];
+          if (isGlassCompany) {
+            itemCategory = ((line.category || 'Raw') === 'Raw' ? 'Glass' : line.category) as StoreItem['category'];
+          } else {
+            itemCategory = (line.category && line.category !== 'Raw' ? line.category : 'Hardware') as StoreItem['category'];
+          }
           item = {
             id: effectiveMaterialId, company: company as any,
             name: line.description,
-            category: itemCategory as StoreItem['category'],
+            category: itemCategory,
             quantity: 0, unrestrictedQty: 0, qiQty: 0,
             blockedQty: 0, reservedQty: 0, consignmentQty: 0,
-            unit: line.unit || 'SqFt',
+            unit: line.unit || (isGlassCompany ? 'SqFt' : 'PCS'),
             minLevel: 0, reorderPoint: 0,
             movingAveragePrice: 0, totalValue: 0,
             storageBin: line.storageBin || 'MAIN',
@@ -388,6 +395,16 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
         // ── Material Ledger Entry ────────────────────────────────────
         // FIX 3: use noon PKT (UTC+5) to prevent date showing as previous day
         const obTimestamp = new Date(`${obDate}T12:00:00+05:00`).toISOString();
+        // Glass companies measure & post in SqFt; trading / aluminium use the
+        // raw line unit (PCS / SET). Remarks string also reads differently —
+        // "X sheets, 84x144" is meaningless for hardware.
+        const ledgerUom = isGlassCompany
+          ? (line.totalSqft > 0 ? 'SqFt' : (line.unit || 'SqFt'))
+          : (line.unit || 'PCS');
+        const ledgerRemarks = isGlassCompany
+          ? `Opening Balance — ${line.description} (${line.sheetCount} sheets${line.sheetSize ? ', ' + line.sheetSize + '"' : ''}${line.weightKg > 0 ? ', Own Wt: ' + line.weightKg + 'kg' : ''}${line.biltyWeightKg > 0 ? ', Bilty Wt: ' + line.biltyWeightKg + 'kg' : ''})${remarks ? ' | ' + remarks : ''}`
+          : `Opening Balance — ${line.description} (${line.sheetCount} ${line.unit || 'PCS'})${remarks ? ' | ' + remarks : ''}`;
+
         ledger.push({
           id:            `${obId}-L${lineIdx + 1}`,
           company:       company as any,
@@ -395,15 +412,16 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
           timestamp:     obTimestamp,
           mvmntCode:     '561',
           qty:           stockQty,
-          uom:           line.totalSqft > 0 ? 'SqFt' : (line.unit || 'SqFt'),
+          uom:           ledgerUom,
           valuation:     line.rate,
           balanceAfter:  item.quantity,
           referenceDoc:  obId,
           user:          'Opening Balance',
-          remarks:       `Opening Balance — ${line.description} (${line.sheetCount} sheets${line.sheetSize ? ', ' + line.sheetSize + '"' : ''}${line.weightKg > 0 ? ', Own Wt: ' + line.weightKg + 'kg' : ''}${line.biltyWeightKg > 0 ? ', Bilty Wt: ' + line.biltyWeightKg + 'kg' : ''})${remarks ? ' | ' + remarks : ''}`,
-          sheetCount:    line.sheetCount    || undefined,
-          lineWeightKg:  line.weightKg      || undefined,
-          biltyWeightKg: line.biltyWeightKg || undefined,
+          remarks:       ledgerRemarks,
+          // sheetCount/weight only meaningful for glass — omit for hardware
+          sheetCount:    isGlassCompany ? (line.sheetCount || undefined) : undefined,
+          lineWeightKg:  isGlassCompany ? (line.weightKg || undefined) : undefined,
+          biltyWeightKg: isGlassCompany ? (line.biltyWeightKg || undefined) : undefined,
         } as MaterialLedgerEntry);
 
         glTotal += line.totalValue;
@@ -497,37 +515,54 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
         // Check if this product already exists
         const alreadyExists = existingProducts.some(p => p.id === newMaterialId);
         if (!alreadyExists) {
-          // FIX 9: Auto-parse thickness, color, glassType from description when user
-          // typed description manually (no product-suggestion pick). Without this,
-          // GlasscoEditor MM dropdown stays empty because p.thickness is undefined.
-          const parsed = parseGlassAttrs(line.description);
-          const isGlassProduct = line.category === 'Raw' || line.category === 'Glass' || !!parsed.thickness;
+          // Glass-attr parsing only makes sense for Glassco. For Nippon /
+          // GTK / GTI we skip it so a row like "Door Handle CZS133" doesn't
+          // get auto-tagged as 4mm Clear Plain glass and corrupt the master.
+          if (isGlassCompany) {
+            const parsed = parseGlassAttrs(line.description);
+            const isGlassProduct = line.category === 'Raw' || line.category === 'Glass' || !!parsed.thickness;
+            const resolvedThickness = line.thickness || parsed.thickness || '';
+            const resolvedColor     = parsed.color || 'Clear';
+            const resolvedGlassType = parsed.glassType || 'Plain';
 
-          const resolvedThickness = line.thickness || parsed.thickness || '';
-          const resolvedColor     = parsed.color || 'Clear';
-          const resolvedGlassType = parsed.glassType || 'Plain';
-
-          const newProduct: Product = {
-            id: newMaterialId,
-            company: company as any,
-            description: line.description,
-            category: isGlassProduct ? 'Glass' : (line.category as any),
-            basePrice: line.rate || 0,
-            unit: (line.unit || 'SqFt') as any,
-            variants: [],
-            thickness: resolvedThickness,
-            sheetSize: line.sheetSize,
-            modelNo: '',
-            // For glass products, set glassType and subCategory so GlasscoEditor can find them
-            ...(isGlassProduct && {
-              glassType: resolvedGlassType as any,
-              subCategory: 'Standard' as any,
-              finishColor: resolvedColor,
-            }),
-          };
-          console.log(`[OB Product Sync] id=${newMaterialId} desc="${line.description}" → thickness="${resolvedThickness}", glassType="${resolvedGlassType}", color="${resolvedColor}"`);
-          updatedProducts.push(newProduct);
-          productsAdded++;
+            const newProduct: Product = {
+              id: newMaterialId,
+              company: company as any,
+              description: line.description,
+              category: isGlassProduct ? 'Glass' : (line.category as any),
+              basePrice: line.rate || 0,
+              unit: (line.unit || 'SqFt') as any,
+              variants: [],
+              thickness: resolvedThickness,
+              sheetSize: line.sheetSize,
+              modelNo: '',
+              ...(isGlassProduct && {
+                glassType: resolvedGlassType as any,
+                subCategory: 'Standard' as any,
+                finishColor: resolvedColor,
+              }),
+            };
+            console.log(`[OB Product Sync · Glass] id=${newMaterialId} desc="${line.description}" → thickness="${resolvedThickness}", glassType="${resolvedGlassType}", color="${resolvedColor}"`);
+            updatedProducts.push(newProduct);
+            productsAdded++;
+          } else {
+            // Hardware / aluminium / trading branch — no glass attrs, no
+            // thickness, no sheet size. Category respects the chosen value
+            // (defaults to Hardware for Nippon trading).
+            const newProduct: Product = {
+              id: newMaterialId,
+              company: company as any,
+              description: line.description,
+              category: (line.category && line.category !== 'Raw' ? line.category : 'Hardware') as any,
+              basePrice: line.rate || 0,
+              unit: (line.unit || 'PCS') as any,
+              variants: [],
+              modelNo: '',
+            };
+            console.log(`[OB Product Sync · Non-Glass] id=${newMaterialId} desc="${line.description}" category="${newProduct.category}"`);
+            updatedProducts.push(newProduct);
+            productsAdded++;
+          }
         }
       });
 
@@ -562,53 +597,96 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
     const rows: OBLine[] = [];
     const rawLines = csvText.trim().split('\n');
 
-    // Expected format: Description, Category, Sheets, SheetSize, Rate, WeightKg, BiltyKg, StorageBin
-    // Skip header if present
+    // CSV format differs per company:
+    //   Glassco: Description, Category, Sheets, SheetSize, Rate/SqFt, WeightKg, BiltyKg, StorageBin
+    //   Nippon / GTK / GTI: Description, Category, Quantity, Unit, Rate, StorageBin
     const startIdx = rawLines[0]?.toLowerCase().includes('description') ? 1 : 0;
+    const minCols = isGlassCompany ? 5 : 4;
 
     rawLines.slice(startIdx).forEach((raw, i) => {
       const cols = raw.split(',').map(c => c.trim());
-      if (cols.length < 5) {
-        errors.push(`Row ${i + 1}: Need at least 5 columns (Description, Category, Sheets, SheetSize, Rate)`);
+      if (cols.length < minCols) {
+        errors.push(`Row ${i + 1}: Need at least ${minCols} columns (${isGlassCompany
+          ? 'Description, Category, Sheets, SheetSize, Rate'
+          : 'Description, Category, Quantity, Rate'})`);
         return;
       }
-      const [desc, cat, sheetsStr, sizeStr, rateStr, wtStr, biltyStr, bin] = cols;
-      const sheets = parseFloat(sheetsStr);
-      const rate = parseFloat(rateStr);
-      const wt = parseFloat(wtStr) || 0;
-      const biltyWt = parseFloat(biltyStr) || 0;
 
-      if (!desc) { errors.push(`Row ${i + 1}: Description empty`); return; }
-      if (isNaN(sheets) || sheets <= 0) { errors.push(`Row ${i + 1}: Invalid sheets "${sheetsStr}"`); return; }
-      if (isNaN(rate) || rate <= 0) { errors.push(`Row ${i + 1}: Invalid rate "${rateStr}"`); return; }
+      if (isGlassCompany) {
+        // ── Glassco CSV path (sheet × sqft × rate/sqft) ───────────────
+        const [desc, cat, sheetsStr, sizeStr, rateStr, wtStr, biltyStr, bin] = cols;
+        const sheets = parseFloat(sheetsStr);
+        const rate = parseFloat(rateStr);
+        const wt = parseFloat(wtStr) || 0;
+        const biltyWt = parseFloat(biltyStr) || 0;
 
-      // Try to match with existing product
-      const matchedProduct = allProducts.find(p =>
-        p.description.toLowerCase() === desc.toLowerCase()
-      );
+        if (!desc) { errors.push(`Row ${i + 1}: Description empty`); return; }
+        if (isNaN(sheets) || sheets <= 0) { errors.push(`Row ${i + 1}: Invalid sheets "${sheetsStr}"`); return; }
+        if (isNaN(rate) || rate <= 0) { errors.push(`Row ${i + 1}: Invalid rate "${rateStr}"`); return; }
 
-      const spf = sqftOf(sizeStr || matchedProduct?.sheetSize || '');
-      const totalSqft = Number((sheets * spf).toFixed(2));
+        const matchedProduct = allProducts.find(p =>
+          p.description.toLowerCase() === desc.toLowerCase()
+        );
+        const spf = sqftOf(sizeStr || matchedProduct?.sheetSize || '');
+        const totalSqft = Number((sheets * spf).toFixed(2));
 
-      rows.push({
-        id: `OB-CSV-${i}`,
-        productId: matchedProduct?.id || '',
-        description: desc,
-        category: cat || 'Raw',
-        unit: 'SqFt',
-        sheetCount: sheets,
-        sqftPerSheet: spf,
-        totalSqft,
-        rate,
-        totalValue: Number((totalSqft * rate).toFixed(2)),
-        storageBin: bin || 'MAIN',
-        weightKg: wt,
-        biltyWeightKg: biltyWt,
-        thickness: matchedProduct?.thickness,
-        sheetSize: sizeStr || matchedProduct?.sheetSize,
-        searchQuery: desc,
-        showSuggestions: false,
-      });
+        rows.push({
+          id: `OB-CSV-${i}`,
+          productId: matchedProduct?.id || '',
+          description: desc,
+          category: cat || 'Raw',
+          unit: 'SqFt',
+          sheetCount: sheets,
+          sqftPerSheet: spf,
+          totalSqft,
+          rate,
+          totalValue: Number((totalSqft * rate).toFixed(2)),
+          storageBin: bin || 'MAIN',
+          weightKg: wt,
+          biltyWeightKg: biltyWt,
+          thickness: matchedProduct?.thickness,
+          sheetSize: sizeStr || matchedProduct?.sheetSize,
+          searchQuery: desc,
+          showSuggestions: false,
+        });
+      } else {
+        // ── Trading / aluminium CSV path (quantity × rate) ────────────
+        const [desc, cat, qtyStr, unitOrRate, rateMaybe, bin] = cols;
+        // Two layouts supported:
+        //   4 cols: desc, cat, qty, rate            → unit defaults PCS
+        //   5+ cols: desc, cat, qty, unit, rate, [bin]
+        const hasUnitCol = cols.length >= 5 && isNaN(parseFloat(unitOrRate));
+        const qty  = parseFloat(qtyStr);
+        const unit = hasUnitCol ? (unitOrRate || 'PCS') : 'PCS';
+        const rate = parseFloat(hasUnitCol ? rateMaybe : unitOrRate);
+        const storageBin = hasUnitCol ? bin : cols[4];
+
+        if (!desc) { errors.push(`Row ${i + 1}: Description empty`); return; }
+        if (isNaN(qty) || qty <= 0) { errors.push(`Row ${i + 1}: Invalid quantity "${qtyStr}"`); return; }
+        if (isNaN(rate) || rate <= 0) { errors.push(`Row ${i + 1}: Invalid rate`); return; }
+
+        const matchedProduct = allProducts.find(p =>
+          p.description.toLowerCase() === desc.toLowerCase()
+        );
+
+        rows.push({
+          id: `OB-CSV-${i}`,
+          productId: matchedProduct?.id || '',
+          description: desc,
+          category: cat || 'Hardware',
+          unit,
+          sheetCount: qty,        // for non-glass, sheetCount holds the quantity
+          sqftPerSheet: 1,        // → totalSqft = qty × 1 = qty
+          totalSqft: qty,
+          rate,
+          totalValue: Number((qty * rate).toFixed(2)),
+          storageBin: storageBin || 'MAIN',
+          weightKg: 0,
+          biltyWeightKg: 0,
+          searchQuery: desc,
+          showSuggestions: false,
+        });
+      }
     });
 
     setBulkErrors(errors);
@@ -944,49 +1022,55 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                   </div>
                 </div>
 
-                {/* Third Row: Weight, Bilty Weight, Storage Bin */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Our Weight (KG)</label>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="Manual weight"
-                      value={line.weightKg > 0 ? line.weightKg : ''}
-                      onChange={e => {
-                        const val = e.target.value.replace(/[^0-9.]/g, '');
-                        updateLine(idx, { weightKg: parseFloat(val) || 0 });
-                      }}
-                      className="w-full px-3 py-2 border rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Bilty Weight (KG)</label>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="Transporter wt"
-                      value={line.biltyWeightKg > 0 ? line.biltyWeightKg : ''}
-                      onChange={e => {
-                        const val = e.target.value.replace(/[^0-9.]/g, '');
-                        updateLine(idx, { biltyWeightKg: parseFloat(val) || 0 });
-                      }}
-                      className="w-full px-3 py-2 border rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  {line.biltyWeightKg > 0 && line.weightKg > 0 && (
-                    <div>
-                      <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Packaging Diff</label>
-                      <div className={`px-3 py-2 border rounded-lg text-xs font-black ${(line.biltyWeightKg - line.weightKg) > 0 ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-slate-400'}`}>
-                        {(line.biltyWeightKg - line.weightKg).toFixed(1)} KG
-                        <span className="text-[8px] ml-1 text-slate-400">(pallet/plastic/paper)</span>
+                {/* Third Row — glass: Weight + Bilty + Diff + Bin
+                                    non-glass: just Storage Bin (no weight tracking for hardware) */}
+                <div className={`grid grid-cols-2 ${isGlassCompany ? 'md:grid-cols-4' : 'md:grid-cols-1'} gap-3`}>
+                  {isGlassCompany && (
+                    <>
+                      <div>
+                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Our Weight (KG)</label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="Manual weight"
+                          value={line.weightKg > 0 ? line.weightKg : ''}
+                          onChange={e => {
+                            const val = e.target.value.replace(/[^0-9.]/g, '');
+                            updateLine(idx, { weightKg: parseFloat(val) || 0 });
+                          }}
+                          className="w-full px-3 py-2 border rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                        />
                       </div>
-                    </div>
+                      <div>
+                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Bilty Weight (KG)</label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="Transporter wt"
+                          value={line.biltyWeightKg > 0 ? line.biltyWeightKg : ''}
+                          onChange={e => {
+                            const val = e.target.value.replace(/[^0-9.]/g, '');
+                            updateLine(idx, { biltyWeightKg: parseFloat(val) || 0 });
+                          }}
+                          className="w-full px-3 py-2 border rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      {line.biltyWeightKg > 0 && line.weightKg > 0 && (
+                        <div>
+                          <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Packaging Diff</label>
+                          <div className={`px-3 py-2 border rounded-lg text-xs font-black ${(line.biltyWeightKg - line.weightKg) > 0 ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-slate-400'}`}>
+                            {(line.biltyWeightKg - line.weightKg).toFixed(1)} KG
+                            <span className="text-[8px] ml-1 text-slate-400">(pallet/plastic/paper)</span>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                   <div>
                     <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Storage Bin</label>
                     <input
                       type="text"
+                      placeholder={isGlassCompany ? 'MAIN' : 'e.g. A-01'}
                       value={line.storageBin}
                       onChange={e => updateLine(idx, { storageBin: e.target.value })}
                       className="w-full px-3 py-2 border rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
@@ -1020,8 +1104,16 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
           <div className="p-6 border-t bg-slate-50/50 flex items-center justify-between">
             <div className="flex items-center gap-6 text-xs">
               <span className="font-bold text-slate-500">{lines.filter(l => l.description).length} item(s)</span>
-              <span className="font-bold text-slate-500">Sheets: <span className="font-black text-slate-800">{lines.reduce((s, l) => s + l.sheetCount, 0)}</span></span>
-              <span className="font-bold text-slate-500">SqFt: <span className="font-black text-slate-800">{lines.reduce((s, l) => s + l.totalSqft, 0).toFixed(1)}</span></span>
+              {isGlassCompany ? (
+                <>
+                  <span className="font-bold text-slate-500">Sheets: <span className="font-black text-slate-800">{lines.reduce((s, l) => s + l.sheetCount, 0)}</span></span>
+                  <span className="font-bold text-slate-500">SqFt: <span className="font-black text-slate-800">{lines.reduce((s, l) => s + l.totalSqft, 0).toFixed(1)}</span></span>
+                </>
+              ) : (
+                <span className="font-bold text-slate-500">
+                  Total Qty: <span className="font-black text-slate-800">{lines.reduce((s, l) => s + l.sheetCount, 0).toLocaleString()}</span>
+                </span>
+              )}
               <span className="font-black text-blue-700 text-sm">
                 Total: PKR {lines.reduce((s, l) => s + l.totalValue, 0).toLocaleString()}
               </span>
@@ -1049,7 +1141,9 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
           <div className="p-6 border-b bg-slate-50/50">
             <h2 className="text-sm font-black uppercase text-slate-800">Bulk Opening Balance — CSV Upload</h2>
             <p className="text-[10px] text-slate-400 mt-1">
-              Format: <span className="font-mono bg-slate-100 px-1 rounded">Description, Category, Sheets, SheetSize, Rate, WeightKg, BiltyKg, StorageBin</span>
+              Format: <span className="font-mono bg-slate-100 px-1 rounded">{isGlassCompany
+                ? 'Description, Category, Sheets, SheetSize, Rate, WeightKg, BiltyKg, StorageBin'
+                : 'Description, Category, Quantity, Unit, Rate, StorageBin'}</span>
             </p>
           </div>
 
@@ -1070,7 +1164,9 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
               value={csvText}
               onChange={e => setCsvText(e.target.value)}
               rows={10}
-              placeholder={`Description, Category, Sheets, SheetSize, Rate, WeightKg, BiltyKg, StorageBin\nClear Glass 5mm, Raw, 20, 84x144, 45, 1200, 1350, MAIN\nMirror 6mm Belgium, Raw, 10, 84x144, 120, 800, 920, RACK-A\nColor Glass 5mm Grey, Raw, 15, 78x144, 55, 900, 1050, MAIN`}
+              placeholder={isGlassCompany
+                ? `Description, Category, Sheets, SheetSize, Rate, WeightKg, BiltyKg, StorageBin\nClear Glass 5mm, Raw, 20, 84x144, 45, 1200, 1350, MAIN\nMirror 6mm Belgium, Raw, 10, 84x144, 120, 800, 920, RACK-A\nColor Glass 5mm Grey, Raw, 15, 78x144, 55, 900, 1050, MAIN`
+                : `Description, Category, Quantity, Unit, Rate, StorageBin\nKin Long Handle CZS133, Hardware, 50, PCS, 2100, A-01\nFriction Stay 12in, Hardware, 30, PCS, 900, A-02\nSilicone Sealant, Consumable, 10, Tube, 650, B-03`}
               className="w-full px-4 py-3 border rounded-xl text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
             />
 
@@ -1122,12 +1218,21 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                       <th className="px-4 py-2">#</th>
                       <th className="px-4 py-2">Description</th>
                       <th className="px-4 py-2">Category</th>
-                      <th className="px-4 py-2 text-right">Sheets</th>
-                      <th className="px-4 py-2">Size</th>
-                      <th className="px-4 py-2 text-right">SqFt</th>
+                      {isGlassCompany ? (
+                        <>
+                          <th className="px-4 py-2 text-right">Sheets</th>
+                          <th className="px-4 py-2">Size</th>
+                          <th className="px-4 py-2 text-right">SqFt</th>
+                        </>
+                      ) : (
+                        <>
+                          <th className="px-4 py-2 text-right">Qty</th>
+                          <th className="px-4 py-2">Unit</th>
+                        </>
+                      )}
                       <th className="px-4 py-2 text-right">Rate</th>
                       <th className="px-4 py-2 text-right">Value</th>
-                      <th className="px-4 py-2 text-right">Wt KG</th>
+                      {isGlassCompany && <th className="px-4 py-2 text-right">Wt KG</th>}
                       <th className="px-4 py-2">Match</th>
                     </tr>
                   </thead>
@@ -1137,12 +1242,23 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                         <td className="px-4 py-2 text-slate-400">{i + 1}</td>
                         <td className="px-4 py-2 font-bold">{r.description}</td>
                         <td className="px-4 py-2">{r.category}</td>
-                        <td className="px-4 py-2 text-right font-bold">{r.sheetCount}</td>
-                        <td className="px-4 py-2 text-[10px]">{r.sheetSize || '—'}</td>
-                        <td className="px-4 py-2 text-right font-bold">{r.totalSqft.toLocaleString()}</td>
+                        {isGlassCompany ? (
+                          <>
+                            <td className="px-4 py-2 text-right font-bold">{r.sheetCount}</td>
+                            <td className="px-4 py-2 text-[10px]">{r.sheetSize || '—'}</td>
+                            <td className="px-4 py-2 text-right font-bold">{r.totalSqft.toLocaleString()}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="px-4 py-2 text-right font-bold">{r.sheetCount.toLocaleString()}</td>
+                            <td className="px-4 py-2 text-[10px]">{r.unit || 'PCS'}</td>
+                          </>
+                        )}
                         <td className="px-4 py-2 text-right">{r.rate.toLocaleString()}</td>
                         <td className="px-4 py-2 text-right font-black text-blue-600">{r.totalValue.toLocaleString()}</td>
-                        <td className="px-4 py-2 text-right text-slate-500">{r.weightKg > 0 ? r.weightKg : '—'}</td>
+                        {isGlassCompany && (
+                          <td className="px-4 py-2 text-right text-slate-500">{r.weightKg > 0 ? r.weightKg : '—'}</td>
+                        )}
                         <td className="px-4 py-2">
                           {r.productId ? (
                             <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Matched</span>
