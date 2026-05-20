@@ -7,8 +7,25 @@ import { toast } from 'sonner';
 import { Logger } from '@/modules/shared/services/logger';
 import { supabase } from '../../../src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
+import { useAppStore } from '@/modules/shared/store/appStore';
 import { SyncService } from '../../../src/services/SyncService';
 import { errMsg } from '@/modules/shared/services/utils';
+
+// ── Active company resolver ──────────────────────────────────────────
+// The company switcher in the sidebar updates ONLY appStore.selectedCompany,
+// not authStore.profile.company. Earlier this file always read profile.company,
+// so when Hassan (auth default = GTK) switched the view to Nippon, every
+// fetch here still asked Supabase for GTK rows — Nippon products imported
+// via Bulk Import would persist correctly but never come back on read.
+// Prefer the explicitly-selected company; fall back to auth profile only
+// when the app store hasn't bootstrapped yet (very early app start).
+const activeCompany = (): string => {
+  try {
+    const sel = useAppStore.getState().selectedCompany;
+    if (sel) return sel;
+  } catch { /* appStore not initialised yet */ }
+  return useAuthStore.getState().profile?.company ?? '';
+};
 // Phase 0 Round 2 — typed Supabase row interfaces (replaces (r: any) callbacks)
 import {
   SbBaseRow, SbClientRow, SbProductRow, SbQuotationRow, SbInvoiceRow,
@@ -88,7 +105,7 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 export const AsyncSalesService = {
   getClients: async (): Promise<Client[]> => {
     // SEC-3: scope to caller's company — defence-in-depth over DB-level RLS.
-    const company = useAuthStore.getState().profile?.company ?? '';
+    const company = activeCompany();
     try {
       const { data, error } = await supabase.from('clients').select('*').eq('company', company);
       if (error) {
@@ -162,7 +179,7 @@ export const AsyncSalesService = {
   },
 
   getProducts: async (): Promise<Product[]> => {
-    const company = useAuthStore.getState().profile?.company ?? '';
+    const company = activeCompany();
     try {
       const { data, error } = await supabase.from('products').select('*').eq('company', company || 'GTK')
       if (error) {
@@ -285,7 +302,7 @@ export const AsyncSalesService = {
   },
 
   getQuotations: async (): Promise<Quotation[]> => {
-    const company = useAuthStore.getState().profile?.company ?? '';
+    const company = activeCompany();
     try {
       const { data, error } = await supabase.from('quotations').select('*').eq('company', company);
       if (error) {
@@ -410,7 +427,7 @@ export const AsyncSalesService = {
   },
 
   getProjects: async (): Promise<Project[]> => {
-    const company = useAuthStore.getState().profile?.company ?? '';
+    const company = activeCompany();
     try {
       const { data, error } = await supabase.from('projects').select('*').eq('company', company);
       if (error) {
@@ -429,7 +446,7 @@ export const AsyncSalesService = {
 
 
   getVendors: async (): Promise<Vendor[]> => {
-    const company = useAuthStore.getState().profile?.company ?? '';
+    const company = activeCompany();
     try {
       const { data, error } = await supabase.from('vendors').select('*').eq('company', company);
       if (error || !data || data.length === 0) return safeParse(KEYS.VENDORS);
@@ -458,7 +475,7 @@ export const AsyncSalesService = {
   },
 
   getInvoices: async (): Promise<Invoice[]> => {
-    const company = useAuthStore.getState().profile?.company ?? '';
+    const company = activeCompany();
     try {
       const { data, error } = await supabase.from('invoices').select('*').eq('company', company);
       if (error || !data || data.length === 0) return safeParse('gtk_erp_invoices');
@@ -577,7 +594,7 @@ export const AsyncSalesService = {
   },
 
   getPaymentReceipts: async (): Promise<PaymentReceipt[]> => {
-    const company = useAuthStore.getState().profile?.company ?? '';
+    const company = activeCompany();
     try {
       const { data, error } = await supabase.from('payment_receipts').select('*').eq('company', company);
       if (error || !data || data.length === 0) return safeParse('gtk_erp_payment_receipts');
@@ -648,7 +665,7 @@ export const AsyncSalesService = {
 
   // ── Credit Notes (D3 — new Supabase table from migration 032) ─────────
   getCreditNotes: async (): Promise<SbLooseRow[]> => {
-    const company = useAuthStore.getState().profile?.company ?? '';
+    const company = activeCompany();
     try {
       const { data, error } = await supabase
         .from('credit_notes').select('*').eq('company', company);
@@ -719,7 +736,7 @@ export const AsyncSalesService = {
 
   // ── Customer Complaints (Phase-3 / 3.8 — was localStorage-only) ───────
   getCustomerComplaints: async (): Promise<SbLooseRow[]> => {
-    const company = useAuthStore.getState().profile?.company ?? '';
+    const company = activeCompany();
     try {
       const { data, error } = await supabase
         .from('customer_complaints').select('*').eq('company', company);
@@ -797,7 +814,7 @@ export const AsyncSalesService = {
   // Phase-6 (6.4) — Customer-tier price lists
   // ─────────────────────────────────────────────────────────────────────
   getPriceLists: async (): Promise<SbLooseRow[]> => {
-    const company = useAuthStore.getState().profile?.company ?? '';
+    const company = activeCompany();
     try {
       const { data, error } = await supabase.from('price_lists').select('*').eq('company', company);
       if (error || !data) return safeParse(KEYS.PRICE_LISTS);
@@ -839,7 +856,7 @@ export const AsyncSalesService = {
   },
 
   getPriceListItems: async (): Promise<SbLooseRow[]> => {
-    const company = useAuthStore.getState().profile?.company ?? '';
+    const company = activeCompany();
     try {
       const { data, error } = await supabase.from('price_list_items').select('*').eq('company', company);
       if (error || !data) return safeParse(KEYS.PRICE_LIST_ITEMS);
@@ -886,7 +903,7 @@ export const AsyncSalesService = {
   // Phase-6 (6.2) — Work Orders
   // ─────────────────────────────────────────────────────────────────────
   getWorkOrders: async (): Promise<SbLooseRow[]> => {
-    const company = useAuthStore.getState().profile?.company ?? '';
+    const company = activeCompany();
     try {
       const { data, error } = await supabase.from('work_orders').select('*').eq('company', company);
       if (error || !data) return safeParse(KEYS.WORK_ORDERS);
@@ -951,7 +968,7 @@ export const AsyncSalesService = {
   // Phase-6 (6.3) — Leads
   // ─────────────────────────────────────────────────────────────────────
   getLeads: async (): Promise<SbLooseRow[]> => {
-    const company = useAuthStore.getState().profile?.company ?? '';
+    const company = activeCompany();
     try {
       const { data, error } = await supabase.from('leads').select('*').eq('company', company);
       if (error || !data) return safeParse(KEYS.LEADS);

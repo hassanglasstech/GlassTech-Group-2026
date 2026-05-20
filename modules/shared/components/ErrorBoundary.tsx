@@ -146,6 +146,38 @@ export class GlobalErrorBoundary extends Component<BoundaryProps, BoundaryState>
 // ══════════════════════════════════════════════════════════════════════
 // 2. MODULE ERROR BOUNDARY — per route/module
 // ══════════════════════════════════════════════════════════════════════
+// Detect a stale-chunk error from a fresh deploy. After Vercel invalidates
+// the old hashed chunk filenames, browser tabs still loaded with the old
+// shell try to dynamically import chunks that no longer exist and throw
+// one of these messages. The cure is a hard reload — gets the new shell
+// with the new hash map.
+const isStaleChunkError = (err: Error | null | undefined): boolean => {
+  if (!err) return false;
+  const m = err.message || '';
+  return /Failed to fetch dynamically imported module/i.test(m)
+      || /Loading chunk \d+ failed/i.test(m)
+      || /error loading dynamically imported module/i.test(m)
+      || /Importing a module script failed/i.test(m);
+};
+
+// Guard against reload loops: if we've already auto-reloaded once for
+// this URL in this session, fall through to the manual error UI so the
+// user isn't stuck in an infinite reload.
+const STALE_RELOAD_KEY = 'gt_stale_chunk_reloaded';
+const tryAutoReloadOnce = (): boolean => {
+  try {
+    const already = sessionStorage.getItem(STALE_RELOAD_KEY) === window.location.href;
+    if (already) return false;
+    sessionStorage.setItem(STALE_RELOAD_KEY, window.location.href);
+    // Cache-bust the shell as well — some browsers (esp. Safari) hang on
+    // to the html if it has a long max-age.
+    window.location.reload();
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export class ModuleErrorBoundary extends Component<BoundaryProps & { moduleName?: string }, BoundaryState> {
   state: BoundaryState = { hasError: false, error: null, showDetails: false };
 
@@ -154,11 +186,31 @@ export class ModuleErrorBoundary extends Component<BoundaryProps & { moduleName?
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    // Stale-chunk errors are not real bugs — they're a deploy-cache
+    // mismatch. Try one silent reload before logging or showing UI.
+    if (isStaleChunkError(error)) {
+      if (tryAutoReloadOnce()) return;
+    }
     logError(error, info, 'module', this.props.moduleName);
   }
 
   render() {
     if (!this.state.hasError) return this.props.children;
+
+    // If we're inside the (sub-second) window between hasError firing and
+    // the auto-reload taking effect, show a friendly updating message
+    // instead of the angry red error UI.
+    if (isStaleChunkError(this.state.error)) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[400px] p-8 space-y-4">
+          <RefreshCw size={32} className="text-blue-500 animate-spin"/>
+          <div className="text-center">
+            <h3 className="font-black text-slate-800 uppercase text-sm">Updating to latest version…</h3>
+            <p className="text-slate-400 text-xs mt-1.5">A new build is available — refreshing in a moment.</p>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] p-8 space-y-5">
