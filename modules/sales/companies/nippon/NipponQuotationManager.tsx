@@ -50,8 +50,8 @@ const NipponQuotationManager: React.FC = () => {
     let result = [...quotations];
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
-      result = result.filter(q => 
-        q.id.toLowerCase().includes(lower) || 
+      result = result.filter(q =>
+        q.id.toLowerCase().includes(lower) ||
         (q.projectName || '').toLowerCase().includes(lower) ||
         clients.find(c => c.id === q.clientId)?.name.toLowerCase().includes(lower)
       );
@@ -287,55 +287,84 @@ const NipponQuotationManager: React.FC = () => {
                                  }}
                                  onFocus={() => setActiveDropdown(idx)}
                                />
-                               {activeDropdown === idx && !isLocked && (
-                                 <div ref={dropdownRef} className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                                   {products.filter(p => 
-                                     (p.name || p.description || '').toLowerCase().includes(item.description.toLowerCase()) || 
-                                     (p.itemCode || p.profileCode || '').toLowerCase().includes(item.description.toLowerCase())
-                                   ).map(p => {
-                                     // Store item key resolution — older Nippon code keyed by
-                                     // itemCode/profileCode; bulk-imported products use the same
-                                     // id on both Product and StoreItem rows. Match either to
-                                     // keep historic items and freshly imported ones both
-                                     // showing live qty in the dropdown.
-                                     const storeItem = storeItems.find(s =>
-                                         s.id === p.id ||
-                                         s.id === (p.itemCode || p.profileCode)
-                                     );
-                                     const available = storeItem?.unrestrictedQty || 0;
-                                     const total = storeItem?.quantity || 0;
-                                     
-                                     return (
-                                       <div 
-                                         key={p.id} 
-                                         className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-0"
-                                         onClick={() => {
-                                           selectProduct(idx, p);
-                                           setActiveDropdown(null);
-                                         }}
-                                       >
-                                         <div className="font-bold text-slate-800 uppercase">{p.name || p.description}</div>
-                                         <div className="text-[9px] text-slate-400 font-medium mt-0.5">{getProductSpecs(p)}</div>
-                                         <div className="flex justify-between text-[10px] text-slate-500 mt-1">
-                                           <div className="flex flex-col">
-                                             <span className="font-mono font-bold text-blue-600">{p.itemCode || p.profileCode}</span>
-                                             <span className="text-[9px] font-black text-emerald-600 mt-0.5">
-                                               {available}/{total} {p.unit || 'PCS'} LEFT
-                                             </span>
+                               {activeDropdown === idx && !isLocked && (() => {
+                                 // Stock-driven dropdown — show actual store_items, enrich
+                                 // each row with matching product metadata (specs, brand,
+                                 // image) when one exists. Items that have a stock row
+                                 // but no master-catalog product still appear.
+                                 const q = (item.description || '').toLowerCase();
+                                 const productByKey = new Map<string, Product>();
+                                 products.forEach(p => {
+                                   if (p.id) productByKey.set(p.id, p);
+                                   const code = (p.itemCode || p.profileCode || '').toString();
+                                   if (code) productByKey.set(code, p);
+                                 });
+                                 const matches = storeItems.filter(s => {
+                                   const prod = productByKey.get(s.id);
+                                   const haystack = [
+                                     s.name,
+                                     s.id,
+                                     prod?.name,
+                                     prod?.description,
+                                     prod?.itemCode,
+                                     prod?.profileCode,
+                                     prod?.brand,
+                                   ].filter(Boolean).join(' ').toLowerCase();
+                                   return !q || haystack.includes(q);
+                                 });
+                                 return (
+                                   <div ref={dropdownRef} className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                                     {matches.map(s => {
+                                       const prod = productByKey.get(s.id);
+                                       const available = s.unrestrictedQty || 0;
+                                       const total = s.quantity || 0;
+                                       const displayName = prod?.name || prod?.description || s.name || s.id;
+                                       const code = prod?.itemCode || prod?.profileCode || s.id;
+                                       const unit = prod?.unit || s.unit || 'PCS';
+                                       const price = prod?.price || prod?.basePrice || s.movingAveragePrice || 0;
+                                       // Build a Product-shaped object so selectProduct works
+                                       // even when there's no master-catalog row.
+                                       const productLike: Product = prod ?? ({
+                                         id: s.id,
+                                         company: s.company,
+                                         name: s.name,
+                                         description: s.name,
+                                         itemCode: s.id,
+                                         unit: s.unit,
+                                         basePrice: s.movingAveragePrice || 0,
+                                         price: s.movingAveragePrice || 0,
+                                       } as unknown as Product);
+                                       return (
+                                         <div
+                                           key={s.id}
+                                           className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-0"
+                                           onClick={() => {
+                                             selectProduct(idx, productLike);
+                                             setActiveDropdown(null);
+                                           }}
+                                         >
+                                           <div className="font-bold text-slate-800 uppercase">{displayName}</div>
+                                           {prod && <div className="text-[9px] text-slate-400 font-medium mt-0.5">{getProductSpecs(prod)}</div>}
+                                           <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+                                             <div className="flex flex-col">
+                                               <span className="font-mono font-bold text-blue-600">{code}</span>
+                                               <span className={`text-[9px] font-black mt-0.5 ${available > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                                 {available}/{total} {unit} LEFT
+                                               </span>
+                                             </div>
+                                             <span className="font-black text-slate-700 self-end">Rs {price.toLocaleString()}/{unit}</span>
                                            </div>
-                                           <span className="font-black text-slate-700 self-end">Rs {(p.price || p.basePrice || 0).toLocaleString()}/{p.unit}</span>
                                          </div>
+                                       );
+                                     })}
+                                     {matches.length === 0 && (
+                                       <div className="px-3 py-4 text-center text-slate-400 text-xs">
+                                         {storeItems.length === 0 ? 'No stock items loaded — check inventory sync' : 'No matching stock items'}
                                        </div>
-                                     );
-                                   })}
-                                   {products.filter(p => 
-                                     (p.name || p.description || '').toLowerCase().includes(item.description.toLowerCase()) || 
-                                     (p.itemCode || p.profileCode || '').toLowerCase().includes(item.description.toLowerCase())
-                                   ).length === 0 && (
-                                     <div className="px-3 py-4 text-center text-slate-400 text-xs">No products found</div>
-                                   )}
-                                 </div>
-                               )}
+                                     )}
+                                   </div>
+                                 );
+                               })()}
                             </td>
                             <td className="w-32">
                                 <input readOnly={isLocked} type="text" placeholder="Brand" className="sap-input w-full py-1 text-xs font-bold uppercase" value={item.glazingSpecs || ''} onChange={e => updateItem(idx, 'glazingSpecs', e.target.value)} />

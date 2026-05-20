@@ -63,8 +63,10 @@ export const useNipponQuotations = () => {
     const allProducts = await AsyncSalesService.getProducts();
     setProducts(allProducts.filter(p => p.company === company));
 
-    const allStore = InventoryService.getStore();
-    setStoreItems(allStore);
+    // Pull stock from Supabase first (async); fall back to localStorage in the
+    // service. Filter to Nippon defensively in case authStore.company is empty.
+    const allStore = await InventoryService.getStoreAsync();
+    setStoreItems(allStore.filter(s => !s.company || s.company === company));
   };
 
   const handleAddSection = (title?: string, index?: number) => {
