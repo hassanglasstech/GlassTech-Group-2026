@@ -257,10 +257,11 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                                                         );
                                                     }
 
-                                                    const brand = item.glazingSpecs || '-';
-                                                    const displayBrand = (brand.toLowerCase().includes('kin long') || brand.toLowerCase().includes('kinlong')) 
-                                                        ? 'Kin Long' 
-                                                        : (brand === '-' || !brand) ? '-' : 'Imported';
+                                                    // Show the actual brand (mapped through vendor nickname when one
+                                                    // exists); only fall back to '-' when no brand was set. The previous
+                                                    // logic forced everything to "Kin Long"/"Imported" and hid real names.
+                                                    const brand = item.glazingSpecs || '';
+                                                    const displayBrand = brand ? getBrandNick(brand) : '-';
 
                                                     return (
                                                         <tr key={idx}>

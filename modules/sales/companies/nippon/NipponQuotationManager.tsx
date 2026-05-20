@@ -154,30 +154,28 @@ const NipponQuotationManager: React.FC = () => {
         />
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col flex-1 min-h-[600px]">
-            {/* Editor Header */}
-            <div className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center shrink-0">
-                <div className="flex items-center space-x-4">
-                  <button onClick={() => setView('list')} className="p-2 hover:bg-slate-800 rounded-full transition-colors">
-                    <ArrowLeft size={20} />
+            {/* Editor Header — compact so the items table gets more vertical room */}
+            <div className="bg-slate-900 text-white px-4 py-2 flex justify-between items-center shrink-0">
+                <div className="flex items-center space-x-3">
+                  <button onClick={() => setView('list')} className="p-1.5 hover:bg-slate-800 rounded-full transition-colors">
+                    <ArrowLeft size={16} />
                   </button>
-                  <div>
-                    <h2 className="text-lg font-bold flex items-center gap-2">
-                      <span className="text-blue-400">NIPPON</span>
-                      <span>Quotation Editor</span>
-                    </h2>
-                    <p className="text-xs text-slate-400 font-medium">Create or modify commercial quotation</p>
-                  </div>
+                  <h2 className="text-sm font-bold flex items-center gap-1.5">
+                    <span className="text-blue-400">NIPPON</span>
+                    <span className="text-slate-300 font-medium">·</span>
+                    <span>Quotation Editor</span>
+                  </h2>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${formData.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase ${formData.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                     {formData.status || 'Draft'}
                   </span>
                 </div>
             </div>
             
-            <div className="flex-1 overflow-hidden p-6 bg-slate-50/50 flex flex-col space-y-4">
-              {/* Header Fields */}
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">
+            <div className="flex-1 overflow-hidden p-3 bg-slate-50/50 flex flex-col space-y-2">
+              {/* Header Fields — tighter padding so items table gets more room */}
+              <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase text-slate-400">Client</label>
                   <select disabled={isLocked} className="sap-input w-full font-bold" value={formData.clientId} onChange={e => setFormData({...formData, clientId: e.target.value})}>
@@ -313,7 +311,7 @@ const NipponQuotationManager: React.FC = () => {
                                    return !q || haystack.includes(q);
                                  });
                                  return (
-                                   <div ref={dropdownRef} className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                                   <div ref={dropdownRef} className="absolute z-50 w-[360px] mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-[420px] overflow-y-auto">
                                      {matches.map(s => {
                                        const prod = productByKey.get(s.id);
                                        const available = s.unrestrictedQty || 0;
@@ -322,6 +320,7 @@ const NipponQuotationManager: React.FC = () => {
                                        const code = prod?.itemCode || prod?.profileCode || s.id;
                                        const unit = prod?.unit || s.unit || 'PCS';
                                        const price = prod?.price || prod?.basePrice || s.movingAveragePrice || 0;
+                                       const brand = prod?.brand || '';
                                        // Build a Product-shaped object so selectProduct works
                                        // even when there's no master-catalog row.
                                        const productLike: Product = prod ?? ({
@@ -337,22 +336,29 @@ const NipponQuotationManager: React.FC = () => {
                                        return (
                                          <div
                                            key={s.id}
-                                           className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-0"
+                                           className="px-3 py-1.5 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-0"
                                            onClick={() => {
                                              selectProduct(idx, productLike);
                                              setActiveDropdown(null);
                                            }}
                                          >
-                                           <div className="font-bold text-slate-800 uppercase">{displayName}</div>
-                                           {prod && <div className="text-[9px] text-slate-400 font-medium mt-0.5">{getProductSpecs(prod)}</div>}
-                                           <div className="flex justify-between text-[10px] text-slate-500 mt-1">
-                                             <div className="flex flex-col">
+                                           <div className="flex items-center justify-between gap-2">
+                                             <div className="font-bold text-slate-800 uppercase text-xs leading-tight truncate">{displayName}</div>
+                                             {brand && (
+                                               <span className="shrink-0 text-[8px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                                                 {getBrandNick(brand)}
+                                               </span>
+                                             )}
+                                           </div>
+                                           {prod && <div className="text-[9px] text-slate-400 font-medium mt-0.5 truncate">{getProductSpecs(prod)}</div>}
+                                           <div className="flex justify-between text-[10px] text-slate-500 mt-0.5">
+                                             <div className="flex items-center gap-2">
                                                <span className="font-mono font-bold text-blue-600">{code}</span>
-                                               <span className={`text-[9px] font-black mt-0.5 ${available > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                                                 {available}/{total} {unit} LEFT
+                                               <span className={`text-[9px] font-black ${available > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                                 {available}/{total} {unit}
                                                </span>
                                              </div>
-                                             <span className="font-black text-slate-700 self-end">Rs {price.toLocaleString()}/{unit}</span>
+                                             <span className="font-black text-slate-700">Rs {price.toLocaleString()}/{unit}</span>
                                            </div>
                                          </div>
                                        );
@@ -401,8 +407,8 @@ const NipponQuotationManager: React.FC = () => {
                 </table>
                 </div>
                 
-                {/* Footer Controls - Unified Action Bar */}
-                <div className="bg-slate-50 p-4 border-t border-slate-200 flex flex-col space-y-4 shrink-0">
+                {/* Footer Controls — compact so more rows / dropdown space fit above */}
+                <div className="bg-slate-50 px-4 py-2 border-t border-slate-200 flex flex-col space-y-2 shrink-0">
                   {/* Totals Row */}
                   <div className="flex justify-end items-center space-x-8">
                     <div className="flex items-center space-x-2">
@@ -428,12 +434,12 @@ const NipponQuotationManager: React.FC = () => {
                   {/* Buttons Row */}
                   <div className="flex justify-between items-center">
                     <div className="flex space-x-2">
-                      <button 
-                        disabled={isLocked} 
-                        onClick={() => handleAddItem()} 
-                        className={`text-[10px] py-2.5 px-6 flex items-center space-x-2 shadow-lg font-black uppercase tracking-widest transition-all rounded-lg ${isLocked ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-100'}`}
+                      <button
+                        disabled={isLocked}
+                        onClick={() => handleAddItem()}
+                        className={`text-[10px] py-1.5 px-4 flex items-center space-x-2 shadow-md font-black uppercase tracking-widest transition-all rounded-lg ${isLocked ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-100'}`}
                       >
-                        <Plus size={16}/> <span>Add New Line</span>
+                        <Plus size={14}/> <span>Add New Line</span>
                       </button>
                       <button 
                         disabled={isLocked} 
