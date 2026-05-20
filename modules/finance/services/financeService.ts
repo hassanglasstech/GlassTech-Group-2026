@@ -647,16 +647,21 @@ export const FinanceService = {
   loadAccountsAsync: async (): Promise<void> => { await FinanceService.init(); },
 
   // ── Seed Default COA ───────────────────────────────────────────────
+  // Only writes when at least one company's COA is missing. Previously this
+  // always pushed all ~297 rows to Supabase on every boot, racing with the
+  // parallel loadAccountsAsync upsert and triggering deadlocks.
   seedDefaultCOA: (): void => {
     const existing = FinanceService.getAccounts();
     const companies: Company[] = ['GTK', 'GTI', 'Glassco', 'Nippon', 'Factory'];
+    let added = false;
     for (const co of companies) {
       const coaTree = COMPANY_COA[co];
       if (!coaTree) continue;
       if (existing.some(a => a.company === co)) continue;
       existing.push(...flattenCOA(coaTree, co));
+      added = true;
     }
-    FinanceService.saveAccounts(existing);
+    if (added) FinanceService.saveAccounts(existing);
   },
 
   // ── Ensure Account ─────────────────────────────────────────────────
