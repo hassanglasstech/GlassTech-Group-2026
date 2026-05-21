@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Package, Warehouse, Truck, Handshake, Globe, ClipboardList } from 'lucide-react';
+import { useAppStore } from '@/modules/shared/store/appStore';
 
 // Lazy load all sub-modules
 const Requisitions   = React.lazy(() => import('./Requisitions'));
@@ -61,7 +62,8 @@ const css = `
   }
 `;
 
-const TABS: { id: ProcTab; label: string; icon: React.ReactNode }[] = [
+// Master tab list (filtered per-company below in the component)
+const ALL_TABS: { id: ProcTab; label: string; icon: React.ReactNode }[] = [
   { id: 'requisitions', label: 'Requisitions',   icon: <ClipboardList size={14}/> },
   { id: 'stock',        label: 'Stock / Material', icon: <Warehouse size={14}/> },
   { id: 'logistics',    label: 'Logistics',       icon: <Truck size={14}/> },
@@ -72,6 +74,29 @@ const TABS: { id: ProcTab; label: string; icon: React.ReactNode }[] = [
 
 const ProcurementHub: React.FC = () => {
   const [active, setActive] = useState<ProcTab>('requisitions');
+  const company = useAppStore(state => state.selectedCompany);
+
+  // God Mode audit (Day 1): hide tabs that have no business meaning for the
+  // active company. Nippon is a hardware trader — no factory logistics
+  // (gate passes, vehicle trips, dispatch planner) and the SCMDashboard
+  // is glass-factory analytics; the IntercompanyHub stays because Nippon
+  // legitimately sells to GTK/GTI (intercompany transfers).
+  const TABS = useMemo(() => {
+    return ALL_TABS.filter(t => {
+      if (company === 'Nippon') {
+        // Hide: logistics (factory-only), scm (glass-only analytics)
+        if (t.id === 'logistics' || t.id === 'scm') return false;
+      }
+      return true;
+    });
+  }, [company]);
+
+  // If the active tab got hidden after a company switch, reset to first visible
+  React.useEffect(() => {
+    if (!TABS.find(t => t.id === active)) {
+      setActive(TABS[0]?.id ?? 'requisitions');
+    }
+  }, [TABS, active]);
 
   return (
     <div className="ph-wrap">

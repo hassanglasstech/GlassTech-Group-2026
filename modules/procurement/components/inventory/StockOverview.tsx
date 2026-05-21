@@ -174,7 +174,9 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                        {paginatedItems.map(item => {
                          const product = allProducts.find(p => p.id === item.id);
                          const hasImportSpecs = product && (product.finishColor || product.direction || product.tongueLength);
-                         const currencySymbol = company === 'Nippon' ? '¥' : 'PKR';
+                         // God Mode audit (Day 1): Nippon sells/books in PKR (not yen).
+                         // The RMB → PKR conversion happens at GRN landing-cost time.
+                         const currencySymbol = 'PKR';
                          // Sheet count: compute from sqft balance / sqftPerSheet (from product sheetSize)
                          const sqftPerSheet = product?.sheetSize ? (() => {
                            const [w, h] = (product.sheetSize || '').split('x').map(Number);

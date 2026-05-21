@@ -42,6 +42,12 @@ export const NIPPON_COA: COAAccount[] = [
           leaf('11422','Employee Loans — Recoverable','Asset','Dr'),
           leaf('11423','Employee Loans — Doubtful','Asset','Dr'),
         ]},
+        // Added by God Mode audit (Day 1): GST input tax recoverable
+        // Used when Nippon books local PKR purchases with 17% sales tax
+        { code:'1143', name:'Tax Receivables', level:4, type:'Asset', children:[
+          leaf('11431','Input GST Recoverable','Asset','Dr'),
+          leaf('11432','Withholding Tax Receivable','Asset','Dr'),
+        ]},
       ]},
       { code:'115', name:'Inventory', level:3, type:'Asset', isControl:true, normalBalance:'Dr', children:[
         { code:'1151', name:'Hardware Inventory', level:4, type:'Asset', children:[
@@ -92,6 +98,11 @@ export const NIPPON_COA: COAAccount[] = [
         { code:'2113', name:'Intercompany Payables', level:4, type:'Liability', children:[
           leaf('21131','Due to Factory (20% Share)','Liability','Cr'),
         ]},
+        // Added by God Mode audit (Day 1): GR/IR clearing for three-way match parity
+        // Mirrors Glassco's 21151. Used when GRN is received before vendor invoice.
+        { code:'2114', name:'GR/IR Clearing', level:4, type:'Liability', children:[
+          leaf('21141','GR/IR — Hardware Material','Liability','Cr'),
+        ]},
       ]},
       { code:'212', name:'Tax Liabilities', level:3, type:'Liability', isControl:true, normalBalance:'Cr', children:[
         { code:'2121', name:'Tax', level:4, type:'Liability', children:[
@@ -122,6 +133,9 @@ export const NIPPON_COA: COAAccount[] = [
       { code:'311', name:'Capital', level:3, type:'Equity', isControl:true, normalBalance:'Cr', children:[
         { code:'3111', name:'Capital Accounts', level:4, type:'Equity', children:[
           leaf('31111','Capital — Nippon','Equity','Cr'),
+          // Added by God Mode audit (Day 1): Opening Balance Equity
+          // Cr side of opening stock JV. Required for Day-1 trial balance.
+          leaf('31112','Opening Balance Equity','Equity','Cr'),
           leaf('31121','Retained Earnings — Current','Equity','Cr'),
           leaf('31122','Retained Earnings — Prior','Equity','Cr'),
           leaf('31131','Drawings — Director','Equity','Dr'),
