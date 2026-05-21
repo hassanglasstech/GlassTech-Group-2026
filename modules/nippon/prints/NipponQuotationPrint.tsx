@@ -1,7 +1,6 @@
 
 import React, { useMemo } from 'react';
 import { Quotation } from '../../shared/types';
-import { getBrandNick } from '../../shared/utils/brandUtils';
 
 interface Props {
     quote: Quotation;
@@ -236,7 +235,6 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                                                     <th className="py-2 px-2 text-center w-8">S.No</th>
                                                     <th className="py-2 px-2 text-center w-12">Image</th>
                                                     <th className="py-2 px-2">Item Details</th>
-                                                    <th className="py-2 px-2 w-20">Brand</th>
                                                     <th className="py-2 px-2 text-center w-12">Unit</th>
                                                     <th className="py-2 px-2 text-center w-10">Qty</th>
                                                     <th className="py-2 px-2 text-right w-20">Rate</th>
@@ -246,22 +244,16 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                                             <tbody className="divide-y divide-slate-200">
                                                 {chunk.map((item, idx) => {
                                                     if (!item.isSection) serialNum++;
-                                                    
+
                                                     if (item.isSection) {
                                                         return (
                                                             <tr key={idx} className="bg-slate-100 border-y border-slate-300">
-                                                                <td colSpan={8} className="py-1.5 px-4 font-black uppercase tracking-widest text-slate-700 italic text-[9px]">
+                                                                <td colSpan={7} className="py-1.5 px-4 font-black uppercase tracking-widest text-slate-700 italic text-[9px]">
                                                                     {item.description}
                                                                 </td>
                                                             </tr>
                                                         );
                                                     }
-
-                                                    // Show the actual brand (mapped through vendor nickname when one
-                                                    // exists); only fall back to '-' when no brand was set. The previous
-                                                    // logic forced everything to "Kin Long"/"Imported" and hid real names.
-                                                    const brand = item.glazingSpecs || '';
-                                                    const displayBrand = brand ? getBrandNick(brand) : '-';
 
                                                     return (
                                                         <tr key={idx}>
@@ -277,9 +269,6 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                                                                 <p className="font-black text-slate-800 uppercase leading-tight text-[10px] whitespace-pre-wrap">
                                                                     {item.description?.replace(/^PCS\s+/i, '')}
                                                                 </p>
-                                                            </td>
-                                                            <td className="py-2 px-2 font-bold text-slate-600 uppercase text-[9px]">
-                                                                {displayBrand}
                                                             </td>
                                                             <td className="py-2 px-2 text-center font-bold text-slate-500 uppercase text-[9px]">{item.glassSize || 'PCS'}</td>
                                                             <td className="py-2 px-2 text-center font-black text-slate-900 text-[10px]">{item.qty}</td>
