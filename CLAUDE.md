@@ -492,3 +492,129 @@ withRetry(fn, maxRetries): Promise<T>  // auto-retry Supabase calls
 - Multi-user optimistic locking
 - Full BOM normalization
 - Advanced reporting (PDF exports, dashboards)
+
+---
+
+# 🎯 CURRENT FOCUS — NIPPON HARDWARE GO-LIVE (as of 2026-05-21)
+
+> Glassco Sales is shipped (Phase 0-4 complete + 6 SIT tests green). Focus has
+> moved to **Nippon Hardware** — a trading-only company importing KIN LONG +
+> Soleron / HuangXing / SIWAY hardware from China and selling to Pakistani
+> aluminium fabricators.
+>
+> **Read `RESUME_HERE.md` at project root first** — it has the exact current
+> state, pending action, and continuation prompts. This section is the
+> permanent Nippon reference; that file is the volatile "where we left off".
+
+## Nippon business model (trading, no production)
+
+- Imports finished hardware (handles, hinges, locks, stays, rollers, transmission rods)
+- Sells from on-hand stock to retail/fabricator clients in PKR
+- Sole accounting flow: **Purchase → GRN → Inventory → Invoice (with COGS at delivery) → Receipt**
+- **NO production, NO WIP, NO sqft tracking** — units are PCS / SET / Roll / etc.
+
+## Nippon COA — trading chain (NOT glass-services chain)
+
+| Account | Code | Purpose |
+|---|---|---|
+| Hardware Inventory — General | 11514 | All hardware stock |
+| Hardware Sales Income | 4120 | Revenue from hardware sales |
+| General Hardware — COGS | 5114 | Cost of goods sold at delivery |
+| Customers Control | 12210 | AR (per-client sub-account) |
+| Payable — Kin Long Vendors | 21111 | AP for imports |
+| Sales Tax Payable | 21211 | GST/tax |
+
+When generating invoice GL for Nippon, [deliveryInvoiceService.ts](modules/sales/services/deliveryInvoiceService.ts) branches on `company === 'Nippon'` (variable `isTradingCompany`):
+- Revenue → 4120 (NOT 41110 GLASS PROCESSING SERVICES — that's Glassco)
+- COGS → built via `buildNipponTradingCOGSPlan` from qty × MAP (not from production_pieces)
+- Production-pieces gate is **bypassed** for trading
+
+## Nippon's 4 suppliers
+
+| Brand | Type | Products in master |
+|---|---|---:|
+| **KIN LONG** | Primary — Chinese hardware giant | 141 |
+| **Soleron** | Profiles / decorative / butyl tape | 7 |
+| **HuangXing** | Floor springs / top patches | 2 |
+| **SIWAY** | Sealants (weatherproof silicone) | 2 |
+
+## Product taxonomy (7 main categories, 50+ sub-categories)
+
+Used by Material Management cascading filter + Product Master:
+
+1. **Window Hardware** — Handle / Hinge / Friction Stay / Peg Stay / Lock Point / Crescent Latch / Cockspur etc.
+2. **Door Hardware** — Handle Set / Lock Body / Pivot Hinge / Cylinder / Strike / Tower Bolt / etc.
+3. **Sliding Hardware** — Short-neck Handle / Sliding Lock / Roller / Wind Break / Lift & Slide
+4. **Profile & Frame Hardware** — Transmission Rod / Connecting Pin / Supporting Block / Cushion Block / Spider Fitting / Gear Pati / Cap
+5. **Silicon & Sealants** — Silicone / Weatherstrip / Gasket / Kaplar
+6. **Mesh & Screens** — SS Mesh / Fly Mesh / Fiber Jali
+7. **Fasteners & Consumables** — Screw / Tower Bolt / Spring Bolt
+
+Local Pakistani trade names preserved as sub-categories where useful: Lahori Stay, Pig Stay, Pati, Jali, Kaplar etc.
+
+## Image bucket strategy
+
+- **Bucket:** `product-images` (public, root-level files, NO `products/` subfolder)
+- **URL pattern:** `https://wfytbcmazixddtwpbego.supabase.co/storage/v1/object/public/product-images/{product_id}.png`
+- **Naming:** files named EXACTLY by product `id` — e.g. `NIP-KL-CZS133-L55-W.png`
+- ERP renders `<img src={p.imageUrl}>` directly — no URL transformation
+
+## Nippon-specific code files
+
+### Sales
+- [NipponProductMaster.tsx](modules/sales/companies/nippon/NipponProductMaster.tsx) — has 3 tabs: list / **Bulk Import (no-AI, green)** / Smart Import (AI, red)
+- [NipponDirectImporter.tsx](modules/sales/companies/nippon/components/NipponDirectImporter.tsx) — local xlsx parse + ExcelJS embedded-image extraction → base64 in image_url
+- [NipponQuotationManager.tsx](modules/sales/companies/nippon/NipponQuotationManager.tsx) — quote editor, dropdown sources from storeItems (not products master)
+- [useNipponQuotations.ts](modules/sales/companies/nippon/useNipponQuotations.ts) — quote hook with P1-4/5/7 guards (empty-save block, idempotency, try/catch)
+- [deliveryInvoiceService.ts](modules/sales/services/deliveryInvoiceService.ts) — `isTradingCompany` branch for revenue chain + COGS plan + pieces-gate bypass
+- [asyncSalesService.ts](modules/sales/services/asyncSalesService.ts) — `activeCompany()` helper used by all 12 fetch methods
+
+### Inventory
+- [StockOverview.tsx](modules/procurement/components/inventory/StockOverview.tsx) — cascading Main → Sub filter, badges on rows
+- [OpeningBalance.tsx](modules/procurement/components/inventory/OpeningBalance.tsx) — 38 `isGlassCompany` gates, Nippon shows PCS × Rate (no Sheet Size / SqFt / Weight)
+- [NipponGoodsReceipt.tsx](modules/procurement/components/inventory/NipponGoodsReceipt.tsx) — GRN intake. ⚠ **P1 PENDING: missing GL posting** (mirror GTKStoreReceipt pattern)
+- [InventoryModule.tsx](modules/procurement/pages/InventoryModule.tsx) — Nippon sees 6 tabs (Remnants / Weight Master / Project Consumption / MRP all gated off)
+
+### Print
+- [NipponQuotationPrint.tsx](modules/nippon/prints/NipponQuotationPrint.tsx) — 7-column table, no Brand column
+- [NipponSalesOrderPrint.tsx](modules/nippon/prints/NipponSalesOrderPrint.tsx) — same
+- [NipponCatalogPrint.tsx](modules/nippon/prints/NipponCatalogPrint.tsx) — catalog export
+- [NipponJobCardPrint.tsx](modules/nippon/prints/NipponJobCardPrint.tsx) — DEAD CODE for trading (don't surface)
+
+### Finance
+- [coa.nippon.ts](modules/finance/constants/coa.nippon.ts) — 218-line trading COA
+
+### Tests
+- [nippon_sit.test.ts](modules/__tests__/nippon_sit.test.ts) — 6 SIT tests, all GL-balance proven
+
+## Critical "DO NOT" rules — Nippon-specific
+
+- NEVER set `image_url` to a relative path like `products/X.png` — ERP renders `<img src>` directly. Must be FULL URL.
+- NEVER use bucket name `nippon-products` or `products` — only `product-images` exists.
+- NEVER use sqft / sheet logic for Nippon — units are PCS / SET. Categories are NOT Raw/Glass — they're Hardware.
+- NEVER post Nippon invoice GL to GLASS PROCESSING SERVICES (41110) — must hit HARDWARE SALES INCOME (4120).
+- NEVER hardcode RMB→PKR rate without a UI override path — currently 50:1 in migration SQL.
+- When fetching Nippon products from Supabase, ALWAYS go through `activeCompany()` helper (it reads appStore.selectedCompany, NOT auth.profile.company).
+
+## Bulk-import workflow (for future product additions)
+
+1. Hassan provides new master xlsx (with embedded images)
+2. Extract via `xl/drawings/oneCellAnchor` parsing (NOT ExcelJS — it breaks on complex anchor files)
+3. Map images by anchor row → product id at same row
+4. Save renamed images as `{product_id}.{ext}`
+5. Generate SQL: DELETE existing + INSERT new with image_url
+6. Hassan: empty bucket → upload renamed images → run SQL
+7. Verify: 152 / 113 / 4 brands
+
+## Quick translation table — Nippon edition
+
+| Hassan says | Means technically |
+|---|---|
+| "Nippon products delete kar do" | DELETE FROM products WHERE company = 'Nippon' |
+| "Sare Nippon ki images upload kar do" | Empty bucket → upload files → run image_url SQL |
+| "Quotation me brand column nahi chahiye" | Remove `<th>Brand</th>` + cell from NipponQuotationPrint + SalesOrderPrint |
+| "Opening Balance Glassco ka show ho raha" | Add `isGlassCompany` gate to that UI section in OpeningBalance.tsx |
+| "Material Master me categories galat hain" | Update sheet → main_category mapping in build_final.mjs or run UPDATE |
+| "Brand alag bhi hai" | Check brand column — KIN LONG + Soleron + HuangXing + SIWAY |
+| "Bar bar upload karni padti hai" | localStorage quota OR products not persisting to Supabase — check saveProducts batching |
+| "Image show nahi ho rahi" | Check bucket = product-images, file exists (curl test), URL is FULL not relative |
