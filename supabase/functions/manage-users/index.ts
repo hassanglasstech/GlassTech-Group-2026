@@ -9,7 +9,15 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders } from '../_shared/auth.ts'
+
+// Inlined corsHeaders (was: import from ../_shared/auth.ts).
+// Inlined so dashboard-paste deploys work — dashboard only uploads index.ts
+// and can't follow the _shared/ relative import.
+const corsHeaders = {
+  'Access-Control-Allow-Origin':  '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+}
 
 Deno.serve(async (req) => {
   // CORS preflight
