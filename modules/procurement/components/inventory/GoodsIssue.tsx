@@ -28,12 +28,21 @@ const GoodsIssue: React.FC<Omit<GoodsIssueProps, 'company'>> = ({ items, costCen
         remarks: ''
     });
 
+    const isNippon = company === 'Nippon';
+
     const handlePostIssuance = () => {
-        if (!issueData.materialId || !issueData.costCenterId || issueData.qty <= 0) {
-            toast.error("All fields are required for issuance.");
+        // God Mode audit (Phase 1): cost-center mandate gated to non-Nippon.
+        // Nippon is a trading shop — no cost centers configured today.
+        // Requiring one would block the entire Issue flow.
+        if (!issueData.materialId || issueData.qty <= 0) {
+            toast.error('Item and Quantity are required.');
             return;
         }
-        
+        if (!isNippon && !issueData.costCenterId) {
+            toast.error('Cost Center is required for issuance.');
+            return;
+        }
+
         const itemIdx = items.findIndex(i => i.id === issueData.materialId);
         if (itemIdx === -1) {
             toast.error("Item not found in store.");
@@ -113,10 +122,66 @@ const GoodsIssue: React.FC<Omit<GoodsIssueProps, 'company'>> = ({ items, costCen
         };
   
         InventoryService.saveStockLedger([...InventoryService.getStockLedger(), newEntry]);
-        
-        // *** NEW FINANCIAL EVENT LOGGING ***
-        // Create a pending event in the Financial Registry for this consumption
-        if (consumedValue > 0) {
+
+        // ══════════════════════════════════════════════════════════════
+        // God Mode audit (Phase 1): NIPPON GL POSTING — stock-transfer policy (decision A)
+        // Without this, hardware physically leaves Nippon but books still
+        // show it as inventory → balance-sheet broken at month-end.
+        //
+        // Stock-transfer accounting: Dr "Hardware — Project Issue" (asset)
+        // / Cr "Hardware Inventory" (asset). No P&L hit at issue — COGS
+        // is recognised at the delivery invoice (deliveryInvoiceService).
+        //
+        // Glassco / GTK / GTI flow unchanged — they keep the "FinancialEvent
+        // pending" placeholder for now (their journal mechanics differ).
+        // ══════════════════════════════════════════════════════════════
+        if (isNippon && consumedValue > 0) {
+            try {
+                // Resolve from-account (current inventory bucket) using the
+                // item's category — same logic as orchestrateNipponGRN.
+                const INV_KL = '11511', INV_ALUM = '11512', INV_UPVC = '11513', INV_HW = '11514';
+                const ISSUE_DEFAULT = '11521'; // Hardware — Project Issue (GTK pool)
+                // Crude brand → inventory bucket inference. If we kept brand on
+                // store_items this would be exact; for now we default to HW.
+                const fromCode = ((item as any).inventoryCode as string)
+                    || (item.name?.toUpperCase?.().includes('UPVC') ? INV_UPVC
+                    :  item.category === 'Profile' ? INV_ALUM
+                    :  INV_HW);
+
+                const allAccounts = FinanceService.getAccounts().filter((a: any) => a.company === company);
+                const fromAcc  = allAccounts.find((a: any) => a.code === fromCode);
+                const issueAcc = allAccounts.find((a: any) => a.code === ISSUE_DEFAULT);
+
+                if (!fromAcc || !issueAcc) {
+                    toast.warning(
+                        `${company} COA missing accounts (${!fromAcc ? `Inventory ${fromCode}` : ''}${!issueAcc ? ` Issue ${ISSUE_DEFAULT}` : ''}). Stock issued but GL not posted — manual JV needed.`,
+                        { duration: 8000 }
+                    );
+                } else {
+                    const glTxId = `GL-GI-${docId}`;
+                    FinanceService.recordTransaction({
+                        id: glTxId,
+                        company: company as any,
+                        docType: 'JV' as any,
+                        docDate: new Date().toISOString().split('T')[0],
+                        date:    new Date().toISOString().split('T')[0],
+                        description: `Goods Issue ${docId} — ${item.name || item.id} × ${issueData.qty} ${item.unit}${selectedProject ? ` [Prj: ${selectedProject.title}]` : ''}`,
+                        referenceId: docId,
+                        status: 'Posted',
+                        details: [
+                            { accountId: issueAcc.id, debit: consumedValue, credit: 0, text: `Hardware — Project Issue (${item.name || item.id})` },
+                            { accountId: fromAcc.id,  debit: 0, credit: consumedValue, text: `Inventory reduction at MAP ${item.movingAveragePrice}` },
+                        ],
+                    });
+                    toast.success(`GL posted: Dr Project-Issue / Cr Inventory — PKR ${consumedValue.toLocaleString()}`, { id: 'gi-gl', duration: 3000 });
+                }
+            } catch (err: any) {
+                console.error('[GoodsIssue Nippon GL] failed:', err);
+                toast.error(`GL post failed for issue ${docId}: ${err?.message || 'unknown'}. Stock issued but books NOT updated.`, { duration: 8000 });
+            }
+        } else if (consumedValue > 0) {
+            // Legacy non-Nippon path — still queues a Pending Financial Event.
+            // (Real Glassco/GTK GL is handled elsewhere in their respective flows.)
             const events = FinanceService.getFinancialEvents();
             FinanceService.saveFinancialEvents([...events, {
                 id: `EVT-${Date.now()}`,
@@ -129,10 +194,10 @@ const GoodsIssue: React.FC<Omit<GoodsIssueProps, 'company'>> = ({ items, costCen
                 status: 'Pending'
             }]);
         }
-  
+
         refreshData();
         setIssueData({ materialId: '', qty: 0, costCenterId: '', projectId: '', recipient: '', remarks: '' });
-        toast.success(`${issueData.qty} ${item.unit} issued to ${selectedCC?.name}.\nCost Allocated to Project: ${selectedProject ? selectedProject.title : 'None'}.`);
+        toast.success(`${issueData.qty} ${item.unit} issued${selectedCC ? ` to ${selectedCC.name}` : ''}${selectedProject ? ` [Prj: ${selectedProject.title}]` : ''}.`);
     };
 
     return (

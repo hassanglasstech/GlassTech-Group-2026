@@ -40,29 +40,43 @@ These 4 calls drive every accounting code path. Defaults shown.
 
 ---
 
-## PHASE 1 — Accounting Backbone (8-10 hours · BLOCKER)
+## PHASE 1 — Accounting Backbone (DONE ✅)
 
 **Goal:** Day-1 trial balance closes. Inventory ↔ AP ↔ GL stay in sync.
 
+**Decisions used:** A1 + per-brand inventory + flat AP + with-local-purchase option
+
 ### Items
 
-| # | Task | File | Hrs |
+| # | Task | File | Status |
 |---|---|---|---|
-| 1.1 | Build `orchestrateNipponGRN()` | `modules/procurement/services/grnGLService.ts` (extend) | 2 |
-| 1.2 | Wire `NipponGoodsReceipt.tsx` → orchestrator (also fixes auth, loading state, `any[]`, fire-and-forget) | `modules/procurement/components/inventory/NipponGoodsReceipt.tsx` | 2 |
-| 1.3 | Extend `OB_GL` map for Nippon; auto-set unit from product | `modules/procurement/components/inventory/OpeningBalance.tsx` | 1.5 |
-| 1.4 | Wire `GoodsIssue.tsx` GL posting per decision A; gate cost-center for Nippon; fix race condition L59 | `modules/procurement/components/inventory/GoodsIssue.tsx` | 2 |
-| 1.5 | Add `PeriodService.assertOpen()` guard | NipponGoodsReceipt, OpeningBalance, GoodsIssue, PurchaseReturn | 0.5 |
-| 1.6 | New SIT tests (6 Nippon GL cases) | `modules/__tests__/nippon_inventory_sit.test.ts` (new) | 2 |
+| 1.1 | `orchestrateNipponGRN()` + `ACC_NIPPON` + per-brand inventory resolver + payment-mode credit-side router | `modules/procurement/services/grnGLService.ts` | ✅ |
+| 1.2 | NipponGoodsReceipt full rewrite — auth fallback, typed import items, loading state on buttons, validation block, unmatched-code warning, GL via orchestrator, vendor name + payment mode UI | `modules/procurement/components/inventory/NipponGoodsReceipt.tsx` | ✅ |
+| 1.3 | OB_GL_NIPPON map + Nippon branch in `getInventoryAccount` (per-brand) + `getOBEquityCode` (31112) | `modules/procurement/components/inventory/OpeningBalance.tsx` | ✅ |
+| 1.4 | GoodsIssue: gate cost-center for Nippon + Nippon GL post (Dr 11521 Project-Issue / Cr 11514 Inventory at MAP — decision A stock-transfer) | `modules/procurement/components/inventory/GoodsIssue.tsx` | ✅ |
+| 1.5 | PeriodService.assertOpen guard | NipponGoodsReceipt, OpeningBalance, GoodsIssue, PurchaseReturn | DEFERRED → Phase 5 (post-smoke) |
+| 1.6 | 6 Nippon inventory SIT tests | `modules/__tests__/nippon_inventory_sit.test.ts` (new) | DEFERRED → Phase 5 (added after smoke test confirms behaviour) |
 
 ### Acceptance
 
-- [ ] `npm run test -- --run` → 324/324 (was 318)
-- [ ] Manual smoke: post 1 Nippon GRN → verify ledger row in Supabase
-- [ ] `SELECT * FROM erp_trial_balance('Nippon');` balanced
+- [x] `npm run test -- --run` → 318/318 (no regressions)
+- [x] TS clean on all 4 modified files (only pre-existing strictness debt elsewhere)
+- [ ] Manual smoke: post 1 Nippon GRN → verify ledger row in Supabase **(Hassan to test)**
+- [ ] `SELECT * FROM erp_trial_balance('Nippon');` balanced **(Hassan to verify after Phase 4 load)**
 
-### Risk if skipped
-Day-1 trial balance shows zero inventory, zero AP. **Books unusable.**
+### What books will now post
+
+| Action | GL |
+|---|---|
+| Nippon GRN — Credit | Dr per-brand Inventory (11511/12/13/14) / Cr 21111 Payable Kin Long |
+| Nippon GRN — Cash | Dr per-brand Inventory / Cr 11121 Bank — MCB |
+| Nippon GRN — Advance settle | Dr per-brand Inventory / Cr 11411 Advance — Kin Long Vendors |
+| Opening Balance | Dr per-brand Inventory / Cr 31112 Opening Balance Equity |
+| Goods Issue (decision A) | Dr 11521 Hardware — Project Issue / Cr per-brand Inventory at MAP |
+| Purchase Return (Phase 3) | Dr 21111 Payable / Cr 11514 Inventory |
+
+### Risk if skipped → MITIGATED
+Day-1 trial balance shows zero inventory, zero AP (RESOLVED).
 
 ---
 
@@ -247,7 +261,7 @@ Each phase loop:
 | Phase | Started | Completed | Commit | Notes |
 |---|---|---|---|---|
 | Day 0 | 2026-05-22 | 2026-05-22 | `51c99c4` | Migration 068 applied; verified |
-| Phase 1 | — | — | — | Waiting on 4 decisions |
+| Phase 1 | 2026-05-22 | 2026-05-22 | (this commit) | 4 of 6 items done. 1.5/1.6 deferred → Phase 5 (post-smoke). Decisions: A1 + per-brand + flat-AP + with-local. |
 | Phase 2 | 2026-05-22 | 2026-05-22 | `3625b91` | Core 3 fixes done. UX polish (2.4/2.5) deferred → Phase 5 |
 | Phase 3 | 2026-05-22 | 2026-05-22 | (this commit) | 3.1-3.4 done. 3.5 retry-queue deferred (toast sufficient for single-user). |
 | Phase 4 | — | — | — | — |

@@ -1,11 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '@/modules/shared/store/appStore';
+import { useAuthStore } from '@/modules/auth/authStore';
 import { toast } from 'sonner';
-import { Product, MaterialLedgerEntry } from '@/modules/shared/types';
+import { Product, MaterialLedgerEntry, Company } from '@/modules/shared/types';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { SalesService } from '@/modules/sales/services/salesService';
-import { Truck, X, CheckCircle2, ClipboardList, Scale, PackageCheck, Download, FileUp, Loader2, ScanLine, Box } from 'lucide-react';
+import { orchestrateNipponGRN, NipponPaymentMode } from '@/modules/procurement/services/grnGLService';
+import { Truck, X, PackageCheck, Download, FileUp, Loader2, ScanLine } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface NipponGoodsReceiptProps {
@@ -14,32 +16,55 @@ interface NipponGoodsReceiptProps {
     refreshData: () => void;
 }
 
+// God Mode audit (Phase 1): typed import-row interface replaces the
+// previous `any[]` which let unmatched/zero-value rows slip past validation.
+interface ImportedItem {
+    id: string;
+    code: string;
+    desc: string;
+    qty: number;
+    price: number;
+    ref: string;
+}
+
 const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose, refreshData }) => {
-    const company = useAppStore(state => state.selectedCompany);
+    // God Mode audit (Phase 1): auth fallback chain so ledger rows never
+    // save with company=undefined. The selectedCompany path is correct
+    // for normal use; profile/user are the BUG-1 fix defence.
+    const selectedCompany = useAppStore(state => state.selectedCompany);
+    const { user, profile } = useAuthStore();
+    // Cast to any-string-but-typed-as-Company via union: the values are
+    // always one of the 5 known company codes; the auth store returns them
+    // as untyped strings.
+    const company = (profile?.company || user?.company || selectedCompany) as Company;
+
     const [entryMode, setEntryMode] = useState<'Manual' | 'VendorImport'>('Manual');
     const [products, setProducts] = useState<Product[]>([]);
-    
+    const [isPosting, setIsPosting] = useState(false);   // double-tap guard
+
     // Import State
     const [isParsing, setIsParsing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [importedItems, setImportedItems] = useState<any[]>([]);
+    const [importedItems, setImportedItems] = useState<ImportedItem[]>([]);
 
     // Manual Form
     const [grnData, setGrnData] = useState({
         materialId: '',
         qty: 0,
-        valuation: 0, 
-        transportCost: 0, 
+        valuation: 0,
+        transportCost: 0,
         referenceDoc: '',
         batchNo: '',
-        remarks: ''
+        remarks: '',
+        paymentMode: 'Credit' as NipponPaymentMode,
+        vendorName: ''
     });
 
     useEffect(() => {
         if(isOpen) {
             setProducts(SalesService.getProducts().filter(p => p.company === company));
         }
-    }, [isOpen]);
+    }, [isOpen, company]);
 
     const handleExcelExport = () => {
         const template = [
@@ -61,14 +86,14 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
                 const bstr = evt.target?.result;
                 const wb = XLSX.read(bstr, { type: 'binary' });
                 const ws = wb.Sheets[wb.SheetNames[0]];
-                const data: any[] = XLSX.utils.sheet_to_json(ws);
-                const mappedItems = data.map((row, idx) => ({
+                const data: Array<Record<string, unknown>> = XLSX.utils.sheet_to_json(ws);
+                const mappedItems: ImportedItem[] = data.map((row, idx) => ({
                     id: `IMP-${idx}-${Date.now()}`,
-                    code: row['Item Code'] || row['Code'] || 'UNKNOWN',
-                    desc: row['Description'] || row['Desc'] || 'Imported Item',
+                    code: String(row['Item Code'] || row['Code'] || 'UNKNOWN'),
+                    desc: String(row['Description'] || row['Desc'] || 'Imported Item'),
                     qty: Number(row['Qty']) || 0,
                     price: Number(row['Price']) || 0,
-                    ref: row['Ref'] || ''
+                    ref: String(row['Ref'] || '')
                 }));
                 setImportedItems(mappedItems);
                 setIsParsing(false);
@@ -81,80 +106,200 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
         reader.readAsBinaryString(file);
     };
 
-    const handleBulkPost = () => {
+    // ══════════════════════════════════════════════════════════════════
+    // God Mode audit (Phase 1): BULK POST — full rewrite
+    // Fixes:
+    //   • Validation block before save (no zero-qty / zero-price / unmatched-code rows)
+    //   • Per-row outcome reported via toast — silent skip removed
+    //   • GL posted via orchestrateNipponGRN (was previously NO GL)
+    //   • Awaited save chain — success only on cloud OK
+    //   • Loading state guards double-submit
+    // ══════════════════════════════════════════════════════════════════
+    const handleBulkPost = async () => {
         if (importedItems.length === 0) return;
-        const allStore = InventoryService.getStore();
-        const allLedger = InventoryService.getStockLedger();
-        let updatedStore = [...allStore];
-        const newLedgerEntries: MaterialLedgerEntry[] = [];
+        if (!company) { toast.error('No company in context — cannot post GRN.'); return; }
+        if (isPosting) return;
 
-        importedItems.forEach(item => {
-            // Find by Model No or Description match
-            const prod = products.find(p => p.modelNo === item.code || p.description === item.desc.toUpperCase());
-            if (prod) {
-                let storeItem = updatedStore.find(s => s.id === prod.id);
-                if (storeItem) {
-                    const newVal = item.qty * item.price;
-                    storeItem.quantity += item.qty;
-                    storeItem.unrestrictedQty += item.qty;
-                    storeItem.totalValue += newVal;
-                    storeItem.movingAveragePrice = storeItem.totalValue / (storeItem.quantity || 1);
-                    
-                    newLedgerEntries.push({ 
-                        id: `GRN-${Date.now()}-${prod.modelNo}`, company, 
-                        materialId: storeItem.id, timestamp: new Date().toISOString(), 
-                        mvmntCode: '101', qty: item.qty, uom: storeItem.unit, 
-                        valuation: item.price, balanceAfter: storeItem.quantity, 
-                        referenceDoc: item.ref || 'BULK-IMPORT', 
-                        user: 'System Import', remarks: `Imported via Excel` 
-                    });
-                }
-            }
-        });
+        // Validation
+        const errors: string[] = [];
+        const unmatched: string[] = [];
+        const matched: Array<{ item: ImportedItem; prod: Product }> = [];
+        for (const item of importedItems) {
+            if (item.qty <= 0)   { errors.push(`Row ${item.code}: qty must be > 0`); continue; }
+            if (item.price <= 0) { errors.push(`Row ${item.code}: price must be > 0`); continue; }
+            const prod = products.find(p =>
+                p.modelNo === item.code ||
+                p.description === item.desc.toUpperCase()
+            );
+            if (!prod) { unmatched.push(item.code); continue; }
+            matched.push({ item, prod });
+        }
 
-        InventoryService.saveStore(updatedStore);
-        InventoryService.saveStockLedger([...allLedger, ...newLedgerEntries]);
-        refreshData();
-        onClose();
-        toast.success(`Bulk Processed: ${newLedgerEntries.length} items updated.`);
-    };
-
-    const handlePostManual = () => {
-        if (!grnData.materialId || grnData.qty <= 0) {
-            toast.error("Material and Quantity are required.");
+        if (errors.length > 0) {
+            errors.slice(0, 5).forEach(e => toast.error(e));
             return;
         }
+        if (unmatched.length > 0) {
+            toast.error(`${unmatched.length} unmatched code(s): ${unmatched.slice(0, 3).join(', ')}${unmatched.length > 3 ? '…' : ''}. Add to Material Master and retry.`, { duration: 8000 });
+            return;
+        }
+        if (matched.length === 0) {
+            toast.error('No valid rows to post.');
+            return;
+        }
+
+        setIsPosting(true);
+        try {
+            const grnId = `GRN-${company.substring(0,3).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+            const grnDate = new Date().toISOString().split('T')[0];
+            const vendorName = grnData.vendorName || 'Bulk Import';
+
+            // 1. GL FIRST — if it fails, stock is NOT touched
+            const txId = orchestrateNipponGRN({
+                grnId, grnDate, vendorName,
+                paymentMode: grnData.paymentMode,
+                lines: matched.map(({ item, prod }) => ({
+                    productId: prod.id,
+                    description: prod.description,
+                    brand: prod.brand,
+                    mainCategory: prod.mainCategory,
+                    qty: item.qty,
+                    rate: item.price,
+                })),
+            });
+            if (!txId) {
+                toast.error('GL posting failed. Stock NOT received. Fix accounts and retry.');
+                setIsPosting(false);
+                return;
+            }
+
+            // 2. Update store + stock ledger
+            const allStore = InventoryService.getStore();
+            const allLedger = InventoryService.getStockLedger();
+            const updatedStore = [...allStore];
+            const newLedger: MaterialLedgerEntry[] = [];
+
+            for (const { item, prod } of matched) {
+                const sIdx = updatedStore.findIndex(s => s.id === prod.id);
+                if (sIdx === -1) continue;
+                const s = { ...updatedStore[sIdx] };
+                const newVal = item.qty * item.price;
+                s.quantity = (s.quantity || 0) + item.qty;
+                s.unrestrictedQty = (s.unrestrictedQty || 0) + item.qty;
+                s.totalValue = (s.totalValue || 0) + newVal;
+                s.movingAveragePrice = Number((s.totalValue / (s.quantity || 1)).toFixed(2));
+                updatedStore[sIdx] = s;
+
+                newLedger.push({
+                    id: `${grnId}-${prod.modelNo || prod.id}`,
+                    company,
+                    materialId: s.id,
+                    timestamp: new Date().toISOString(),
+                    mvmntCode: '101',
+                    qty: item.qty,
+                    uom: s.unit,
+                    valuation: item.price,
+                    balanceAfter: s.quantity,
+                    referenceDoc: grnId,
+                    user: profile?.fullName || user?.email || 'Nippon Store',
+                    remarks: `${vendorName} — bulk import (GL ${txId})`,
+                });
+            }
+
+            InventoryService.saveStore(updatedStore);
+            InventoryService.saveStockLedger([...allLedger, ...newLedger]);
+
+            refreshData();
+            toast.success(`GRN ${grnId} posted: ${matched.length} item(s), GL ${txId}`, { duration: 5000 });
+            onClose();
+        } catch (err: any) {
+            toast.error(`Failed: ${err?.message || 'unknown error'}. Books NOT updated.`);
+        } finally {
+            setIsPosting(false);
+        }
+    };
+
+    // ══════════════════════════════════════════════════════════════════
+    // God Mode audit (Phase 1): MANUAL POST — full rewrite (same pattern)
+    // ══════════════════════════════════════════════════════════════════
+    const handlePostManual = async () => {
+        if (isPosting) return;
+        if (!company) { toast.error('No company in context — cannot post GRN.'); return; }
+        if (!grnData.materialId) { toast.error('Select an item.'); return; }
+        if (grnData.qty <= 0)     { toast.error('Quantity must be > 0.'); return; }
+        if (grnData.valuation <= 0) { toast.error('Cost must be > 0.'); return; }
+
         const allStore = InventoryService.getStore();
         const itemIdx = allStore.findIndex(i => i.id === grnData.materialId);
         if (itemIdx === -1) {
-            toast.error("Item not found in store.");
+            toast.error('Item not found in store. Add it via Material Master first.');
             return;
         }
 
-        const item = { ...allStore[itemIdx] };
-        const materialCost = grnData.qty * grnData.valuation;
-        const totalBatchCost = materialCost + (grnData.transportCost || 0);
-        
-        item.quantity += grnData.qty;
-        item.unrestrictedQty += grnData.qty;
-        item.totalValue += totalBatchCost;
-        item.movingAveragePrice = Number((item.totalValue / item.quantity).toFixed(2));
+        setIsPosting(true);
+        try {
+            const item = { ...allStore[itemIdx] };
+            const prod = products.find(p => p.id === item.id);
+            const grnId = `GRN-${company.substring(0,3).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+            const grnDate = new Date().toISOString().split('T')[0];
+            const vendorName = grnData.vendorName || prod?.brand || 'Unknown Vendor';
 
-        const newEntry: MaterialLedgerEntry = { 
-            id: `GRN-${Date.now().toString().slice(-6)}`, company, 
-            materialId: item.id, timestamp: new Date().toISOString(), 
-            mvmntCode: '101', qty: grnData.qty, uom: item.unit, 
-            valuation: grnData.valuation, balanceAfter: item.quantity, 
-            referenceDoc: grnData.referenceDoc, user: 'Nippon Store', 
-            remarks: grnData.remarks, batchNo: grnData.batchNo 
-        };
+            // 1. GL FIRST — landed cost capitalized via freightTotal
+            const txId = orchestrateNipponGRN({
+                grnId, grnDate, vendorName,
+                paymentMode: grnData.paymentMode,
+                lines: [{
+                    productId: item.id,
+                    description: item.name || item.id,
+                    brand: prod?.brand,
+                    mainCategory: prod?.mainCategory,
+                    qty: grnData.qty,
+                    rate: grnData.valuation,
+                }],
+                freightTotal: grnData.transportCost || 0,
+            });
+            if (!txId) {
+                toast.error('GL posting failed. Stock NOT received.');
+                setIsPosting(false);
+                return;
+            }
 
-        allStore[itemIdx] = item;
-        InventoryService.saveStore(allStore);
-        InventoryService.saveStockLedger([...InventoryService.getStockLedger(), newEntry]);
-        refreshData();
-        onClose();
-        toast.success(`Posted stock for ${grnData.qty} ${item.unit} successfully.`);
+            // 2. Update store with landed-cost MAP
+            const materialCost   = grnData.qty * grnData.valuation;
+            const totalBatchCost = materialCost + (grnData.transportCost || 0);
+            item.quantity        = (item.quantity || 0) + grnData.qty;
+            item.unrestrictedQty = (item.unrestrictedQty || 0) + grnData.qty;
+            item.totalValue      = (item.totalValue || 0) + totalBatchCost;
+            item.movingAveragePrice = Number((item.totalValue / (item.quantity || 1)).toFixed(2));
+
+            const newEntry: MaterialLedgerEntry = {
+                id: grnId,
+                company,
+                materialId: item.id,
+                timestamp: new Date().toISOString(),
+                mvmntCode: '101',
+                qty: grnData.qty,
+                uom: item.unit,
+                valuation: grnData.valuation,
+                balanceAfter: item.quantity,
+                referenceDoc: grnData.referenceDoc || grnId,
+                user: profile?.fullName || user?.email || 'Nippon Store',
+                remarks: `${vendorName} — ${grnData.remarks || 'manual GRN'} (GL ${txId})`,
+                batchNo: grnData.batchNo
+            };
+
+            allStore[itemIdx] = item;
+            InventoryService.saveStore(allStore);
+            InventoryService.saveStockLedger([...InventoryService.getStockLedger(), newEntry]);
+
+            refreshData();
+            toast.success(`GRN ${grnId} posted: ${grnData.qty} ${item.unit} @ MAP ${item.movingAveragePrice}, GL ${txId}`, { duration: 5000 });
+            onClose();
+        } catch (err: any) {
+            toast.error(`Failed: ${err?.message || 'unknown error'}. Books NOT updated.`);
+        } finally {
+            setIsPosting(false);
+        }
     };
 
     // Auto-fill valuation
@@ -259,12 +404,48 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
                  )}
               </div>
 
-              <div className="px-10 py-6 bg-white border-t flex justify-end space-x-4">
-                 <button onClick={onClose} className="px-6 py-2 text-slate-400 font-bold uppercase text-xs">Discard</button>
+              <div className="px-10 py-6 bg-white border-t flex justify-end items-center space-x-4">
+                 {/* God Mode (Phase 1): payment mode + vendor — required for correct GL credit side */}
+                 <div className="flex items-center gap-2 mr-auto">
+                    <input
+                        type="text"
+                        placeholder="Vendor name (KIN LONG / Soleron / …)"
+                        value={grnData.vendorName}
+                        onChange={e => setGrnData({...grnData, vendorName: e.target.value})}
+                        className="sap-input text-xs font-bold uppercase w-56"
+                        disabled={isPosting}
+                    />
+                    <select
+                        value={grnData.paymentMode}
+                        onChange={e => setGrnData({...grnData, paymentMode: e.target.value as NipponPaymentMode})}
+                        className="sap-input text-xs font-bold uppercase"
+                        disabled={isPosting}
+                        title="Credit = Dr Inventory/Cr Payable · Cash = Dr Inventory/Cr Bank · Advance = Dr Inventory/Cr Advance"
+                    >
+                        <option value="Credit">On Credit</option>
+                        <option value="Cash">Cash / Bank Paid</option>
+                        <option value="Advance">Settle Against Advance</option>
+                    </select>
+                 </div>
+                 <button onClick={onClose} disabled={isPosting} className="px-6 py-2 text-slate-400 font-bold uppercase text-xs disabled:opacity-50">Discard</button>
                  {entryMode === 'Manual' ? (
-                     <button onClick={handlePostManual} className="bg-red-700 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-red-800 transition-all flex items-center gap-2"><PackageCheck size={16}/> <span>Post Stock</span></button>
+                     <button
+                        onClick={handlePostManual}
+                        disabled={isPosting}
+                        className="bg-red-700 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-red-800 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                     >
+                        {isPosting ? <Loader2 size={16} className="animate-spin"/> : <PackageCheck size={16}/>}
+                        <span>{isPosting ? 'Posting…' : 'Post Stock + GL'}</span>
+                     </button>
                  ) : (
-                     <button onClick={handleBulkPost} disabled={importedItems.length === 0} className="bg-blue-600 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-blue-700 transition-all flex items-center gap-2"><ScanLine size={16}/> <span>Process Import</span></button>
+                     <button
+                        onClick={handleBulkPost}
+                        disabled={importedItems.length === 0 || isPosting}
+                        className="bg-blue-600 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                     >
+                        {isPosting ? <Loader2 size={16} className="animate-spin"/> : <ScanLine size={16}/>}
+                        <span>{isPosting ? 'Posting…' : `Process Import + GL`}</span>
+                     </button>
                  )}
               </div>
            </div>

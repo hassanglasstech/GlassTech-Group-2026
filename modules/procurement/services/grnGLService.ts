@@ -43,6 +43,26 @@ const ACC = {
   UNLOADING_LABOUR:  '51216',   // Unloading Expense — Labour
 };
 
+// ── Account codes — Nippon (trading) COA ─────────────────────────────────
+// Added by God Mode audit Phase 1. Nippon's COA structure is different
+// from Glassco — it's a trading chain, not a manufacturing chain.
+// Per decision B: per-brand inventory accounts (visibility over flat 11514).
+// Per decision C: flat AP (21111) — vendor sub-ledger handles per-supplier.
+const ACC_NIPPON = {
+  INVENTORY_KL:    '11511',   // Kin Long Products — Stock
+  INVENTORY_ALUM:  '11512',   // Aluminium Accessories — Stock
+  INVENTORY_UPVC:  '11513',   // UPVC Hardware — Stock
+  INVENTORY_HW:    '11514',   // General Hardware — Stock (DEFAULT)
+  PAYABLE_KL:      '21111',   // Payable — Kin Long Vendors (flat)
+  PAYABLE_IMP:     '21112',   // Payable — Hardware Importers
+  PAYABLE_OTHER:   '21113',   // Payable — Other
+  CASH_IN_HAND:    '11112',   // Cash in Hand
+  BANK_MCB:        '11121',   // Bank — MCB Current
+  ADVANCE_KL:      '11411',   // Advance — Kin Long / Hardware Vendors
+  GRIR_HW:         '21141',   // GR/IR — Hardware Material (Day-1 added)
+  INPUT_GST:       '11431',   // Input GST Recoverable (Day-1 added)
+};
+
 // Account name map for auto-creation via ensureAccount
 const ACC_META: Record<string, { name: string; level: number; type: 'Asset' | 'Liability' | 'Expense' | 'Revenue' | 'Equity'; parentCode: string | null; parentName: string | null }> = {
   '11512': { name: 'Float Glass — Raw Sheets',       level: 5, type: 'Asset',     parentCode: '1151',  parentName: 'RAW MATERIAL INVENTORY' },
@@ -60,6 +80,15 @@ const ACC_META: Record<string, { name: string; level: number; type: 'Asset' | 'L
   '51216': { name: 'Unloading Expense — Labour',     level: 4, type: 'Expense',   parentCode: '512',   parentName: 'PROCUREMENT EXPENSES' },
   '51213': { name: 'Outward Freight Expense',           level: 4, type: 'Expense',   parentCode: '512',   parentName: 'PROCUREMENT EXPENSES' },
   '52291': { name: 'Miscellaneous Operating Expense',   level: 4, type: 'Expense',   parentCode: '522',   parentName: 'OPERATING EXPENSES' },
+
+  // Nippon trading COA metadata (Phase 1)
+  '11511': { name: 'Kin Long Products — Stock',         level: 5, type: 'Asset',     parentCode: '1151',  parentName: 'HARDWARE INVENTORY' },
+  '11513': { name: 'UPVC Hardware — Stock',             level: 5, type: 'Asset',     parentCode: '1151',  parentName: 'HARDWARE INVENTORY' },
+  '11514': { name: 'General Hardware — Stock',          level: 5, type: 'Asset',     parentCode: '1151',  parentName: 'HARDWARE INVENTORY' },
+  '11411': { name: 'Advance — Kin Long / Hardware Vendors', level: 5, type: 'Asset', parentCode: '1141',  parentName: 'VENDOR ADVANCES' },
+  '11121': { name: 'Bank — MCB Current',                level: 5, type: 'Asset',     parentCode: '1112',  parentName: 'BANK' },
+  '11431': { name: 'Input GST Recoverable',             level: 5, type: 'Asset',     parentCode: '1143',  parentName: 'TAX RECEIVABLES' },
+  '21141': { name: 'GR/IR — Hardware Material',         level: 5, type: 'Liability', parentCode: '2114',  parentName: 'GR/IR CLEARING' },
 };
 
 /**
@@ -637,4 +666,170 @@ export function orchestrateGRNGL(params: {
   }
 
   return glCount;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 7. NIPPON GRN ORCHESTRATOR — Trading-company hardware receipt (Phase 1)
+//
+// Replaces NipponGoodsReceipt's previous NO-GL save path with a balanced
+// double-entry journal. Decision B (per-brand inventory) is encoded in
+// `nipponInventoryAcc()`; decision C (flat AP) defaults to 21111.
+//
+// Journal pattern:
+//   Dr <inventory accounts> per brand   (sum of qty × rate per line)
+//   Cr <credit account>                  (single line, by payment mode)
+//
+// Optional landed cost (freight) capitalized into inventory per IAS-2 —
+// rolled into per-brand inventory rows pro-rated by line value.
+//
+// Returns the posted ledger transaction id (caller stores it as the GL ref
+// on the GRN) or null on failure (so the caller knows NOT to mark stock
+// as received).
+// ══════════════════════════════════════════════════════════════════════════
+
+export type NipponPaymentMode = 'Credit' | 'Cash' | 'Advance';
+
+export interface NipponGRNLine {
+  productId: string;
+  description: string;
+  brand?: string;          // KIN LONG / Soleron / HuangXing / SIWAY / ...
+  mainCategory?: string;   // 'Aluminium Products' | 'UPVC' | 'Steel Mesh' | 'Silicon'
+  qty: number;             // PCS / SET
+  rate: number;            // PKR per unit (landed cost basis)
+}
+
+/**
+ * Per-brand inventory account resolution (decision B).
+ * Falls back to 11514 General Hardware if brand/category not recognised.
+ */
+function nipponInventoryAcc(brand?: string, mainCategory?: string): string {
+  const b = (brand || '').toUpperCase();
+  const c = (mainCategory || '').toUpperCase();
+
+  if (b.includes('KIN LONG') || b.includes('KINLONG')) return ACC_NIPPON.INVENTORY_KL;
+  if (c.includes('UPVC'))                              return ACC_NIPPON.INVENTORY_UPVC;
+  if (c.includes('ALUMINIUM'))                         return ACC_NIPPON.INVENTORY_ALUM;
+  return ACC_NIPPON.INVENTORY_HW; // default General Hardware
+}
+
+/**
+ * Resolve the credit-side account based on payment mode.
+ *   Credit  → 21111 Payable (default)
+ *   Cash    → 11121 Bank (or 11112 cash if Hassan picks that)
+ *   Advance → 11411 Advance settlement (Dr-side asset reduction)
+ */
+function nipponCreditAcc(mode: NipponPaymentMode): string {
+  switch (mode) {
+    case 'Cash':    return ACC_NIPPON.BANK_MCB;
+    case 'Advance': return ACC_NIPPON.ADVANCE_KL;
+    case 'Credit':
+    default:        return ACC_NIPPON.PAYABLE_KL;
+  }
+}
+
+export function orchestrateNipponGRN(params: {
+  grnId: string;
+  grnDate: string;
+  vendorName: string;
+  paymentMode: NipponPaymentMode;       // 'Credit' default
+  lines: NipponGRNLine[];
+  freightTotal?: number;                // landed cost — pro-rated into inventory
+}): string | null {
+  const company = 'Nippon';
+  const { grnId, grnDate, vendorName, paymentMode, lines } = params;
+  const freightTotal = params.freightTotal || 0;
+
+  if (!lines.length) {
+    console.warn('[Nippon GRN GL] no lines — skip');
+    return null;
+  }
+
+  // ── Compute material totals per inventory account ───────────────────
+  const matByAcc: Record<string, number> = {};
+  let totalMaterial = 0;
+  for (const line of lines) {
+    if (line.qty <= 0 || line.rate <= 0) continue;
+    const lineVal = line.qty * line.rate;
+    const accCode = nipponInventoryAcc(line.brand, line.mainCategory);
+    matByAcc[accCode] = (matByAcc[accCode] || 0) + lineVal;
+    totalMaterial += lineVal;
+  }
+
+  if (totalMaterial <= 0) {
+    console.warn('[Nippon GRN GL] zero material total — skip');
+    return null;
+  }
+
+  // ── Pro-rate freight (landed cost) into inventory accounts ─────────
+  // IAS-2: landed cost capitalized into inventory, NOT expensed at GRN.
+  if (freightTotal > 0) {
+    for (const accCode of Object.keys(matByAcc)) {
+      const share = freightTotal * (matByAcc[accCode] / totalMaterial);
+      matByAcc[accCode] += share;
+    }
+  }
+
+  // ── Resolve all accounts (auto-create if missing via ensureAccount) ──
+  const details: LedgerTransaction['details'] = [];
+  for (const [code, amount] of Object.entries(matByAcc)) {
+    if (amount <= 0) continue;
+    const acc = getOrCreateAcc(company, code);
+    if (!acc) {
+      console.error(`[Nippon GRN GL] could not create inventory account ${code}`);
+      toast.error(`Nippon GRN GL: missing inventory account ${code}. Add to COA and retry.`);
+      return null;
+    }
+    details.push({
+      accountId: acc.id,
+      debit: Math.round(amount * 100) / 100,
+      credit: 0,
+      text: `Inventory in — GRN ${grnId} (${vendorName})`,
+    });
+  }
+
+  // ── Credit side: single payable / cash / advance line ──────────────
+  const creditCode = nipponCreditAcc(paymentMode);
+  const creditAcc  = getOrCreateAcc(company, creditCode);
+  if (!creditAcc) {
+    toast.error(`Nippon GRN GL: missing credit account ${creditCode}. Add to COA and retry.`);
+    return null;
+  }
+  const totalDebit = details.reduce((s, d) => s + d.debit, 0);
+  details.push({
+    accountId: creditAcc.id,
+    debit: 0,
+    credit: Math.round(totalDebit * 100) / 100,
+    text: paymentMode === 'Credit'
+      ? `Payable accrued — ${vendorName} (GRN ${grnId})`
+      : paymentMode === 'Cash'
+        ? `Cash/bank paid — ${vendorName} (GRN ${grnId})`
+        : `Advance settled — ${vendorName} (GRN ${grnId})`,
+  });
+
+  // ── Post via FinanceService (which enforces Dr = Cr) ──────────────
+  const txId = genTxId('KR');
+  const tx: LedgerTransaction = {
+    id: txId,
+    company,
+    docType: 'KR' as LedgerDocType,
+    docDate: grnDate,
+    date: grnDate,
+    description: `Nippon GRN ${grnId} — ${vendorName} (${paymentMode})`,
+    referenceId: grnId,
+    status: 'Posted',
+    details,
+  };
+
+  try {
+    FinanceService.recordTransaction(tx);
+    toast.success(
+      `GL posted: PKR ${totalDebit.toLocaleString()} inventory recorded — GRN ${grnId}`,
+      { duration: 4000 }
+    );
+    return txId;
+  } catch (err: any) {
+    console.error('[Nippon GRN GL] posting failed:', err);
+    toast.error(`Nippon GRN GL failed: ${err?.message || 'unknown'}. Stock NOT received.`);
+    return null;
+  }
 }

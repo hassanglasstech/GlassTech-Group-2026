@@ -37,12 +37,25 @@ const OB_GL = {
 
   // Generic inventory for non-Glassco companies
   INVENTORY_GLASS:  '11511',   // Float Glass inventory (default)
-  INVENTORY_HW:     '11512',   // Hardware inventory
+  INVENTORY_HW:     '11512',   // Hardware inventory (GTK/Glassco legacy mapping)
   INVENTORY_ALUM:   '11513',   // Aluminium inventory (GTK/GTI)
   INVENTORY_CONS:   '11514',   // Consumables
 
   // Opening Balance Equity — will auto-create if not exists
   OB_EQUITY:        '31901',   // Opening Balance Equity
+};
+
+// ── NIPPON-SPECIFIC OB ACCOUNT MAP (Phase 1) ───────────────────────────────
+// Nippon COA uses 11511-11514 for branded hardware inventory and the
+// new 31112 leaf (added Day 1) for opening equity. Existing OB_GL.INVENTORY_HW
+// of '11512' would (in Nippon's COA) post to "Aluminium Accessories" — wrong
+// account. This map overrides per-company.
+const OB_GL_NIPPON = {
+  INVENTORY_KL:    '11511',   // Kin Long Products — Stock
+  INVENTORY_ALUM:  '11512',   // Aluminium Accessories — Stock
+  INVENTORY_UPVC:  '11513',   // UPVC Hardware — Stock
+  INVENTORY_HW:    '11514',   // General Hardware — Stock (DEFAULT for Nippon)
+  OB_EQUITY:       '31112',   // Opening Balance Equity (added in migration Day 1)
 };
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -232,15 +245,32 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
   };
 
   // ── Resolve Inventory GL Account by THICKNESS (Glassco) or CATEGORY (others) ───────
-  const getInventoryAccount = (category: string, thickness?: string) => {
+  // Phase 1 (God Mode audit): Nippon branch added — uses OB_GL_NIPPON map
+  // because Nippon's COA assigns 11512 to "Aluminium Accessories" (not Hardware
+  // as in the legacy OB_GL.INVENTORY_HW). Without this branch, every Nippon
+  // opening hardware entry would have posted to the wrong account.
+  const getInventoryAccount = (category: string, thickness?: string, mainCategory?: string) => {
     const isGlass = company === 'Glassco' || company === 'GlassCo';
     const isAlum = company === 'GTK' || company === 'GTI';
+    const isNippon = company === 'Nippon';
     let result;
 
+    // Nippon: branded inventory mapping (per decision B)
+    if (isNippon) {
+      const mc = (mainCategory || '').toUpperCase();
+      if (mc.includes('UPVC')) {
+        result = { code: OB_GL_NIPPON.INVENTORY_UPVC, name: 'Nippon — UPVC Hardware Stock' };
+      } else if (mc.includes('ALUMINIUM')) {
+        result = { code: OB_GL_NIPPON.INVENTORY_ALUM, name: 'Nippon — Aluminium Accessories Stock' };
+      } else {
+        // Default for KIN LONG branded items and unclassified hardware
+        result = { code: OB_GL_NIPPON.INVENTORY_HW, name: 'Nippon — General Hardware Stock' };
+      }
+    }
     // For Glassco, use per-thickness accounts
-    if (isGlass && (category === 'Raw' || category === 'Glass')) {
+    else if (isGlass && (category === 'Raw' || category === 'Glass')) {
       // Extract thickness (e.g. "6mm" → 6, "6" → 6)
-      const thicknessNum = thickness ? parseInt(thickness) : null;
+      const thicknessNum = thickness ? parseInt(thickness, 10) : null;
 
       switch (thicknessNum) {
         case 4:
@@ -271,9 +301,14 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
       result = { code: OB_GL.INVENTORY_GLASS, name: 'Glass Inventory' };
     }
 
-    // FIX 7: Log thickness-based mapping to debug GL posting
-    console.log(`[OB Account Resolution] category="${category}", thickness="${thickness}" → accountCode="${result.code}" (${result.name})`);
+    console.log(`[OB Account Resolution] company="${company}" category="${category}" thickness="${thickness}" mainCat="${mainCategory}" → accountCode="${result.code}" (${result.name})`);
     return result;
+  };
+
+  // Resolve OB Equity (credit side) per company. Nippon uses the 31112 leaf
+  // added in Day 1 migration; others fall back to OB_GL.OB_EQUITY (31901).
+  const getOBEquityCode = (): string => {
+    return company === 'Nippon' ? OB_GL_NIPPON.OB_EQUITY : OB_GL.OB_EQUITY;
   };
 
   // ══════════════════════════════════════════════════════════════════════
@@ -431,14 +466,25 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
       // ── GL Entry: Dr Inventory / Cr Opening Balance Equity ─────────
       if (glTotal > 0) {
         try {
+          // Phase 1: Nippon uses 31112 (its dedicated leaf added Day 1),
+          // others fall back to 31901. Without this branch Nippon's OB would
+          // either crash on account-not-found or post to a Glassco-shaped
+          // 31901 leaf that doesn't exist in Nippon's COA.
+          const obEquityCode = getOBEquityCode();
           const obEquityAcc = FinanceService.ensureAccount(
-            company as any, 'Opening Balance Equity', 4, null, 'Equity', OB_GL.OB_EQUITY
+            company as any, 'Opening Balance Equity', 4, null, 'Equity', obEquityCode
           );
 
           // Group lines by inventory account code (one debit line per category+thickness combo for Glassco)
+          // Phase 1: pass mainCategory so Nippon's branded inventory mapping fires.
+          // Products aren't held in component state — fetch once here so the
+          // groupBy can look up mainCategory for branded-inventory routing.
+          const allProductsForLookup = SalesService.getProducts();
           const invGroups: Record<string, { amount: number; name: string; count: number }> = {};
           linesToPost.forEach(line => {
-            const { code, name } = getInventoryAccount(line.category, line.thickness);
+            const lineProduct = allProductsForLookup.find(p => p.id === line.productId);
+            const mainCat = lineProduct?.mainCategory;
+            const { code, name } = getInventoryAccount(line.category, line.thickness, mainCat);
             if (!invGroups[code]) invGroups[code] = { amount: 0, name, count: 0 };
             invGroups[code].amount += line.totalValue;
             invGroups[code].count  += 1;
@@ -462,7 +508,7 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
           });
 
           // FIX 7: LOG equity account and GL balance check
-          console.log(`[OB GL Debug] OB Equity Account: code=${OB_GL.OB_EQUITY}, name=Opening Balance Equity, type=Equity, accountId=${obEquityAcc.id}, credit=${glTotal}`);
+          console.log(`[OB GL Debug] OB Equity Account: code=${obEquityCode}, name=Opening Balance Equity, type=Equity, accountId=${obEquityAcc.id}, credit=${glTotal}`);
           console.log(`[OB GL Balance] Total Debits=${totalDebits.toFixed(2)}, Total Credits=${glTotal.toFixed(2)}, Balanced=${Math.abs(totalDebits - glTotal) < 0.01}`);
 
           glDetails.push({
