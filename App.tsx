@@ -152,6 +152,91 @@ const ALL_NAV = [
   { name: 'Basis Admin',      path: '/admin',            icon: ShieldCheck,key: 'admin'            },
 ];
 
+// ─────────────────────────────────────────────────────────────────────
+// ROUTE ACCESS GUARD — Sprint 39 / BUG-1 fix
+//
+// Previously: Sidebar hid nav items based on `allowedModules`, but typing a
+// URL directly (e.g. /#/accounts) bypassed RBAC entirely. This component
+// enforces module access at the ROUTE level — if the user does not have the
+// module in `allowedModules`, they get redirected to Dashboard with a toast.
+//
+// Full-access roles (super_admin, owner, hassan) bypass this guard.
+// Empty `allowedModules` array now means NO ACCESS (was previously "all access")
+// — admin must explicitly tick modules in Admin → Users → Edit.
+// ─────────────────────────────────────────────────────────────────────
+const FULL_ACCESS_ROLES = ['super_admin', 'owner', 'hassan'];
+
+// Maps a URL pathname to its module key. Must match `key` values in CORE_NAV / ROLE_NAV.
+// Any path not in this map is treated as "no module restriction" (Dashboard, public pages).
+const pathToModuleKey = (pathname: string): string | null => {
+  if (pathname === '/' || pathname === '') return null; // Dashboard always allowed
+  if (pathname.startsWith('/sales'))           return 'sales';
+  if (pathname.startsWith('/hr'))              return 'hr';
+  if (pathname.startsWith('/inventory'))       return 'inventory';
+  if (pathname.startsWith('/logistics'))       return 'logistics';
+  if (pathname.startsWith('/vendors'))         return 'vendors';
+  if (pathname.startsWith('/projects'))        return 'projects';
+  if (pathname.startsWith('/production'))      return 'production';
+  if (pathname.startsWith('/cutter'))          return 'production';
+  if (pathname.startsWith('/qc'))              return 'production';
+  if (pathname.startsWith('/dispatch'))        return 'logistics';
+  if (pathname.startsWith('/requisitions'))    return 'requisitions';
+  if (pathname.startsWith('/procurement'))     return 'requisitions';
+  if (pathname.startsWith('/accounts'))        return 'accounts';
+  if (pathname.startsWith('/finance'))         return 'accounts';
+  if (pathname.startsWith('/hub'))             return 'hub';
+  if (pathname.startsWith('/admin'))           return 'admin';
+  if (pathname.startsWith('/md-dashboard'))    return 'md-dashboard';
+  if (pathname.startsWith('/factory-incharge'))return 'factory-incharge';
+  if (pathname.startsWith('/health'))          return 'admin';
+  if (pathname.startsWith('/test-suite'))      return 'test-suite';
+  if (pathname.startsWith('/e2e-verify'))      return 'e2e-verify';
+  if (pathname.startsWith('/guided-tests'))    return 'test-suite';
+  if (pathname.startsWith('/loan-flow'))       return 'hr';
+  return null;
+};
+
+const RouteAccessGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuthStore();
+  const location = useLocation();
+
+  // No user yet = bail (Login handles redirect elsewhere)
+  if (!user) return <>{children}</>;
+
+  // Full-access roles always pass
+  if (FULL_ACCESS_ROLES.includes(user.role)) return <>{children}</>;
+
+  const moduleKey = pathToModuleKey(location.pathname);
+
+  // Path doesn't map to any module (e.g. Dashboard) — allow
+  if (!moduleKey) return <>{children}</>;
+
+  const allowed = user.allowedModules || [];
+  if (allowed.includes(moduleKey)) return <>{children}</>;
+
+  // BLOCKED. Show a clean Forbidden screen with link back home.
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6">
+      <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mb-4">
+        <ShieldCheck size={28} className="text-rose-600" />
+      </div>
+      <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight mb-1">Access Denied</h2>
+      <p className="text-sm text-slate-500 max-w-md mb-1">
+        Aap ke pas <strong className="text-slate-700">{moduleKey}</strong> module ka access nahi hai.
+      </p>
+      <p className="text-xs text-slate-400 mb-5">
+        Admin se rabta karen agar yeh module aap ko chahiye.
+      </p>
+      <Link
+        to="/"
+        className="bg-slate-900 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-colors"
+      >
+        Dashboard pe wapas
+      </Link>
+    </div>
+  );
+};
+
 // ── Session timeout watcher ───────────────────────────────────────────
 const useSessionWatch = () => {
   const { user, signOut } = useAuthStore();
@@ -183,10 +268,11 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
     ? user.allowedCompanies
     : ['GTK', 'GTI', 'Glassco', 'Nippon', 'Factory']) as Company[];
 
-  // Compute which nav items to show
-  const allowedModuleKeys = user?.allowedModules?.length
-    ? user.allowedModules
-    : null; // null = show all
+  // Compute which nav items to show.
+  // BUG-1 fix: empty allowedModules now means NO ACCESS (was: "all access").
+  // Full-access roles (super_admin/owner/hassan) always see everything.
+  const isFullAccessRole = ['super_admin', 'owner', 'hassan'].includes(user?.role || '');
+  const allowedModuleKeys = isFullAccessRole ? null : (user?.allowedModules || []);
 
   // Build nav: core items filtered by role permissions + role-specific items
   const coreItems = CORE_NAV.filter(item => {
@@ -609,6 +695,7 @@ const App: React.FC = () => {
                   <div className="space-y-4 animate-slide-up"><div className="skeleton skeleton-heading"></div><div className="grid grid-cols-2 md:grid-cols-4 gap-4"><div className="skeleton skeleton-card"></div><div className="skeleton skeleton-card"></div><div className="skeleton skeleton-card"></div><div className="skeleton skeleton-card"></div></div><div className="skeleton skeleton-heading" style={{width:"30%",marginTop:"16px"}}></div><div className="skeleton skeleton-row"></div><div className="skeleton skeleton-row"></div><div className="skeleton skeleton-row"></div></div>
                 </div>
               }>
+                <RouteAccessGuard>
                 <Routes>
                   <Route path="/"             element={<ModuleErrorBoundary moduleName="Dashboard"><Dashboard /></ModuleErrorBoundary>} />
                   <Route path="/hr/*"          element={<ModuleErrorBoundary moduleName="HR"><HRModule /></ModuleErrorBoundary>} />
@@ -676,11 +763,13 @@ const App: React.FC = () => {
                   {/* Sprint 18 — Dispatch mini-app for dispatch_staff role */}
                   <Route path="/dispatch"            element={<ModuleErrorBoundary moduleName="Dispatch"><DispatchWorkbench /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />
-                </Routes>              </Suspense>
+                </Routes>
+                </RouteAccessGuard>
+              </Suspense>
             </div>
           </div>
         </main>
-        <BottomNav allowedModules={user?.allowedModules?.length ? user.allowedModules : null} />
+        <BottomNav allowedModules={['super_admin', 'owner', 'hassan'].includes(user?.role || '') ? null : (user?.allowedModules || [])} />
         <Suspense fallback={null}><EventOSChatWidget /></Suspense>
         <Suspense fallback={null}><WazirLauncher /></Suspense>
         {/* Sprint 21 — global ⌘K command palette (skips when in input field) */}

@@ -33,7 +33,7 @@ export const AdminAuthService = {
 
   getMode: (): 'edge_function' => 'edge_function',
 
-  /** Create a new Supabase auth user */
+  /** Create a new Supabase auth user (with password — for PIN fallback users) */
   createUser: async (opts: {
     email: string;
     password?: string;
@@ -43,6 +43,27 @@ export const AdminAuthService = {
       email: opts.email,
       password: opts.password,
       user_metadata: opts.userMetadata,
+    });
+    return { userId: result.user.id, email: result.user.email };
+  },
+
+  /**
+   * Invite user via magic-link email (passwordless onboarding).
+   * Supabase sends a signup invite to `email`. After they click it, they're
+   * signed in and can use 6-digit OTP for all subsequent logins.
+   *
+   * Use this for new ERP users — admin only enters email + role, no manual
+   * password ever needs to be shared.
+   */
+  inviteUser: async (opts: {
+    email: string;
+    userMetadata?: Record<string, any>;
+    redirectTo?: string;
+  }): Promise<{ userId: string; email: string }> => {
+    const result = await callEdgeFunction('invite_user', {
+      email: opts.email,
+      user_metadata: opts.userMetadata,
+      redirect_to: opts.redirectTo || (window.location.origin + '/'),
     });
     return { userId: result.user.id, email: result.user.email };
   },

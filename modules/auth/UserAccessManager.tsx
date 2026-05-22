@@ -158,6 +158,15 @@ export default function UserAccessManager() {
   // Edit modal
   const [editUser, setEditUser]         = useState<ManagedUser | null>(null);
 
+  // ── Invite-by-email modal (Quick Add — no HR employee required) ───
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail,     setInviteEmail]     = useState('');
+  const [inviteFullName,  setInviteFullName]  = useState('');
+  const [inviteRole,      setInviteRole]      = useState<string>('admin_officer');
+  const [inviteCompanies, setInviteCompanies] = useState<string[]>([]);
+  const [inviteModules,   setInviteModules]   = useState<string[]>([]);
+  const [inviteTimeRestrict, setInviteTimeRestrict] = useState(false);
+
   // ── Guard: Super Admin only ────────────────────────────────────────
   if (me?.role !== 'super_admin') {
     return (
@@ -499,6 +508,117 @@ export default function UserAccessManager() {
     setEmpSearch('');
   };
 
+  const resetInviteForm = () => {
+    setInviteEmail('');
+    setInviteFullName('');
+    setInviteRole('admin_officer');
+    setInviteCompanies([]);
+    setInviteModules([]);
+    setInviteTimeRestrict(false);
+  };
+
+  // When role changes in invite modal, pre-fill role's default companies (modules
+  // stay empty by design — admin explicitly ticks modules. BUG-1 + "empty = no access").
+  const applyInviteRolePreset = (role: string) => {
+    setInviteRole(role);
+    const d = ROLE_DEFAULTS[role];
+    if (d) setInviteCompanies(d.companies);
+  };
+
+  const toggleInList = (list: string[], val: string): string[] =>
+    list.includes(val) ? list.filter(x => x !== val) : [...list, val];
+
+  // ── Invite User by Email (magic link, no HR employee required) ─────
+  const handleInviteByEmail = async () => {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      toast.error('Valid email required');
+      return;
+    }
+    if (!inviteFullName.trim()) {
+      toast.error('Full name required');
+      return;
+    }
+    if (!inviteRole) {
+      toast.error('Role required');
+      return;
+    }
+    if (inviteCompanies.length === 0) {
+      toast.error('At least one company required');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      let authUserId: string;
+
+      // 1. Send magic-link invite (also creates the auth.users row)
+      try {
+        const { userId } = await AdminAuthService.inviteUser({
+          email,
+          userMetadata: {
+            full_name: inviteFullName.trim(),
+            invited_by: me?.email,
+            role: inviteRole,
+          },
+        });
+        authUserId = userId;
+      } catch (err: any) {
+        // If user already exists in auth, find them and re-send doesn't apply —
+        // we'll just attach the profile to the existing UUID.
+        if (err.message?.toLowerCase().includes('already') || err.message?.toLowerCase().includes('exists')) {
+          const existingUsers = await AdminAuthService.listUsers();
+          const existing = existingUsers.find(u => u.email?.toLowerCase() === email);
+          if (!existing) throw err;
+          authUserId = existing.id;
+          toast.info('User already exists in Auth — updating profile only. Tell them to login with OTP.');
+        } else {
+          throw err;
+        }
+      }
+
+      // 2. Create / upsert user_profiles row
+      //    Empty allowed_modules = NO access (BUG-1 fix in App.tsx route guard).
+      const profilePayload = {
+        id: authUserId,
+        email,
+        full_name: inviteFullName.trim(),
+        role: inviteRole,
+        allowed_companies: inviteCompanies,
+        allowed_modules: inviteModules,
+        time_restricted: inviteTimeRestrict,
+        is_active: true,
+        company: inviteCompanies[0],
+      };
+
+      const { error: profErr } = await supabase
+        .from('user_profiles')
+        .upsert(profilePayload, { onConflict: 'id' });
+
+      if (profErr) throw profErr;
+
+      // 3. Audit log
+      try {
+        await supabase.from('access_logs').insert({
+          user_id: me?.id,
+          email: me?.email,
+          action: `invite_user:${email}:${inviteRole}`,
+          user_agent: navigator.userAgent,
+        });
+      } catch { /* table may not exist */ }
+
+      Logger.action('UserAccess', 'INVITE', `Invite sent to ${email} as ${inviteRole}`);
+      toast.success(`Invite bhej diya: ${email} ko email check karne ko bolen.`, { duration: 6000 });
+      setShowInviteModal(false);
+      resetInviteForm();
+      await loadUsers();
+    } catch (err: any) {
+      Logger.error('UserAccess', 'INVITE_FAILED', err);
+      toast.error(`Invite failed: ${err?.message || err}`);
+    }
+    setBusy(false);
+  };
+
   const formatDate = (d: string | null) => {
     if (!d) return 'Never';
     return new Date(d).toLocaleString('en-PK', { dateStyle: 'short', timeStyle: 'short' });
@@ -535,9 +655,13 @@ export default function UserAccessManager() {
             className="p-2.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors">
             <RefreshCw size={15} className={busy ? 'animate-spin' : ''} />
           </button>
+          <button onClick={() => { resetInviteForm(); setShowInviteModal(true); }}
+            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-all shadow-sm">
+            <Mail size={14} /> Invite by Email
+          </button>
           <button onClick={() => { resetGrantForm(); setShowGrantModal(true); }}
             className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-all shadow-sm">
-            <UserPlus size={14} /> Grant Access
+            <UserPlus size={14} /> Grant Access (HR)
           </button>
         </div>
       </div>
@@ -555,12 +679,21 @@ export default function UserAccessManager() {
       </div>
 
       {/* ── How it works (info box) ─────────────────────────────────── */}
-      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-xs text-blue-800">
-        <p className="font-semibold mb-1">How to grant access:</p>
-        <p>1. Click "Grant Access" → select employee from registry</p>
-        <p>2. Enter their Gmail (for Google sign-in) or enable PIN fallback</p>
-        <p>3. Assign role → system creates Supabase auth user automatically</p>
-        <p className="mt-1 text-blue-600">No need to open Supabase dashboard — everything is managed here.</p>
+      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-xs text-blue-800 space-y-2">
+        <div>
+          <p className="font-semibold mb-1">🟢 Invite by Email (recommended — outside HR users / fast):</p>
+          <p>1. Click <strong>Invite by Email</strong> → enter email + name + role</p>
+          <p>2. Tick allowed companies + modules → click Send Invite</p>
+          <p>3. User ko Supabase se signup email aata hai. Woh click karke set up karte hain.</p>
+          <p>4. Aage se woh bas email daal kar 6-digit OTP se login karte hain.</p>
+        </div>
+        <div>
+          <p className="font-semibold mb-1">🔵 Grant Access (HR — for shop floor / employees on payroll):</p>
+          <p>HR Employees ke liye — employee record se link hota hai. PIN fallback bhi mil sakta hai.</p>
+        </div>
+        <p className="text-blue-600 font-semibold border-t border-blue-200 pt-2">
+          ⚠ Empty modules = no access. Admin ko har module tick karna parega.
+        </p>
       </div>
 
       {/* ── Users List ──────────────────────────────────────────────── */}
@@ -856,6 +989,167 @@ export default function UserAccessManager() {
                 {busy
                   ? <><Loader2 size={14} className="animate-spin" /> Granting...</>
                   : <><UserPlus size={14} /> Grant Access</>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          INVITE BY EMAIL MODAL — passwordless magic-link invite.
+          No HR Employee record required. Empty allowed_modules = no access.
+          ═══════════════════════════════════════════════════════════════ */}
+      {showInviteModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-start justify-center p-4 z-[500] overflow-y-auto">
+          <div className="bg-white w-full max-w-xl my-6 rounded-2xl shadow-2xl border border-slate-200 flex flex-col">
+
+            {/* Header */}
+            <div className="bg-emerald-700 text-white px-6 py-5 rounded-t-2xl flex justify-between items-center">
+              <div>
+                <h3 className="font-black uppercase tracking-tight text-base flex items-center gap-2">
+                  <Mail size={18} /> Invite User by Email
+                </h3>
+                <p className="text-[10px] text-emerald-200 mt-0.5 font-bold">
+                  Magic-link signup invite. No password sharing required.
+                </p>
+              </div>
+              <button onClick={() => { setShowInviteModal(false); resetInviteForm(); }}
+                className="hover:bg-white/10 p-2 rounded-lg transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-5 overflow-y-auto max-h-[75vh]">
+
+              {/* Email + Full name */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                    Email <span className="text-rose-500">*</span>
+                  </label>
+                  <input type="email" value={inviteEmail}
+                    onChange={e => setInviteEmail(e.target.value)}
+                    placeholder="user@example.com"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 outline-none" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                    Full Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input type="text" value={inviteFullName}
+                    onChange={e => setInviteFullName(e.target.value)}
+                    placeholder="e.g. Ahmed Khan"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 outline-none" />
+                </div>
+              </div>
+
+              {/* Role */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                  Role <span className="text-rose-500">*</span>
+                </label>
+                <div className="grid grid-cols-1 gap-1.5 max-h-56 overflow-y-auto border border-slate-100 rounded-xl p-2">
+                  {ROLES_LIST.map(r => (
+                    <button key={r.value}
+                      onClick={() => applyInviteRolePreset(r.value)}
+                      className={`flex items-center justify-between px-3 py-2 rounded-lg border text-left transition-all ${inviteRole === r.value ? 'bg-emerald-50 border-emerald-400' : 'bg-white border-slate-200 hover:border-emerald-200'}`}>
+                      <div>
+                        <p className={`font-black text-xs uppercase ${inviteRole === r.value ? 'text-emerald-800' : 'text-slate-700'}`}>{r.label}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{r.desc}</p>
+                      </div>
+                      {inviteRole === r.value && <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Companies */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                  Allowed Companies <span className="text-rose-500">*</span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {['GTK', 'GTI', 'Glassco', 'Nippon', 'Factory'].map(c => (
+                    <button key={c}
+                      onClick={() => setInviteCompanies(inviteCompanies => toggleInList(inviteCompanies, c))}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${inviteCompanies.includes(c) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'}`}>
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Modules (EMPTY = NO ACCESS — Hassan's instruction) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                    Module Access
+                  </label>
+                  <span className="text-[10px] font-bold text-rose-600">
+                    {inviteModules.length === 0 ? '⚠ NO MODULES SELECTED' : `${inviteModules.length} modules`}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Sirf woh modules tick karen jo is user ko chahiye. Empty = sirf Dashboard.
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
+                  {[
+                    { key: 'sales',           label: 'Sales' },
+                    { key: 'hr',              label: 'HR / HCM' },
+                    { key: 'inventory',       label: 'Inventory' },
+                    { key: 'requisitions',    label: 'Procurement' },
+                    { key: 'production',      label: 'Production' },
+                    { key: 'accounts',        label: 'Finance / FICO' },
+                    { key: 'logistics',       label: 'Logistics' },
+                    { key: 'vendors',         label: 'Vendors' },
+                    { key: 'projects',        label: 'Projects' },
+                    { key: 'hub',             label: 'Supply Hub' },
+                    { key: 'md-dashboard',    label: 'MD Dashboard' },
+                    { key: 'factory-incharge',label: 'Factory Desk' },
+                    { key: 'admin',           label: 'Admin / Basis' },
+                  ].map(m => (
+                    <button key={m.key}
+                      onClick={() => setInviteModules(prev => toggleInList(prev, m.key))}
+                      className={`text-left px-3 py-2 rounded-lg text-[11px] font-bold border transition-all ${inviteModules.includes(m.key) ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Time restriction */}
+              <div className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+                <div>
+                  <p className="text-xs font-black text-slate-800">Office Hours Only</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Mon–Sat 9am–6pm PKT only</p>
+                </div>
+                <button onClick={() => setInviteTimeRestrict(v => !v)}
+                  className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${inviteTimeRestrict ? 'bg-amber-500' : 'bg-slate-300'}`}>
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${inviteTimeRestrict ? 'translate-x-5' : ''}`} />
+                </button>
+              </div>
+
+              <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3 text-[11px] text-emerald-800">
+                <p className="font-bold">Kya hoga jab Send dabayen?</p>
+                <p>1. Supabase user ko signup magic-link email bhejega</p>
+                <p>2. User click karega → password set/skip → login</p>
+                <p>3. Aage se woh sirf email + 6-digit OTP se login kar sakta hai</p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t bg-slate-50 rounded-b-2xl flex justify-end gap-3">
+              <button onClick={() => { setShowInviteModal(false); resetInviteForm(); }}
+                className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">
+                Cancel
+              </button>
+              <button onClick={handleInviteByEmail} disabled={busy}
+                className="flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm disabled:opacity-50">
+                {busy
+                  ? <><Loader2 size={14} className="animate-spin" /> Sending invite...</>
+                  : <><Mail size={14} /> Send Invite</>
                 }
               </button>
             </div>

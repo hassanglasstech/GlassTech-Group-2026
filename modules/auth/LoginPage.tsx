@@ -178,27 +178,15 @@ const LoginPage: React.FC = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === 'SIGNED_IN' && session?.user) {
-          let profile = await fetchProfile(session.user.id, session.user.email || '');
+          const profile = await fetchProfile(session.user.id, session.user.email || '');
 
-          // If profile doesn't exist, auto-create a basic one (fresh Supabase setup)
-          if (!profile) {
-            const { error: insertErr } = await supabase
-              .from('user_profiles')
-              .insert({
-                id: session.user.id,
-                email: session.user.email || '',
-                full_name: 'User',
-                role: 'viewer',
-                company: 'GTK',
-                allowed_companies: ['GTK'],
-                allowed_modules: [],
-                time_restricted: false,
-                is_active: true,
-              });
-            if (!insertErr) {
-              profile = await fetchProfile(session.user.id, session.user.email || '');
-            }
-          }
+          // SECURITY FIX (BUG-4): NEVER auto-create a profile here. If a user
+          // can authenticate but no profile row exists, that means the admin
+          // hasn't granted them ERP access yet. Sign them out immediately —
+          // otherwise anyone with Supabase Auth access becomes a viewer.
+          //
+          // Admin grants access via Admin → Users → Invite User (which both
+          // sends the magic-link invite AND creates the user_profiles row).
 
           if (profile) {
             if (profile.timeRestricted && !isOfficeHours()) {
@@ -218,7 +206,10 @@ const LoginPage: React.FC = () => {
               setStep('biometric');
             }
           } else {
-            setError('Profile could not be created. Contact admin.');
+            // No profile = no ERP access. Sign them out of Supabase Auth so
+            // they can't get stuck in a "logged-in-but-blank-screen" state.
+            await supabase.auth.signOut();
+            setError('Aapko abhi tak ERP access nahi mila. Admin se Users → Invite karwayen.');
             setStep('google');
           }
         }
@@ -248,7 +239,10 @@ const LoginPage: React.FC = () => {
     // OTP verified — now fetch full profile and decide device setup
     const profile = await fetchProfile(data.user.id, data.user.email || '');
     if (!profile) {
-      setError('Profile not found. Contact admin.');
+      // SECURITY (BUG-4): sign out so they're not stuck in a half-authed state.
+      await supabase.auth.signOut();
+      setError('Aapko abhi tak ERP access nahi mila. Admin se Users → Invite karwayen.');
+      setStep('google');
       setBusy(false);
       return;
     }

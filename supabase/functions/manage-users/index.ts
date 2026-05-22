@@ -98,6 +98,28 @@ Deno.serve(async (req) => {
         break
       }
 
+      // ── Invite user via magic link email (passwordless onboarding) ──
+      // Sends signup invite to the email. User clicks the link, sets
+      // themselves up, and subsequent logins use 6-digit OTP only.
+      case 'invite_user': {
+        const { email, user_metadata, redirect_to } = params
+        const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+          email,
+          {
+            data: user_metadata,
+            redirectTo: redirect_to,
+          },
+        )
+        if (error) throw error
+        result = { user: { id: data.user.id, email: data.user.email } }
+        await writeAuditLog(data.user.id, {
+          email: data.user.email,
+          invite_sent: true,
+          metadata_keys: Object.keys(user_metadata || {}),
+        })
+        break
+      }
+
       case 'update_user': {
         const { user_id, updates } = params
         const { data, error } = await supabaseAdmin.auth.admin.updateUserById(user_id, updates)
