@@ -239,20 +239,15 @@ const InventoryModule: React.FC = () => {
         </div>
       )}
 
+      {/* God Mode audit (Phase 2): removed dead-code ternary that rendered
+          the SAME StockOverview in both branches. Component now reads
+          company internally for branded column logic. */}
       {activeTab === 'overview' && (
-        company === 'Nippon' ? (
-            <StockOverview 
-                items={items}
-                searchTerm={searchTerm}
-                setSearchTerm={setSearchTerm}
-            />
-        ) : (
-            <StockOverview 
-                items={items}
-                searchTerm={searchTerm}
-                setSearchTerm={setSearchTerm}
-            />
-        )
+        <StockOverview
+          items={items}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+        />
       )}
 
       {activeTab === 'master' && (

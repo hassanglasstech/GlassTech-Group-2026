@@ -20,6 +20,12 @@ const GRNRegister: React.FC = () => {
   const [expandedGrn, setExpandedGrn] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // God Mode audit (Phase 2): branch by company class.
+  // - Glass companies: show sheets / sqft / weight columns (sheet-tag flow)
+  // - Hardware traders (Nippon) / aluminium fab (GTK/GTI):
+  //   show total qty / unit / total value columns (PCS flow)
+  const isGlassCompany = company === 'Glassco';
+
   // Build GRN list from ledger entries with mvmntCode 101
   const grnList = useMemo(() => {
     const ledger = InventoryService.getStockLedger()
@@ -35,9 +41,10 @@ const GRNRegister: React.FC = () => {
       biltyNo: string;
       poId: string;
       lines: MaterialLedgerEntry[];
-      totalSqft: number;
-      totalSheets: number;
-      totalWeight: number;
+      totalSqft: number;       // Glass: cumulative sqft. Hardware: same field reused as cumulative qty.
+      totalSheets: number;     // Glass-only.
+      totalWeight: number;     // Glass-only.
+      totalValue: number;      // Hardware: qty × rate sum (for non-glass display).
       freightPKR: number;
       freightType: string;
     }> = {};
@@ -58,6 +65,7 @@ const GRNRegister: React.FC = () => {
           totalSqft: 0,
           totalSheets: 0,
           totalWeight: 0,
+          totalValue: 0,
           freightPKR: 0,
           freightType: e.freightType || '',
         };
@@ -66,6 +74,7 @@ const GRNRegister: React.FC = () => {
       grnMap[grnId].totalSqft += e.qty || 0;
       grnMap[grnId].totalSheets += e.sheetCount || 0;
       grnMap[grnId].totalWeight += e.lineWeightKg || 0;
+      grnMap[grnId].totalValue += (e.qty || 0) * (e.valuation || 0);
       if (e.freightPKR) grnMap[grnId].freightPKR = e.freightPKR;
     });
 
@@ -144,9 +153,14 @@ const GRNRegister: React.FC = () => {
       <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl flex justify-between items-center relative overflow-hidden">
         <div className="absolute top-0 right-0 p-6 opacity-10"><Truck size={120}/></div>
         <div className="relative z-10">
-          
+
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-            {grnList.length} GRN(s) · {grnList.reduce((s, g) => s + g.totalSheets, 0)} sheets · {grnList.reduce((s, g) => s + g.totalSqft, 0).toFixed(0)} sqft
+            {grnList.length} GRN(s)
+            {isGlassCompany ? (
+              <> · {grnList.reduce((s, g) => s + g.totalSheets, 0)} sheets · {grnList.reduce((s, g) => s + g.totalSqft, 0).toFixed(0)} sqft</>
+            ) : (
+              <> · {grnList.reduce((s, g) => s + g.totalSqft, 0).toFixed(0)} units · PKR {grnList.reduce((s, g) => s + g.totalValue, 0).toLocaleString()}</>
+            )}
           </p>
         </div>
         <div className="relative w-72 z-10">
@@ -159,19 +173,33 @@ const GRNRegister: React.FC = () => {
 
       {/* GRN List */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        {/* Column headers */}
-        <div className="grid text-[9px] font-black uppercase text-slate-400 tracking-widest bg-slate-50 border-b px-6 py-3 gap-2"
-          style={{ gridTemplateColumns: '24px 130px 90px 1fr 80px 80px 80px 90px 80px' }}>
-          <span></span>
-          <span>GRN ID</span>
-          <span>Date</span>
-          <span>Vendor</span>
-          <span className="text-right">Sheets</span>
-          <span className="text-right">SqFt</span>
-          <span className="text-right">Weight KG</span>
-          <span className="text-right">Freight</span>
-          <span>DC / Bilty</span>
-        </div>
+        {/* Column headers — branched by company class (Phase 2) */}
+        {isGlassCompany ? (
+          <div className="grid text-[9px] font-black uppercase text-slate-400 tracking-widest bg-slate-50 border-b px-6 py-3 gap-2"
+            style={{ gridTemplateColumns: '24px 130px 90px 1fr 80px 80px 80px 90px 80px' }}>
+            <span></span>
+            <span>GRN ID</span>
+            <span>Date</span>
+            <span>Vendor</span>
+            <span className="text-right">Sheets</span>
+            <span className="text-right">SqFt</span>
+            <span className="text-right">Weight KG</span>
+            <span className="text-right">Freight</span>
+            <span>DC / Bilty</span>
+          </div>
+        ) : (
+          <div className="grid text-[9px] font-black uppercase text-slate-400 tracking-widest bg-slate-50 border-b px-6 py-3 gap-2"
+            style={{ gridTemplateColumns: '24px 130px 90px 1fr 80px 110px 90px 90px' }}>
+            <span></span>
+            <span>GRN ID</span>
+            <span>Date</span>
+            <span>Vendor</span>
+            <span className="text-right">Qty</span>
+            <span className="text-right">Value (PKR)</span>
+            <span className="text-right">Freight</span>
+            <span>DC / Bilty</span>
+          </div>
+        )}
 
         {filtered.length === 0 ? (
           <div className="text-center py-16 text-slate-300 font-bold uppercase italic text-sm">
@@ -186,27 +214,49 @@ const GRNRegister: React.FC = () => {
 
               return (
                 <div key={grn.grnId}>
-                  {/* GRN Row */}
-                  <button
-                    onClick={() => setExpandedGrn(isExpanded ? null : grn.grnId)}
-                    className="w-full grid items-center px-6 py-3 gap-2 hover:bg-slate-50 transition-colors text-left"
-                    style={{ gridTemplateColumns: '24px 130px 90px 1fr 80px 80px 80px 90px 80px' }}>
-                    <span className="text-slate-400">
-                      {isExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
-                    </span>
-                    <span className="text-xs font-mono font-black text-blue-700">{grn.grnId}</span>
-                    <span className="text-xs font-bold text-slate-500">{grn.date}</span>
-                    <span className="text-xs font-bold text-slate-700 uppercase truncate">{grn.vendorName || '—'}</span>
-                    <span className="text-xs font-black text-slate-800 text-right">{grn.totalSheets}</span>
-                    <span className="text-xs font-black text-emerald-600 text-right">{grn.totalSqft.toFixed(1)}</span>
-                    <span className="text-xs font-bold text-slate-500 text-right">{grn.totalWeight.toFixed(1)}</span>
-                    <span className="text-xs font-bold text-blue-600 text-right">
-                      {grn.freightPKR > 0 ? `PKR ${grn.freightPKR.toLocaleString()}` : '—'}
-                    </span>
-                    <span className="text-[9px] font-bold text-slate-400 truncate">
-                      {grn.dcNo || '—'} / {grn.biltyNo || '—'}
-                    </span>
-                  </button>
+                  {/* GRN Row — branched by company class (Phase 2) */}
+                  {isGlassCompany ? (
+                    <button
+                      onClick={() => setExpandedGrn(isExpanded ? null : grn.grnId)}
+                      className="w-full grid items-center px-6 py-3 gap-2 hover:bg-slate-50 transition-colors text-left"
+                      style={{ gridTemplateColumns: '24px 130px 90px 1fr 80px 80px 80px 90px 80px' }}>
+                      <span className="text-slate-400">
+                        {isExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
+                      </span>
+                      <span className="text-xs font-mono font-black text-blue-700">{grn.grnId}</span>
+                      <span className="text-xs font-bold text-slate-500">{grn.date}</span>
+                      <span className="text-xs font-bold text-slate-700 uppercase truncate">{grn.vendorName || '—'}</span>
+                      <span className="text-xs font-black text-slate-800 text-right">{grn.totalSheets}</span>
+                      <span className="text-xs font-black text-emerald-600 text-right">{grn.totalSqft.toFixed(1)}</span>
+                      <span className="text-xs font-bold text-slate-500 text-right">{grn.totalWeight.toFixed(1)}</span>
+                      <span className="text-xs font-bold text-blue-600 text-right">
+                        {grn.freightPKR > 0 ? `PKR ${grn.freightPKR.toLocaleString()}` : '—'}
+                      </span>
+                      <span className="text-[9px] font-bold text-slate-400 truncate">
+                        {grn.dcNo || '—'} / {grn.biltyNo || '—'}
+                      </span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setExpandedGrn(isExpanded ? null : grn.grnId)}
+                      className="w-full grid items-center px-6 py-3 gap-2 hover:bg-slate-50 transition-colors text-left"
+                      style={{ gridTemplateColumns: '24px 130px 90px 1fr 80px 110px 90px 90px' }}>
+                      <span className="text-slate-400">
+                        {isExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
+                      </span>
+                      <span className="text-xs font-mono font-black text-blue-700">{grn.grnId}</span>
+                      <span className="text-xs font-bold text-slate-500">{grn.date}</span>
+                      <span className="text-xs font-bold text-slate-700 uppercase truncate">{grn.vendorName || '—'}</span>
+                      <span className="text-xs font-black text-slate-800 text-right">{grn.totalSqft.toFixed(0)}</span>
+                      <span className="text-xs font-black text-emerald-600 text-right">{grn.totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                      <span className="text-xs font-bold text-blue-600 text-right">
+                        {grn.freightPKR > 0 ? grn.freightPKR.toLocaleString() : '—'}
+                      </span>
+                      <span className="text-[9px] font-bold text-slate-400 truncate">
+                        {grn.dcNo || '—'} / {grn.biltyNo || '—'}
+                      </span>
+                    </button>
+                  )}
 
                   {/* Expanded: Line items + sheet entries */}
                   {isExpanded && (
@@ -227,15 +277,25 @@ const GRNRegister: React.FC = () => {
                           <div key={line.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 text-[10px] font-bold">
                             <span className="text-slate-400">#{i + 1}</span>
                             <span className="text-slate-700 uppercase flex-1 ml-2 truncate">{line.remarks?.replace(`GRN ${grn.grnId} — `, '') || line.materialId}</span>
-                            <span className="text-slate-500 mx-3">{line.sheetCount || 0} sheets</span>
-                            <span className="text-emerald-600 font-black">{(line.qty || 0).toFixed(1)} sqft</span>
-                            <span className="text-slate-400 ml-3">@ {(line.valuation || 0).toFixed(0)}/sqft</span>
+                            {isGlassCompany ? (
+                              <>
+                                <span className="text-slate-500 mx-3">{line.sheetCount || 0} sheets</span>
+                                <span className="text-emerald-600 font-black">{(line.qty || 0).toFixed(1)} sqft</span>
+                                <span className="text-slate-400 ml-3">@ {(line.valuation || 0).toFixed(0)}/sqft</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-emerald-600 font-black">{(line.qty || 0).toFixed(0)} units</span>
+                                <span className="text-slate-400 ml-3">@ {(line.valuation || 0).toFixed(0)}/unit</span>
+                                <span className="text-blue-600 font-black ml-3">PKR {((line.qty || 0) * (line.valuation || 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                              </>
+                            )}
                           </div>
                         ))}
                       </div>
 
-                      {/* Sheet entries summary */}
-                      {sheets.length > 0 && (
+                      {/* Sheet entries summary — glass-only (hardware has no sheet tags) */}
+                      {isGlassCompany && sheets.length > 0 && (
                         <div className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">
                           {sheets.length} Sheet Tags — {sheets.filter(s => s.status === 'OK').length} OK
                           {defectCount > 0 && <span className="text-amber-600 ml-2">{defectCount} Defect(s)</span>}
