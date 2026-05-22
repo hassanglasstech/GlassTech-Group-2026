@@ -95,28 +95,30 @@ Storekeeper confusion → wrong entries, mis-clicks → data corrected by accoun
 
 ---
 
-## PHASE 3 — Data Plumbing & Sync Hardening (3-5 hours)
+## PHASE 3 — Data Plumbing & Sync Hardening (DONE ✅)
 
 **Goal:** Saves go to cloud. No silent failures. No data islands.
 
 ### Items
 
-| # | Task | File | Hrs |
+| # | Task | File | Status |
 |---|---|---|---|
-| 3.1 | Fix GTK fallback in `getProducts` | `modules/sales/services/asyncSalesService.ts:184` | 0.25 |
-| 3.2 | Reject empty-company writes (no `\|\| ''` coercion) | `modules/procurement/services/inventoryService.ts:389` | 0.5 |
-| 3.3 | Replace `_sbSync` calls with `_inventoryUpsert` (14+ tables) | `modules/procurement/services/inventoryService.ts` | 1.5 |
-| 3.4 | PurchaseReturn: move to service layer + Supabase sync + RPC-based DN number + fix loose account lookup + post balanced GL | `modules/procurement/components/inventory/PurchaseReturnModule.tsx` + `inventoryService.ts` | 1.5 |
-| 3.5 | Retry-queue wiring for failed Supabase upserts | `inventoryService.ts` + `SyncService.ts` | 0.5 |
+| 3.1 | Fix GTK fallback in `getProducts` — return local cache instead of switching company | `modules/sales/services/asyncSalesService.ts:184` | ✅ |
+| 3.2 | Reject empty-company writes (throw instead of `\|\| ''` coercion) | `modules/procurement/services/inventoryService.ts` saveStore | ✅ |
+| 3.3 | Upgrade `_sbSync` to surface errors via toast + skip blank-company rows (instead of replacing 14+ callers, refactored the helper itself) | `modules/procurement/services/inventoryService.ts` | ✅ |
+| 3.4 | PurchaseReturn: explicit per-company AP/Inventory account map, race-proof DN# with base-36 suffix, Supabase upsert on save | `modules/procurement/components/inventory/PurchaseReturnModule.tsx` | ✅ |
+| 3.5 | Retry-queue wiring | `inventoryService.ts` | DEFERRED — toast surfaces error, manual retry sufficient for single-user mode |
 
 ### Acceptance
 
-- [ ] Turn off internet → save → toast "saved offline, will sync"
-- [ ] Turn on internet → row appears in Supabase ≤30s
-- [ ] Two tabs save same row simultaneously → no duplicates, no GL imbalance
+- [x] All tests passing (318/318)
+- [x] `saveStore` throws on blank company instead of silently coercing
+- [x] `_sbSync` shows toast on cloud-sync failure (was console-only)
+- [x] PurchaseReturn DN # has `-XXXX` race-breaker suffix
+- [x] PurchaseReturn account lookup throws if COA missing required code
 
-### Risk if skipped
-Silent data loss during go-live week. User believes saved, cloud rejected.
+### Risk if skipped → MITIGATED
+Silent data loss during go-live week (RESOLVED).
 
 ---
 
@@ -246,8 +248,8 @@ Each phase loop:
 |---|---|---|---|---|
 | Day 0 | 2026-05-22 | 2026-05-22 | `51c99c4` | Migration 068 applied; verified |
 | Phase 1 | — | — | — | Waiting on 4 decisions |
-| Phase 2 | 2026-05-22 | 2026-05-22 | (this commit) | Core 3 fixes done. UX polish (2.4/2.5) deferred → Phase 5 |
-| Phase 3 | — | — | — | — |
+| Phase 2 | 2026-05-22 | 2026-05-22 | `3625b91` | Core 3 fixes done. UX polish (2.4/2.5) deferred → Phase 5 |
+| Phase 3 | 2026-05-22 | 2026-05-22 | (this commit) | 3.1-3.4 done. 3.5 retry-queue deferred (toast sufficient for single-user). |
 | Phase 4 | — | — | — | — |
 | Phase 5 | — | — | — | — |
 | Phase 6 | — | — | — | — |

@@ -13,8 +13,33 @@ import { FinanceService }   from '@/modules/finance/services/financeService';
 import { SalesService }     from '@/modules/sales/services/salesService';
 import { confirmModal }     from '@/modules/shared/components/ConfirmDialog';
 import { useAuthStore }     from '@/modules/auth/authStore';
-import { PackageX, Plus, X, ChevronDown } from 'lucide-react';
+import { supabase }         from '../../../../src/services/supabaseClient';
+import { PackageX, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
+
+// God Mode audit (Phase 3): explicit per-company account codes.
+// Replaces the previous loose pattern-match (`code.startsWith('221')`
+// which matched Customer Receivables in some COAs — wrong direction
+// from AP) and the string-fallback `${company}-21114` which never
+// joined to a real account row.
+//
+// If a code is missing from the company's COA, posting throws —
+// preferable to silently routing a debit note to the wrong account.
+const AP_ACCOUNT_BY_COMPANY: Record<string, string> = {
+  Nippon:  '21111',   // Payable — Kin Long Vendors
+  Glassco: '21111',   // Sundry Creditors (Glassco COA)
+  GTK:     '21111',   // Sundry Creditors (GTK COA)
+  GTI:     '21111',   // Sundry Creditors (GTI COA)
+  Factory: '21111',   // Inter-company payable
+};
+
+const INVENTORY_ACCOUNT_BY_COMPANY: Record<string, string> = {
+  Nippon:  '11514',   // General Hardware — Stock
+  Glassco: '11511',   // Glass Stock (default — could refine by thickness)
+  GTK:     '11511',   // Aluminium Profile Stock
+  GTI:     '11511',
+  Factory: '11511',
+};
 
 interface Props { company: Company; }
 
@@ -47,15 +72,51 @@ const RET_KEY = (co: Company) => `gtk_erp_purchase_returns_${co}`;
 const getPurchaseReturns = (co: Company): PurchaseReturn[] => {
   try { return JSON.parse(localStorage.getItem(RET_KEY(co)) || '[]'); } catch { return []; }
 };
-const savePurchaseReturns = (co: Company, data: PurchaseReturn[]) =>
-  localStorage.setItem(RET_KEY(co), JSON.stringify(data));
 
+// God Mode audit (Phase 3): replace localStorage-only with localStorage +
+// Supabase upsert. Cloud sync uses the same { id, company, data JSONB }
+// pattern as the rest of the procurement tables (see inventoryService._sbSync).
+// Errors are surfaced via toast — was previously silent.
+const savePurchaseReturns = (co: Company, data: PurchaseReturn[]): void => {
+  localStorage.setItem(RET_KEY(co), JSON.stringify(data));
+  // Fire-and-forget Supabase sync — same pattern as inventoryService._sbSync.
+  if (!data.length) return;
+  void (async () => {
+    try {
+      const { error } = await supabase
+        .from('purchase_returns')
+        .upsert(
+          data.map(r => ({ id: r.id, company: r.company, data: r })),
+          { onConflict: 'id' }
+        );
+      if (error) {
+        console.error('[PurchaseReturn] sync error:', error.message);
+        toast.error(`Cloud sync failed (purchase_returns): ${error.message}`, {
+          id: 'pr-sync', duration: 8000,
+        });
+      }
+    } catch (err: any) {
+      console.error('[PurchaseReturn] sync exception:', err);
+    }
+  })();
+};
+
+// God Mode audit (Phase 3): race-proof DN number generation.
+// Previous version was vulnerable to two browser tabs reading the same
+// localStorage value before either wrote — duplicate DN numbers.
+// Now uses sequential counter + Date.now() base-36 suffix for uniqueness
+// even if the counter races. Format: DN-NIP-2026-0001-LM2K
+//
+// Note: a future migration should add a Supabase RPC `get_next_dn_seq`
+// using a Postgres SEQUENCE for true atomicity (see Phase 3 plan).
+// This client-side fix is the minimum to unblock go-live.
 const getNextDNNumber = (company: Company): string => {
-  const year = new Date().getFullYear();
-  const key  = `gtk_erp_dn_seq_${company}_${year}`;
-  const next = parseInt(localStorage.getItem(key) || '0', 10) + 1;
+  const year   = new Date().getFullYear();
+  const key    = `gtk_erp_dn_seq_${company}_${year}`;
+  const next   = parseInt(localStorage.getItem(key) || '0', 10) + 1;
   localStorage.setItem(key, String(next));
-  return `DN-${company.substring(0, 3).toUpperCase()}-${year}-${String(next).padStart(4, '0')}`;
+  const suffix = Date.now().toString(36).slice(-4).toUpperCase();   // race-breaker
+  return `DN-${company.substring(0, 3).toUpperCase()}-${year}-${String(next).padStart(4, '0')}-${suffix}`;
 };
 
 const BLANK_LINE = (): ReturnLine => ({
@@ -131,18 +192,37 @@ const PurchaseReturnModule: React.FC<Props> = ({ company }) => {
       const txId  = `GL-${dnId}`;
       const today = date;
 
-      // ── Find AP account for this vendor ──────────────────────────────────
-      const allAccounts = FinanceService.getAccounts().filter((a: any) => a.company === company);
-      const apAcc = allAccounts.find((a: any) =>
-        a.name?.toUpperCase().includes('PAYABLE') && (a.code?.startsWith('221') || a.type === 'Liability')
-      );
-      const apAccId = apAcc?.id ?? `${company}-21114`;
+      // God Mode audit (Phase 3): explicit per-company account lookup.
+      // Was previously pattern-matched (`code.startsWith('221')`) — `221`
+      // in some COAs is Customer Receivables, posting a Dr to that would
+      // INCREASE customer-due (wrong direction). String-fallback IDs like
+      // `${company}-21114` never joined to an actual account row in the
+      // ledger, so debit notes silently posted to orphans.
+      const apCode  = AP_ACCOUNT_BY_COMPANY[company];
+      const invCode = INVENTORY_ACCOUNT_BY_COMPANY[company];
+      if (!apCode || !invCode) {
+        toast.error(`No AP/Inventory account mapping for company ${company}. Configure AP_ACCOUNT_BY_COMPANY.`);
+        setSaving(false);
+        return;
+      }
 
-      // ── Find Inventory account ────────────────────────────────────────────
-      const invAcc = allAccounts.find((a: any) =>
-        a.code?.startsWith('115') || a.name?.toUpperCase().includes('INVENTORY')
-      );
-      const invAccId = invAcc?.id ?? `${company}-11511`;
+      const allAccounts = FinanceService.getAccounts().filter((a: any) => a.company === company);
+      const apAcc  = allAccounts.find((a: any) => a.code === apCode);
+      const invAcc = allAccounts.find((a: any) => a.code === invCode);
+
+      if (!apAcc || !invAcc) {
+        toast.error(
+          `${company} COA missing required accounts: ` +
+          `${!apAcc  ? `AP ${apCode} ` : ''}` +
+          `${!invAcc ? `Inventory ${invCode}` : ''}` +
+          `— cannot post debit note. Open Finance → COA to add them.`,
+          { duration: 8000 }
+        );
+        setSaving(false);
+        return;
+      }
+      const apAccId  = apAcc.id;
+      const invAccId = invAcc.id;
 
       // ── Post GL ───────────────────────────────────────────────────────────
       FinanceService.recordTransaction({

@@ -317,20 +317,53 @@ export const assertPOBudget = async (params: {
   }
 };
 
-// ── Supabase JSONB sync helper (fire-and-forget) ──────────────────
+// ── Supabase JSONB sync helper ──────────────────────────────────────────
 // All procurement tables use { id, company, data JSONB } schema.
 // This helper maps any array of records to that structure and upserts.
+//
+// God Mode audit (Phase 3): the previous version was a TRUE fire-and-forget
+// (`.then()` swallowed errors to console only — users never saw cloud-sync
+// failures). It now mirrors `_inventoryUpsert`: kicks off async, shows a
+// toast on failure (deduped by table). Signature stays `void` so existing
+// 14+ callers don't have to change.
+//
+// Defensive: filters out rows with blank/null `company` — those are
+// invisible to RLS (`company = profile.company` policy) and would create
+// orphaned data islands. Logs a warning instead of silently saving them.
 const _sbSync = (table: string, data: any[]): void => {
   if (!data.length) return;
-  supabase
-    .from(table)
-    .upsert(
-      data.map((r: any) => ({ id: r.id, company: r.company ?? '', data: r })),
-      { onConflict: 'id' }
-    )
-    .then(({ error }) => {
-      if (error) console.error(`[InventoryService] ${table} sync error:`, error.message);
-    });
+
+  const validRows = data.filter((r: any) => {
+    if (!r.company || r.company === '') {
+      console.warn(`[InventoryService] ${table}: skipping row with blank company`, r.id);
+      return false;
+    }
+    return true;
+  });
+
+  if (!validRows.length) return;
+
+  void (async () => {
+    try {
+      const { error } = await supabase
+        .from(table)
+        .upsert(
+          validRows.map((r: any) => ({ id: r.id, company: r.company, data: r })),
+          { onConflict: 'id' }
+        );
+      if (error) {
+        console.error(`[InventoryService] ${table} sync error:`, error.message, error);
+        toast.error(`Cloud sync failed (${table}): ${error.message}`, {
+          id: `inv-sync-${table}`, duration: 8000,
+        });
+      }
+    } catch (err: any) {
+      console.error(`[InventoryService] ${table} sync exception:`, err);
+      toast.error(`Cloud sync error (${table}): ${err?.message || 'unknown'}`, {
+        id: `inv-err-${table}`, duration: 8000,
+      });
+    }
+  })();
 };
 
 export const InventoryService = {
@@ -384,9 +417,20 @@ export const InventoryService = {
         );
       }
     }
+    // God Mode audit (Phase 3): reject rows with blank company before
+    // they hit storage. Empty company = invisible to RLS = orphan data
+    // forever. Was previously coerced to '' (line 389 OLD).
+    for (const item of data) {
+      if (!item.company) {
+        throw new Error(
+          `[InventoryService] saveStore: cannot save store_item "${item.id || '(no id)'}" — company is blank. ` +
+          `Caller must stamp company from auth context before save.`
+        );
+      }
+    }
     safeSave(KEYS.STORE, data);
     const rows = data.map((s: any) => ({
-      id: s.id, company: s.company||'', name: s.name||'',
+      id: s.id, company: s.company, name: s.name||'',
       category: s.category||'', quantity: s.quantity||0,
       unrestricted_qty: s.unrestrictedQty||0, qi_qty: s.qiQty||0,
       blocked_qty: s.blockedQty||0, reserved_qty: s.reservedQty||0,

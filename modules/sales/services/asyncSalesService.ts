@@ -180,8 +180,17 @@ export const AsyncSalesService = {
 
   getProducts: async (): Promise<Product[]> => {
     const company = activeCompany();
+    // God Mode audit (Phase 3): NEVER silently fall back to GTK.
+    // If activeCompany() returns empty (page-load race between hash route
+    // and appStore hydration), return local cache for whatever company is
+    // currently selected. A wrong-company query is worse than no data —
+    // it hydrates GTK products into a Nippon-scoped UI state.
+    if (!company) {
+      console.warn('[AsyncSalesService] getProducts called before company resolved — returning local cache');
+      return safeParse('gtk_erp_products');
+    }
     try {
-      const { data, error } = await supabase.from('products').select('*').eq('company', company || 'GTK')
+      const { data, error } = await supabase.from('products').select('*').eq('company', company);
       if (error) {
         console.error('[AsyncSalesService] getProducts:', error.message);
         toast.error('Cloud sync failed — using local products.', { id: 'get-products', duration: 3000 });
