@@ -188,6 +188,34 @@ export default function UserAccessManager() {
   const [createdCreds, setCreatedCreds] = useState<{ email: string; password: string; fullName: string } | null>(null);
   const [credsCopiedField, setCredsCopiedField] = useState<'email' | 'password' | 'both' | ''>('');
 
+  // ── Login history modal — per-user activity from access_logs ──
+  const [historyUser, setHistoryUser] = useState<ManagedUser | null>(null);
+  const [historyRows, setHistoryRows] = useState<any[]>([]);
+  const [historyBusy, setHistoryBusy] = useState(false);
+
+  const openLoginHistory = async (u: ManagedUser) => {
+    setHistoryUser(u);
+    setHistoryBusy(true);
+    try {
+      const { data, error } = await supabase
+        .from('access_logs')
+        .select('action, user_agent, ip_address, created_at')
+        .eq('user_id', u.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (error) {
+        toast.error(`History load failed: ${error.message}`);
+        setHistoryRows([]);
+      } else {
+        setHistoryRows(data || []);
+      }
+    } catch (err: any) {
+      toast.error(`History load failed: ${err?.message}`);
+      setHistoryRows([]);
+    }
+    setHistoryBusy(false);
+  };
+
   // ── Guard: Super Admin only ────────────────────────────────────────
   if (me?.role !== 'super_admin') {
     return (
@@ -898,8 +926,13 @@ export default function UserAccessManager() {
 
                     {u.status !== 'revoked' && (
                       <>
+                        <button onClick={() => openLoginHistory(u)}
+                          title="View login history"
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                          <Activity size={14} />
+                        </button>
                         <button onClick={() => handleResetPIN(u)}
-                          title="Reset PIN"
+                          title="Reset Password"
                           className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors">
                           <Key size={14} />
                         </button>
@@ -1400,6 +1433,92 @@ export default function UserAccessManager() {
               <button onClick={() => { setCreatedCreds(null); setCredsCopiedField(''); }}
                 className="bg-slate-900 hover:bg-slate-700 text-white px-5 py-2 rounded-xl text-sm font-semibold transition-colors">
                 Done — credentials saved
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          LOGIN HISTORY MODAL — admin views user's access_logs activity
+          ═══════════════════════════════════════════════════════════════ */}
+      {historyUser && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-start justify-center p-4 z-[500] overflow-y-auto">
+          <div className="bg-white w-full max-w-2xl my-6 rounded-2xl shadow-2xl border border-slate-200 flex flex-col">
+            <div className="bg-blue-700 text-white px-6 py-5 rounded-t-2xl flex justify-between items-center">
+              <div>
+                <h3 className="font-black uppercase tracking-tight text-base flex items-center gap-2">
+                  <Activity size={18} /> Login History
+                </h3>
+                <p className="text-[11px] text-blue-200 mt-0.5">
+                  {historyUser.fullName} · {historyUser.email}
+                </p>
+              </div>
+              <button onClick={() => { setHistoryUser(null); setHistoryRows([]); }}
+                className="hover:bg-white/10 p-2 rounded-lg transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 max-h-[70vh] overflow-y-auto">
+              {/* Auth summary */}
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                  <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Status</p>
+                  <p className="mt-1"><StatusBadge status={historyUser.status} /></p>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                  <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Last Login</p>
+                  <p className="text-xs font-bold text-slate-800 mt-1">
+                    {historyUser.lastLogin ? formatDate(historyUser.lastLogin) : 'Never'}
+                  </p>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                  <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Invite Clicked</p>
+                  <p className="text-xs font-bold text-slate-800 mt-1">
+                    {historyUser.inviteClickedAt ? formatDate(historyUser.inviteClickedAt) : '—'}
+                  </p>
+                </div>
+              </div>
+
+              {historyBusy ? (
+                <div className="flex items-center justify-center py-10">
+                  <Loader2 size={20} className="animate-spin text-slate-400" />
+                </div>
+              ) : historyRows.length === 0 ? (
+                <div className="text-center py-10 text-sm text-slate-400">
+                  Koi activity log nahi mila is user ke liye
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      <tr>
+                        <th className="text-left px-3 py-2">Action</th>
+                        <th className="text-left px-3 py-2">Device</th>
+                        <th className="text-left px-3 py-2">IP</th>
+                        <th className="text-left px-3 py-2">When</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historyRows.map((r, i) => (
+                        <tr key={i} className="border-t border-slate-100 hover:bg-slate-50">
+                          <td className="px-3 py-2 font-mono text-slate-700">{r.action}</td>
+                          <td className="px-3 py-2 text-slate-600">{parseUserAgent(r.user_agent || '')}</td>
+                          <td className="px-3 py-2 text-slate-500 font-mono">{r.ip_address || '—'}</td>
+                          <td className="px-3 py-2 text-slate-600">{formatDate(r.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t bg-slate-50 rounded-b-2xl flex justify-end">
+              <button onClick={() => { setHistoryUser(null); setHistoryRows([]); }}
+                className="bg-slate-900 hover:bg-slate-700 text-white px-5 py-2 rounded-xl text-sm font-semibold transition-colors">
+                Close
               </button>
             </div>
           </div>

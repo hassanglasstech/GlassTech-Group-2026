@@ -64,6 +64,7 @@ const GuidedTestFlows  = React.lazy(() => import('./modules/shared/pages/GuidedT
 const E2EVerifier      = React.lazy(() => import('./modules/shared/pages/E2EVerifier'));
 // Sprint 6 — dedicated mobile-first cutter workbench (route-gated to glassco_cutter)
 const CutterWorkbench  = React.lazy(() => import('./modules/production/companies/glassco/pages/CutterWorkbench'));
+const ChangePasswordPage = React.lazy(() => import('./modules/auth/ChangePasswordPage'));
 // Sprint 7 — dedicated mobile-first QC workbench (dispatch_staff / supervisor)
 const QCWorkbench      = React.lazy(() => import('./modules/production/companies/glassco/pages/QCWorkbench'));
 // Sprint 8 — WIP aging + vendor SLA + cutter performance
@@ -351,7 +352,7 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
           })}
         </nav>
 
-        {/* User info + logout */}
+        {/* User info + change-password + logout */}
         {(isSidebarOpen || isMobile) && user && (
           <div className="p-4 border-t border-white/5 bg-slate-900/80">
             <div className="flex items-center justify-between">
@@ -359,10 +360,17 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
                 <p className="text-xs font-bold text-white truncate">{user.fullName || user.email}</p>
                 <p className="text-xs text-blue-300 font-bold uppercase mt-0.5">{roleLabels[user.role] || user.role}</p>
               </div>
-              <button onClick={() => { signOut(); toast.success('Logged out.'); }}
-                className="ml-2 p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors shrink-0" title="Sign out">
-                <LogOut size={16} />
-              </button>
+              <div className="flex items-center gap-1 ml-2 shrink-0">
+                <Link to="/change-password"
+                  className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors"
+                  title="Change password">
+                  <Settings size={16} />
+                </Link>
+                <button onClick={() => { signOut(); toast.success('Logged out.'); }}
+                  className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors" title="Sign out">
+                  <LogOut size={16} />
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -720,6 +728,7 @@ const App: React.FC = () => {
                   <Route path="/md-dashboard" element={<ModuleErrorBoundary moduleName="MD Dashboard"><MDDashboard /></ModuleErrorBoundary>} />
                   <Route path="/factory-incharge" element={<ModuleErrorBoundary moduleName="Factory Incharge"><FactoryInchargeModule /></ModuleErrorBoundary>} />
                   <Route path="/admin"         element={<ModuleErrorBoundary moduleName="Admin"><AdminSecurity /></ModuleErrorBoundary>} />
+                  <Route path="/change-password" element={<ModuleErrorBoundary moduleName="Change Password"><ChangePasswordPage /></ModuleErrorBoundary>} />
                   <Route path="/health"        element={<ModuleErrorBoundary moduleName="Health Monitor"><HealthMonitor /></ModuleErrorBoundary>} />
                   <Route path="/test-suite"    element={<ModuleErrorBoundary moduleName="UAT Test Suite"><TestSuite /></ModuleErrorBoundary>} />
                   <Route path="/loan-flow"     element={<ModuleErrorBoundary moduleName="Loan Flow Chart"><LoanFlowChart /></ModuleErrorBoundary>} />
