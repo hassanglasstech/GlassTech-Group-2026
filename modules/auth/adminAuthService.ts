@@ -20,7 +20,24 @@ const callEdgeFunction = async (action: string, params: Record<string, any> = {}
     body: { action, ...params },
   });
 
-  if (error) throw error;
+  // supabase.functions.invoke returns a FunctionsHttpError for any non-2xx
+  // response. Its `.message` is just the generic
+  // "Edge Function returned a non-2xx status code" — the actual error
+  // body (the useful part) lives on `error.context`. Extract it so the
+  // toast surfaces the real reason (e.g. "Your role: viewer — needs ...")
+  if (error) {
+    let detail = '';
+    try {
+      const ctx: any = (error as any).context;
+      if (ctx && typeof ctx.json === 'function') {
+        const body = await ctx.json();
+        detail = body?.error || JSON.stringify(body);
+      } else if (ctx && typeof ctx.text === 'function') {
+        detail = await ctx.text();
+      }
+    } catch { /* ignore body-extraction failures */ }
+    throw new Error(detail ? `${error.message}: ${detail}` : error.message);
+  }
   if (data?.error) throw new Error(data.error);
   return data;
 };
