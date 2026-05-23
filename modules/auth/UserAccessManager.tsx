@@ -512,27 +512,39 @@ export default function UserAccessManager() {
     setBusy(false);
   };
 
-  // ── Reset PIN ──────────────────────────────────────────────────────
+  // ── Reset Password / PIN ───────────────────────────────────────────
+  // Resets the user's password to a fresh 12-char strong password (NOT a
+  // 6-digit PIN any more — old PIN was below Supabase's 6-char minimum and
+  // confused users when copying via WhatsApp). After reset, shows the same
+  // credentials modal as Create User so admin can copy & share cleanly.
   const handleResetPIN = async (user: ManagedUser) => {
-    const newPIN = generatePIN();
+    const newPassword = generatePassword();
     setBusy(true);
     try {
-      await AdminAuthService.resetPassword(user.id, newPIN);
+      await AdminAuthService.resetPassword(user.id, newPassword);
 
       await supabase.from('user_profiles')
         .update({ has_pin_fallback: true })
         .eq('id', user.id);
 
-      await supabase.from('access_logs').insert({
-        user_id: me?.id, email: me?.email,
-        action: `reset_pin:${user.employeeCode || user.email}`,
-        user_agent: navigator.userAgent,
-      }).then(() => {});
+      try {
+        await supabase.from('access_logs').insert({
+          user_id: me?.id, email: me?.email,
+          action: `reset_password:${user.employeeCode || user.email}`,
+          user_agent: navigator.userAgent,
+        });
+      } catch { /* table may not exist */ }
 
-      toast.success(`New PIN for ${user.fullName}: ${newPIN}`, { duration: 10000 });
-      Logger.action('UserAccess', 'RESET_PIN', `PIN reset for ${user.fullName}`);
+      Logger.action('UserAccess', 'RESET_PIN', `Password reset for ${user.fullName}`);
+      // Show the same credentials modal as Create User so admin can copy.
+      setCreatedCreds({
+        email:    user.email,
+        password: newPassword,
+        fullName: user.fullName,
+      });
+      await loadUsers();
     } catch (err: any) {
-      toast.error(`PIN reset failed: ${err?.message}`);
+      toast.error(`Password reset failed: ${err?.message}`);
     }
     setBusy(false);
   };
