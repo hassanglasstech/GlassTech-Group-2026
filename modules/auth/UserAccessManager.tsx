@@ -102,8 +102,11 @@ interface AuditEntry {
 }
 
 // ── PIN generator ────────────────────────────────────────────────────
+// Supabase default minimum password length is 6 chars — 4-digit PINs were
+// being rejected by auth.admin.updateUserById with a 422 / "password should
+// be at least 6 characters" error. Bumped to 6-digit.
 const generatePIN = (): string => {
-  return String(Math.floor(1000 + Math.random() * 9000)); // 4-digit
+  return String(Math.floor(100000 + Math.random() * 900000)); // 6-digit
 };
 
 const buildShadowEmail = (empCode: string): string => {

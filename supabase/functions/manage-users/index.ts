@@ -61,10 +61,17 @@ Deno.serve(async (req) => {
       .eq('id', caller.id)
       .single()
 
-    if (callerProfile?.role !== 'super_admin') {
-      return new Response(JSON.stringify({ error: 'Super admin access required' }), {
-        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
+    // Allow any of the three "Hassan-tier" full-access roles. The UI in
+    // UserAccessManager already guards on the same set, but the edge function
+    // is the security boundary so we re-check here.
+    const ADMIN_ROLES = ['super_admin', 'owner', 'hassan']
+    if (!callerProfile?.role || !ADMIN_ROLES.includes(callerProfile.role)) {
+      return new Response(
+        JSON.stringify({
+          error: `Admin access required. Your role: ${callerProfile?.role || '(no profile)'} — needs one of: ${ADMIN_ROLES.join(', ')}`,
+        }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
     }
 
     // Parse request
