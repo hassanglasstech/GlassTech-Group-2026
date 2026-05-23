@@ -65,6 +65,7 @@ const E2EVerifier      = React.lazy(() => import('./modules/shared/pages/E2EVeri
 // Sprint 6 — dedicated mobile-first cutter workbench (route-gated to glassco_cutter)
 const CutterWorkbench  = React.lazy(() => import('./modules/production/companies/glassco/pages/CutterWorkbench'));
 const ChangePasswordPage = React.lazy(() => import('./modules/auth/ChangePasswordPage'));
+const NipponCataloguePage = React.lazy(() => import('./modules/nippon/pages/NipponCataloguePage'));
 // Sprint 7 — dedicated mobile-first QC workbench (dispatch_staff / supervisor)
 const QCWorkbench      = React.lazy(() => import('./modules/production/companies/glassco/pages/QCWorkbench'));
 // Sprint 8 — WIP aging + vendor SLA + cutter performance
@@ -729,6 +730,7 @@ const App: React.FC = () => {
                   <Route path="/factory-incharge" element={<ModuleErrorBoundary moduleName="Factory Incharge"><FactoryInchargeModule /></ModuleErrorBoundary>} />
                   <Route path="/admin"         element={<ModuleErrorBoundary moduleName="Admin"><AdminSecurity /></ModuleErrorBoundary>} />
                   <Route path="/change-password" element={<ModuleErrorBoundary moduleName="Change Password"><ChangePasswordPage /></ModuleErrorBoundary>} />
+                  <Route path="/nippon/catalogue" element={<ModuleErrorBoundary moduleName="Catalogue"><NipponCataloguePage /></ModuleErrorBoundary>} />
                   <Route path="/health"        element={<ModuleErrorBoundary moduleName="Health Monitor"><HealthMonitor /></ModuleErrorBoundary>} />
                   <Route path="/test-suite"    element={<ModuleErrorBoundary moduleName="UAT Test Suite"><TestSuite /></ModuleErrorBoundary>} />
                   <Route path="/loan-flow"     element={<ModuleErrorBoundary moduleName="Loan Flow Chart"><LoanFlowChart /></ModuleErrorBoundary>} />
