@@ -153,16 +153,21 @@ Deno.serve(async (req) => {
       case 'update_user': {
         const { user_id, updates } = params
         if (!user_id) throw new Error('user_id required')
-        // Strip undefined / null fields — the client always sends the full
-        // {password, ban_duration, user_metadata} object even when only one
-        // is set, and the Supabase Admin SDK chokes on undefined values
-        // ("Invalid input" / 500). Build a clean partial object.
         const cleanUpdates: Record<string, unknown> = {}
         for (const [k, v] of Object.entries(updates || {})) {
           if (v !== undefined && v !== null) cleanUpdates[k] = v
         }
         if (Object.keys(cleanUpdates).length === 0) {
           throw new Error('No update fields provided')
+        }
+        // Pre-flight: only operate on users that exist in auth.users.
+        const { data: lookup, error: lookupErr } =
+          await supabaseAdmin.auth.admin.getUserById(user_id)
+        if (lookupErr || !lookup?.user) {
+          throw new Error(
+            `User ${user_id} has no Supabase Auth account — only a profile row exists. ` +
+            `Invite them via "Invite by Email" first.`,
+          )
         }
         const { data, error } = await supabaseAdmin.auth.admin.updateUserById(user_id, cleanUpdates)
         if (error) throw error
@@ -200,6 +205,19 @@ Deno.serve(async (req) => {
         if (_pw.length < 6) {
           throw new Error(`Password too short (${_pw.length} chars). Supabase requires minimum 6 characters.`)
         }
+
+        // Pre-flight check: does the auth user exist? Without this, Supabase
+        // returns a generic "User not found" that admins can't act on. Now we
+        // give a clear instruction: invite them first.
+        const { data: existing, error: lookupErr } =
+          await supabaseAdmin.auth.admin.getUserById(user_id)
+        if (lookupErr || !existing?.user) {
+          throw new Error(
+            `User ${user_id} has no Supabase Auth account yet — only a profile row exists. ` +
+            `Click "Invite by Email" first to send them a magic-link signup, then you can reset PIN.`,
+          )
+        }
+
         const { data, error } = await supabaseAdmin.auth.admin.updateUserById(user_id, {
           password: _pw,
         })
