@@ -38,12 +38,12 @@ type MainTabId = 'stock' | 'master' | 'movements' | 'grn' | 'planning';
  *  group is opened and the back-compat redirect from old links. */
 const SUB_TO_MAIN: Record<SubTabId, MainTabId> = {
   overview:        'stock',
+  opening:         'stock',     // Opening Balance is a stock-side transaction
   tools:           'stock',
   advances:        'stock',
   remnants:        'stock',
   master:          'master',
   weightMaster:    'master',
-  opening:         'master',
   issuance:        'movements',
   consumption:     'movements',
   purchase_return: 'movements',
@@ -141,11 +141,19 @@ const InventoryModule: React.FC = () => {
   //                                 Project Consumption are hidden. KIN LONG
   //                                 hardware doesn't have remnants or weight-
   //                                 per-sqft accounting.
+  // Sub-tab list — gates by company type.
+  // Nippon (trading) gets a CLEANER cut than Glassco/GTK:
+  //   • No "Goods Issue" — trading sales auto-decrement stock on delivery.
+  //     There's no production-floor issue flow to model.
+  //   • Opening Balance moved to the Stock group (it's a stock-side action,
+  //     not master data).
+  //   • No Tool Register / Cash Advances / Remnants / Weight Master / MRP.
   const subTabs = [
     { id: 'overview',        label: 'Stock Balances',     icon: LayoutGrid },
     { id: 'master',          label: 'Material Master',    icon: Database },
     { id: 'opening',         label: 'Opening Balance',    icon: PackageOpen },
-    { id: 'issuance',        label: 'Goods Issue',        icon: ArrowUpRight },
+    // Goods Issue — Nippon (trading) doesn't need a manual issue flow.
+    ...(!isNippon          ? [{ id: 'issuance',        label: 'Goods Issue',        icon: ArrowUpRight }] : []),
     ...(isGlassCompany      ? [{ id: 'consumption',  label: 'Project Consumption', icon: BarChart3 }] : []),
     ...(isAluminiumCompany  ? [{ id: 'tools',        label: 'Tool Register',       icon: Wrench       }] : []),
     ...(isAluminiumCompany  ? [{ id: 'advances',     label: 'Cash Advances',       icon: Banknote     }] : []),

@@ -6,12 +6,11 @@ import { InventoryService } from '@/modules/procurement/services/inventoryServic
 import { getBrandNick } from '@/modules/shared/utils/brandUtils';
 import { 
   Plus, Search, Edit2, Trash2, Package, Filter, Download, Box, 
-  FileJson, FileSpreadsheet, FileUp, UploadCloud, LayoutGrid, List, Printer
+  FileJson, FileSpreadsheet, FileUp, UploadCloud, Printer
 } from 'lucide-react';
 import NipponProductForm from '@/modules/nippon/components/NipponProductForm';
 import NipponSmartImporter from './components/NipponSmartImporter';
 import NipponDirectImporter from './components/NipponDirectImporter';
-import { NipponCatalogPrint } from '@/modules/nippon/prints/NipponCatalogPrint';
 import * as XLSX from 'xlsx';
 
 const NipponProductMaster: React.FC = () => {
@@ -22,9 +21,7 @@ const NipponProductMaster: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [catFilter, setCatFilter] = useState('All');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [viewMode, setViewMode] = useState<'table' | 'catalog'>('table');
   const [activeTab, setActiveTab] = useState<'list' | 'import' | 'direct'>('list');
-  const [isPrintingCatalog, setIsPrintingCatalog] = useState(false);
 
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const excelInputRef = useRef<HTMLInputElement>(null);
@@ -233,24 +230,31 @@ const NipponProductMaster: React.FC = () => {
     reader.readAsBinaryString(file);
   };
 
-  const handlePrintCatalog = () => {
-    setIsPrintingCatalog(true);
-    setTimeout(() => {
-      window.print();
-      setIsPrintingCatalog(false);
-    }, 500);
-  };
+  // Category filter dropdown values derived from real data — not the
+  // legacy "Hardware/Accessory/Consumable" trio that didn't match the
+  // actual Window/Door/Sliding taxonomy in the master.
+  const realCategories = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of products) {
+      const v = (p.mainCategory || p.category || '').trim();
+      if (v) set.add(v);
+    }
+    return [...set].sort();
+  }, [products]);
 
   const filtered = useMemo(() => {
+    const q = searchTerm.toLowerCase();
     return products
       .filter(p => {
-          const matchesSearch = p.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                                String(p.modelNo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                String(p.profileCode || '').toLowerCase().includes(searchTerm.toLowerCase());
-          const matchesCat = catFilter === 'All' || p.category === catFilter;
-          return matchesSearch && matchesCat;
+        const matchesSearch =
+          (p.description || '').toLowerCase().includes(q) ||
+          String(p.modelNo || '').toLowerCase().includes(q) ||
+          String(p.profileCode || '').toLowerCase().includes(q);
+        const matchesCat = catFilter === 'All' ||
+          p.mainCategory === catFilter || p.category === catFilter;
+        return matchesSearch && matchesCat;
       })
-      .sort((a, b) => a.description.localeCompare(b.description));
+      .sort((a, b) => (a.description || '').localeCompare(b.description || ''));
   }, [products, searchTerm, catFilter]);
 
   return (
@@ -278,13 +282,6 @@ const NipponProductMaster: React.FC = () => {
         }} />
       ) : (
         <>
-          {/* CATALOG PRINT VIEW */}
-      {isPrintingCatalog && (
-        <div className="hidden print:block">
-          <NipponCatalogPrint products={filtered} />
-        </div>
-      )}
-
       {/* TOOLBAR */}
       <div className="flex flex-col lg:flex-row justify-between items-center bg-white p-3 rounded-2xl border border-slate-200 shadow-sm w-full no-print gap-4">
         <div className="flex items-center space-x-3">
@@ -309,23 +306,6 @@ const NipponProductMaster: React.FC = () => {
 
            <div className="h-8 w-px bg-slate-200 hidden lg:block mx-2"></div>
 
-           <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl mr-2">
-               <button 
-                   onClick={() => setViewMode('table')} 
-                   className={`p-2 rounded-lg transition-all ${viewMode === 'table' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                   title="Table View"
-               >
-                   <List size={18}/>
-               </button>
-               <button 
-                   onClick={() => setViewMode('catalog')} 
-                   className={`p-2 rounded-lg transition-all ${viewMode === 'catalog' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                   title="Catalog View"
-               >
-                   <LayoutGrid size={18}/>
-               </button>
-           </div>
-
            <a
                href="#/nippon/catalogue"
                className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest mr-2 transition-all shadow-sm"
@@ -336,15 +316,13 @@ const NipponProductMaster: React.FC = () => {
 
            <div className="relative shrink-0">
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-              <select 
+              <select
                 className="pl-9 pr-4 py-2 bg-slate-100 border-none rounded-xl font-bold text-xs uppercase focus:ring-2 focus:ring-red-500 outline-none"
                 value={catFilter}
                 onChange={e => setCatFilter(e.target.value)}
               >
-                  <option value="All">All Groups</option>
-                  <option value="Hardware">Hardware</option>
-                  <option value="Accessory">Accessory</option>
-                  <option value="Consumable">Consumable</option>
+                  <option value="All">All Categories</option>
+                  {realCategories.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
            </div>
            
@@ -359,7 +337,7 @@ const NipponProductMaster: React.FC = () => {
         </div>
       </div>
 
-      {viewMode === 'table' ? (
+      {(
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-[500px] no-print">
               <table className="w-full text-left sap-table">
                   <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400 tracking-widest">
@@ -444,54 +422,7 @@ const NipponProductMaster: React.FC = () => {
                   </div>
               )}
           </div>
-      ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 no-print">
-              {filtered.map(p => (
-                  <div key={p.id} className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden group hover:shadow-xl transition-all flex flex-col">
-                      <div className="aspect-square bg-slate-50 relative overflow-hidden flex items-center justify-center">
-                          {p.imageUrl ? (
-                              <img src={p.imageUrl} alt={p.description} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                          ) : (
-                              <Package size={48} className="text-slate-200" />
-                          )}
-                          <div className="absolute top-3 right-3 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => handleEdit(p)} className="p-2 bg-white/90 backdrop-blur shadow-lg rounded-xl text-blue-600 hover:bg-blue-600 hover:text-white transition-all"><Edit2 size={16}/></button>
-                              <button onClick={() => handleDelete(p.id)} className="p-2 bg-white/90 backdrop-blur shadow-lg rounded-xl text-red-600 hover:bg-red-600 hover:text-white transition-all"><Trash2 size={16}/></button>
-                          </div>
-                          <div className="absolute bottom-3 left-3">
-                              <span className="px-2 py-1 bg-slate-900/80 backdrop-blur text-white text-[9px] font-black uppercase rounded-lg tracking-widest">
-                                  {p.modelNo || 'No Code'}
-                              </span>
-                          </div>
-                      </div>
-                      <div className="p-4 flex-1 flex flex-col">
-                          <div className="mb-2">
-                              <h4 className="font-black text-slate-800 uppercase text-xs line-clamp-2 leading-tight h-8">{p.description}</h4>
-                              <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{getBrandNick(p.brand || 'Generic')}</p>
-                          </div>
-                          <div className="mt-auto pt-3 border-t border-slate-100 flex justify-between items-end">
-                              <div>
-                                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Unit Price</p>
-                                  <p className="font-black text-slate-900 text-sm">PKR {p.basePrice?.toLocaleString()}</p>
-                              </div>
-                              <div className="text-right">
-                                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Stock</p>
-                                  <p className={`font-black text-sm ${getStockLevel(p.id) > 0 ? 'text-emerald-600' : 'text-rose-400'}`}>
-                                      {getStockLevel(p.id)} <span className="text-[9px]">{p.unit}</span>
-                                  </p>
-                              </div>
-                          </div>
-                      </div>
-                  </div>
-              ))}
-              {filtered.length === 0 && (
-                  <div className="col-span-full p-20 text-center text-slate-300 font-black uppercase italic text-xs tracking-widest">
-                      <Package size={48} className="mx-auto mb-4 opacity-10"/>
-                      No hardware items found in selection.
-                  </div>
-              )}
-          </div>
-        )}
+      )}
       </>
     )}
 

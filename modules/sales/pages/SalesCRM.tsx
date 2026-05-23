@@ -9,7 +9,7 @@ import SalesOrders from '../components/SalesOrders';
 import SalesPipeline from '../components/SalesPipeline';
 import BillingHub from '../../finance/components/BillingHub';
 import CustomerComplaintModule from '../components/CustomerComplaintModule';
-import { Users, FileSignature, Layout, ShoppingCart, BarChart3, Receipt } from 'lucide-react';
+import { Users, FileSignature, Layout, ShoppingCart, BarChart3, Receipt, MessageSquareWarning } from 'lucide-react';
 import { useAppStore } from '../../shared/store/appStore';
 
 type ActiveTab = 'orders' | 'quotations' | 'clients' | 'design' | 'pipeline' | 'invoices' | 'complaints';
@@ -114,14 +114,17 @@ const SalesCRM: React.FC = () => {
       {/* ── Navigation ── */}
       <nav className="sd-nav">
 
-        {/* Sales Orders — first for Glassco (order-centric) */}
-        <button
-          onClick={() => setActiveTab('orders')}
-          className={`sd-tab${activeTab === 'orders' ? ' active' : ''}`}
-        >
-          <ShoppingCart size={14}/>
-          Sales Orders
-        </button>
+        {/* Sales Orders — hidden for Nippon (trading goes quote → invoice
+            direct; no separate "order" stage). Visible everywhere else. */}
+        {company !== 'Nippon' && (
+          <button
+            onClick={() => setActiveTab('orders')}
+            className={`sd-tab${activeTab === 'orders' ? ' active' : ''}`}
+          >
+            <ShoppingCart size={14}/>
+            Sales Orders
+          </button>
+        )}
 
         {/* Quotations */}
         <button
@@ -173,6 +176,7 @@ const SalesCRM: React.FC = () => {
             onClick={() => setActiveTab('complaints')}
             className={`sd-tab${activeTab === 'complaints' ? ' active' : ''}`}
           >
+            <MessageSquareWarning size={14}/>
             Complaints
           </button>
 
