@@ -55,11 +55,26 @@ Deno.serve(async (req) => {
       })
     }
 
-    const { data: callerProfile } = await supabaseAdmin
+    // CRITICAL: previously this query selected ('role, company') with .single()
+    // and only destructured `data`, swallowing any DB error. If the `company`
+    // column doesn't exist on user_profiles in some envs (it's optional in our
+    // schema), the query errors out, `data` is null, and the role check below
+    // sees "(no profile)" → 403 even for a real super_admin.
+    //
+    // Fix: select only what we need (`role`), use .maybeSingle(), and surface
+    // any DB error to the caller instead of silently treating it as "no profile".
+    const { data: callerProfile, error: profileErr } = await supabaseAdmin
       .from('user_profiles')
-      .select('role, company')
+      .select('role')
       .eq('id', caller.id)
-      .single()
+      .maybeSingle()
+
+    if (profileErr) {
+      return new Response(
+        JSON.stringify({ error: `Profile lookup failed: ${profileErr.message}` }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
 
     // Allow any of the three "Hassan-tier" full-access roles. The UI in
     // UserAccessManager already guards on the same set, but the edge function
@@ -68,7 +83,7 @@ Deno.serve(async (req) => {
     if (!callerProfile?.role || !ADMIN_ROLES.includes(callerProfile.role)) {
       return new Response(
         JSON.stringify({
-          error: `Admin access required. Your role: ${callerProfile?.role || '(no profile)'} — needs one of: ${ADMIN_ROLES.join(', ')}`,
+          error: `Admin access required. Caller id: ${caller.id}. Your role: ${callerProfile?.role || '(no profile row)'} — needs one of: ${ADMIN_ROLES.join(', ')}`,
         }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
@@ -84,7 +99,7 @@ Deno.serve(async (req) => {
       try {
         await supabaseAdmin.from('audit_log').insert({
           id:        crypto.randomUUID(),
-          company:   callerProfile?.company ?? 'system',
+          company:   'system',  // schema-agnostic — caller's company isn't required for audit
           user_id:   caller.id,
           action,
           target_id: targetId,
