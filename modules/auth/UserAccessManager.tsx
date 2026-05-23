@@ -238,9 +238,15 @@ export default function UserAccessManager() {
         if (!p.is_active) return 'revoked';
         if (!a) return 'no_auth';                                 // orphan profile
         if (a.banned_until && new Date(a.banned_until).getTime() > now) return 'revoked';
-        if (!a.email_confirmed_at) return 'invite_pending';       // link not clicked
-        if (!a.last_sign_in_at)    return 'never_signed_in';      // confirmed, no login
-        return 'active';
+        // PRIORITY FIX (Sprint 40):
+        // Check last_sign_in_at FIRST. A user who has actually logged in is
+        // active regardless of whether email_confirmed_at is set — older
+        // accounts (e.g. Hassan's original super_admin account, created via
+        // password not invite) have a NULL email_confirmed_at but a real
+        // last_sign_in_at, and were incorrectly flagged as "Invite Pending".
+        if (a.last_sign_in_at)    return 'active';                // has logged in → done
+        if (a.email_confirmed_at) return 'never_signed_in';       // confirmed link, never logged
+        return 'invite_pending';                                  // link not clicked
       };
 
       const mapped: ManagedUser[] = (profiles || []).map((p: any) => {
