@@ -93,7 +93,7 @@ interface HealthIssue {
 
 const emptyLine = (): OBLine => ({
   id: `OB-L-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-  productId: '', description: '', category: '', unit: 'SqFt',
+  productId: '', description: '', category: '', unit: 'PCS',
   sheetCount: 0, sqftPerSheet: 0, totalSqft: 0,
   rate: 0, totalValue: 0, storageBin: 'MAIN',
   weightKg: 0, biltyWeightKg: 0,
@@ -957,7 +957,7 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                       type="text"
                       value={line.description}
                       onChange={e => updateLine(idx, { description: e.target.value })}
-                      placeholder="e.g. Clear Glass 5mm 84x144"
+                      placeholder={isGlassCompany ? 'e.g. Clear Glass 5mm 84x144' : 'e.g. KIN LONG Door Handle Silver'}
                       className="w-full px-3 py-2 border rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -977,7 +977,8 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                     </select>
                   </div>
 
-                  {/* Unit — 2 cols */}
+                  {/* Unit — 2 cols. Order swaps based on company: glass-first
+                      for Glassco, hardware-first (PCS/Set/Pair) for Nippon. */}
                   <div className="md:col-span-2">
                     <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Unit</label>
                     <select
@@ -985,7 +986,10 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                       onChange={e => updateLine(idx, { unit: e.target.value })}
                       className="w-full px-3 py-2 border rounded-lg text-xs font-bold outline-none bg-white cursor-pointer"
                     >
-                      {['SqFt','Unit','RunningFt','Inch','KG','Mtr','Sheet','PCS','Set','Pair','Roll','Pkt','Box','Ltr','Tube'].map(u => (
+                      {(isGlassCompany
+                        ? ['SqFt','Sheet','RunningFt','Inch','Mtr','KG','PCS','Set','Pair','Roll','Pkt','Box','Ltr','Tube','Unit']
+                        : ['PCS','Set','Pair','Roll','Box','Pkt','KG','Mtr','RunningFt','Ltr','Tube','Unit','SqFt','Sheet','Inch']
+                      ).map(u => (
                         <option key={u} value={u}>{u}</option>
                       ))}
                     </select>
