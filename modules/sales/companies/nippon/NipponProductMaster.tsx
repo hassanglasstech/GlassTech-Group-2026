@@ -4,10 +4,11 @@ import { Product, StoreItem } from '@/modules/shared/types';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { getBrandNick } from '@/modules/shared/utils/brandUtils';
-import { 
-  Plus, Search, Edit2, Trash2, Package, Filter, Download, Box, 
-  FileJson, FileSpreadsheet, FileUp, UploadCloud, Printer
+import {
+  Plus, Search, Edit2, Trash2, Package, Filter, Download, Box,
+  FileJson, FileSpreadsheet, FileUp, UploadCloud, Printer, Layers
 } from 'lucide-react';
+import { toast } from 'sonner';
 import NipponProductForm from '@/modules/nippon/components/NipponProductForm';
 import NipponSmartImporter from './components/NipponSmartImporter';
 import NipponDirectImporter from './components/NipponDirectImporter';
@@ -187,6 +188,102 @@ const NipponProductMaster: React.FC = () => {
       XLSX.writeFile(wb, `Nippon_Catalog_Template_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  // ── Category-wise Excel Export (Phase 5 prep) ─────────────────────
+  // Multi-sheet workbook: Summary + one sheet per Main Category.
+  // Sheet names sanitised to Excel's 31-char limit; falls back to
+  // "Uncategorised" when a product has no mainCategory.
+  const handleExportCategoryWise = () => {
+    try {
+      if (!products.length) {
+        toast.error('No products to export.');
+        return;
+      }
+
+      // Group by mainCategory
+      const groups: Record<string, Product[]> = {};
+      for (const p of products) {
+        const key = (p.mainCategory || '').trim() || 'Uncategorised';
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(p);
+      }
+
+      const wb = XLSX.utils.book_new();
+
+      // Sanitiser for Excel sheet names: max 31 chars, no \ / ? * [ ] :
+      const sheetName = (name: string): string => {
+        const cleaned = name.replace(/[\\/?*[\]:]/g, '').trim() || 'Sheet';
+        return cleaned.length > 31 ? cleaned.slice(0, 31) : cleaned;
+      };
+
+      // ── Summary sheet (first) ─────────────────────────────────────
+      const summaryRows = Object.entries(groups)
+        .map(([cat, items]) => {
+          const subs = new Set(items.map(p => p.subCategory || '').filter(Boolean));
+          const brands = new Set(items.map(p => p.brand || '').filter(Boolean));
+          const prices = items.map(p => p.basePrice || 0).filter(v => v > 0);
+          const avg = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : 0;
+          return {
+            'Main Category': cat,
+            'Products': items.length,
+            'Sub Categories': subs.size,
+            'Brands': brands.size,
+            'With Image': items.filter(p => p.imageUrl).length,
+            'Avg Sales Price (PKR)': Math.round(avg),
+          };
+        })
+        .sort((a, b) => b.Products - a.Products);
+      const summaryWs = XLSX.utils.json_to_sheet(summaryRows);
+      summaryWs['!cols'] = [
+        { wch: 32 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 20 }
+      ];
+      XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
+
+      // ── One sheet per Main Category ──────────────────────────────
+      const sortedGroups = Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+      for (const [cat, items] of sortedGroups) {
+        // Sort items within sheet by sub-category then description
+        items.sort((a, b) => {
+          const subA = (a.subCategory || '').localeCompare(b.subCategory || '');
+          if (subA !== 0) return subA;
+          return (a.description || '').localeCompare(b.description || '');
+        });
+        const rows = items.map(p => ({
+          'Internal ID': p.profileCode || '',
+          'Model No': p.modelNo || '',
+          'Description': p.description,
+          'Brand': p.brand || '',
+          'Sub Category': p.subCategory || '',
+          'Unit': p.unit,
+          'Cost Price': p.costPrice || 0,
+          'Sales Price': p.basePrice || 0,
+          'Finish': p.finishColor || '',
+          'Material': p.material || '',
+          'Direction': p.direction || '',
+          'Size': p.tongueLength || '',
+          'Spindle Length': p.spindleLength || '',
+          'Has Image': p.imageUrl ? 'Yes' : 'No',
+        }));
+        const ws = XLSX.utils.json_to_sheet(rows);
+        ws['!cols'] = [
+          { wch: 18 }, { wch: 18 }, { wch: 32 }, { wch: 14 },
+          { wch: 22 }, { wch: 8 }, { wch: 12 }, { wch: 12 },
+          { wch: 12 }, { wch: 16 }, { wch: 10 }, { wch: 10 },
+          { wch: 14 }, { wch: 10 },
+        ];
+        // Freeze header row
+        ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+        XLSX.utils.book_append_sheet(wb, ws, sheetName(cat));
+      }
+
+      const fileName = `Nippon_Products_ByCategory_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      toast.success(`Exported ${products.length} products across ${sortedGroups.length} categories.`);
+    } catch (err) {
+      console.error('[NipponProductMaster] Category export failed:', err);
+      toast.error('Export failed. Check console for details.');
+    }
+  };
+
   const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -298,7 +395,8 @@ const NipponProductMaster: React.FC = () => {
 
            <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl">
                <button onClick={handleExportJson} className="p-2 text-slate-600 hover:bg-white rounded-lg transition-all" title="Backup JSON"><FileJson size={18}/></button>
-               <button onClick={handleExportExcel} className="p-2 text-emerald-600 hover:bg-white rounded-lg transition-all" title="Export Template/Excel"><FileSpreadsheet size={18}/></button>
+               <button onClick={handleExportExcel} className="p-2 text-emerald-600 hover:bg-white rounded-lg transition-all" title="Export Template/Excel (Flat)"><FileSpreadsheet size={18}/></button>
+               <button onClick={handleExportCategoryWise} className="p-2 text-amber-600 hover:bg-white rounded-lg transition-all" title="Export Category-wise (multi-sheet)"><Layers size={18}/></button>
                <div className="w-px h-6 bg-slate-200 mx-1"></div>
                <button onClick={() => jsonInputRef.current?.click()} className="p-2 text-slate-600 hover:bg-white rounded-lg transition-all" title="Restore JSON"><UploadCloud size={18}/></button>
                <button onClick={() => excelInputRef.current?.click()} className="p-2 text-emerald-600 hover:bg-white rounded-lg transition-all" title="Import Excel"><FileUp size={18}/></button>
