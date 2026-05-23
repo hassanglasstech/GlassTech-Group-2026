@@ -152,10 +152,22 @@ Deno.serve(async (req) => {
 
       case 'update_user': {
         const { user_id, updates } = params
-        const { data, error } = await supabaseAdmin.auth.admin.updateUserById(user_id, updates)
+        if (!user_id) throw new Error('user_id required')
+        // Strip undefined / null fields — the client always sends the full
+        // {password, ban_duration, user_metadata} object even when only one
+        // is set, and the Supabase Admin SDK chokes on undefined values
+        // ("Invalid input" / 500). Build a clean partial object.
+        const cleanUpdates: Record<string, unknown> = {}
+        for (const [k, v] of Object.entries(updates || {})) {
+          if (v !== undefined && v !== null) cleanUpdates[k] = v
+        }
+        if (Object.keys(cleanUpdates).length === 0) {
+          throw new Error('No update fields provided')
+        }
+        const { data, error } = await supabaseAdmin.auth.admin.updateUserById(user_id, cleanUpdates)
         if (error) throw error
         result = { user: { id: data.user.id } }
-        await writeAuditLog(user_id, { updated_fields: Object.keys(updates || {}) })
+        await writeAuditLog(user_id, { updated_fields: Object.keys(cleanUpdates) })
         break
       }
 
@@ -183,6 +195,11 @@ Deno.serve(async (req) => {
 
       case 'reset_password': {
         const { user_id, new_password: _pw } = params   // never log the password itself
+        if (!user_id) throw new Error('user_id required')
+        if (!_pw || typeof _pw !== 'string') throw new Error('new_password required')
+        if (_pw.length < 6) {
+          throw new Error(`Password too short (${_pw.length} chars). Supabase requires minimum 6 characters.`)
+        }
         const { data, error } = await supabaseAdmin.auth.admin.updateUserById(user_id, {
           password: _pw,
         })
@@ -211,8 +228,15 @@ Deno.serve(async (req) => {
     })
 
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message || 'Internal error' }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
+    // CRITICAL: surface the real error in both the Supabase function logs
+    // (console.error) AND the HTTP response body. Without console.error, the
+    // logs show only Boot/Shutdown events and you can't tell what failed.
+    const errMsg = err?.message || (typeof err === 'string' ? err : 'Internal error')
+    const errStack = err?.stack || ''
+    console.error('[manage-users] handler failed:', errMsg, '\n', errStack)
+    return new Response(
+      JSON.stringify({ error: errMsg, stack: errStack.split('\n').slice(0, 3).join(' | ') }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    )
   }
 })
