@@ -1,247 +1,236 @@
-# RESUME HERE — Nippon Hardware Go-Live in progress
+# RESUME HERE — Nippon Hardware Go-Live (Phase 5 in progress)
 
-**Last updated:** 2026-05-21
-**Active focus:** Nippon Hardware module (trading business, KIN LONG + 3 other suppliers)
-**Branch:** `main` @ commit `1037649` (Vercel auto-deploys this)
+**Last updated:** 2026-05-23
+**Active focus:** Nippon Hardware module (trading business, 5 vendors: KIN LONG / Soleron / SIWAY / Froise / Ningbo Widen)
+**Branch:** `main` @ commit `1c957bc` (Vercel auto-deploys this)
+**Master plan document:** [docs/testing/NIPPON_GO_LIVE_PLAN.md](docs/testing/NIPPON_GO_LIVE_PLAN.md) — keep this as the single source of truth for go-live progress.
 
 ---
 
 ## 🎯 IMMEDIATE NEXT STEP
 
-**Hassan was about to run the FINAL Nippon master replacement.** Three deliverables sit in `C:\Users\Hassa\Downloads\`:
+**Phase 5 smoke test** — walk a complete Nippon transaction cycle and verify each step posts balanced GL. Hassan operates the browser; Claude observes + writes verification SQL.
 
-| File | Purpose |
-|---|---|
-| `Nippon_Images_Final.zip` | 113 product images, named EXACTLY by product ID |
-| `Nippon_Replace_All_v2.sql` | DELETE old + INSERT 152 fresh products |
-| `Nippon_Migration_README.md` | Full step-by-step |
-| `Nippon_Missing_Images.csv` | 39 products still needing photos |
-
-**Run order (10 min total):**
-1. Supabase Dashboard → Storage → `product-images` bucket → select all → Delete
-2. Drop 113 files from `Nippon_Images_Final.zip` into the empty bucket
-3. Run `Nippon_Replace_All_v2.sql` in SQL Editor
-
-Expected after: 152 Nippon products, 113 with image_url, 4 brands captured (KIN LONG / Soleron / HuangXing / SIWAY).
+But **3 P2 fixes were discovered today via the KIN LONG IMART verification** that you may want to address first (see "Today's findings" below).
 
 ---
 
-## 📊 PRODUCT INVENTORY — SOURCE OF TRUTH
+## ✅ COMPLETED (this week)
 
-| Brand | Products | With image | Missing |
-|---|---:|---:|---:|
-| KIN LONG | 141 | 113 | 28 |
-| Soleron | 7 | 0 | 7 |
-| HuangXing | 2 | 0 | 2 |
-| SIWAY | 2 | 0 | 2 |
-| **TOTAL** | **152** | **113** | **39** |
+### Day 0 — 2026-05-22 · commit `51c99c4`
 
-Master file: `C:\Users\Hassa\Downloads\Nippon_Hardware_Complete.zip` (Excel + 143 source images).
+- Migration `068_phase0_rls_inventory_tighten.sql` — closed anon INSERT/UPDATE/DELETE on inventory tables (products, vendors, store_items, stock_ledger, requisitions, purchase_orders, grn_sheet_entries, ledger, opening_balances). Migration 064 had closed financial tables, but procurement migrations 20260432-20260434 re-opened anon writes on inventory. The anon key is in the public JS bundle so this was a real "anyone can DELETE all 152 products" hole.
+- `coa.nippon.ts` — added 3 leaves: `11431` Input GST Recoverable, `21141` GR/IR — Hardware Material, `31112` Opening Balance Equity.
+- `ProcurementHub.tsx` — Logistics + SCM Dashboard tabs hidden for Nippon.
+- `StockOverview.tsx` — fixed `¥` (yen) → `PKR`.
 
-The 113 mapped images came from parsing `xl/drawings/oneCellAnchor` records in the master xlsx — NOT from the `images/` folder which was a stale subset.
+### Phase 1 — 2026-05-22 · commit `a8c4f21` (THE big one — accounting backbone)
 
----
+- `grnGLService.ts` — added `orchestrateNipponGRN()` + `ACC_NIPPON` constants + `nipponInventoryAcc()` per-brand resolver + `nipponCreditAcc()` payment-mode router (Credit/Cash/Advance). Landed cost pro-rated into inventory per IAS-2.
+- `NipponGoodsReceipt.tsx` — full handler rewrite: `useAuthStore` dual fallback, typed `ImportedItem` (no any[]), `isPosting` state with disabled+spinner buttons, validation block, unmatched-code warning, GL via orchestrator (BEFORE stock save so failed journal doesn't leave phantom stock). Vendor name + payment mode in footer UI.
+- `OpeningBalance.tsx` — `OB_GL_NIPPON` map + Nippon branch in `getInventoryAccount` reading `product.mainCategory` → routes to per-brand inventory (KL=11511, Alum=11512, UPVC=11513, General=11514). New `getOBEquityCode()` returns `31112` for Nippon.
+- `GoodsIssue.tsx` — `isNippon` branch with stock-transfer GL (decision A): Dr `11521` Hardware-Project-Issue / Cr `11514` Inventory at MAP. Cost-center mandate gated to non-Nippon (Nippon has no cost centers).
 
-## 🗂️ FILES WE PRODUCED THIS SESSION
+**Decisions used in Phase 1:** A1 (stock-transfer) + per-brand inventory + flat AP (21111) + with-local-purchase support.
 
-### Local Excel deliverables (in `C:\Users\Hassa\Downloads\`)
-- `Nippon_Replace_All_v2.sql` — FINAL SQL to run
-- `Nippon_Images_Final.zip` — FINAL images to upload
-- `Nippon_Missing_Images.csv` — 39 photo-pending products
-- `Nippon_Migration_README.md` — workflow doc
-- `Nippon_Hardware_Complete.zip` — original master (Hassan provided)
-- `Nippon_Products_CLEAN.xlsx` — earlier cleaned 446-product file (now superseded)
-- `Nippon_Bulk_Import_V2_2026-05-20.xlsx` — pre-master bulk importer file (superseded)
-- `Nippon_Image_Fix_FINAL.sql` — earlier image URL fix (applied; rolled into v2 logic)
+### Phase 2 — 2026-05-22 · commit `3625b91` (de-glassify UX)
 
-### Working temp dir (do NOT delete — has the extraction state)
-- `C:\Users\Hassa\AppData\Local\Temp\nippon_complete\`
-  - `Nippon_Hardware_Master.xlsx` (the actual master)
-  - `_xlsx_unzip/` (manual xlsx extraction)
-  - `final_images/` (113 renamed photos)
-  - `proper_extract.mjs` + `build_final.mjs` (extraction + SQL gen scripts)
-  - `image_mappings.json` (product_id → image filename map)
-- `C:\Users\Hassa\AppData\Local\Temp\nippon_work\` — older session, has `node_modules` (xlsx + exceljs + node-unrar-js)
+- `GRNRegister.tsx` — column set branches on `isGlassCompany`. Glass: Sheets / SqFt / Weight. Non-glass (Nippon/GTK/GTI): Qty / Value (PKR). Sheet-tag expand-row hidden for non-glass.
+- `LogisticsModule.tsx` — defensive stub for non-glass companies (Nippon/GTK/GTI/Factory).
+- `InventoryModule.tsx` — removed dead-code ternary rendering same `StockOverview` on both Nippon branches.
 
----
+### Phase 3 — 2026-05-22 · commit `68dcb8b` (data plumbing)
 
-## 🚀 DEPLOYED FIXES — ALREADY ON PROD
+- `asyncSalesService.getProducts` — no longer falls back to `'GTK'` when company empty; returns local cache instead.
+- `inventoryService.saveStore` — throws on blank company instead of coercing to `''`.
+- `inventoryService._sbSync` — wrapped in async + try/catch, shows toast on failure, filters blank-company rows. 14+ callers (requisitions, POs, vehicles, remnants, weight_master, etc.) auto-benefit.
+- `PurchaseReturnModule.tsx` — explicit per-company AP/Inventory account map (was loose `code.startsWith('221')` pattern-match), `Date.now()` base-36 race-breaker on DN#, Supabase upsert on save.
 
-### 8 Nippon go-live phases + 13 commits today
+### Phase 4 — 2026-05-23 · Hassan ran in parallel
 
-| Commit | What |
-|---|---|
-| `1037649` | **Remove Brand column from print** (was last commit) |
-| `7729f31` | Migration: correct image_url to real `product-images` bucket at root |
-| `695ea32` | OB form fully de-glassified — pcs/rate flow, no sheet-size for Nippon |
-| `d5253a7` | `activeCompany()` helper — fetches respect appStore.selectedCompany (was always GTK) |
-| `ee14920` | Storage bucket image routing migration (older) |
-| `66676bd` | Nippon prints — real brand + taller dropdown + compact editor |
-| `c6fe3e4` | Finance accounts upsert deadlock fix |
-| `7b4f2a0` | Quote row dropdown sources from storeItems (not products master) |
-| `cb95e87` | `erp_trial_balance` RPC + 4 timeout indexes |
-| `6bc942f` | localStorage quota fallback + JSONB-aware alert queries |
-| `cdc771a` | Payroll numeric coercion + JSONB schema mappers + FK orphan filter |
-| `9112ee2` | Batched product upsert + main_category persist + non-glass OB form |
-| `8431bc4` | Inventory tabs cleanup + quote dropdown qty lookup |
-| `7eb2c98` | Bulk Import (no-AI) + cascading category filter + 406 v_alert_unread fix |
-| `8b05429` | Phase 0-4 audit + 6 SIT tests + UAT runbook |
-
-### Test suite status
-- `npm run test -- --run` → **318/318 passing**
-- `npx tsc --noEmit` → only pre-existing P2/P3 strictness warnings in Nippon files (none from today's changes)
-- Production build (`npm run build`) → clean, all chunks emitted
-
-### Sales SIT (Nippon-specific GL tests)
-File: `modules/__tests__/nippon_sit.test.ts` — 6 tests covering:
-- N-01: Revenue posts to HARDWARE SALES INCOME (4120), not GLASS PROCESSING
-- N-02: 17% GST creates 3-line balanced GL
-- N-03: Invoice succeeds with zero production pieces (trading bypass)
-- N-04: COGS = Σ(qty × MAP), balanced Dr 5114 / Cr 11514
-- N-05: COGS plan null when no store match (no phantom GL)
-- N-06: Full cycle trial balance closes
+- Migrations `20260521_nippon_clean_product_update.sql` (430 UPDATEs from curated Excel) and `20260521_nippon_insert_missing.sql` (INSERT missing with `ON CONFLICT DO NOTHING`) applied.
+- 5 Nippon vendors confirmed in `vendors` table (after CSV cross-check):
+  - `VEND-NIP-KL-001` Guangdong Kin Long Hardware Products Co., Ltd. — code KL
+  - `VEND-NIP-SL-003` Soleron Building Materials (Hebei) Co., Ltd. — code SOL
+  - `VEND-NIP-SW-004` SHANGHAI SIWAY BUILDING MATERIAL CO.LTD — code SIW
+  - `VEND-NIP-NB-002` NINGBO WIDEN IMPORT AND EXPORT CO., LTD — code NB
+  - `VEND-NIP-FR-005` Froise — code FR
+- Massive auth overhaul (PKCE flow, email+password invite, change-password, login-history modal, 6-digit OTP, RBAC fixes).
+- Catalogue page (`modules/nippon/pages/NipponCataloguePage.tsx`) with branding + PDF export.
+- Grouped category view in StockOverview (Window/Door/Sliding etc.).
+- Storage cap at 3.5MB + auto-sync pattern (clear localStorage after Supabase write).
 
 ---
 
-## 🔧 KEY CODE PATHS — CRITICAL FILES
+## 🔍 TODAY'S FINDINGS — KIN LONG IMART verification (3 issues)
 
-### Sales side
-- `modules/sales/companies/nippon/NipponProductMaster.tsx` — product master UI, has Bulk Import (green tab) + Smart Import (AI, red tab)
-- `modules/sales/companies/nippon/components/NipponDirectImporter.tsx` — no-AI bulk importer with image extraction via ExcelJS
-- `modules/sales/companies/nippon/NipponQuotationManager.tsx` — quote editor
-- `modules/sales/companies/nippon/useNipponQuotations.ts` — quote hook
-- `modules/sales/services/deliveryInvoiceService.ts` — invoice generation, has Nippon trading-COGS branch + revenue chain branch
-- `modules/sales/services/asyncSalesService.ts` — all 12+ fetch methods use `activeCompany()` helper
+Logged in to https://imart.kinlong.com via Chrome extension and searched `CZS133`. Found 2 variants on KIN LONG (CZS133 + Y2CZS133), pulled detail page (product id `3333`). Comparison vs Nippon DB:
 
-### Inventory side
-- `modules/procurement/components/inventory/StockOverview.tsx` — cascading Main → Sub filter
-- `modules/procurement/components/inventory/OpeningBalance.tsx` — 38 isGlassCompany gates, fully Nippon-aware
-- `modules/procurement/components/inventory/NipponGoodsReceipt.tsx` — GRN intake. ⚠ **NO GL POSTING YET** (P1 deferred — see Known Gaps below)
-- `modules/procurement/pages/InventoryModule.tsx` — tab visibility per company
+### P2 — Image URL has wrong path prefix
+DB stores: `…/storage/v1/object/public/product-images/products/CZS133.png`
+But CLAUDE.md rule: bucket is `product-images` with **NO `products/` subfolder** — files at root.
 
-### Print
-- `modules/nippon/prints/NipponQuotationPrint.tsx` — Brand col REMOVED
-- `modules/nippon/prints/NipponSalesOrderPrint.tsx` — Brand col REMOVED
-
-### Shared
-- `modules/shared/services/utils.ts` — `safeSave` with quota fallback (strips imageUrl on 5MB hit)
-- `modules/shared/components/ErrorBoundary.tsx` — stale-chunk auto-reload
-- `src/services/SyncService.ts` — JSONB push mappers fixed for tag_master / departments / cost_centers; payroll numeric coercion; FK orphan pre-flight
-
-### COA
-- `modules/finance/constants/coa.nippon.ts` — 218 lines, trading COA with Hardware Inventory + Hardware Sales chain
-
----
-
-## 📋 KNOWN GAPS / DEFERRED P1
-
-### 🛑 `NipponGoodsReceipt` — missing GL posting
-Currently updates `store_items` + `material_ledger` but does NOT call `FinanceService.postJournal`. Every hardware GRN silently skips:
+→ Likely 404 for every image. Verify with one curl/browser open of:
 ```
-Dr Hardware Inventory (11514) / Cr Accounts Payable (21111-21113)
+https://wfytbcmazixddtwpbego.supabase.co/storage/v1/object/public/product-images/CZS133.png
 ```
-Result: Inventory account stays at 0, AP never reflects vendor balance. **Blocker for accurate trial balance.**
+If that loads but the `/products/CZS133.png` version 404s, run the cleanup SQL below.
 
-Fix path: mirror what `GTKStoreReceipt.tsx` does (it calls `FinanceService.settleAdvance` after GRN). Need to add same GL call after `InventoryService.saveStore`.
+### P3 — Duplicate rows with same `profile_code='CZS133'`
+- `NIP-KL-CZS133-B` — model_no "CZS133", material "Aluminium alloy", base_price 2400
+- (another row) — model_no "KIN LONG HANDLE BLACK & WHITE TONGUE LENGTH=55MM", material NULL
 
-### ⚠️ GRN Register columns are glass-centric for Nippon
-`modules/procurement/components/inventory/GRNRegister.tsx` shows Sheets / SqFt / Weight columns — all zero for hardware. Should switch to Qty / Unit / Value for non-glass.
-
-### ⚠️ Goods Issue requires Cost Center
-`GoodsIssue.tsx:32` validates `!issueData.costCenterId` — Nippon may not have cost centers configured, blocking the tab.
-
-### ⚠️ 39 products without images
-Listed in `Nippon_Missing_Images.csv`. Need photos from suppliers (Soleron + HuangXing + SIWAY) + KIN LONG newer items.
-
-### ⚠️ Prices set at RMB × 50 → PKR
-The conversion rate is hardcoded in `Nippon_Replace_All_v2.sql`. If actual FX rate differs, run:
+Probably same product entered twice during the master-update migration. Find all duplicates:
 ```sql
-UPDATE products SET base_price = ROUND(base_price * <new_rate> / 50),
-       cost_price = ROUND(cost_price * <new_rate> / 50)
-WHERE company = 'Nippon';
+SELECT profile_code, COUNT(*) AS cnt, ARRAY_AGG(id) AS ids
+FROM products
+WHERE company='Nippon' AND profile_code IS NOT NULL
+GROUP BY profile_code HAVING COUNT(*) > 1
+ORDER BY cnt DESC;
 ```
 
-### Pre-existing P2/P3 (deferred to post-go-live sprint)
-- 619 pre-existing TS strictness errors (any-types, missing imports in NipponQuotationManager) — documented in `docs/testing/NIPPON_AUDIT.md`
-- Smart Import (AI) tab — gemini-proxy edge function fails CORS because it imports `_shared/auth.ts` which doesn't exist in dashboard-deployed functions. **Workaround: use Bulk Import (green tab) which has no AI dependency.**
+### P3 — Material spec incomplete
+DB says only "Aluminium alloy". KIN LONG official: "Aluminum alloy **& Zinc alloy**" (handle body + lever). Worth correcting for catalogue accuracy. Not a blocker.
 
----
-
-## 🌐 SUPABASE PROJECT INFO
-
-- **URL:** `https://wfytbcmazixddtwpbego.supabase.co`
-- **Project ID:** `wfytbcmazixddtwpbego`
-- **Bucket for images:** `product-images` (public, root-level files, no subfolder)
-- **Image URL pattern:**
-  ```
-  https://wfytbcmazixddtwpbego.supabase.co/storage/v1/object/public/product-images/{filename}
-  ```
-- **Anon key:** embedded in public JS bundle (`eyJhbGc...` extracted to `/tmp/nippon_work/bundle.js` line where appears)
-
-### `products` table schema (JSONB-hybrid)
-Has both flat columns AND a `data` jsonb. Flat columns we use:
-`id, company, category, sub_category, main_category, description, model_no, brand, image_url, finish_color, direction, material, unit, cost_price, base_price, hs_code, updated_at`
-
----
-
-## 🇵🇰 LOCAL TERM GLOSSARY (Hassan's trade terms)
-
-| Term | Means |
-|---|---|
-| Pati / Patti / Roll Pati | Gear rail / rolling rail |
-| Stay (Lahori / Latoo / Pig / Bottom) | Friction stay variants — local names |
-| Jali (Fiber Jali, SS Jali) | Mesh / netting |
-| ESPG / Gear Set | Espagnolette / multi-point lock |
-| Stoper / Local Stoper | Door / window stopper |
-| Kaplar | Cup-shaped gasket |
-| Tower Bolt / Towerbolt | Sliding door bolt |
-| Sliding Keeps / Openable Keeps | Strike plates |
-| Lift & Slide | Heavy-duty sliding door system |
-| Slicon / Slicon Pouch | Silicone (typo) |
-| Cockuspur | Cockspur (typo) |
-| Cousion | Cushion (typo) |
-| Screew | Screw (typo) |
-
----
-
-## 🔍 USEFUL CONSOLE COMMANDS (for Hassan in DevTools)
-
-### See what's bloating localStorage
-```js
-console.table(Object.entries(localStorage)
-  .map(([k,v]) => ({ key: k, kb: (v.length/1024).toFixed(1) + ' KB' }))
-  .sort((a,b) => parseFloat(b.kb) - parseFloat(a.kb))
-  .slice(0, 15));
-```
-
-### Clear local cache (force fresh Supabase fetch on reload)
-```js
-['gtk_erp_products','gtk_erp_store','gtk_erp_stock_ledger',
- 'gtk_erp_quotations','gtk_erp_invoices','gtk_erp_clients',
- 'gtk_erp_vendors','gtk_erp_grn_sheet_entries','gt_error_log']
-  .forEach(k => localStorage.removeItem(k));
-(async () => {
-  const dbs = await indexedDB.databases();
-  for (const db of dbs) indexedDB.deleteDatabase(db.name);
-  setTimeout(() => location.reload(), 1000);
-})();
-```
-
-### After deploy — flush stale chunks
-```
-Ctrl + Shift + R  (Windows)
+### Image URL fix SQL (run if P2 confirmed)
+```sql
+UPDATE products
+SET image_url = REPLACE(image_url, '/product-images/products/', '/product-images/'),
+    updated_at = now()
+WHERE company = 'Nippon'
+  AND image_url LIKE '%/product-images/products/%';
 ```
 
 ---
 
-## 🤝 CONTINUE FROM HERE
+## 📋 NIPPON ACCOUNTING — POST-PHASE 1 CHEAT SHEET
 
-If Hassan says "ye SQL run kar diya" → ask which one (the v2) and confirm verification counts (152 / 113 / 4 brands).
+Every Nippon transaction now produces balanced GL via `orchestrateNipponGRN()` / `GoodsIssue.tsx` Nippon branch / `OpeningBalance.tsx` Nippon branch / `deliveryInvoiceService.ts` trading branch:
 
-If Hassan reports a fresh error after running SQL → check console first (image 404s mean bucket upload incomplete; FK errors mean RLS or schema issue).
+| Transaction | Dr | Cr |
+|---|---|---|
+| GRN — Credit | per-brand Inventory 11511-14 | 21111 Payable Kin Long |
+| GRN — Cash | per-brand Inventory | 11121 Bank — MCB |
+| GRN — Advance settle | per-brand Inventory | 11411 Advance — Kin Long Vendors |
+| Opening Balance | per-brand Inventory | 31112 Opening Balance Equity |
+| Goods Issue (to GTK project) | 11521 Hardware-Project-Issue | per-brand Inventory at MAP |
+| Goods Issue (to GTI project) | 11522 Hardware-Project-Issue | per-brand Inventory at MAP |
+| Delivery Invoice | 11211 Receivable + 5114 COGS | 4120 Hardware Sales + 21211 GST + 11521 Project-Issue |
+| Cash Receipt | 11121 Bank | 11211 Receivable |
+| Purchase Return | 21111 Payable | 11514 Inventory |
 
-If Hassan wants to wire `NipponGoodsReceipt` GL posting → mirror `GTKStoreReceipt.tsx` pattern, post `Dr Hardware Inventory / Cr AP` using `FinanceService.postJournal()`. This is the next P1 to close.
+Brand → inventory account routing (in `grnGLService.ts:nipponInventoryAcc`):
+- `KIN LONG` brand → `11511` Kin Long Products Stock
+- `main_category='UPVC'` → `11513` UPVC Hardware Stock
+- `main_category='Aluminium Products'` → `11512` Aluminium Accessories Stock
+- everything else → `11514` General Hardware Stock (default)
 
-If Hassan wants to fix `GRNRegister` glass-centric columns → gate the Sheets / SqFt / Weight columns behind `company === 'Glassco'` like we did for StockOverview and OpeningBalance.
+---
 
-**Test discipline:** Before any commit, run `npx tsc --noEmit` and `npm run test -- --run`. 318/318 must stay green. New features add new SIT tests (mirror `nippon_sit.test.ts` pattern).
+## ⏭️ PHASE 5 — FULL CYCLE SMOKE TEST (next session, Hassan operates)
+
+Goal: Walk every step of Nippon's real transaction cycle. Confirm trial balance closes at every step.
+
+```
+1. Stock Balances → verify product count + image renders
+2. Hardware GRN (manual) — receive 10 PCS of one item @ test price from KIN LONG
+   → verify ledger row in Supabase: Dr 11511 / Cr 21111 = qty × rate
+3. Quotation → create for client X, 5 PCS @ retail
+4. Approve quote → SO auto-created
+5. Goods Issue 5 PCS to SO → verify Dr 11521 / Cr 11511 at MAP
+6. Delivery Invoice → verify Dr 11211 + 5114 / Cr 4120 + 21211 + 11521
+7. Cash Receipt → verify Dr 11121 / Cr 11211
+8. Final TB: SELECT * FROM erp_trial_balance('Nippon'); → must balance
+```
+
+### Phase 5 cleanup items (after smoke test passes)
+
+- Delete `GoodsReceiptMIGO.tsx` (legacy; wizard replaced)
+- Delete `NipponKinLongSeeder.tsx` (orphan code, no imports)
+- Unify Vendor Hub chrome (`<VendorHubShell>` wrapper around the 3 company-specific vendor pages)
+- Decide on zombie pages: `StockAging.tsx`, `VendorScorecard.tsx`, `SupplyChainDashboard.tsx` — hide for Nippon if no real data path
+- Add `PeriodService.assertOpen()` guard on GRN/OB/Issue/PurchaseReturn save handlers (deferred from Phase 1)
+- Write 6 Nippon inventory SIT tests (deferred from Phase 1 — `modules/__tests__/nippon_inventory_sit.test.ts`)
+- Tag release: `git tag -a v1.0.0-nippon-go-live -m "Nippon hardware go-live cut"`
+
+---
+
+## 🛠️ ENVIRONMENT QUICK-REF
+
+- **Supabase URL:** `https://wfytbcmazixddtwpbego.supabase.co`
+- **Bucket for images:** `product-images` (root-level files, NO subfolder)
+- **Image URL pattern:** `…/storage/v1/object/public/product-images/{filename}` — NOT `…/products/{filename}`
+- **Vercel:** auto-deploys from `main`
+- **Worktree:** `C:\Users\Hassa\Downloads\ERP\GlassTech-Group-2026\.claude\worktrees\zen-darwin-faed85` (branch `claude/zen-darwin-faed85` — same head as `main`)
+- **Chrome browser extension** is installed and was used to verify CZS133 against KIN LONG IMART. Re-use via `mcp__Claude_in_Chrome__*` tools.
+
+### Commands
+```bash
+# Run all tests (must be 318/318 green)
+npm run test -- --run
+
+# TypeScript check (only pre-existing P2/P3 strictness debt is acceptable)
+npx tsc --noEmit
+
+# Dev server
+npm run dev
+
+# Build
+npm run build
+```
+
+### Verification SQL (run in Supabase after each phase)
+```sql
+-- Anon writes still closed (after migration 068)
+SELECT COUNT(*) FROM information_schema.role_table_grants
+ WHERE grantee='anon' AND privilege_type IN ('INSERT','UPDATE','DELETE')
+   AND table_name IN ('products','store_items','stock_ledger','vendors','ledger');
+-- Expected: 0
+
+-- Nippon vendors loaded
+SELECT id, name, data->>'code' AS code, data->>'brand' AS brand
+  FROM vendors WHERE company='Nippon' ORDER BY data->>'code';
+-- Expected: 5 rows (FR, KL, NB, SIW, SOL)
+
+-- Nippon products
+SELECT COUNT(*), COUNT(image_url) FROM products WHERE company='Nippon';
+-- Expected: ~185 products, most with image_url
+
+-- Image URL prefix audit (run before applying P2 fix above)
+SELECT COUNT(*) FROM products
+WHERE company='Nippon' AND image_url LIKE '%/product-images/products/%';
+-- If > 0, run the REPLACE UPDATE SQL above to drop the 'products/' prefix.
+
+-- After Phase 5: trial balance must close
+SELECT * FROM erp_trial_balance('Nippon');
+```
+
+---
+
+## 🔁 HOW TO START NEXT SESSION
+
+1. `cd C:\Users\Hassa\Downloads\ERP\GlassTech-Group-2026` (or worktree path)
+2. `git pull origin main` (always — Hassan may have committed parallel UX work)
+3. `npm install` if `package.json` changed
+4. `npm run test -- --run` — confirm 318/318 green baseline
+5. Open this file (`RESUME_HERE.md`) — that's where you are
+6. Open `docs/testing/NIPPON_GO_LIVE_PLAN.md` — that's where you're going
+
+If Hassan says **"phase 5 start"** → walk the smoke test cycle.
+If Hassan says **"image url fix kr do"** → run the P2 UPDATE SQL above + verify a few image loads.
+If Hassan says **"duplicate products check kro"** → run the duplicate-detection SQL above + propose dedup strategy.
+If Hassan says **"latest commits check kro"** → `git fetch && git log origin/main -10` (he commits a lot in parallel).
+
+---
+
+## 📞 5 NIPPON VENDORS — quick reference
+
+| Code | Brand | Vendor ID | Full Name |
+|---|---|---|---|
+| KL | KIN LONG | VEND-NIP-KL-001 | Guangdong Kin Long Hardware Products Co., Ltd. |
+| SOL | Soleron | VEND-NIP-SL-003 | Soleron Building Materials (Hebei) Co., Ltd. |
+| SIW | SIWAY | VEND-NIP-SW-004 | SHANGHAI SIWAY BUILDING MATERIAL CO. LTD |
+| NB | Ningbo Widen | VEND-NIP-NB-002 | NINGBO WIDEN IMPORT AND EXPORT CO., LTD |
+| FR | Froise | VEND-NIP-FR-005 | Froise |
+
+Note: `nipponInventoryAcc()` in `grnGLService.ts` currently only routes KIN LONG → 11511. Soleron / SIWAY / Ningbo Widen / Froise all default to `11514` General Hardware. If Hassan wants finer per-brand routing, refine that function — but ALL paths still post balanced GL.

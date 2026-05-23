@@ -261,9 +261,25 @@ Each phase loop:
 | Phase | Started | Completed | Commit | Notes |
 |---|---|---|---|---|
 | Day 0 | 2026-05-22 | 2026-05-22 | `51c99c4` | Migration 068 applied; verified |
-| Phase 1 | 2026-05-22 | 2026-05-22 | (this commit) | 4 of 6 items done. 1.5/1.6 deferred → Phase 5 (post-smoke). Decisions: A1 + per-brand + flat-AP + with-local. |
+| Phase 1 | 2026-05-22 | 2026-05-22 | `a8c4f21` | 4 of 6 items done. 1.5/1.6 deferred → Phase 5 (post-smoke). Decisions: A1 + per-brand + flat-AP + with-local. |
 | Phase 2 | 2026-05-22 | 2026-05-22 | `3625b91` | Core 3 fixes done. UX polish (2.4/2.5) deferred → Phase 5 |
-| Phase 3 | 2026-05-22 | 2026-05-22 | (this commit) | 3.1-3.4 done. 3.5 retry-queue deferred (toast sufficient for single-user). |
-| Phase 4 | — | — | — | — |
-| Phase 5 | — | — | — | — |
-| Phase 6 | — | — | — | — |
+| Phase 3 | 2026-05-22 | 2026-05-22 | `68dcb8b` | 3.1-3.4 done. 3.5 retry-queue deferred (toast sufficient for single-user). |
+| Phase 4 | 2026-05-23 | 2026-05-23 | `34c1820` `b874c92` `1c957bc` | Hassan ran in parallel — 430-UPDATE clean master + INSERT missing + OB async fix. 5 vendors backfilled via SQL (KL/SOL/SIW/NB/FR). |
+| Phase 5 | — | — | — | NEXT — full cycle smoke test (GRN → SO → Issue → Invoice → Receipt → TB). 3 P2/P3 fixes from KIN LONG IMART verification queued. |
+| Phase 6 | — | — | — | Post go-live hypercare |
+
+---
+
+## 🔍 KIN LONG IMART verification log (2026-05-23)
+
+Logged into https://imart.kinlong.com via Chrome browser extension. Searched `CZS133` (random KIN LONG product sample from Nippon DB). Found 2 variants (CZS133 + Y2CZS133, KIN LONG IMART product id 3333). Comparison against Nippon DB row `NIP-KL-CZS133-B`:
+
+| Finding | Severity | Status |
+|---|---|---|
+| Image URL has wrong path prefix `/products/` (CLAUDE.md says bucket is flat — no subfolder) | P2 | NOT FIXED — UPDATE SQL queued in RESUME_HERE.md |
+| Duplicate rows with same `profile_code='CZS133'` (different ids, one with material NULL) | P3 | NOT FIXED — detection SQL queued in RESUME_HERE.md |
+| Material spec incomplete ("Aluminium alloy" — KIN LONG official says "Aluminum alloy & Zinc alloy") | P3 | NOT FIXED — catalogue accuracy only, not blocker |
+
+✅ Confirmed match: brand, category, sub-category, unit, base SKU exists.
+
+These 3 fixes can be batched into a single "Phase 5 prep" commit before the smoke test, or skipped if the smoke test is more urgent.
