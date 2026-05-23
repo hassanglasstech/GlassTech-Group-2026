@@ -269,21 +269,10 @@ const NipponProductMaster: React.FC = () => {
         >
           Bulk Import
         </button>
-        <button
-          onClick={() => setActiveTab('import')}
-          className={`px-6 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${activeTab === 'import' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-        >
-          Smart Import (AI)
-        </button>
       </div>
 
       {activeTab === 'direct' ? (
         <NipponDirectImporter onComplete={() => {
-          setActiveTab('list');
-          refreshData();
-        }} />
-      ) : activeTab === 'import' ? (
-        <NipponSmartImporter onComplete={() => {
           setActiveTab('list');
           refreshData();
         }} />
@@ -301,8 +290,7 @@ const NipponProductMaster: React.FC = () => {
         <div className="flex items-center space-x-3">
            <div className="p-2 bg-red-600 rounded-lg text-white shadow-inner"><Box size={20}/></div>
            <div>
-               <h3 className="font-black text-slate-800 uppercase tracking-tight">Nippon Hardware</h3>
-               <p className="text-[10px] font-bold text-slate-400 uppercase">Kin Long & Accessories Registry</p>
+               <h3 className="font-black text-slate-800 uppercase tracking-tight">Material Registry</h3>
            </div>
         </div>
 

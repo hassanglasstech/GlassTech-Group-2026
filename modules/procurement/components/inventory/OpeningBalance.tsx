@@ -962,7 +962,7 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                     />
                   </div>
 
-                  {/* Category — 2 cols */}
+                  {/* Category — 2 cols (Raw/Glass hidden for non-glass companies) */}
                   <div className="md:col-span-2">
                     <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Category</label>
                     <select
@@ -970,7 +970,7 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
                       onChange={e => updateLine(idx, { category: e.target.value })}
                       className="w-full px-3 py-2 border rounded-lg text-xs font-bold outline-none bg-white cursor-pointer"
                     >
-                      <option value="Raw">Raw</option>
+                      {isGlassCompany && <option value="Raw">Raw</option>}
                       <option value="Hardware">Hardware</option>
                       <option value="Consumable">Consumable</option>
                       <option value="Profile">Profile</option>
