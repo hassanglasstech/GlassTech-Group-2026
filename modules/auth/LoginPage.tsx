@@ -519,7 +519,7 @@ const LoginPage: React.FC = () => {
           </Card>
         )}
 
-        {/* ── STEP: OTP — Magic Link ────────────────────────────────── */}
+        {/* ── STEP: OTP — Magic Link / 6-digit code ────────────────── */}
         {step === 'otp' && (
           <Card>
             <div className="space-y-5">
@@ -529,19 +529,44 @@ const LoginPage: React.FC = () => {
                 </div>
                 <p className="text-white font-black text-base">Check Your Email</p>
                 <p className="text-slate-400 text-xs mt-2">
-                  Magic link bhej di. <span className="text-blue-400 font-semibold">{pendingEmail}</span> check karo.
+                  Code bhej di. <span className="text-blue-400 font-semibold">{pendingEmail}</span> check karo.
                 </p>
               </div>
               {error && <ErrBox msg={error} />}
-              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
-                <p className="text-xs text-slate-300">
-                  📧 Email mein "Log In" button par click karo — seedha app mein login ho jayega.
-                </p>
+
+              {/* 6-digit code entry */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase text-slate-500 tracking-widest">6-Digit Code</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  value={otp}
+                  onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  onKeyDown={e => e.key === 'Enter' && handleVerifyOtp()}
+                  placeholder="123456"
+                  className="w-full bg-[#0f1923] border border-white/10 rounded-xl py-3 px-4 text-white text-center text-2xl font-mono tracking-[0.5em] focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30 transition-all"
+                  autoFocus
+                />
               </div>
+
+              <button onClick={handleVerifyOtp} disabled={busy || otp.length !== 6}
+                className="w-full flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/30 text-white font-black uppercase tracking-widest py-3 rounded-xl transition-all shadow-lg">
+                {busy ? <Loader2 size={18} className="animate-spin" /> : (
+                  <><CheckCircle2 size={16} /><span>Verify & Sign In</span></>
+                )}
+              </button>
+
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-[11px] text-slate-400">
+                <p>📧 Email me code aaya hoga. <strong className="text-blue-300">Link click karne ki zarurat nahi</strong> — bas 6-digit code yahan daalo.</p>
+                <p className="mt-1">Agar code visible nahi to email template me <code className="text-blue-300">{'{{ .Token }}'}</code> add karen.</p>
+              </div>
+
               <p className="text-center text-[11px] text-slate-500">
-                Link 24 ghantay mein expire ho jayega
+                Code 1 ghantay mein expire ho jayega
               </p>
-              <button onClick={() => { setStep('google'); setError(''); setEmail(''); }}
+              <button onClick={() => { setStep('google'); setError(''); setOtp(''); }}
                 className="w-full text-slate-500 hover:text-slate-300 text-xs font-bold uppercase transition-colors">
                 ← Back
               </button>
