@@ -580,8 +580,12 @@ export default function UserAccessManager() {
         }
       }
 
-      // 2. Create / upsert user_profiles row
+      // 2. Create / upsert user_profiles row.
       //    Empty allowed_modules = NO access (BUG-1 fix in App.tsx route guard).
+      //    NOTE: do NOT include a 'company' column — user_profiles schema only
+      //    has `allowed_companies` (jsonb array). The active company is derived
+      //    at runtime from allowedCompanies[0] in authStore. Adding `company`
+      //    causes PostgREST to throw "Could not find the 'company' column".
       const profilePayload = {
         id: authUserId,
         email,
@@ -591,7 +595,6 @@ export default function UserAccessManager() {
         allowed_modules: inviteModules,
         time_restricted: inviteTimeRestrict,
         is_active: true,
-        company: inviteCompanies[0],
       };
 
       const { error: profErr } = await supabase
