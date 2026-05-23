@@ -13,7 +13,8 @@ import {
 } from './useWebAuthn';
 import {
   Mail, Shield, Fingerprint, Smartphone,
-  Loader2, AlertCircle, CheckCircle2, Clock, Key, LogIn
+  Loader2, AlertCircle, CheckCircle2, Clock, Key, LogIn,
+  Eye, EyeOff,
 } from 'lucide-react';
 
 // ── Fetch user profile from DB ────────────────────────────────────────
@@ -150,6 +151,8 @@ const LoginPage: React.FC = () => {
 
   // ── STEP: Email OTP — send magic link ──────────────────────────────
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSendOtp = async () => {
     if (!email.includes('@')) return setError('Valid email daalo.');
@@ -170,6 +173,30 @@ const LoginPage: React.FC = () => {
     setPendingEmail(email.toLowerCase().trim());
     setError('');
     setStep('otp');
+    setBusy(false);
+  };
+
+  // ── Email + Password sign-in (primary flow for invited users) ──────
+  // Admin creates the user with a password (UserAccessManager.handleInviteByEmail),
+  // shares it via WhatsApp / SMS, user types email + password here. No magic
+  // link, no email round-trip — just works.
+  const handlePasswordLogin = async () => {
+    if (!email.includes('@')) return setError('Valid email daalo.');
+    if (!password || password.length < 6) return setError('Password chahiye (kam se kam 6 chars).');
+    setBusy(true);
+    setError('');
+    const { data, error: signErr } = await supabase.auth.signInWithPassword({
+      email: email.toLowerCase().trim(),
+      password,
+    });
+    if (signErr || !data?.user) {
+      setError('Email ya password galat hai. Admin se confirm karen.');
+      setBusy(false);
+      return;
+    }
+    // onAuthStateChange will fire SIGNED_IN and drive the rest of the flow
+    // (fetchProfile → device choice → biometric). Just clear errors here.
+    setPendingEmail(email.toLowerCase().trim());
     setBusy(false);
   };
 
@@ -426,27 +453,67 @@ const LoginPage: React.FC = () => {
             <div className="space-y-5">
               <div>
                 <p className="text-white font-black text-base">Sign In</p>
-                <p className="text-slate-400 text-xs mt-1">Apna email daalo — OTP bheja jayega</p>
+                <p className="text-slate-400 text-xs mt-1">Email + Password se login — admin ne aap ko jo credentials diye hain</p>
               </div>
               {error && <ErrBox msg={error} />}
+
+              {/* Email */}
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold uppercase text-slate-500 tracking-widest">Email Address</label>
                 <input
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSendOtp()}
+                  onKeyDown={e => e.key === 'Enter' && (password ? handlePasswordLogin() : handleSendOtp())}
                   placeholder="email@example.com"
                   className="w-full bg-[#0f1923] border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30 transition-all"
                   autoFocus
                 />
               </div>
-              <button onClick={handleSendOtp} disabled={busy || !email.includes('@')}
+
+              {/* Password */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase text-slate-500 tracking-widest">Password</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handlePasswordLogin()}
+                    placeholder="Aap ka password"
+                    className="w-full bg-[#0f1923] border border-white/10 rounded-xl py-3 px-4 pr-12 text-white text-sm focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30 transition-all"
+                  />
+                  <button type="button" onClick={() => setShowPassword(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                    title={showPassword ? 'Hide password' : 'Show password'}>
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Primary: password sign-in */}
+              <button onClick={handlePasswordLogin} disabled={busy || !email.includes('@') || password.length < 6}
                 className="w-full flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/30 text-white font-black uppercase tracking-widest py-3 rounded-xl transition-all shadow-lg">
                 {busy ? <Loader2 size={18} className="animate-spin" /> : (
-                  <><Mail size={16} /><span>Send OTP</span></>
+                  <><LogIn size={16} /><span>Sign In</span></>
                 )}
               </button>
+
+              {/* Divider */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-white/10" />
+                <p className="text-[9px] uppercase tracking-widest text-slate-600">OR</p>
+                <div className="flex-1 h-px bg-white/10" />
+              </div>
+
+              {/* Fallback: OTP via email (kept for users without password) */}
+              <button onClick={handleSendOtp} disabled={busy || !email.includes('@')}
+                className="w-full flex items-center justify-center space-x-2 bg-transparent hover:bg-white/5 border border-white/10 text-slate-300 text-xs font-bold uppercase tracking-widest py-2.5 rounded-xl transition-all">
+                {busy ? <Loader2 size={14} className="animate-spin" /> : (
+                  <><Mail size={13} /><span>Send 6-digit OTP instead</span></>
+                )}
+              </button>
+
               <p className="text-center text-[10px] text-slate-600">Internal use only — unauthorized access prohibited</p>
             </div>
           </Card>

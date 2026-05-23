@@ -182,6 +182,11 @@ export default function UserAccessManager() {
   const [inviteCompanies, setInviteCompanies] = useState<string[]>([]);
   const [inviteModules,   setInviteModules]   = useState<string[]>([]);
   const [inviteTimeRestrict, setInviteTimeRestrict] = useState(false);
+  const [invitePassword,  setInvitePassword]  = useState('');
+
+  // ── Credentials modal — shows email+password after successful create ──
+  const [createdCreds, setCreatedCreds] = useState<{ email: string; password: string; fullName: string } | null>(null);
+  const [credsCopiedField, setCredsCopiedField] = useState<'email' | 'password' | 'both' | ''>('');
 
   // ── Guard: Super Admin only ────────────────────────────────────────
   if (me?.role !== 'super_admin') {
@@ -573,6 +578,7 @@ export default function UserAccessManager() {
     setInviteCompanies([]);
     setInviteModules([]);
     setInviteTimeRestrict(false);
+    setInvitePassword('');
   };
 
   // When role changes in invite modal, pre-fill role's default companies (modules
@@ -586,7 +592,35 @@ export default function UserAccessManager() {
   const toggleInList = (list: string[], val: string): string[] =>
     list.includes(val) ? list.filter(x => x !== val) : [...list, val];
 
-  // ── Invite User by Email (magic link, no HR employee required) ─────
+  // Strong, human-readable password — 12 chars, mixed-case + digits.
+  // Avoids ambiguous chars (0/O, 1/l/I) so WhatsApp / SMS recipients can
+  // type it without confusion.
+  const generatePassword = (): string => {
+    const upper = 'ABCDEFGHJKMNPQRSTUVWXYZ';
+    const lower = 'abcdefghijkmnpqrstuvwxyz';
+    const nums  = '23456789';
+    const all   = upper + lower + nums;
+    let pw = '';
+    // Guarantee at least 1 of each category
+    pw += upper[Math.floor(Math.random() * upper.length)];
+    pw += lower[Math.floor(Math.random() * lower.length)];
+    pw += nums [Math.floor(Math.random() * nums.length)];
+    while (pw.length < 12) {
+      pw += all[Math.floor(Math.random() * all.length)];
+    }
+    // Shuffle so the "category" chars aren't always at the start
+    return pw.split('').sort(() => Math.random() - 0.5).join('');
+  };
+
+  // ── Create user with admin-set password (no magic-link dependency) ─
+  // Replaces the previous magic-link invite flow which kept getting stuck
+  // in a HashRouter / Supabase URL redirect loop. With this flow:
+  //   1. Admin enters email + name + role + (optionally) password
+  //   2. Backend creates auth.users with that password + confirms email
+  //   3. Profile row is upserted with role/companies/modules
+  //   4. Admin gets a Credentials modal with email + password — share via
+  //      WhatsApp / SMS / whatever
+  //   5. User logs in directly via email + password (no email step needed)
   const handleInviteByEmail = async () => {
     const email = inviteEmail.trim().toLowerCase();
     if (!email || !email.includes('@')) {
@@ -606,41 +640,48 @@ export default function UserAccessManager() {
       return;
     }
 
+    // Use admin-provided password if any, else auto-generate.
+    const password = invitePassword.trim() || generatePassword();
+    if (password.length < 6) {
+      toast.error('Password must be at least 6 characters (Supabase requirement)');
+      return;
+    }
+
     setBusy(true);
     try {
       let authUserId: string;
 
-      // 1. Send magic-link invite (also creates the auth.users row)
+      // 1. Create the auth.users row with email + password (no magic link)
       try {
-        const { userId } = await AdminAuthService.inviteUser({
+        const { userId } = await AdminAuthService.createUser({
           email,
+          password,
           userMetadata: {
             full_name: inviteFullName.trim(),
-            invited_by: me?.email,
+            created_by: me?.email,
             role: inviteRole,
           },
         });
         authUserId = userId;
       } catch (err: any) {
-        // If user already exists in auth, find them and re-send doesn't apply —
-        // we'll just attach the profile to the existing UUID.
-        if (err.message?.toLowerCase().includes('already') || err.message?.toLowerCase().includes('exists')) {
+        // If user already exists in auth, reuse their UUID and reset the
+        // password — this lets admin recover when a half-failed earlier
+        // invite left an orphan auth row.
+        if (err.message?.toLowerCase().includes('already') || err.message?.toLowerCase().includes('exists') || err.message?.toLowerCase().includes('registered')) {
           const existingUsers = await AdminAuthService.listUsers();
           const existing = existingUsers.find(u => u.email?.toLowerCase() === email);
           if (!existing) throw err;
           authUserId = existing.id;
-          toast.info('User already exists in Auth — updating profile only. Tell them to login with OTP.');
+          // Reset their password to the new one we just generated
+          await AdminAuthService.resetPassword(existing.id, password);
+          toast.info('User already existed — password reset.');
         } else {
           throw err;
         }
       }
 
-      // 2. Create / upsert user_profiles row.
-      //    Empty allowed_modules = NO access (BUG-1 fix in App.tsx route guard).
-      //    NOTE: do NOT include a 'company' column — user_profiles schema only
-      //    has `allowed_companies` (jsonb array). The active company is derived
-      //    at runtime from allowedCompanies[0] in authStore. Adding `company`
-      //    causes PostgREST to throw "Could not find the 'company' column".
+      // 2. Upsert profile row.
+      //    Empty allowed_modules = NO access (BUG-1 fix). NO 'company' column.
       const profilePayload = {
         id: authUserId,
         email,
@@ -658,24 +699,30 @@ export default function UserAccessManager() {
 
       if (profErr) throw profErr;
 
-      // 3. Audit log
+      // 3. Audit log (table may not exist — silently swallow)
       try {
         await supabase.from('access_logs').insert({
           user_id: me?.id,
           email: me?.email,
-          action: `invite_user:${email}:${inviteRole}`,
+          action: `create_user:${email}:${inviteRole}`,
           user_agent: navigator.userAgent,
         });
       } catch { /* table may not exist */ }
 
-      Logger.action('UserAccess', 'INVITE', `Invite sent to ${email} as ${inviteRole}`);
-      toast.success(`Invite bhej diya: ${email} ko email check karne ko bolen.`, { duration: 6000 });
+      Logger.action('UserAccess', 'CREATE', `User created: ${email} as ${inviteRole}`);
+
+      // 4. Show credentials modal so admin can copy & share.
       setShowInviteModal(false);
       resetInviteForm();
+      setCreatedCreds({
+        email,
+        password,
+        fullName: inviteFullName.trim(),
+      });
       await loadUsers();
     } catch (err: any) {
-      Logger.error('UserAccess', 'INVITE_FAILED', err);
-      toast.error(`Invite failed: ${err?.message || err}`);
+      Logger.error('UserAccess', 'CREATE_FAILED', err);
+      toast.error(`User create failed: ${err?.message || err}`);
     }
     setBusy(false);
   };
@@ -718,7 +765,7 @@ export default function UserAccessManager() {
           </button>
           <button onClick={() => { resetInviteForm(); setShowInviteModal(true); }}
             className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-all shadow-sm">
-            <Mail size={14} /> Invite by Email
+            <UserPlus size={14} /> Create User
           </button>
           <button onClick={() => { resetGrantForm(); setShowGrantModal(true); }}
             className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-all shadow-sm">
@@ -742,11 +789,11 @@ export default function UserAccessManager() {
       {/* ── How it works (info box) ─────────────────────────────────── */}
       <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-xs text-blue-800 space-y-2">
         <div>
-          <p className="font-semibold mb-1">🟢 Invite by Email (recommended — outside HR users / fast):</p>
-          <p>1. Click <strong>Invite by Email</strong> → enter email + name + role</p>
-          <p>2. Tick allowed companies + modules → click Send Invite</p>
-          <p>3. User ko Supabase se signup email aata hai. Woh click karke set up karte hain.</p>
-          <p>4. Aage se woh bas email daal kar 6-digit OTP se login karte hain.</p>
+          <p className="font-semibold mb-1">🟢 Create User (recommended — fast, no email dependency):</p>
+          <p>1. Click <strong>Create User</strong> → enter email + name + role + modules</p>
+          <p>2. Aap password type karen ya <strong>Auto-generate</strong> click karen</p>
+          <p>3. Create dabane par credentials modal me email + password milega → Copy → WhatsApp / SMS pe user ko bhej do</p>
+          <p>4. User ERP login page pe email + password daal kar seedha login karega — koi email link click nahi karna</p>
         </div>
         <div>
           <p className="font-semibold mb-1">🔵 Grant Access (HR — for shop floor / employees on payroll):</p>
@@ -1083,10 +1130,10 @@ export default function UserAccessManager() {
             <div className="bg-emerald-700 text-white px-6 py-5 rounded-t-2xl flex justify-between items-center">
               <div>
                 <h3 className="font-black uppercase tracking-tight text-base flex items-center gap-2">
-                  <Mail size={18} /> Invite User by Email
+                  <UserPlus size={18} /> Create User
                 </h3>
                 <p className="text-[10px] text-emerald-200 mt-0.5 font-bold">
-                  Magic-link signup invite. No password sharing required.
+                  Direct email + password — share via WhatsApp/SMS.
                 </p>
               </div>
               <button onClick={() => { setShowInviteModal(false); resetInviteForm(); }}
@@ -1194,6 +1241,28 @@ export default function UserAccessManager() {
                 </div>
               </div>
 
+              {/* Password — admin sets it, or auto-generate */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                    Password
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setInvitePassword(generatePassword())}
+                    className="text-[10px] font-bold text-emerald-600 hover:underline">
+                    Auto-generate strong password
+                  </button>
+                </div>
+                <input type="text" value={invitePassword}
+                  onChange={e => setInvitePassword(e.target.value)}
+                  placeholder="Leave blank for auto-generated password (min 6 chars)"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 outline-none" />
+                <p className="text-[10px] text-slate-400">
+                  User ko WhatsApp / SMS pe yeh password share karna parega — woh isi se login karega (no email link needed).
+                </p>
+              </div>
+
               {/* Time restriction */}
               <div className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
                 <div>
@@ -1207,10 +1276,10 @@ export default function UserAccessManager() {
               </div>
 
               <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3 text-[11px] text-emerald-800">
-                <p className="font-bold">Kya hoga jab Send dabayen?</p>
-                <p>1. Supabase user ko signup magic-link email bhejega</p>
-                <p>2. User click karega → password set/skip → login</p>
-                <p>3. Aage se woh sirf email + 6-digit OTP se login kar sakta hai</p>
+                <p className="font-bold">Kya hoga jab Create dabayen?</p>
+                <p>1. ERP user ko email + password k saath create kare ga (no email link needed)</p>
+                <p>2. Aap ko credentials modal me email + password milega — copy karke WhatsApp pe bhej do</p>
+                <p>3. User ERP login page pe seedha email + password daal kar login karega</p>
               </div>
             </div>
 
@@ -1223,9 +1292,102 @@ export default function UserAccessManager() {
               <button onClick={handleInviteByEmail} disabled={busy}
                 className="flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm disabled:opacity-50">
                 {busy
-                  ? <><Loader2 size={14} className="animate-spin" /> Sending invite...</>
-                  : <><Mail size={14} /> Send Invite</>
+                  ? <><Loader2 size={14} className="animate-spin" /> Creating...</>
+                  : <><UserPlus size={14} /> Create User</>
                 }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          CREDENTIALS MODAL — shown after a successful create. Admin can
+          copy email + password and share via WhatsApp / SMS / email.
+          ═══════════════════════════════════════════════════════════════ */}
+      {createdCreds && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-start justify-center p-4 z-[600] overflow-y-auto">
+          <div className="bg-white w-full max-w-md my-10 rounded-2xl shadow-2xl border border-slate-200 flex flex-col">
+            <div className="bg-emerald-700 text-white px-6 py-5 rounded-t-2xl flex justify-between items-center">
+              <div>
+                <h3 className="font-black uppercase tracking-tight text-base flex items-center gap-2">
+                  <CheckCircle2 size={18} /> User Created
+                </h3>
+                <p className="text-[10px] text-emerald-200 mt-0.5 font-bold">
+                  {createdCreds.fullName} ka account ready hai
+                </p>
+              </div>
+              <button onClick={() => { setCreatedCreds(null); setCredsCopiedField(''); }}
+                className="hover:bg-white/10 p-2 rounded-lg transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-600">
+                Yeh credentials user ko share karen — WhatsApp / SMS / email me se jo bhi convenient ho.
+                User ERP k login page pe yeh email + password daal kar seedha login kar sakta hai.
+              </p>
+
+              {/* Email row */}
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Email</label>
+                  <button onClick={() => {
+                      navigator.clipboard.writeText(createdCreds.email);
+                      setCredsCopiedField('email');
+                      setTimeout(() => setCredsCopiedField(''), 2000);
+                    }}
+                    className="text-[10px] font-bold text-emerald-600 hover:underline flex items-center gap-1">
+                    {credsCopiedField === 'email' ? <><Check size={11}/> Copied</> : <><Copy size={11}/> Copy</>}
+                  </button>
+                </div>
+                <p className="text-sm font-mono text-slate-800 break-all">{createdCreds.email}</p>
+              </div>
+
+              {/* Password row */}
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Password</label>
+                  <button onClick={() => {
+                      navigator.clipboard.writeText(createdCreds.password);
+                      setCredsCopiedField('password');
+                      setTimeout(() => setCredsCopiedField(''), 2000);
+                    }}
+                    className="text-[10px] font-bold text-emerald-600 hover:underline flex items-center gap-1">
+                    {credsCopiedField === 'password' ? <><Check size={11}/> Copied</> : <><Copy size={11}/> Copy</>}
+                  </button>
+                </div>
+                <p className="text-base font-mono font-bold text-slate-800 select-all">{createdCreds.password}</p>
+              </div>
+
+              {/* Copy-both convenience button */}
+              <button
+                onClick={() => {
+                  const text =
+                    `GlassTech ERP login\n\nEmail: ${createdCreds.email}\nPassword: ${createdCreds.password}\n\nLogin URL: ${window.location.origin}/#/`;
+                  navigator.clipboard.writeText(text);
+                  setCredsCopiedField('both');
+                  setTimeout(() => setCredsCopiedField(''), 2500);
+                }}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-sm">
+                {credsCopiedField === 'both'
+                  ? <><Check size={14}/> Copied — paste in WhatsApp / SMS</>
+                  : <><Copy size={14}/> Copy email + password + login URL</>
+                }
+              </button>
+
+              <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-[11px] text-amber-800">
+                <p className="font-bold mb-1">⚠ Important:</p>
+                <p>• Yeh password sirf abhi visible hai. Modal band karne k bad show nahi hoga.</p>
+                <p>• User ko bolen yeh password change kar lein pehli login pe (security best practice).</p>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t bg-slate-50 rounded-b-2xl flex justify-end">
+              <button onClick={() => { setCreatedCreds(null); setCredsCopiedField(''); }}
+                className="bg-slate-900 hover:bg-slate-700 text-white px-5 py-2 rounded-xl text-sm font-semibold transition-colors">
+                Done — credentials saved
               </button>
             </div>
           </div>
