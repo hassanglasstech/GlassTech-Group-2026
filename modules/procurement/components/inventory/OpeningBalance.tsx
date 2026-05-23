@@ -17,6 +17,7 @@ import { useAppStore } from '@/modules/shared/store/appStore';
 import { toast } from 'sonner';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { SalesService } from '@/modules/sales/services/salesService';
+import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { StoreItem, MaterialLedgerEntry, Product } from '@/modules/shared/types';
 import {
@@ -162,7 +163,22 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
   const [bulkErrors, setBulkErrors] = useState<string[]>([]);
 
   // ── Data ───────────────────────────────────────────────────────────────
-  const allProducts = useMemo(() => SalesService.getProducts().filter(p => p.company === company), [company]);
+  // Products list. Sync-read from localStorage is unreliable after the
+  // Sprint-41 cache cleanup (heavy tables get cleared post-sync), so we
+  // mirror it with an async Supabase fetch and keep both in scope —
+  // whichever has data first populates the dropdown.
+  const [asyncProducts, setAsyncProducts] = React.useState<any[]>([]);
+  React.useEffect(() => {
+    let alive = true;
+    AsyncSalesService.getProducts()
+      .then(rows => { if (alive) setAsyncProducts(rows.filter((p: any) => p.company === company)); })
+      .catch(() => { /* fall back to sync below */ });
+    return () => { alive = false; };
+  }, [company]);
+  const allProducts = useMemo(() => {
+    if (asyncProducts.length) return asyncProducts;
+    return SalesService.getProducts().filter(p => p.company === company);
+  }, [company, asyncProducts]);
   const allStore = useMemo(() => InventoryService.getStore().filter(s => s.company === company), [company]);
   const allLedger = useMemo(() => InventoryService.getStockLedger().filter(l => l.company === company), [company]);
 
@@ -186,12 +202,26 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
   const getFilteredProducts = useCallback((query: string) => {
     if (!query || query.length < 2) return [];
     const q = query.toLowerCase();
-    return allProducts.filter(p =>
-      p.description.toLowerCase().includes(q) ||
-      (p.modelNo || '').toLowerCase().includes(q) ||
-      (p.thickness || '').toLowerCase().includes(q) ||
-      (p.category || '').toLowerCase().includes(q)
-    ).slice(0, 8);
+    return allProducts.filter(p => {
+      // Defensive — any field may be null/undefined, especially for
+      // imported KIN LONG rows. .toLowerCase() on null crashes the
+      // dropdown silently (the whole map returns []).
+      const fields = [
+        p.description,
+        p.modelNo,
+        (p as any).profileCode,
+        (p as any).profile_code,
+        p.brand,
+        (p as any).mainCategory,
+        (p as any).main_category,
+        (p as any).subCategory,
+        (p as any).sub_category,
+        p.thickness,
+        p.category,
+        p.id,
+      ];
+      return fields.some(v => v && String(v).toLowerCase().includes(q));
+    }).slice(0, 12);
   }, [allProducts]);
 
   // ── Line Handlers ──────────────────────────────────────────────────────
