@@ -59,8 +59,49 @@ export const safeParse = (key: string, defaultValue: string = '[]') => {
   }
 };
 
+// ── Estimate current localStorage usage in bytes ──────────────────────
+const getLocalStorageBytes = (): number => {
+  let total = 0;
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key) continue;
+    const value = localStorage.getItem(key) || '';
+    // Each char ≈ 2 bytes in UTF-16 (browser internal)
+    total += (key.length + value.length) * 2;
+  }
+  return total;
+};
+
+// Soft cap — well below the 5 MB hard limit so we never block writes
+// to small/critical tables (auth tokens, settings, audit logs).
+const LOCAL_STORAGE_SOFT_CAP = 3.5 * 1024 * 1024;
+
+// Tables that grow large and are FINE to skip locally. Supabase is the
+// source of truth; an in-memory cache (e.g. financeService._cache,
+// products store) handles per-session reads. On offline reload these
+// tables refetch from IndexedDB / Supabase, not localStorage.
+const HEAVY_TABLES = new Set([
+  'gtk_erp_products',
+  'gtk_erp_store_items',
+  'gtk_erp_ledger',
+  'gtk_erp_quotations',
+  'gtk_erp_invoices',
+  'gtk_erp_stock_ledger',
+  'gtk_erp_production_pieces',
+  'gtk_erp_activity_logs',
+]);
+
 // ── Safe write: localStorage cache + Supabase push (non-blocking) ────
 // Supabase is PRIMARY. localStorage is just a fast cache for instant UI.
+//
+// Sprint 41 mitigation: localStorage was growing unbounded and hitting
+// the 5 MB browser quota (Hassan reported "4.37 MB approaching limit").
+// New rules:
+//  • For HEAVY_TABLES — only write locally if we're well under the soft
+//    cap. Beyond that we silently skip the local write; Supabase keeps
+//    full data and in-memory caches serve the active session.
+//  • For everything else — write as before, but if approaching the cap
+//    log a warning so we know to keep pruning.
 export const safeSave = (key: string, data: any): boolean => {
   try {
     let toSave = data;
@@ -80,39 +121,59 @@ export const safeSave = (key: string, data: any): boolean => {
       });
     }
 
-    // 1. Write to localStorage cache immediately — UI stays instant.
-    //    Quota fallback: when base64 image payloads push the products
-    //    cache past the ~5 MB quota, drop image_url and retry. Images
-    //    stay safe in Supabase (source of truth); the UI just lazy-loads
-    //    them on demand when missing locally.
-    try {
-      localStorage.setItem(key, JSON.stringify(toSave));
-    } catch (quotaErr: unknown) {
-      const isQuota = (quotaErr instanceof Error)
-        && (quotaErr.name === 'QuotaExceededError' || /quota/i.test(quotaErr.message));
-      if (!isQuota || !Array.isArray(toSave)) {
-        /* non-quota failure — Supabase is primary, swallow silently */
-      } else {
-        // Strip the largest bloat field per known table and retry once.
-        const HEAVY_FIELD: Record<string, string> = {
-          gtk_erp_products: 'imageUrl',
-          gtk_erp_clients:  'attachments',
-        };
-        const heavy = HEAVY_FIELD[key];
-        if (heavy) {
-          const slim = (toSave as Array<Record<string, unknown>>).map(item => {
-            const { [heavy]: _drop, ...rest } = item || {};
-            return rest;
-          });
-          try {
-            localStorage.setItem(key, JSON.stringify(slim));
-            console.warn(`[safeSave] ${key}: quota exceeded — dropped "${heavy}" from local cache (${(toSave as unknown[]).length} rows). Images remain in Supabase.`);
-          } catch { /* still over quota — give up local cache, Supabase wins */ }
+    // ── 1. Decide whether to write to localStorage at all ──────────
+    const currentBytes = getLocalStorageBytes();
+    const isHeavy      = HEAVY_TABLES.has(key);
+    const skipLocal    = isHeavy && currentBytes > LOCAL_STORAGE_SOFT_CAP * 0.5;
+
+    if (skipLocal) {
+      // Drop the existing entry for this key so we free up space rather
+      // than letting an outdated copy linger.
+      try { localStorage.removeItem(key); } catch { /* ignore */ }
+      console.warn(`[safeSave] ${key}: localStorage skipped (heavy table, current=${(currentBytes/1024).toFixed(0)}KB). Supabase has source of truth.`);
+    } else {
+      try {
+        localStorage.setItem(key, JSON.stringify(toSave));
+      } catch (quotaErr: unknown) {
+        const isQuota = (quotaErr instanceof Error)
+          && (quotaErr.name === 'QuotaExceededError' || /quota/i.test(quotaErr.message));
+        if (!isQuota || !Array.isArray(toSave)) {
+          /* non-quota failure — Supabase is primary, swallow silently */
+        } else {
+          // Strip the largest bloat field per known table and retry once.
+          const HEAVY_FIELD: Record<string, string> = {
+            gtk_erp_products: 'imageUrl',
+            gtk_erp_clients:  'attachments',
+          };
+          const heavy = HEAVY_FIELD[key];
+          if (heavy) {
+            const slim = (toSave as Array<Record<string, unknown>>).map(item => {
+              const { [heavy]: _drop, ...rest } = item || {};
+              return rest;
+            });
+            try {
+              localStorage.setItem(key, JSON.stringify(slim));
+              console.warn(`[safeSave] ${key}: quota exceeded — dropped "${heavy}" from local cache (${(toSave as unknown[]).length} rows). Images remain in Supabase.`);
+            } catch {
+              // Still over quota — drop the local entry entirely
+              try { localStorage.removeItem(key); } catch { /* ignore */ }
+              console.warn(`[safeSave] ${key}: quota still exceeded after slim — local cache dropped. Supabase wins.`);
+            }
+          } else {
+            // Non-known-heavy table that still hit quota — drop the entry
+            try { localStorage.removeItem(key); } catch { /* ignore */ }
+            console.warn(`[safeSave] ${key}: quota exceeded — local cache dropped. Supabase wins.`);
+          }
         }
+      }
+
+      // Warn when approaching the soft cap so we have advance notice
+      if (currentBytes > LOCAL_STORAGE_SOFT_CAP) {
+        console.warn(`[safeSave] localStorage at ${(currentBytes/1024/1024).toFixed(2)} MB — approaching browser 5 MB limit. Heavy tables now skipping local cache.`);
       }
     }
 
-    // 2. Push to Supabase in background — non-blocking, won't slow UI
+    // ── 2. Push to Supabase in background — non-blocking ───────────
     if (Array.isArray(toSave)) {
       dbWrite(key, toSave).catch(err => {
         console.warn(`[safeSave] Supabase push queued for ${key}:`, err?.message);
