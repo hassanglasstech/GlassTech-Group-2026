@@ -218,8 +218,14 @@ Deno.serve(async (req) => {
           )
         }
 
+        // Also confirm the email (email_confirm: true). Without this, users
+        // who came in via the old invite_user flow have NULL email_confirmed_at
+        // and Supabase rejects signInWithPassword with a 400 even though the
+        // password is correct. Setting it on password-reset is the natural
+        // place — admin is explicitly vouching for the user.
         const { data, error } = await supabaseAdmin.auth.admin.updateUserById(user_id, {
-          password: _pw,
+          password:      _pw,
+          email_confirm: true,
         })
         if (error) throw error
         result = { reset: true }
