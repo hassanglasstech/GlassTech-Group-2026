@@ -123,7 +123,7 @@ const NIPPON_VENDORS: Vendor[] = [
 export const AppService = {
   seedInitialData: async () => {
     await FinanceService.loadAccountsAsync();
-    FinanceService.seedDefaultCOA();
+    await FinanceService.seedDefaultCOA();
     
     const version = localStorage.getItem(KEYS.DB_VERSION);
     if (version !== CURRENT_VERSION) {

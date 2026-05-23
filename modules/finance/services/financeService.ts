@@ -254,19 +254,39 @@ const pettyCashToRow = (e: PettyCashEntry) => ({
 
 // ── Supabase upsert — visible error, never silent ─────────────────────
 const _upsert = async (table: string, rows: any[], label: string): Promise<void> => {
-  try {
-    const { error } = await supabase.from(table).upsert(rows);
-    if (error) {
+  // Retry on transient Postgres errors (deadlock detected, statement timeout,
+  // serialization failure). Exponential backoff: 100ms, 300ms, 900ms.
+  const TRANSIENT_PATTERNS = ['deadlock detected', 'could not serialize', 'statement timeout'];
+  const isTransient = (msg: string) =>
+    TRANSIENT_PATTERNS.some(p => (msg || '').toLowerCase().includes(p));
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { error } = await supabase.from(table).upsert(rows, { onConflict: 'id' });
+      if (!error) return; // success
+
+      if (attempt < 2 && isTransient(error.message)) {
+        Logger.warn('Finance', `${label} upsert transient error (attempt ${attempt + 1}): ${error.message}`);
+        await new Promise(r => setTimeout(r, 100 * Math.pow(3, attempt)));
+        continue;
+      }
+
       Logger.error('Finance', `${label} upsert failed`, error);
       toast.error(`GL sync failed (${label}) — saved locally, will retry on next sync.`, {
         id: `finance-sync-${table}`, duration: 5000,
       });
+      return;
+    } catch (err: any) {
+      if (attempt < 2 && isTransient(err?.message || '')) {
+        await new Promise(r => setTimeout(r, 100 * Math.pow(3, attempt)));
+        continue;
+      }
+      Logger.error('Finance', `${label} exception`, err);
+      toast.error(`GL sync error (${label}) — offline mode active.`, {
+        id: `finance-err-${table}`, duration: 5000,
+      });
+      return;
     }
-  } catch (err: any) {
-    Logger.error('Finance', `${label} exception`, err);
-    toast.error(`GL sync error (${label}) — offline mode active.`, {
-      id: `finance-err-${table}`, duration: 5000,
-    });
   }
 };
 
@@ -647,21 +667,54 @@ export const FinanceService = {
   loadAccountsAsync: async (): Promise<void> => { await FinanceService.init(); },
 
   // ── Seed Default COA ───────────────────────────────────────────────
-  // Only writes when at least one company's COA is missing. Previously this
-  // always pushed all ~297 rows to Supabase on every boot, racing with the
-  // parallel loadAccountsAsync upsert and triggering deadlocks.
-  seedDefaultCOA: (): void => {
-    const existing = FinanceService.getAccounts();
-    const companies: Company[] = ['GTK', 'GTI', 'Glassco', 'Nippon', 'Factory'];
-    let added = false;
-    for (const co of companies) {
-      const coaTree = COMPANY_COA[co];
-      if (!coaTree) continue;
-      if (existing.some(a => a.company === co)) continue;
-      existing.push(...flattenCOA(coaTree, co));
-      added = true;
+  // DEADLOCK FIX (Sprint 40):
+  // The previous version checked the LOCAL cache for each company's COA
+  // existence. But _loadCache only fetches accounts for the user's CURRENT
+  // company. So if Hassan was on GTK, the local cache had only GTK rows —
+  // the seed loop then thought GTI/Glassco/Nippon/Factory were missing and
+  // pushed ~250 rows to Supabase on EVERY page load. Those rows already
+  // existed in Supabase, the UPSERT raced with the parallel SyncService
+  // push, and Postgres killed one of them with "deadlock detected".
+  //
+  // Real fix: ask Supabase directly which companies already have accounts,
+  // and skip those entirely. Only truly empty companies get seeded.
+  seedDefaultCOA: async (): Promise<void> => {
+    try {
+      const { data: dbRows, error } = await supabase
+        .from('accounts')
+        .select('company')
+        .limit(1000);
+
+      if (error) {
+        Logger.warn('Finance', 'seedDefaultCOA: Supabase check failed — skipping seed (safe default)', error);
+        return;
+      }
+
+      const companiesInDB = new Set((dbRows || []).map((r: any) => r.company));
+      const existing = FinanceService.getAccounts();
+      const companies: Company[] = ['GTK', 'GTI', 'Glassco', 'Nippon', 'Factory'];
+      let added = false;
+      const newAccounts: Account[] = [];
+
+      for (const co of companies) {
+        const coaTree = COMPANY_COA[co];
+        if (!coaTree) continue;
+        if (companiesInDB.has(co)) continue;             // already in Supabase — skip
+        if (existing.some(a => a.company === co)) continue; // already in local cache — skip
+        newAccounts.push(...flattenCOA(coaTree, co));
+        added = true;
+      }
+
+      if (added) {
+        // Merge new + existing, sort by level ASC so parents are upserted
+        // before children — keeps the FK lock order consistent and avoids
+        // self-deadlock on the parent_id self-reference.
+        const merged = [...existing, ...newAccounts].sort((a, b) => a.level - b.level);
+        FinanceService.saveAccounts(merged);
+      }
+    } catch (err: unknown) {
+      Logger.warn('Finance', 'seedDefaultCOA: unexpected failure — skipped', err);
     }
-    if (added) FinanceService.saveAccounts(existing);
   },
 
   // ── Ensure Account ─────────────────────────────────────────────────
