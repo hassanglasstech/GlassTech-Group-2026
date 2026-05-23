@@ -230,7 +230,19 @@ Deno.serve(async (req) => {
       case 'list_users': {
         const { data, error } = await supabaseAdmin.auth.admin.listUsers()
         if (error) throw error
-        result = { users: data.users.map(u => ({ id: u.id, email: u.email, created_at: u.created_at })) }
+        // Expose enough auth info for the UI to show real invite/login status:
+        //   email_confirmed_at  → user clicked invite link
+        //   last_sign_in_at     → user actually logged in at least once
+        result = {
+          users: data.users.map(u => ({
+            id:                  u.id,
+            email:               u.email,
+            created_at:          u.created_at,
+            email_confirmed_at:  u.email_confirmed_at  ?? null,
+            last_sign_in_at:     u.last_sign_in_at     ?? null,
+            banned_until:        (u as any).banned_until ?? null,
+          })),
+        }
         await writeAuditLog(null, { count: data.users.length })
         break
       }

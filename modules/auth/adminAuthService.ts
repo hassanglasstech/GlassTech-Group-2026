@@ -119,8 +119,15 @@ export const AdminAuthService = {
     });
   },
 
-  /** List all auth users */
-  listUsers: async (): Promise<{ id: string; email: string }[]> => {
+  /** List all auth users (with invite confirmation + sign-in timestamps) */
+  listUsers: async (): Promise<Array<{
+    id:                 string;
+    email:              string;
+    created_at?:        string;
+    email_confirmed_at: string | null;
+    last_sign_in_at:    string | null;
+    banned_until?:      string | null;
+  }>> => {
     const result = await callEdgeFunction('list_users');
     return result.users;
   },

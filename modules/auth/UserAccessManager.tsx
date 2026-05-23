@@ -71,7 +71,13 @@ const ROLE_DEFAULTS: Record<string, { companies: string[]; modules: string[] }> 
   nippon_admin:        { companies: ['Nippon'],                                 modules: ['sales','inventory','hr','accounts','requisitions'] },
 };
 
-type UserStatus = 'active' | 'pending' | 'revoked';
+// Real lifecycle states (more granular than before — see auth_status_label()).
+//   no_auth        → profile row exists but no auth.users row (orphan)
+//   invite_pending → auth user created, but invite link not clicked yet
+//   never_signed_in→ link clicked / email confirmed, but never logged in
+//   active         → has at least one successful sign-in
+//   revoked        → is_active=false in profile, or banned in auth
+type UserStatus = 'no_auth' | 'invite_pending' | 'never_signed_in' | 'active' | 'revoked';
 
 interface ManagedUser {
   id: string;
@@ -83,7 +89,9 @@ interface ManagedUser {
   employeeName: string | null;
   company: string;
   status: UserStatus;
-  lastLogin: string | null;
+  lastLogin: string | null;       // auth.last_sign_in_at (real source of truth)
+  inviteClickedAt: string | null; // auth.email_confirmed_at
+  invitedAt: string | null;       // auth.created_at
   createdAt: string;
   allowedCompanies: string[];
   allowedModules: string[];
@@ -123,15 +131,20 @@ const RoleBadge = ({ role }: { role: string }) => {
   );
 };
 
+const STATUS_META: Record<UserStatus, { label: string; classes: string; tip: string }> = {
+  active:          { label: 'Active',         classes: 'bg-emerald-100 text-emerald-700 border-emerald-200', tip: 'User has signed in at least once' },
+  never_signed_in: { label: 'Email Confirmed',classes: 'bg-blue-100 text-blue-700 border-blue-200',         tip: 'Clicked invite link but never signed in' },
+  invite_pending:  { label: 'Invite Pending', classes: 'bg-amber-100 text-amber-700 border-amber-200',      tip: 'Email sent — user has not clicked the link yet' },
+  no_auth:         { label: 'No Auth',        classes: 'bg-slate-100 text-slate-600 border-slate-200',       tip: 'Profile row exists but no Supabase auth account' },
+  revoked:         { label: 'Revoked',        classes: 'bg-red-100 text-red-700 border-red-200',             tip: 'Access has been revoked / banned' },
+};
+
 const StatusBadge = ({ status }: { status: UserStatus }) => {
-  const styles = {
-    active:  'bg-emerald-100 text-emerald-700 border-emerald-200',
-    pending: 'bg-amber-100 text-amber-700 border-amber-200',
-    revoked: 'bg-red-100 text-red-700 border-red-200',
-  };
+  const m = STATUS_META[status] || STATUS_META.no_auth;
   return (
-    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border capitalize ${styles[status]}`}>
-      {status}
+    <span title={m.tip}
+      className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${m.classes}`}>
+      {m.label}
     </span>
   );
 };
@@ -181,13 +194,32 @@ export default function UserAccessManager() {
   }
 
   // ── Load users ─────────────────────────────────────────────────────
+  // Strategy: fetch user_profiles + auth.users in parallel, then merge by id.
+  // auth.users gives us the real signals for invite-link click and last login:
+  //   • email_confirmed_at → link clicked
+  //   • last_sign_in_at    → user logged in at least once
+  //   • banned_until       → access revoked at auth layer
   const loadUsers = useCallback(async () => {
     setBusy(true);
     try {
-      const { data: profiles, error } = await supabase
+      // Profiles (RLS-readable for super_admin)
+      const profilesPromise = supabase
         .from('user_profiles')
         .select('*')
         .order('created_at', { ascending: false });
+
+      // auth.users (via edge function — service_role only)
+      const authPromise = AdminAuthService.listUsers().catch((err) => {
+        // Don't block the whole load if listUsers fails — just degrade
+        // gracefully to profile-only data.
+        Logger.warn('UserAccess', `listUsers fallback: ${err?.message || err}`);
+        return [];
+      });
+
+      const [{ data: profiles, error }, authUsers] = await Promise.all([
+        profilesPromise,
+        authPromise,
+      ]);
 
       if (error) {
         toast.error(`Failed to load users: ${error.message}`);
@@ -195,14 +227,29 @@ export default function UserAccessManager() {
         return;
       }
 
-      // Map profiles to ManagedUser with employee info
+      // Build a quick id→authUser lookup
+      const authById = new Map<string, any>();
+      for (const a of authUsers || []) authById.set(a.id, a);
+
       const employees = HRService.getEmployees();
+      const now = Date.now();
+
+      const computeStatus = (p: any, a: any): UserStatus => {
+        if (!p.is_active) return 'revoked';
+        if (!a) return 'no_auth';                                 // orphan profile
+        if (a.banned_until && new Date(a.banned_until).getTime() > now) return 'revoked';
+        if (!a.email_confirmed_at) return 'invite_pending';       // link not clicked
+        if (!a.last_sign_in_at)    return 'never_signed_in';      // confirmed, no login
+        return 'active';
+      };
+
       const mapped: ManagedUser[] = (profiles || []).map((p: any) => {
-        const emp = employees.find(e => 
-          e.id === p.employee_id || 
-          e.personal?.phone === p.email || // loose match fallback
+        const emp = employees.find(e =>
+          e.id === p.employee_id ||
+          e.personal?.phone === p.email ||
           e.work?.employeeCode === p.employee_code
         );
+        const a = authById.get(p.id);
         return {
           id: p.id,
           email: p.email,
@@ -212,8 +259,10 @@ export default function UserAccessManager() {
           employeeCode: p.employee_code || emp?.work?.employeeCode || null,
           employeeName: emp?.personal?.name || null,
           company: (p.allowed_companies || [])[0] || 'GTK',
-          status: !p.is_active ? 'revoked' : (p.last_login ? 'active' : 'pending'),
-          lastLogin: p.last_login,
+          status: computeStatus(p, a),
+          lastLogin: a?.last_sign_in_at || p.last_login || null,
+          inviteClickedAt: a?.email_confirmed_at || null,
+          invitedAt: a?.created_at || p.created_at || null,
           createdAt: p.created_at,
           allowedCompanies: p.allowed_companies || [],
           allowedModules: p.allowed_modules || [],
@@ -222,8 +271,8 @@ export default function UserAccessManager() {
         };
       });
       setUsers(mapped);
-    } catch (err) {
-      toast.error('Failed to load users');
+    } catch (err: any) {
+      toast.error(`Failed to load users: ${err?.message || err}`);
     }
     setBusy(false);
   }, []);
@@ -764,9 +813,23 @@ export default function UserAccessManager() {
 
                   {/* Right: actions */}
                   <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-                    <span className="text-[9px] text-slate-400 mr-2 hidden lg:block">
-                      {u.lastLogin ? formatDate(u.lastLogin) : 'Never logged in'}
-                    </span>
+                    <div className="text-[9px] text-slate-400 mr-2 hidden lg:flex lg:flex-col lg:items-end leading-tight">
+                      {u.status === 'invite_pending' && u.invitedAt ? (
+                        <>
+                          <span>Invited {formatDate(u.invitedAt)}</span>
+                          <span className="text-amber-600 font-bold">Awaiting link click</span>
+                        </>
+                      ) : u.status === 'never_signed_in' && u.inviteClickedAt ? (
+                        <>
+                          <span>Link clicked {formatDate(u.inviteClickedAt)}</span>
+                          <span className="text-blue-600 font-bold">Awaiting first login</span>
+                        </>
+                      ) : u.lastLogin ? (
+                        <span>Last seen {formatDate(u.lastLogin)}</span>
+                      ) : (
+                        <span>Never logged in</span>
+                      )}
+                    </div>
 
                     {u.status !== 'revoked' && (
                       <>
