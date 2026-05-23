@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 
 import { useAppStore } from '../store/appStore';
+import { useAuthStore } from '@/modules/auth/authStore';
 
 import GlasscoDataWiper from '@/modules/shared/components/GlasscoDataWiper';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
@@ -17,6 +18,11 @@ const BypassLogDashboard = React.lazy(() => import('@/modules/admin/components/B
 
 const AdminSecurity: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
+  const { user } = useAuthStore();
+  // Users tab visible to anyone in the "Hassan-tier" full-access roles.
+  // Previously was gated by company === 'Factory' (UX trap — user had to
+  // switch company to Factory just to see User Roles).
+  const canManageUsers = ['super_admin', 'owner', 'hassan'].includes(user?.role || '');
   const [activeTab, setActiveTab] = useState<'command_center' | 'admin' | 'users' | 'data_reset' | 'exceptions'>('command_center');
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [filterModule, setFilterModule] = useState<string>('All');
@@ -224,7 +230,7 @@ const AdminSecurity: React.FC = () => {
             { id: 'admin', label: 'Basis (DB Management)', icon: Database },
           { id: 'data_reset', label: 'Data Reset', icon: ShieldCheck },
             { id: 'exceptions', label: 'Exception Register', icon: ShieldAlert },
-            ...(company === 'Factory' ? [{ id: 'users', label: 'User Roles (SU01)', icon: Users }] : []),
+            ...(canManageUsers ? [{ id: 'users', label: 'User Roles (SU01)', icon: Users }] : []),
           ].map(tab => (
             <button
               key={tab.id}
