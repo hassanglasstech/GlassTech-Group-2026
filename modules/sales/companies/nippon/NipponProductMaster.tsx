@@ -6,7 +6,8 @@ import { InventoryService } from '@/modules/procurement/services/inventoryServic
 import { getBrandNick } from '@/modules/shared/utils/brandUtils';
 import {
   Plus, Search, Edit2, Trash2, Package, Filter, Download, Box,
-  FileJson, FileSpreadsheet, FileUp, UploadCloud, Printer, Layers
+  FileJson, FileSpreadsheet, FileUp, UploadCloud, Printer, Layers,
+  Image as ImageIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
 import NipponProductForm from '@/modules/nippon/components/NipponProductForm';
