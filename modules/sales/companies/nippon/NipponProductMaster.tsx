@@ -21,6 +21,7 @@ const NipponProductMaster: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [catFilter, setCatFilter] = useState('All');
+  const [imageFilter, setImageFilter] = useState<'all' | 'has' | 'missing'>('all');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'import' | 'direct'>('list');
 
@@ -339,6 +340,9 @@ const NipponProductMaster: React.FC = () => {
     return [...set].sort();
   }, [products]);
 
+  const missingImgCount = useMemo(() => products.filter(p => !p.imageUrl).length, [products]);
+  const hasImgCount     = useMemo(() => products.filter(p => !!p.imageUrl).length, [products]);
+
   const filtered = useMemo(() => {
     const q = searchTerm.toLowerCase();
     return products
@@ -349,10 +353,14 @@ const NipponProductMaster: React.FC = () => {
           String(p.profileCode || '').toLowerCase().includes(q);
         const matchesCat = catFilter === 'All' ||
           p.mainCategory === catFilter || p.category === catFilter;
-        return matchesSearch && matchesCat;
+        const matchesImg =
+          imageFilter === 'all'     ? true :
+          imageFilter === 'has'     ? !!p.imageUrl :
+          /* missing */               !p.imageUrl;
+        return matchesSearch && matchesCat && matchesImg;
       })
       .sort((a, b) => (a.description || '').localeCompare(b.description || ''));
-  }, [products, searchTerm, catFilter]);
+  }, [products, searchTerm, catFilter, imageFilter]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -422,6 +430,26 @@ const NipponProductMaster: React.FC = () => {
                   <option value="All">All Categories</option>
                   {realCategories.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
+           </div>
+
+           {/* Image filter — quick audit of products missing images */}
+           <div className="flex items-center bg-slate-100 p-1 rounded-xl shrink-0">
+             <button
+               onClick={() => setImageFilter('all')}
+               className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${imageFilter === 'all' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400'}`}
+             >All</button>
+             <button
+               onClick={() => setImageFilter('has')}
+               className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1 ${imageFilter === 'has' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-400'}`}
+             >
+               <ImageIcon size={10} /> {hasImgCount}
+             </button>
+             <button
+               onClick={() => setImageFilter('missing')}
+               className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1 ${imageFilter === 'missing' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-400'}`}
+             >
+               ❌ {missingImgCount}
+             </button>
            </div>
            
            <div className="relative w-48 shrink-0">
