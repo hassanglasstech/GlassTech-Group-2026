@@ -286,6 +286,41 @@ const NipponProductMaster: React.FC = () => {
     }
   };
 
+  // Export whatever is currently showing (respects search + cat + image filters)
+  const handleExportFiltered = () => {
+    if (filtered.length === 0) { toast.error('No products to export.'); return; }
+    const label =
+      imageFilter === 'missing' ? 'Missing_Images' :
+      imageFilter === 'has'     ? 'Has_Images'     : 'All';
+    const rows = filtered.map(p => ({
+      'ID':              p.id,
+      'Internal Code':   p.profileCode || '',
+      'Model No':        p.modelNo || '',
+      'Description':     p.description,
+      'Brand':           p.brand || '',
+      'Main Category':   p.mainCategory || '',
+      'Sub Category':    p.subCategory || '',
+      'Unit':            p.unit,
+      'Cost Price':      p.costPrice || 0,
+      'Sales Price':     p.basePrice || 0,
+      'Finish':          p.finishColor || '',
+      'Material':        p.material || '',
+      'Direction':       p.direction || '',
+      'Has Image':       p.imageUrl ? 'Yes' : 'No',
+      'Image URL':       p.imageUrl || '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [
+      {wch:28},{wch:18},{wch:18},{wch:36},{wch:14},
+      {wch:22},{wch:22},{wch:8},{wch:12},{wch:12},
+      {wch:12},{wch:16},{wch:10},{wch:10},{wch:55},
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Products');
+    XLSX.writeFile(wb, `Nippon_${label}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success(`Exported ${filtered.length} products.`);
+  };
+
   const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -458,7 +493,16 @@ const NipponProductMaster: React.FC = () => {
               <input type="text" placeholder="Search..." className="w-full pl-9 pr-4 py-2 bg-slate-100 border-none rounded-xl font-bold text-xs uppercase focus:ring-2 focus:ring-red-500 outline-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
            </div>
 
-           <button onClick={openAddModal} className="bg-slate-900 text-white px-6 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-red-600 transition-all flex items-center space-x-2">
+           <button
+             onClick={handleExportFiltered}
+             className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-sm transition-all shrink-0"
+             title={`Export current view (${filtered.length} products)`}
+           >
+             <Download size={14}/>
+             <span>Export{imageFilter !== 'all' ? ` (${filtered.length})` : ''}</span>
+           </button>
+
+           <button onClick={openAddModal} className="bg-slate-900 text-white px-6 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-red-600 transition-all flex items-center space-x-2 shrink-0">
                <Plus size={16}/> <span>Add Item</span>
            </button>
         </div>
