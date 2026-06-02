@@ -332,6 +332,19 @@ export const useNipponQuotations = () => {
         const need = new Map<string, number>();
         for (const item of lineItems) {
           if (!item.locationCode) continue;
+          const si = stockNow.find(s => s.id === item.locationCode);
+          // Leakage #10 fix: Unit-of-Measure lock. Block if the quote line's
+          // unit differs from the stock item's unit (e.g. selling in BOX while
+          // stock is tracked in PCS) — otherwise the decrement is off by the
+          // pack factor. Trivial case/whitespace differences are ignored.
+          if (si) {
+            const lineUnit  = String((item as any).glassSize || '').trim().toUpperCase();
+            const stockUnit = String((si as any).unit || '').trim().toUpperCase();
+            if (lineUnit && stockUnit && lineUnit !== stockUnit) {
+              toast.error(`Unit mismatch for ${si.name || item.locationCode}: quote is in "${item.glassSize}" but stock is in "${si.unit}". Align the unit in Material Master before approving.`, { duration: 8000 });
+              return;
+            }
+          }
           need.set(item.locationCode, (need.get(item.locationCode) || 0) + (Number(item.qty) || 0));
         }
         for (const [sid, qty] of need) {
