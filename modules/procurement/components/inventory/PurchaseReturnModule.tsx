@@ -243,10 +243,18 @@ const PurchaseReturnModule: React.FC<Props> = ({ company }) => {
         if (!line.storeItemId) return;
         const idx = allStore.findIndex(i => i.id === line.storeItemId);
         if (idx < 0) return;
+        // Leakage #8 fix: reduce totalValue at current MAP so per-unit cost
+        // stays correct (previously only qty changed -> MAP silently inflated).
+        const cur = allStore[idx];
+        const map = Number(cur.movingAveragePrice) || 0;
+        const newQty = Math.max(0, (cur.quantity || 0) - line.quantity);
+        const newTotalValue = Math.max(0, Math.round(((Number(cur.totalValue) || 0) - line.quantity * map) * 100) / 100);
         allStore[idx] = {
-          ...allStore[idx],
-          quantity:          Math.max(0, allStore[idx].quantity - line.quantity),
-          unrestrictedQty:   Math.max(0, (allStore[idx].unrestrictedQty || 0) - line.quantity),
+          ...cur,
+          quantity:          newQty,
+          unrestrictedQty:   Math.max(0, (cur.unrestrictedQty || 0) - line.quantity),
+          totalValue:        newTotalValue,
+          movingAveragePrice: newQty > 0 ? Math.round((newTotalValue / newQty) * 100) / 100 : 0,
         };
       });
       InventoryService.saveStore(allStore);

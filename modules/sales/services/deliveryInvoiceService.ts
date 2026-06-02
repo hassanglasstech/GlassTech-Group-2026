@@ -99,7 +99,9 @@ function buildNipponTradingCOGSPlan(params: {
     const qty = Number(item.qty) || 0;
     if (qty <= 0) return;
     const si = store.find((s) => s.id === item.locationCode);
-    const unitCost = si?.movingAveragePrice || 0;
+    // Leakage #3 fix: prefer the cost basis snapshotted at SO approval; fall
+    // back to live MAP for legacy orders saved before this change.
+    const unitCost = Number((item as any).costBasis) || (si?.movingAveragePrice || 0);
     totalCogs += qty * unitCost;
   });
 

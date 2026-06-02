@@ -304,6 +304,19 @@ export const useNipponQuotations = () => {
         orderNo: approve ? `SO-${mmyy}-${formData.manualSerial}` : undefined
       };
 
+      // Leakage #3 fix: snapshot cost basis (MAP at approval) onto each line so
+      // COGS at invoice time uses the cost at the moment of sale, not a later
+      // (possibly changed) MAP. Backward-compatible: invoice falls back to live
+      // MAP when costBasis is absent.
+      if (approve) {
+        const snap = InventoryService.getStore();
+        finalQuo.items = ((finalQuo.items || []).map(it => {
+          if (it.isSection || !it.locationCode) return it;
+          const si = snap.find(s => s.id === it.locationCode);
+          return si ? ({ ...it, costBasis: Number(si.movingAveragePrice) || 0 } as any) : it;
+        })) as any;
+      }
+
       // Leakage #5 fix: block double-approval (e.g. rapid double-click). If the
       // persisted row is already Approved, stock was already decremented.
       if (approve && all.some(x => x.id === finalQuo.id && x.status === 'Approved')) {
