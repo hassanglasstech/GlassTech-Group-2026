@@ -222,8 +222,13 @@ describe('Period Locking', () => {
 
   it('unregistered future month is open by default', () => {
     const periods = [{ id: 'GTK-2026-03', company: 'GTK', month: '2026-03', status: 'Closed' }];
-    // 2026-05 not in periods — and is >= current month (2026-04)
-    expect(isPeriodOpen(periods, 'GTK', '2026-05-01')).toBe(true);
+    // Compute a date in a clearly-future month relative to "now" so this test
+    // does not rot as the wall clock advances (previously hardcoded 2026-05,
+    // which broke once real time passed that month).
+    const future = new Date();
+    future.setMonth(future.getMonth() + 1);
+    const futureDate = future.toISOString().slice(0, 10);
+    expect(isPeriodOpen(periods, 'GTK', futureDate)).toBe(true);
   });
 
 });

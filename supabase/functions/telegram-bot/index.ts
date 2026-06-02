@@ -215,15 +215,20 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Telegram webhook (POST from Telegram) — verify secret token
+    // Telegram webhook (POST from Telegram) — verify secret token (FAIL CLOSED).
+    // SECURITY (go-live fix): if the secret is unset we now REJECT the request
+    // instead of silently accepting every (spoofable) webhook.
     const telegramSecret = Deno.env.get('TELEGRAM_WEBHOOK_SECRET');
-    if (telegramSecret) {
-      const incomingSecret = req.headers.get('X-Telegram-Bot-Api-Secret-Token');
-      if (incomingSecret !== telegramSecret) {
-        return new Response(JSON.stringify({ error: 'Invalid webhook secret' }), {
-          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+    if (!telegramSecret) {
+      return new Response(JSON.stringify({ error: 'Webhook secret not configured' }), {
+        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const incomingSecret = req.headers.get('X-Telegram-Bot-Api-Secret-Token');
+    if (incomingSecret !== telegramSecret) {
+      return new Response(JSON.stringify({ error: 'Invalid webhook secret' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const body = await req.json();

@@ -1,4 +1,19 @@
 -- ═══════════════════════════════════════════════════════════════════
+-- ⚠️  SAFETY GUARD (added during go-live audit) — DESTRUCTIVE SCRIPT  ⚠️
+-- This script PERMANENTLY DELETES data and must NEVER run on production
+-- as part of an automated migration. To run it intentionally, first
+-- execute (same session):
+--     SET app.confirm_destructive = 'YES_I_UNDERSTAND';
+-- ═══════════════════════════════════════════════════════════════════
+DO $guard$
+BEGIN
+  IF current_setting('app.confirm_destructive', true) IS DISTINCT FROM 'YES_I_UNDERSTAND' THEN
+    RAISE EXCEPTION 'BLOCKED destructive script. Run: SET app.confirm_destructive = ''YES_I_UNDERSTAND''; first to confirm intentional execution.';
+  END IF;
+END
+$guard$;
+
+-- ═══════════════════════════════════════════════════════════════════
 -- Fresh-start user reset — keep ONLY Hassan, lock his deletion forever
 -- ═══════════════════════════════════════════════════════════════════
 --

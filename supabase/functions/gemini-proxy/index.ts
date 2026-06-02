@@ -10,6 +10,8 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { requireAuth, corsHeaders } from '../_shared/auth.ts';
+import { checkRateLimit } from '../_shared/rateLimiter.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -17,6 +19,21 @@ Deno.serve(async (req) => {
   // ── Auth gate ─────────────────────────────────────────────────────
   const auth = await requireAuth(req);
   if (!auth.ok) return auth.response;
+
+  // ── Rate limit per authenticated user (go-live fix: prevents quota abuse)
+  if (!auth.isCron && auth.userId) {
+    const svc = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    );
+    const rl = await checkRateLimit(auth.userId, svc);
+    if (!rl.allowed) {
+      return new Response(
+        JSON.stringify({ error: 'Rate limit exceeded', reason: rl.reason, retryAfter: rl.retryAfter }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+  }
 
   const geminiKey = Deno.env.get('GEMINI_API_KEY');
   if (!geminiKey) {

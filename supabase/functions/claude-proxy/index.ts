@@ -54,9 +54,17 @@ async function requireAuth(req: Request): Promise<AuthResult> {
     return { ok: true, isCron: true, userId: null };
   }
 
-  // Anon key → unauthenticated browser call (allow with anonymous userId)
+  // SECURITY (go-live fix): reject the public anon key. It ships inside the
+  // browser bundle, so accepting it lets ANY visitor burn paid Claude tokens
+  // (cost / DoS). Require a real authenticated user JWT (verified below).
   if (anonKey && token === anonKey) {
-    return { ok: true, isCron: false, userId: 'anonymous' };
+    return {
+      ok: false,
+      response: new Response(
+        JSON.stringify({ error: 'Authentication required (anon key not accepted)' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      ),
+    };
   }
 
   const supabase = createClient(

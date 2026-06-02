@@ -142,34 +142,18 @@ const getAuthHeader = async (): Promise<string> => {
 // ── Core: Send message to Claude via proxy ───────────────────────────────
 // ── Direct Anthropic API call (fallback when proxy not deployed) ─────────
 const callClaudeDirect = async (
-  body: Record<string, any>,
-  agentId: string,
-  model: string,
+  _body: Record<string, any>,
+  _agentId: string,
+  _model: string,
 ): Promise<ClaudeResponse> => {
-  const directKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-  if (!directKey) {
-    throw new Error(
-      'Claude proxy not reachable and VITE_ANTHROPIC_API_KEY is not set. ' +
-      'Either deploy the claude-proxy Edge Function in Supabase, or add ' +
-      'VITE_ANTHROPIC_API_KEY=sk-ant-... to your .env file.'
-    );
-  }
-  const res = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type':      'application/json',
-      'x-api-key':         directKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const errBody = await res.text();
-    throw new Error(`Claude direct API error (${res.status}): ${errBody}`);
-  }
-  const data = await res.json();
-  if (data.usage) trackUsage(agentId, model, data.usage.input_tokens || 0, data.usage.output_tokens || 0);
-  return data as ClaudeResponse;
+  // SECURITY (go-live fix): direct browser -> Anthropic calls are DISABLED.
+  // A VITE_* API key is inlined into the public JS bundle and is readable by
+  // anyone, leading to key theft and unbounded billing. All Claude traffic
+  // MUST flow through the claude-proxy Edge Function (server-side key only).
+  throw new Error(
+    'Claude proxy unavailable. Direct browser API calls are disabled for security. ' +
+    'Deploy or repair the claude-proxy Edge Function in Supabase.'
+  );
 };
 
 export const callClaude = async (opts: ClaudeRequestOptions): Promise<ClaudeResponse> => {
