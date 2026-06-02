@@ -773,3 +773,38 @@ tr[tabindex]:focus-visible {
   }
 }
 
+
+
+/* ══════════════════════════════════════════════════════════
+   SALES MODULE — consistent page chrome, typography & layout
+   (added during go-live completion pass — uses global type scale)
+══════════════════════════════════════════════════════════ */
+.sales-page-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap;
+  background: var(--sap-header-bg);
+  border: 1px solid var(--sap-border);
+  border-radius: 0.75rem;
+  box-shadow: var(--sap-card-shadow);
+  padding: 0.875rem 1.125rem;
+}
+.sales-page-title {
+  font-size: var(--text-xl); font-weight: 800; color: var(--sap-text);
+  letter-spacing: -0.01em; line-height: 1.2; margin: 0;
+}
+.sales-page-sub {
+  font-size: var(--text-xs); font-weight: 600; color: var(--sap-secondary-text);
+  margin: 2px 0 0;
+}
+.sales-table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.sales-empty {
+  padding: 3rem 1rem; text-align: center; color: var(--sap-muted-text);
+  font-size: var(--text-sm); font-weight: 600;
+}
+@media (max-width: 640px) {
+  .sales-page-head { padding: 0.75rem 0.875rem; }
+  .sales-page-title { font-size: var(--text-lg); }
+}
+@media print {
+  .sap-table tr, .sales-table-wrap tr { page-break-inside: avoid; }
+}

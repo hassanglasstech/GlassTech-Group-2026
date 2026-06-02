@@ -119,9 +119,12 @@ const ClientMaster: React.FC = () => {
 
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
-      <div className="bg-white border border-slate-200 p-4 shadow-sm flex justify-between items-center no-print">
+      <div className="sales-page-head no-print">
         <div className="flex items-center space-x-6">
-          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest">Transaction: BP_MAINT</h3>
+          <div>
+            <h2 className="sales-page-title">Business Partners</h2>
+            <p className="sales-page-sub">Customers &amp; clients — {company}</p>
+          </div>
           <div className="relative w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
             <input 
@@ -138,7 +141,7 @@ const ClientMaster: React.FC = () => {
         </button>
       </div>
 
-      <div className="bg-white rounded border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded border border-slate-200 shadow-sm overflow-x-auto">
         <table className="w-full text-left sap-table">
           <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase text-slate-500 tracking-widest">
             <tr>
@@ -189,7 +192,7 @@ const ClientMaster: React.FC = () => {
               </tr>
             )) : (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-slate-300 italic font-bold uppercase">No Business Partners registered under {company}.</td>
+                <td colSpan={6} className="sales-empty">{searchTerm ? `No business partners match “${searchTerm}”.` : `No business partners under ${company} yet — click “Create BP” to add one.`}</td>
               </tr>
             )}
           </tbody>

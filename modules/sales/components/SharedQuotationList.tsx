@@ -43,9 +43,12 @@ export const SharedQuotationList: React.FC<SharedQuotationListProps> = ({
 }) => {
   return (
     <div className="space-y-4">
-      <div className="bg-white p-4 border border-slate-200 shadow-sm flex justify-between items-center no-print rounded-xl">
+      <div className="sales-page-head no-print">
         <div className="flex items-center space-x-4">
-          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest">{companyName} Sales Desk</h3>
+          <div>
+            <h2 className="sales-page-title">Quotations</h2>
+            <p className="sales-page-sub">{companyName} Sales Desk</p>
+          </div>
           <div className="relative w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
             <input 
@@ -80,7 +83,7 @@ export const SharedQuotationList: React.FC<SharedQuotationListProps> = ({
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded shadow-sm overflow-hidden no-print">
+      <div className="bg-white border border-slate-200 rounded shadow-sm overflow-x-auto no-print">
         <table className="w-full text-left sap-table">
           <thead>
             <tr>
@@ -154,8 +157,8 @@ export const SharedQuotationList: React.FC<SharedQuotationListProps> = ({
             })}
             {quotations.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center py-8 text-slate-400 font-medium">
-                  No quotations found.
+                <td colSpan={6} className="sales-empty">
+                  {searchTerm ? `No quotations match “${searchTerm}”.` : 'No quotations yet — click “Create Quote” to add your first one.'}
                 </td>
               </tr>
             )}

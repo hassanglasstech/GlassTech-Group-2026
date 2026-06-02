@@ -95,6 +95,10 @@ const styles = `
     max-width: 1600px;
     margin: 0 auto;
   }
+  @media (max-width: 640px) {
+    .sd-body { padding: 12px; }
+    .sd-tab  { padding: 12px 12px; }
+  }
 `;
 
 const SalesCRM: React.FC = () => {

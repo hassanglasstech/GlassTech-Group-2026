@@ -11,6 +11,10 @@ import { useNipponQuotations } from './useNipponQuotations';
 
 const NipponQuotationManager: React.FC = () => {
   const [nipponPrintType, setNipponPrintType] = React.useState<'KinLong' | 'Glasstech' | 'General'>('Glasstech');
+  // Inline section-heading entry (replaces blocking window.prompt — better UX,
+  // mobile-friendly, validates empty input).
+  const [sectionModal, setSectionModal] = React.useState<{ afterIdx?: number } | null>(null);
+  const [sectionTitle, setSectionTitle] = React.useState('');
   const {
     quotations,
     clients,
@@ -392,10 +396,7 @@ const NipponQuotationManager: React.FC = () => {
                         <td className="w-12 text-center">
                             {!isLocked && (
                               <div className="flex items-center justify-center gap-1">
-                                <button onClick={() => {
-                                  const title = prompt("Enter Section Heading:");
-                                  if (title !== null) handleAddSection(title, idx);
-                                }} className="text-slate-400 hover:text-emerald-600" title="Add Section Below"><Layers size={14}/></button>
+                                <button onClick={() => { setSectionTitle(''); setSectionModal({ afterIdx: idx }); }} className="text-slate-400 hover:text-emerald-600" title="Add Section Below"><Layers size={14}/></button>
                                 <button onClick={() => handleDuplicateItem(idx)} className="text-slate-400 hover:text-blue-600" title="Duplicate Row"><Copy size={14}/></button>
                                 <button onClick={() => handleRemoveItem(idx)} className="text-slate-400 hover:text-red-500" title="Remove Row"><Trash2 size={14}/></button>
                               </div>
@@ -443,10 +444,7 @@ const NipponQuotationManager: React.FC = () => {
                       </button>
                       <button 
                         disabled={isLocked} 
-                        onClick={() => {
-                          const title = prompt("Enter Section Heading:");
-                          if (title !== null) handleAddSection(title);
-                        }} 
+                        onClick={() => { setSectionTitle(''); setSectionModal({}); }} 
                         className={`text-[10px] py-2.5 px-6 flex items-center space-x-2 shadow-sm font-black uppercase tracking-widest transition-all rounded-lg border ${isLocked ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
                       >
                         <Layers size={16}/> <span>Add New Section</span>
@@ -516,6 +514,41 @@ const NipponQuotationManager: React.FC = () => {
                   className="col-span-1 py-2.5 text-xs font-bold text-white bg-amber-600 rounded-xl hover:bg-amber-700 transition-colors uppercase shadow-md"
                 >
                   Add Full Set
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {sectionModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[600]" onClick={() => setSectionModal(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-slate-900 text-white px-6 py-4 flex items-center gap-2">
+              <Layers size={16} />
+              <h4 className="font-black uppercase tracking-tight text-sm">Add Section Heading</h4>
+            </div>
+            <div className="p-6 space-y-4">
+              <input
+                autoFocus
+                type="text"
+                value={sectionTitle}
+                onChange={e => setSectionTitle(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && sectionTitle.trim()) { handleAddSection(sectionTitle.trim(), sectionModal.afterIdx); setSectionModal(null); }
+                  if (e.key === 'Escape') setSectionModal(null);
+                }}
+                placeholder="e.g. Ground Floor Windows"
+                className="sap-input w-full font-bold"
+              />
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setSectionModal(null)} className="sap-btn-ghost text-xs">Cancel</button>
+                <button
+                  disabled={!sectionTitle.trim()}
+                  onClick={() => { handleAddSection(sectionTitle.trim(), sectionModal.afterIdx); setSectionModal(null); }}
+                  className="sap-btn-primary text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Add Section
                 </button>
               </div>
             </div>
