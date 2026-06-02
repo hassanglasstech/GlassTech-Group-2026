@@ -1,0 +1,282 @@
+{
+  "version": "1.0.0",
+  "generated": "2026-04-14",
+  "source": "Extracted from GlassTech ERP codebase",
+  "modules": [
+    {
+      "module_name": "Sales",
+      "service_file": "modules/sales/services/salesService.ts",
+      "accepted_inputs": [
+        {
+          "source_module": "UI",
+          "trigger_condition": "User creates quotation",
+          "required_fields": ["client_name", "company", "items[]", "totalAmount"],
+          "validation_rules": ["items.length > 0", "totalAmount > 0", "discount <= subtotal (SAL-1)"]
+        }
+      ],
+      "produced_outputs": [
+        {
+          "destination_module": "Production",
+          "trigger_condition": "quotation.status = 'Approved'",
+          "output_fields": ["order_id", "client_name", "items[]", "company"],
+          "data_contract": "Quotation object → gtkJobOrderService.convertQuotationToJobOrder()"
+        },
+        {
+          "destination_module": "Finance",
+          "trigger_condition": "Invoice posted",
+          "output_fields": ["invoice_id", "totalAmount", "client_id", "company"],
+          "data_contract": "deliveryInvoiceService: Dr AR / Cr Revenue"
+        },
+        {
+          "destination_module": "Finance",
+          "trigger_condition": "Credit note issued",
+          "output_fields": ["credit_note_id", "amount", "invoice_id"],
+          "data_contract": "creditNoteService: Dr Sales Returns / Cr AR"
+        }
+      ],
+      "gl_touch_points": [
+        {
+          "event": "invoice_posted",
+          "debit_account": "Accounts Receivable (1310)",
+          "credit_account": "Sales Revenue (4110)",
+          "amount_source": "invoice.totalAmount",
+          "ias_reference": "IFRS 15 - Revenue Recognition"
+        },
+        {
+          "event": "credit_note_posted",
+          "debit_account": "Sales Returns (4120)",
+          "credit_account": "Accounts Receivable (1310)",
+          "amount_source": "creditNote.amount",
+          "ias_reference": "IFRS 15 - Variable consideration"
+        }
+      ],
+      "rejection_conditions": [
+        "discount_pct > 99.99 (SAL-1)",
+        "discount_amount > subtotal (SAL-1)"
+      ],
+      "supabase_tables": ["quotations", "clients", "invoices", "payment_receipts", "projects"],
+      "rls_scope": "company column + company_rls policy"
+    },
+    {
+      "module_name": "Procurement",
+      "service_file": "modules/procurement/services/inventoryService.ts",
+      "accepted_inputs": [
+        {
+          "source_module": "UI / Agent",
+          "trigger_condition": "Requisition created",
+          "required_fields": ["category", "description", "qty", "unit", "priority"],
+          "validation_rules": ["qty > 0", "priority in (Normal, Urgent)"]
+        },
+        {
+          "source_module": "Sales (Intercompany)",
+          "trigger_condition": "generate_intercompany_order RPC",
+          "required_fields": ["buyer_company", "seller_company", "items[]", "total_amount"],
+          "validation_rules": ["buyer != seller", "amount > 0"]
+        }
+      ],
+      "produced_outputs": [
+        {
+          "destination_module": "Finance",
+          "trigger_condition": "GRN posted (after QA + 3-way match)",
+          "output_fields": ["grn_id", "vendor_id", "items[]", "total_value", "freight"],
+          "data_contract": "grnGLService.postGRNMaterialGL(): Dr Inventory / Cr GR/IR"
+        },
+        {
+          "destination_module": "Finance",
+          "trigger_condition": "Advance payment on requisition",
+          "output_fields": ["req_id", "amount", "vendor"],
+          "data_contract": "financeService.createParkedPV(): Dr Advance / Cr Cash"
+        }
+      ],
+      "gl_touch_points": [
+        {
+          "event": "grn_material_receipt",
+          "debit_account": "Inventory (1410)",
+          "credit_account": "GR/IR Clearing (2120)",
+          "amount_source": "grn.total_value (MAP-adjusted)",
+          "ias_reference": "IAS 2 - Inventory valuation at landed cost"
+        },
+        {
+          "event": "freight_posting",
+          "debit_account": "Freight Payable / Expense",
+          "credit_account": "Cash (1111)",
+          "amount_source": "grn.freight_amount",
+          "ias_reference": "IAS 2 - Costs of purchase"
+        },
+        {
+          "event": "advance_payment",
+          "debit_account": "Advance to Vendor (1250)",
+          "credit_account": "Cash (1111)",
+          "amount_source": "requisition.advance_amount",
+          "ias_reference": "IAS 1 - Prepayments"
+        }
+      ],
+      "rejection_conditions": [
+        "GRN QA values mismatch inspection_lots (SCM-1 GRNQAIntegrityError)",
+        "PO + committed > monthly budget (SCM-2 BudgetExceededError)",
+        "Issue qty > available stock (SCM-3 InsufficientStockError)",
+        "PO/GRN/Invoice mismatch > PKR 1 (SCM-5 ThreeWayMatchError)"
+      ],
+      "supabase_tables": ["requisitions", "purchase_orders", "grn_sheet_entries", "store_items", "stock_ledger", "inspection_lots", "handling_units", "products", "vendors", "vendor_rates"],
+      "rls_scope": "company column + company_rls policy"
+    },
+    {
+      "module_name": "Production",
+      "service_file": "modules/production/services/productionService.ts",
+      "accepted_inputs": [
+        {
+          "source_module": "Sales",
+          "trigger_condition": "quotation.status = 'Approved'",
+          "required_fields": ["order_id", "client_name", "items[]", "company"],
+          "validation_rules": ["order exists in quotations (MFG-1)", "items.length > 0"]
+        }
+      ],
+      "produced_outputs": [
+        {
+          "destination_module": "QC (NCR)",
+          "trigger_condition": "piece.status = 'Broken' (defect found)",
+          "output_fields": ["piece_id", "ncr_id", "defect_type", "cutter_name"],
+          "data_contract": "NCR event created with action (Dispose/Reproduce/Vendor-Claim)"
+        },
+        {
+          "destination_module": "Logistics",
+          "trigger_condition": "piece.status = 'Done' (cutting complete)",
+          "output_fields": ["piece_id", "job_order_id", "dimensions"],
+          "data_contract": "Piece ready for tempering dispatch or direct delivery"
+        }
+      ],
+      "gl_touch_points": [
+        {
+          "event": "piece_breakage_dispose",
+          "debit_account": "Glass Breakage Loss (5210)",
+          "credit_account": "WIP Glass (1420)",
+          "amount_source": "piece.absorbed_cost",
+          "ias_reference": "IAS 2 - Abnormal waste"
+        },
+        {
+          "event": "vendor_claim_settled",
+          "debit_account": "Cash / Vendor Account",
+          "credit_account": "Vendor Claim Recovery (4310)",
+          "amount_source": "claim.settled_amount",
+          "ias_reference": "IAS 37 - Provisions"
+        }
+      ],
+      "rejection_conditions": [
+        "Order IDs not found in quotations table (MFG-1 GhostOrderError)",
+        "Material stock insufficient for BOM explosion"
+      ],
+      "supabase_tables": ["production_pieces", "job_orders", "cutting_sessions", "cutter_daily_logs", "ncr_events", "ncr_claims", "ncr_reproductions", "ncr_remnants", "scrap_disposals"],
+      "rls_scope": "company column + company_rls policy"
+    },
+    {
+      "module_name": "Finance",
+      "service_file": "modules/finance/services/financeService.ts",
+      "accepted_inputs": [
+        {
+          "source_module": "All modules (GL posting)",
+          "trigger_condition": "recordTransaction() called",
+          "required_fields": ["company", "docType", "date", "description", "details[]"],
+          "validation_rules": ["period must be Open", "sum(debits) == sum(credits) (FIN-3)", "details[].accountId must exist in accounts"]
+        },
+        {
+          "source_module": "UI (Manual JV)",
+          "trigger_condition": "draftJV() called",
+          "required_fields": ["company", "description", "details[]", "draftedBy"],
+          "validation_rules": ["docType == 'JV'", "period must be Open"]
+        }
+      ],
+      "produced_outputs": [
+        {
+          "destination_module": "All modules (balance queries)",
+          "trigger_condition": "GL data requested",
+          "output_fields": ["accounts[]", "ledger[]", "costCenters[]"],
+          "data_contract": "Read-only getters: getAccounts(), getLedger(), getCostCenters()"
+        }
+      ],
+      "gl_touch_points": [
+        {
+          "event": "manual_jv_approval",
+          "debit_account": "Variable (user-specified)",
+          "credit_account": "Variable (user-specified)",
+          "amount_source": "jv.details[].debit / credit",
+          "ias_reference": "IAS 1 - Fair presentation"
+        }
+      ],
+      "rejection_conditions": [
+        "Debits != Credits (FIN-3 LedgerImbalanceError)",
+        "Period closed for posting date",
+        "Manual JV: draftedBy == approvedBy (4-eyes violation)",
+        "Manual JV: approver role not in JV_APPROVER_ROLES",
+        "Advance overclaim > 1.5x original (FIN-1)"
+      ],
+      "supabase_tables": ["accounts", "ledger", "cost_centers", "petty_cash", "recurring_expenses", "fiscal_periods", "budget_lines", "gl_posting_rules", "asset_registry", "gl_config", "mapping_rules", "financial_events", "intercompany_transfers", "intercompany_settlements", "bank_recon_sessions"],
+      "rls_scope": "company column + company_rls policy"
+    },
+    {
+      "module_name": "HR",
+      "service_file": "modules/hr/services/hrService.ts",
+      "accepted_inputs": [
+        {
+          "source_module": "UI",
+          "trigger_condition": "Attendance/payroll/loan entry",
+          "required_fields": ["employeeId", "company", "date"],
+          "validation_rules": ["employee must exist", "company match"]
+        }
+      ],
+      "produced_outputs": [
+        {
+          "destination_module": "Finance (Payroll GL)",
+          "trigger_condition": "Payroll processed",
+          "output_fields": ["employee_id", "netSalary", "deductions", "company"],
+          "data_contract": "Salary GL entries via financeService.recordTransaction()"
+        },
+        {
+          "destination_module": "Procurement",
+          "trigger_condition": "Loan/advance requisition",
+          "output_fields": ["requisitionId", "amount", "type"],
+          "data_contract": "Loan links to requisition system via requisition_id"
+        }
+      ],
+      "gl_touch_points": [
+        {
+          "event": "salary_posting",
+          "debit_account": "Salary Expense (by cost center)",
+          "credit_account": "Salary Payable / Cash",
+          "amount_source": "payroll.netSalary",
+          "ias_reference": "IAS 19 - Employee benefits"
+        }
+      ],
+      "rejection_conditions": [],
+      "supabase_tables": ["employees", "attendance", "loans", "payroll", "departments", "leave_applications", "attendance_overrides", "employee_docs", "employee_tags", "employee_roles"],
+      "rls_scope": "company column + company_rls policy"
+    },
+    {
+      "module_name": "AgentOS",
+      "service_file": "modules/factory/services/claudeAgentService.ts",
+      "accepted_inputs": [
+        {
+          "source_module": "UI (Chat)",
+          "trigger_condition": "User sends message in AIChatInterface",
+          "required_fields": ["query (sanitized)", "erpContext"],
+          "validation_rules": ["sanitizeUserInput() applied", "rate limit not exceeded (100/hr, 10/min)"]
+        }
+      ],
+      "produced_outputs": [
+        {
+          "destination_module": "All (via agentTools.ts)",
+          "trigger_condition": "Claude returns tool_use blocks",
+          "output_fields": ["tool_name", "tool_params"],
+          "data_contract": "ConfirmationCard HITL → executeTool() → Supabase write"
+        }
+      ],
+      "gl_touch_points": [],
+      "rejection_conditions": [
+        "Rate limit exceeded (429)",
+        "Model not in whitelist",
+        "Prompt injection detected (sanitizer)"
+      ],
+      "supabase_tables": ["agent_api_calls", "agent_tasks", "agent_actions", "factory_events", "morning_briefings", "agent_permissions", "agent_table_access"],
+      "rls_scope": "Mixed: authenticated read/insert + service_role for Edge Functions"
+    }
+  ]
+}

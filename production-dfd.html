@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Production Module — DFD</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#0a0d14;color:#e2e8f0;font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;padding:20px 16px 40px;}
+
+/* ── TITLE ── */
+.page-title{text-align:center;margin-bottom:4px;}
+.page-title h1{font-size:17px;font-weight:800;color:#f1f5f9;letter-spacing:.5px;}
+.page-title p{font-size:11px;color:#475569;margin-top:3px;}
+
+/* ── LEGEND ── */
+.legend{display:flex;flex-wrap:wrap;gap:8px 14px;justify-content:center;margin:12px 0 20px;}
+.leg{display:flex;align-items:center;gap:5px;font-size:10px;color:#94a3b8;}
+.ld{width:10px;height:10px;border-radius:2px;}
+
+/* ── MAIN PIPELINE (horizontal phases) ── */
+.pipeline{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:0;
+  max-width:1320px;
+  margin:0 auto;
+  position:relative;
+}
+
+/* ── PHASE COLUMN ── */
+.phase{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:0;
+  position:relative;
+}
+
+/* horizontal connector line through phases */
+.pipeline::before{
+  content:'';
+  position:absolute;
+  top:44px;
+  left:calc(100%/14);
+  width:calc(100% - 100%/7);
+  height:2px;
+  background:linear-gradient(90deg,#1e40af,#065f46,#065f46,#7c2d12,#4a1d96,#831843,#1e3a5f);
+  z-index:0;
+}
+
+/* ── PHASE HEADER (numbered circle + label) ── */
+.ph-num{
+  width:44px;height:44px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:800;
+  position:relative;z-index:1;
+  border:2px solid;
+}
+.ph-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:5px;text-align:center;color:#94a3b8;}
+
+/* ── PROCESS BOX ── */
+.proc{
+  border-radius:8px;
+  padding:9px 10px;
+  width:calc(100% - 12px);
+  font-size:10.5px;
+  line-height:1.5;
+  margin-top:10px;
+  border:1.5px solid;
+}
+.proc .pname{font-weight:700;font-size:11px;margin-bottom:4px;}
+.proc .pfile{font-size:9.5px;font-family:monospace;opacity:.7;margin-bottom:3px;}
+.proc .pdetail{font-size:10px;opacity:.85;line-height:1.6;}
+
+/* ── DATA STORE BOX ── */
+.dstore{
+  border-radius:4px;
+  padding:6px 10px;
+  width:calc(100% - 12px);
+  font-size:10px;
+  margin-top:6px;
+  border-left:3px solid;
+  background:#111827;
+  position:relative;
+}
+.dstore::before{content:'▤ ';font-size:10px;opacity:.6;}
+.ds-label{font-size:10px;font-weight:600;}
+.ds-fields{font-size:9.5px;color:#64748b;font-family:monospace;margin-top:2px;line-height:1.5;}
+
+/* ── GL ENTRY ── */
+.gl-entry{
+  border-radius:6px;
+  padding:7px 10px;
+  width:calc(100% - 12px);
+  margin-top:6px;
+  font-size:9.5px;
+  background:#0f172a;
+  border:1px solid #1e3a5f;
+}
+.gl-entry .gl-title{font-size:9px;font-weight:700;color:#fbbf24;margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px;}
+.dr{color:#f87171;font-weight:700;}
+.cr{color:#4ade80;font-weight:700;}
+.gl-line{display:flex;justify-content:space-between;gap:6px;font-family:monospace;margin:1px 0;}
+.gl-line .acc{flex:1;font-size:9px;}
+.gl-line .amt{font-size:9px;color:#94a3b8;}
+.gl-status{font-size:8.5px;margin-top:3px;}
+.posted{color:#4ade80;} .parked{color:#fb923c;} .wip{color:#38bdf8;}
+
+/* ── LOGIC BOX ── */
+.logic{
+  border-radius:6px;
+  padding:7px 10px;
+  width:calc(100% - 12px);
+  margin-top:6px;
+  font-size:9.5px;
+  line-height:1.6;
+  border:1px dashed;
+}
+.logic .lname{font-size:9px;font-weight:700;margin-bottom:3px;text-transform:uppercase;letter-spacing:.4px;}
+
+/* ── CONNECTOR ARROWS (down within phase) ── */
+.arrow-d{text-align:center;font-size:13px;color:#334155;line-height:1;padding:2px 0;}
+
+/* ── FLOW ARROW BETWEEN PHASES ── */
+.flow-arr{
+  position:absolute;
+  top:44px;
+  right:-14px;
+  z-index:2;
+  font-size:14px;
+  color:#334155;
+  line-height:1;
+  background:#0a0d14;
+  padding:0 1px;
+}
+
+/* ── PHASE COLORS ── */
+/* 1 Order */
+.c1 .ph-num{background:#1e3a5f;border-color:#3b82f6;color:#93c5fd;}
+.c1 .proc{background:#0f1e35;border-color:#1d4ed8;}
+.c1 .dstore{border-color:#1d4ed8;}
+.c1 .logic{background:#0a1525;border-color:#1d4ed8;color:#93c5fd;}
+.c1 .logic .lname{color:#3b82f6;}
+/* 2 Cutting */
+.c2 .ph-num{background:#14432a;border-color:#22c55e;color:#86efac;}
+.c2 .proc{background:#0d2b1a;border-color:#15803d;}
+.c2 .dstore{border-color:#15803d;}
+.c2 .logic{background:#091a10;border-color:#15803d;color:#86efac;}
+.c2 .logic .lname{color:#22c55e;}
+/* 3 Services */
+.c3 .ph-num{background:#1a2d3d;border-color:#06b6d4;color:#67e8f9;}
+.c3 .proc{background:#0d1d28;border-color:#0e7490;}
+.c3 .dstore{border-color:#0e7490;}
+.c3 .logic{background:#081519;border-color:#0e7490;color:#67e8f9;}
+.c3 .logic .lname{color:#06b6d4;}
+/* 4 Tempering */
+.c4 .ph-num{background:#3d2a00;border-color:#f59e0b;color:#fcd34d;}
+.c4 .proc{background:#271b00;border-color:#b45309;}
+.c4 .dstore{border-color:#b45309;}
+.c4 .logic{background:#1a1200;border-color:#b45309;color:#fcd34d;}
+.c4 .logic .lname{color:#f59e0b;}
+/* 5 QC */
+.c5 .ph-num{background:#2d1f3d;border-color:#a78bfa;color:#c4b5fd;}
+.c5 .proc{background:#1c1429;border-color:#7c3aed;}
+.c5 .dstore{border-color:#7c3aed;}
+.c5 .logic{background:#130e1d;border-color:#7c3aed;color:#c4b5fd;}
+.c5 .logic .lname{color:#a78bfa;}
+/* 6 Invoice+COGS */
+.c6 .ph-num{background:#3b1800;border-color:#f97316;color:#fdba74;}
+.c6 .proc{background:#271100;border-color:#c2410c;}
+.c6 .dstore{border-color:#c2410c;}
+.c6 .logic{background:#1a0b00;border-color:#c2410c;color:#fdba74;}
+.c6 .logic .lname{color:#f97316;}
+/* 7 Month-end */
+.c7 .ph-num{background:#2d0f1e;border-color:#ec4899;color:#f9a8d4;}
+.c7 .proc{background:#1e0a13;border-color:#be185d;}
+.c7 .dstore{border-color:#be185d;}
+.c7 .logic{background:#14060e;border-color:#be185d;color:#f9a8d4;}
+.c7 .logic .lname{color:#ec4899;}
+
+/* ── EXTERNAL ENTITY ── */
+.ext{
+  border:2px solid #475569;
+  border-radius:3px;
+  padding:5px 8px;
+  font-size:9.5px;
+  font-weight:700;
+  text-align:center;
+  color:#94a3b8;
+  width:calc(100% - 12px);
+  margin-top:6px;
+  position:relative;
+  background:#111827;
+}
+.ext::after{content:'';position:absolute;top:2px;left:2px;right:2px;bottom:2px;border:1px solid #334155;border-radius:2px;}
+
+/* ── STATUS CHIPS ── */
+.chip{display:inline-block;border-radius:3px;padding:1px 5px;font-size:8.5px;font-weight:700;margin:1px 2px;}
+.chip-ok{background:#166534;color:#86efac;}
+.chip-warn{background:#7c2d12;color:#fdba74;}
+.chip-new{background:#1e3a5f;color:#93c5fd;}
+
+/* ── BOTTOM SECTION (Month-end detail) ── */
+.month-end-section{
+  max-width:1320px;margin:24px auto 0;
+  display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
+}
+.me-card{
+  border-radius:8px;padding:12px 14px;font-size:10.5px;
+}
+.me-card h3{font-size:11px;font-weight:700;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid #1e293b;}
+.me-step{display:flex;gap:6px;margin:4px 0;align-items:flex-start;font-size:10px;}
+.me-step .msn{min-width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:700;flex-shrink:0;margin-top:1px;}
+.me1{background:#1a2d3d;border:1.5px solid #06b6d4;}
+.me1 h3{color:#06b6d4;}
+.me1 .msn{background:#0e7490;color:#fff;}
+.me2{background:#1e1e3b;border:1.5px solid #a78bfa;}
+.me2 h3{color:#a78bfa;}
+.me2 .msn{background:#7c3aed;color:#fff;}
+.me3{background:#2d1f00;border:1.5px solid #f59e0b;}
+.me3 h3{color:#f59e0b;}
+.me3 .msn{background:#b45309;color:#fff;}
+
+/* ── PIECE PNL SECTION ── */
+.pnl-section{max-width:1320px;margin:16px auto 0;}
+.pnl-card{background:#0f172a;border:1.5px solid #1e3a5f;border-radius:8px;padding:14px 16px;}
+.pnl-card h3{font-size:12px;font-weight:700;color:#fbbf24;margin-bottom:10px;}
+.pnl-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;}
+.pnl-item{background:#1e293b;border-radius:6px;padding:8px 10px;font-size:10px;}
+.pnl-item .pi-label{color:#64748b;font-size:9px;text-transform:uppercase;letter-spacing:.3px;}
+.pnl-item .pi-val{color:#f1f5f9;font-size:12px;font-weight:700;margin-top:2px;}
+.pnl-item .pi-sub{color:#475569;font-size:9px;margin-top:1px;font-family:monospace;}
+.pnl-formula{font-size:10.5px;color:#94a3b8;margin-top:10px;padding:8px 10px;background:#1e293b;border-radius:6px;font-family:monospace;line-height:1.8;}
+</style>
+</head>
+<body>
+
+<div class="page-title">
+  <h1>⚙ Production Module — Data Flow Diagram</h1>
+  <p>Piece Generation → Cutting → Services → Tempering → Invoice → Site Delivery &nbsp;|&nbsp; All Logic &amp; GL Entries &nbsp;|&nbsp; IAS 2 Compliant</p>
+</div>
+
+<div class="legend">
+  <div class="leg"><div class="ld" style="background:#3b82f6"></div>Sales / Order</div>
+  <div class="leg"><div class="ld" style="background:#22c55e"></div>Cutting</div>
+  <div class="leg"><div class="ld" style="background:#06b6d4"></div>Service Floor</div>
+  <div class="leg"><div class="ld" style="background:#f59e0b"></div>Tempering</div>
+  <div class="leg"><div class="ld" style="background:#a78bfa"></div>QC / Status</div>
+  <div class="leg"><div class="ld" style="background:#f97316"></div>Invoice + COGS</div>
+  <div class="leg"><div class="ld" style="background:#ec4899"></div>Month-End</div>
+  <div class="leg"><div class="ld" style="background:#334155;border:1px dashed #64748b"></div>Data Store</div>
+</div>
+
+<!-- ════════════════════ MAIN PIPELINE ════════════════════ -->
+<div class="pipeline">
+
+  <!-- ─── PHASE 1: ORDER ─── -->
+  <div class="phase c1">
+    <div class="ph-num">1</div>
+    <div class="ph-label">Order &amp; Pieces</div>
+    <div class="flow-arr">›</div>
+
+    <div class="ext">👤 CLIENT<br><span style="font-size:8.5px;font-weight:400;color:#64748b">sends RFQ / order</span></div>
+    <div class="arrow-d">↓</div>
+
+    <div class="proc">
+      <div class="pname">📋 Quotation Form</div>
+      <div class="pfile">GlassCoQuotationForm.tsx</div>
+      <div class="pdetail">
+        Glass size + thickness + type<br>
+        Services: T/G · R/D · Polish…<br>
+        serviceCharges[] added<br>
+        aptCharges · discountPercent
+      </div>
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="logic">
+      <div class="lname">💲 Price Logic</div>
+      GlassCoQuotationPrint.tsx<br>
+      gross = subTotal<br>
+      &nbsp;&nbsp;+ aptChargesTotal<br>
+      &nbsp;&nbsp;+ serviceChargesTotal<br>
+      net = gross − discount
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="proc">
+      <div class="pname">🏗 Job Order Created</div>
+      <div class="pfile">ProductionService.saveJobOrder()</div>
+      <div class="pdetail">
+        orderId: GT-JO-GLS-MMYY-XXXX<br>
+        items[]: sqft · type · mm<br>
+        serviceCharges[]<br>
+        status: Pending
+      </div>
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="dstore">
+      <div class="ds-label">D1: Job Orders</div>
+      <div class="ds-fields">localStorage<br>+ Supabase sync</div>
+    </div>
+
+    <div class="dstore">
+      <div class="ds-label">D2: Production Pieces</div>
+      <div class="ds-fields">id · orderId · itemIndex<br>sqft · status · serviceLog[]</div>
+    </div>
+  </div>
+
+  <!-- ─── PHASE 2: CUTTING ─── -->
+  <div class="phase c2">
+    <div class="ph-num">2</div>
+    <div class="ph-label">Glass Cutting</div>
+    <div class="flow-arr">›</div>
+
+    <div class="proc">
+      <div class="pname">🪟 Inventory Pick</div>
+      <div class="pfile">InventoryService.getStore()</div>
+      <div class="pdetail">
+        Match by type + thickness (mm)<br>
+        Read MAP (Moving Avg Price)<br>
+        GRN sheet tag scanned<br>
+        <span class="chip chip-warn">⚠ qty deduction manual</span>
+      </div>
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="dstore">
+      <div class="ds-label">D3: Glass Inventory Store</div>
+      <div class="ds-fields">materialId · MAP · totalValue<br>category: Raw · unrestrictedQty</div>
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="proc">
+      <div class="pname">✂ Cutting Session</div>
+      <div class="pfile">CuttingSessionView.tsx</div>
+      <div class="pdetail">
+        Sheets scanned via QR tag<br>
+        Scrap sqft recorded<br>
+        session.close() triggered<br>
+        Pieces: status → Cut
+      </div>
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="logic">
+      <div class="lname">📐 Scrap Logic</div>
+      scrapValue = (scrapSqft ÷ totalSqft)<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;× totalMAP<br>
+      wipValue = totalValue − scrapValue<br>
+      MAP updated on store
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="gl-entry">
+      <div class="gl-title">GL — Cutting Close (postCuttingGL)</div>
+      <div class="gl-line"><span class="acc"><span class="dr">Dr</span> 11513 WIP—Glass in Process</span><span class="amt">wipValue</span></div>
+      <div class="gl-line"><span class="acc"><span class="dr">Dr</span> 5113&nbsp; Scrap &amp; Wastage</span><span class="amt">scrapVal</span></div>
+      <div class="gl-line"><span class="acc"><span class="cr">Cr</span> 11511 Glass Inventory—Raw</span><span class="amt">totalVal</span></div>
+      <div class="gl-status">Doc: WA &nbsp;<span class="parked">● Parked</span> &nbsp;Guard: GL-CUT-{sessionId}</div>
+    </div>
+  </div>
+
+  <!-- ─── PHASE 3: SERVICES ─── -->
+  <div class="phase c3">
+    <div class="ph-num">3</div>
+    <div class="ph-label">Service Floor</div>
+    <div class="flow-arr">›</div>
+
+    <div class="proc">
+      <div class="pname">🖥 Service Floor View</div>
+      <div class="pfile">ServiceFloorView.tsx</div>
+      <div class="pdetail">
+        Shows Cut pieces per order<br>
+        Services: Polish · Grind<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Notch · Holes<br>
+        Worker dropdown per service
+      </div>
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="logic">
+      <div class="lname">👷 Role Filter Logic</div>
+      SERVICE_ROLES map:<br>
+      Polishing → Polish Op · Helper<br>
+      Grinding&nbsp; → Machine Op · Helper<br>
+      Notching&nbsp; → Machine Op<br>
+      Holes&nbsp;&nbsp;&nbsp;&nbsp; → Machine Op · Helper<br>
+      <span style="color:#94a3b8">Cutter → Cutting only</span>
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="proc">
+      <div class="pname">📝 Worker Capture Modal</div>
+      <div class="pfile">onUpdateStatus(piece, serviceLog)</div>
+      <div class="pdetail">
+        Worker assigned per service<br>
+        sqft captured from piece<br>
+        costRatePerSqft applied<br>
+        completedAt timestamp
+      </div>
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="dstore">
+      <div class="ds-label">D4: piece.serviceLog[]</div>
+      <div class="ds-fields">{ serviceNick, workerId<br>workerName, sqft<br>costRatePerSqft, totalCost<br>completedAt }</div>
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="logic">
+      <div class="lname">💰 Internal Pool Rate</div>
+      getMonthlyServicePoolRate()<br>
+      = Prod Payroll ÷ Total sqft<br>
+      Workers: cutting|polish|grind<br>
+      |operator|helper keywords<br>
+      Result: PKR/sqft (mgmt KPI)
+    </div>
+
+    <div class="dstore" style="margin-top:6px">
+      <div class="ds-label">D5: Floor Staff</div>
+      <div class="ds-fields">floorStaff[] · role · grade<br>Supabase JSONB sync</div>
+    </div>
+  </div>
+
+  <!-- ─── PHASE 4: TEMPERING ─── -->
+  <div class="phase c4">
+    <div class="ph-num">4</div>
+    <div class="ph-label">Tempering</div>
+    <div class="flow-arr">›</div>
+
+    <div class="ext">🏭 TEMPERING VENDOR<br><span style="font-size:8.5px;font-weight:400;color:#64748b">PSG · AHM · Lakhani</span></div>
+    <div class="arrow-d">↓</div>
+
+    <div class="proc">
+      <div class="pname">🚚 Dispatch Planner</div>
+      <div class="pfile">DispatchPlanner.tsx</div>
+      <div class="pdetail">
+        Vendor selected → rates picked<br>
+        Pieces assigned to dispatch<br>
+        Vehicle + driver assigned<br>
+        Status: Ready to Dispatch
+      </div>
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="logic">
+      <div class="lname">📊 Rate Snapshot Logic</div>
+      <span style="color:#fcd34d">At dispatch creation:</span><br>
+      vendor.rates[] sorted by date<br>
+      → ratesByMm: {<br>
+      &nbsp;&nbsp;'6': PKR55, '8': PKR65<br>
+      &nbsp;&nbsp;'10': PKR75, '12': PKR85<br>
+      } snapshot saved in dispatch<br>
+      <span style="font-size:9px;color:#94a3b8">Rate changes after → no effect</span>
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="dstore">
+      <div class="ds-label">D6: TemperingDispatch</div>
+      <div class="ds-fields">plantName · pieceIds[]<br>chargesPerSqFt (display)<br>ratesByMm{} ← NEW<br>status · receivedPieceIds[]</div>
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="proc">
+      <div class="pname">📥 Pieces Return</div>
+      <div class="pfile">ProductionContext.tsx</div>
+      <div class="pdetail">
+        Last piece scanned → isComplete<br>
+        postTemperingInwardGL() fires<br>
+        Rate priority:<br>
+        ratesByMm → vendorLive → warn
+      </div>
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="gl-entry">
+      <div class="gl-title">GL — Tempering Inward (per-mm)</div>
+      <div class="gl-line"><span class="acc"><span class="dr">Dr</span> 11513 WIP [6mm × sqft]</span><span class="amt">exact</span></div>
+      <div class="gl-line"><span class="acc"><span class="dr">Dr</span> 11513 WIP [8mm × sqft]</span><span class="amt">exact</span></div>
+      <div class="gl-line"><span class="acc"><span class="dr">Dr</span> 11513 WIP [12mm × sqft]</span><span class="amt">exact</span></div>
+      <div class="gl-line"><span class="acc"><span class="cr">Cr</span> 22113 AP—Tempering Vendor</span><span class="amt">total</span></div>
+      <div class="gl-status">Doc: KR &nbsp;<span class="parked">● Parked</span> &nbsp;Guard: GL-TEMP-{dispId}<br>MAP updated per material (exact alloc)</div>
+    </div>
+  </div>
+
+  <!-- ─── PHASE 5: QC ─── -->
+  <div class="phase c5">
+    <div class="ph-num">5</div>
+    <div class="ph-label">QC &amp; Status</div>
+    <div class="flow-arr">›</div>
+
+    <div class="proc">
+      <div class="pname">🔍 Quality Check</div>
+      <div class="pfile">ProductionContext.tsx</div>
+      <div class="pdetail">
+        Piece inspected after return<br>
+        Defect → fault flagged<br>
+        Reject → back to cutting<br>
+        Pass → Ready for Delivery
+      </div>
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="logic">
+      <div class="lname">🔄 Status Machine</div>
+      Cut<br>
+      &nbsp;↓ service assigned<br>
+      In Processing<br>
+      &nbsp;↓ tempering dispatched<br>
+      Sent to Tempering<br>
+      &nbsp;↓ piece received back<br>
+      Tempering Done<br>
+      &nbsp;↓ QC pass<br>
+      Ready for Delivery<br>
+      &nbsp;↓ delivery challan<br>
+      Delivered
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="proc">
+      <div class="pname">📦 Delivery Challan</div>
+      <div class="pfile">WarehouseView / GatePass</div>
+      <div class="pdetail">
+        Pieces selected for delivery<br>
+        Gate pass generated<br>
+        Driver + vehicle assigned<br>
+        status → Delivered
+      </div>
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="dstore">
+      <div class="ds-label">D7: GatePass / Challan</div>
+      <div class="ds-fields">gatePassId · pieceIds[]<br>vehicleNo · driverName<br>deliveryDate · clientSite</div>
+    </div>
+  </div>
+
+  <!-- ─── PHASE 6: INVOICE + COGS ─── -->
+  <div class="phase c6">
+    <div class="ph-num">6</div>
+    <div class="ph-label">Invoice + COGS</div>
+    <div class="flow-arr">›</div>
+
+    <div class="proc">
+      <div class="pname">🧾 Generate Invoice</div>
+      <div class="pfile">generateDeliveryInvoice()</div>
+      <div class="pdetail">
+        ID: GT-INV-GLS-MMYY-XXXX<br>
+        finalAmount incl. serviceCharges<br>
+        GST line if gstPercent &gt; 0<br>
+        Credit limit check
+      </div>
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="gl-entry">
+      <div class="gl-title">GL — Revenue (DR doc)</div>
+      <div class="gl-line"><span class="acc"><span class="dr">Dr</span> 12210 AR — Client</span><span class="amt">grandTotal</span></div>
+      <div class="gl-line"><span class="acc"><span class="cr">Cr</span> 41110 Service Income</span><span class="amt">netAmt</span></div>
+      <div class="gl-line"><span class="acc"><span class="cr">Cr</span> 2214&nbsp; GST Payable</span><span class="amt">gstAmt</span></div>
+      <div class="gl-status">Doc: DR &nbsp;<span class="posted">● Posted</span> &nbsp;Guard: GL-{invoiceId}</div>
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="logic">
+      <div class="lname">🔗 Auto-COGS Trigger</div>
+      On invoice generate:<br>
+      pieces = getProductionPieces()<br>
+      .filter(p.orderId===order.id)<br>
+      if pieceIds.length &gt; 0:<br>
+      &nbsp;&nbsp;postDeliveryCOGS() fires
+    </div>
+    <div class="arrow-d">↓</div>
+
+    <div class="gl-entry">
+      <div class="gl-title">GL — COGS (SA doc) — 3 lines</div>
+      <div class="gl-line"><span class="acc"><span class="dr">Dr</span> 5111&nbsp; COGS Glass (MAP×sqft)</span><span class="amt">rawCost</span></div>
+      <div class="gl-line"><span class="acc"><span class="cr">Cr</span> 11511 Glass Inventory—Raw</span><span class="amt">rawCost</span></div>
+      <div class="gl-line" style="margin-top:3px"><span class="acc"><span class="dr">Dr</span> 51311 COGS Cutting Labour</span><span class="amt">cutCost</span></div>
+      <div class="gl-line"><span class="acc"><span class="cr">Cr</span> 11514 WIP—Direct Labour</span><span class="amt">cutCost</span></div>
+      <div class="gl-line" style="margin-top:3px"><span class="acc"><span class="dr">Dr</span> 51312 COGS Processing Labour</span><span class="amt">procCost</span></div>
+      <div class="gl-line"><span class="acc"><span class="cr">Cr</span> 11514 WIP—Direct Labour</span><span class="amt">procCost</span></div>
+      <div class="gl-status">Doc: SA &nbsp;<span class="parked">● Parked</span> &nbsp;Guard: GL-COGS-{invId}<br><span class="chip chip-new">Option B</span> Labour via WIP acc — not double-counted</div>
+    </div>
+  </div>
+
+  <!-- ─── PHASE 7: MONTH END ─── -->
+  <div class="phase c7">
+    <div class="ph-num">7</div>
+    <div class="ph-label">Month-End</div>
+
+    <div class="proc">
+      <div class="pname">💸 Payroll GL</div>
+      <div class="pfile">hrService.savePayroll()</div>
+      <div class="pdetail">
+        On isSalaryPaid=true<br>
+        Classify by desig keyword<br>
+        Cutting/Processing → WIP<br>
+        Admin → Period cost P&amp;L
+      </div>
+    </div>
+
+    <div class="gl-entry">
+      <div class="gl-title">GL — Payroll (JV)</div>
+      <div class="gl-line"><span class="acc"><span class="dr">Dr</span> 11514 WIP—Direct Labour</span><span class="amt">prodWages</span></div>
+      <div class="gl-line"><span class="acc"><span class="dr">Dr</span> 52111 Admin Salaries</span><span class="amt">adminPay</span></div>
+      <div class="gl-line"><span class="acc"><span class="cr">Cr</span> 21311 Salary Payable</span><span class="amt">total</span></div>
+      <div class="gl-status"><span class="posted">● Posted</span> &nbsp;Guard: GL-PAY-{co}-{month}</div>
+    </div>
+
+    <div class="proc" style="margin-top:8px">
+      <div class="pname">🏭 Factory Allocation</div>
+      <div class="pfile">FactoryOverheadAllocationService</div>
+      <div class="pdetail">
+        GTK 50% · Glassco 30%<br>
+        Nippon 20% of Factory costs<br>
+        4 company books posted<br>
+        Reversible
+      </div>
+    </div>
+
+    <div class="gl-entry">
+      <div class="gl-title">GL — Factory→Glassco (JV)</div>
+      <div class="gl-line"><span class="acc"><span class="dr">Dr</span> 51415 Factory Elec OH</span><span class="amt">30%</span></div>
+      <div class="gl-line"><span class="acc"><span class="dr">Dr</span> 51416 Factory Depr OH</span><span class="amt">30%</span></div>
+      <div class="gl-line"><span class="acc"><span class="dr">Dr</span> 51417 Factory Maint OH</span><span class="amt">30%</span></div>
+      <div class="gl-line"><span class="acc"><span class="dr">Dr</span> 51418 Factory Rent OH</span><span class="amt">30%</span></div>
+      <div class="gl-line"><span class="acc"><span class="cr">Cr</span> 21141 Due to Factory</span><span class="amt">total</span></div>
+      <div class="gl-status"><span class="posted">● Posted</span> &nbsp;Guard: GL-FACTORY-OHA-{m}-Glassco</div>
+    </div>
+
+    <div class="gl-entry" style="margin-top:6px">
+      <div class="gl-title">GL — OH Absorption (JV)</div>
+      <div class="gl-line"><span class="acc"><span class="dr">Dr</span> 5141x OH accounts (prorated)</span><span class="amt">absorbed</span></div>
+      <div class="gl-line"><span class="acc"><span class="cr">Cr</span> 5142&nbsp; OH Absorbed (clearing)</span><span class="amt">absorbed</span></div>
+      <div class="gl-status">Rate = OH ÷ sqft produced<br>Variance = Actual − Absorbed<br><span class="posted">● Posted</span> &nbsp;Guard: GL-OH-ABS-{co}-{m}</div>
+    </div>
+  </div>
+
+</div><!-- end pipeline -->
+
+<!-- ════════ MONTH-END DETAIL CARDS ════════ -->
+<div class="month-end-section">
+
+  <div class="me-card me1">
+    <h3>⚙ Labour Flow — Option B (IAS 2)</h3>
+    <div class="me-step"><div class="msn" style="background:#0e7490">1</div><div><strong>Payroll run:</strong><br>Dr 11514 WIP-Labour / Cr 21311 Salary Payable<br>→ Labour on Balance Sheet (WIP), NOT P&amp;L yet</div></div>
+    <div class="me-step"><div class="msn" style="background:#0e7490">2</div><div><strong>Delivery COGS:</strong><br>Dr 51311/51312 COGS / Cr 11514 WIP-Labour<br>→ Labour moves to P&amp;L only when job delivered</div></div>
+    <div class="me-step"><div class="msn" style="background:#0e7490">3</div><div><strong>Month-end 11514 balance:</strong><br>= Labour cost of pieces still in WIP<br>→ Stays on Balance Sheet (correct, IAS 2)</div></div>
+    <div class="me-step"><div class="msn" style="background:#374151">!</div><div style="color:#f59e0b"><strong>No double count:</strong> 51311/51312 hit once only (at delivery), not at payroll</div></div>
+  </div>
+
+  <div class="me-card me2">
+    <h3>📊 Tempering Rate Logic</h3>
+    <div class="me-step"><div class="msn">1</div><div><strong>Vendor price list:</strong><br>Vendor.rates[] = [{thickness:'6mm', rate:55}, {thickness:'8mm', rate:65}, …]<br>SalesService.getVendors()</div></div>
+    <div class="me-step"><div class="msn">2</div><div><strong>Dispatch creation snapshot:</strong><br>ratesByMm = {'6':55, '8':65, '10':75, '12':85}<br>Saved in TemperingDispatch object</div></div>
+    <div class="me-step"><div class="msn">3</div><div><strong>GL rate priority:</strong><br>① dispatch.ratesByMm (snapshot)<br>② getVendorRatesByMm() live<br>③ 0 → warn + skip piece</div></div>
+    <div class="me-step"><div class="msn">4</div><div><strong>Per-piece cost:</strong><br>6mm piece: sqft × PKR 55<br>8mm piece: sqft × PKR 65<br>MAP updated per-material (exact)</div></div>
+  </div>
+
+  <div class="me-card me3">
+    <h3>🧮 Overhead Absorption (IAS 2.13)</h3>
+    <div class="me-step"><div class="msn">1</div><div><strong>Own OH (Glassco):</strong><br>51121 Cutting Consumables<br>51122 Processing Consumables<br>51123 Packaging</div></div>
+    <div class="me-step"><div class="msn">2</div><div><strong>Factory shared OH (30%):</strong><br>51415 Electricity · 51416 Depreciation<br>51417 Maintenance+Fuel · 51418 Rent</div></div>
+    <div class="me-step"><div class="msn">3</div><div><strong>Rate calculation:</strong><br>OH Rate = (own+shared) ÷ sqft produced<br>Absorbed = delivered sqft × rate<br>Variance = Actual − Absorbed</div></div>
+    <div class="me-step"><div class="msn">4</div><div><strong>Admin OH (period cost — P&amp;L):</strong><br>52911 Admin OH from Factory<br>NOT in COGS (IAS 2.16)</div></div>
+  </div>
+</div>
+
+<!-- ════════ PIECE P&L SECTION ════════ -->
+<div class="pnl-section">
+  <div class="pnl-card">
+    <h3>📊 Piece-Level P&amp;L — getPiecePnL(pieceId, company)</h3>
+    <div class="pnl-grid">
+      <div class="pnl-item">
+        <div class="pi-label">Direct Material</div>
+        <div class="pi-val" style="color:#60a5fa">DM</div>
+        <div class="pi-sub">sqft × MAP<br>from 11511 Inventory<br>per piece exact</div>
+      </div>
+      <div class="pnl-item">
+        <div class="pi-label">External Service</div>
+        <div class="pi-val" style="color:#fbbf24">ES</div>
+        <div class="pi-sub">tempering cost<br>from TemperingDispatch<br>per-piece from ratesByMm</div>
+      </div>
+      <div class="pnl-item">
+        <div class="pi-label">Direct Labour</div>
+        <div class="pi-val" style="color:#34d399">DL</div>
+        <div class="pi-sub">from serviceLog[]<br>each service × sqft × rate<br>Cutting + Processing</div>
+      </div>
+      <div class="pnl-item">
+        <div class="pi-label">Production Overhead</div>
+        <div class="pi-val" style="color:#f87171">OH</div>
+        <div class="pi-sub">sqft × monthlyOHrate<br>own(51121-23)<br>+ factory(51415-18)</div>
+      </div>
+      <div class="pnl-item">
+        <div class="pi-label">Gross Profit</div>
+        <div class="pi-val" style="color:#a78bfa">GP%</div>
+        <div class="pi-sub">Revenue − COGS<br>GP% = GP ÷ Rev × 100<br>per piece shown</div>
+      </div>
+    </div>
+    <div class="pnl-formula">
+      COGS = DM (MAP×sqft) &nbsp;+&nbsp; ES (tempering per-mm) &nbsp;+&nbsp; DL (serviceLog rates) &nbsp;+&nbsp; OH (sqft × monthly rate)
+      &nbsp;&nbsp;|&nbsp;&nbsp; GP = Revenue − COGS &nbsp;&nbsp;|&nbsp;&nbsp; GP% = GP ÷ Revenue × 100
+    </div>
+  </div>
+</div>
+
+<div style="text-align:center;font-size:10px;color:#1e293b;margin-top:24px;padding-bottom:4px">
+  GlassTech ERP · Production DFD · Generated from live source code
+</div>
+
+</body>
+</html>

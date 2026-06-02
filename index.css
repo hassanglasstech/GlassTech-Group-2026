@@ -1,0 +1,776 @@
+@import "./modules/glassco/core/GlasscoPrintTemplate.css";
+
+/* ══════════════════════════════════════════════════════════
+   GLASSTECH ERP — Global Styles
+   Mobile-first responsive design
+══════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Type Scale — minimum 12px everywhere ──────────────────── */
+  --text-2xs: 0.6875rem;  /* 11px — absolute minimum, labels only */
+  --text-xs:  0.75rem;    /* 12px — small labels */
+  --text-sm:  0.875rem;   /* 14px — body, table cells */
+  --text-base: 1rem;      /* 16px — default */
+  --text-lg:  1.125rem;   /* 18px — card titles */
+  --text-xl:  1.25rem;    /* 20px — page headers */
+  --text-2xl: 1.5rem;     /* 24px — module titles */
+  /* ── Brand ────────────────────────────────────────────────── */
+  --sap-blue:           #2563eb;   /* blue-600 */
+  --sap-blue-hover:     #1d4ed8;   /* blue-700 */
+  
+  /* ── Shell & Navigation ───────────────────────────────────── */
+  --sap-shell-color:    #1e293b;   /* slate-800 — premium dark */
+  --sap-shell-hover:    #334155;   /* slate-700 */
+  --sap-shell-accent:   #3b82f6;   /* blue-500 accent */
+  
+  /* ── Surfaces ─────────────────────────────────────────────── */
+  --sap-background:     #f8fafc;   /* slate-50 — warm, easy on eyes */
+  --sap-tile-bg:        #ffffff;
+  --sap-header-bg:      #ffffff;
+  --sap-card-shadow:    0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.03);
+  
+  /* ── Text ─────────────────────────────────────────────────── */
+  --sap-text:           #0f172a;   /* slate-900 — rich, not pure black */
+  --sap-secondary-text: #64748b;   /* slate-500 */
+  --sap-muted-text:     #94a3b8;   /* slate-400 */
+  
+  /* ── Borders ──────────────────────────────────────────────── */
+  --sap-border:         #e2e8f0;   /* slate-200 */
+  --sap-border-hover:   #cbd5e1;   /* slate-300 */
+  
+  /* ── Semantic ─────────────────────────────────────────────── */
+  --sap-success:        #059669;   /* emerald-600 */
+  --sap-success-light:  #ecfdf5;   /* emerald-50 */
+  --sap-error:          #e11d48;   /* rose-600 */
+  --sap-error-light:    #fff1f2;   /* rose-50 */
+  --sap-warning:        #d97706;   /* amber-600 */
+  --sap-warning-light:  #fffbeb;   /* amber-50 */
+  --sap-info:           #2563eb;   /* blue-600 */
+  --sap-info-light:     #eff6ff;   /* blue-50 */
+
+  /* Bottom nav height — used everywhere for safe spacing */
+  --bottom-nav-height:  64px;
+}
+
+/* ── Base ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--sap-background);
+  color: var(--sap-text);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11'; /* Plus Jakarta Sans optical features */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Remove number spinners ──────────────────────────────────────── */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }
+
+/* ── Scrollbars ──────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #bccad6; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #9db2c3; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── SAP Shell ───────────────────────────────────────────────────── */
+.sap-shell {
+  background-color: var(--sap-shell-color);
+  height: 3.5rem;
+  color: white;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+/* ── SAP Tile ────────────────────────────────────────────────────── */
+.sap-tile {
+  background: var(--sap-tile-bg);
+  border: 1px solid var(--sap-border);
+  box-shadow: var(--sap-card-shadow);
+  border-radius: 1rem;
+  transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  /* Mobile: smaller tiles */
+  width: 9rem;
+  height: 9rem;
+  position: relative;
+}
+@media (min-width: 640px) {
+  .sap-tile { width: 11rem; height: 11rem; padding: 1.25rem; }
+}
+
+.sap-tile:hover {
+  box-shadow: 0 8px 20px -4px rgba(0,0,0,0.08), 0 4px 8px -2px rgba(0,0,0,0.04);
+  border-color: var(--sap-blue);
+  transform: translateY(-4px);
+}
+.sap-tile:active { transform: scale(0.97); }
+
+.sap-tile-title {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--sap-text);
+  line-height: 1.2;
+  margin-bottom: 0.25rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-transform: uppercase;
+}
+@media (min-width: 640px) { .sap-tile-title { font-size: 0.95rem; } }
+
+.sap-tile-subtitle {
+  font-size: 0.65rem;
+  color: var(--sap-secondary-text);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.sap-tile-icon {
+  margin-top: auto;
+  align-self: flex-end;
+  color: var(--sap-blue);
+  opacity: 0.8;
+}
+
+/* ── Tables — horizontal scroll on mobile ───────────────────────── */
+.sap-table-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 0.75rem;
+}
+
+.sap-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 500px; /* triggers scroll on small screens */
+}
+
+.sap-table thead th {
+  font-size: 0.625rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #64748b;
+  padding: 0.75rem 1rem;
+  white-space: nowrap;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.sap-table tbody td {
+  padding: 0.625rem 1rem;
+  font-size: 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.sap-table tbody tr:last-child td { border-bottom: none; }
+.sap-table tbody tr:hover { background: #f8fafc; }
+
+/* Mobile table: smaller padding */
+@media (max-width: 640px) {
+  .sap-table thead th { padding: 0.5rem 0.75rem; font-size: 0.625rem; }
+  .sap-table tbody td { padding: 0.5rem 0.75rem; }
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────── */
+.sap-btn-primary {
+  background-color: var(--sap-blue);
+  color: white;
+  border: none;
+  border-radius: 0.75rem;
+  padding: 0.625rem 1.25rem;
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: all 0.2s;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  /* Mobile: larger touch target */
+  min-height: 44px;
+}
+.sap-btn-primary:hover  { background-color: var(--sap-blue-hover); }
+.sap-btn-primary:active { transform: scale(0.97); }
+
+.sap-btn-ghost {
+  background-color: transparent;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 0.625rem 1.25rem;
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  min-height: 44px;
+}
+.sap-btn-ghost:hover  { background-color: #f1f5f9; color: #334155; }
+.sap-btn-ghost:active { transform: scale(0.97); }
+
+/* ── Input Fields ────────────────────────────────────────────────── */
+.sap-input {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  outline: none;
+  transition: all 0.2s;
+  /* Mobile: prevent zoom on focus (font-size >= 16px) */
+  font-size: max(16px, 0.875rem);
+  min-height: 44px;
+  width: 100%;
+}
+.sap-input:focus {
+  background-color: white;
+  border-color: var(--sap-blue);
+  box-shadow: 0 0 0 3px rgba(10,110,209,0.1);
+}
+/* Desktop: normal font size */
+@media (min-width: 768px) {
+  .sap-input { font-size: 0.875rem; min-height: unset; }
+}
+
+/* ── Object Header (used in forms) ──────────────────────────────── */
+.sap-object-header {
+  background: var(--sap-shell-color);
+  color: white;
+  padding: 1.25rem 1.5rem;
+}
+
+/* ── Scroll container (tabs) ─────────────────────────────────────── */
+.sap-scroll-container {
+  display: flex;
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 4px;
+  gap: 0.5rem;
+}
+.sap-scroll-container::-webkit-scrollbar { display: none; }
+
+/* ── Content area padding (accounts for bottom nav on mobile) ───── */
+.sap-content-container {
+  padding: 0.75rem;
+  padding-bottom: calc(0.75rem + var(--bottom-nav-height));
+}
+@media (min-width: 1024px) {
+  .sap-content-container {
+    padding: 2rem;
+    padding-bottom: 2rem; /* no bottom nav on desktop */
+  }
+}
+
+/* ── Mobile bottom nav (shown below 1024px) ──────────────────────── */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--bottom-nav-height);
+  background: var(--sap-shell-color);
+  border-top: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  z-index: 200;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  height: 100%;
+  color: #94a3b8;
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: color 0.2s;
+  text-decoration: none;
+  gap: 2px;
+}
+.bottom-nav-item.active { color: #60a5fa; }
+.bottom-nav-item:active { transform: scale(0.92); }
+
+/* ── Modal full-screen on mobile ─────────────────────────────────── */
+@media (max-width: 640px) {
+  .modal-fullscreen-mobile {
+    position: fixed !important;
+    inset: 0 !important;
+    border-radius: 0 !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    margin: 0 !important;
+  }
+}
+
+/* ── Card spacing on mobile ──────────────────────────────────────── */
+.space-y-6 { gap: 1.5rem; }
+@media (max-width: 640px) {
+  .mobile-compact > * + * { margin-top: 0.75rem; }
+}
+
+/* ── Prevent horizontal overflow globally ────────────────────────── */
+#root { overflow-x: hidden; }
+
+/* ── Touch action for swipeable areas ───────────────────────────── */
+.swipeable { touch-action: pan-x; }
+
+/* ── Print — Auto-Pagination System ──────────────────────────────── */
+@media print {
+  /* Hide UI chrome */
+  .print-hidden, .no-print, .bottom-nav,
+  nav, header, footer, aside,
+  button:not(.print-keep),
+  select, input, .sap-scroll-container,
+  [class*="sticky"], [class*="fixed"]:not(.print-container):not(.print-only) {
+    display: none !important;
+  }
+
+  /* Reset page */
+  @page {
+    size: A4;
+    margin: 10mm 12mm;
+  }
+
+  html, body {
+    width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    font-size: 10px !important;
+  }
+
+  /* Print container takes over full page */
+  .print-only, .print-container, .print-challan, .print-gate-pass {
+    display: block !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    z-index: 99999 !important;
+    background: white !important;
+  }
+  .print-only *, .print-container *, .print-challan *, .print-gate-pass * {
+    visibility: visible !important;
+  }
+
+  /* Table auto-pagination: thead repeats on every page */
+  table { border-collapse: collapse; width: 100%; }
+  thead { display: table-header-group !important; }
+  tfoot { display: table-footer-group !important; }
+  tbody { display: table-row-group !important; }
+
+  /* Prevent rows from breaking across pages */
+  tr { break-inside: avoid !important; page-break-inside: avoid !important; }
+  td, th { break-inside: avoid !important; page-break-inside: avoid !important; }
+
+  /* Prevent sections from breaking */
+  .break-avoid, .print-section { break-inside: avoid !important; page-break-inside: avoid !important; }
+
+  /* Force page break */
+  .page-break, .break-after { break-after: page !important; page-break-after: always !important; }
+  .break-before { break-before: page !important; page-break-before: always !important; }
+
+  /* Keep header with content */
+  h1, h2, h3, h4, h5, h6 { break-after: avoid !important; page-break-after: avoid !important; }
+
+  /* Shadows, rounded corners, animations off for cleaner print */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* Preserve colors for badges/tags */
+  .bg-rose-100, .bg-emerald-100, .bg-blue-100, .bg-amber-100,
+  .bg-slate-100, .bg-indigo-100, .bg-orange-100, .bg-cyan-100,
+  .bg-slate-50, .bg-rose-50, .bg-emerald-50 {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Links show URL */
+  a[href]:after { content: none !important; }
+
+  /* Ensure images don't break */
+  img { break-inside: avoid !important; max-width: 100% !important; }
+
+  /* Table borders visible in print */
+  .challan-table th, .challan-table td {
+    border: 1px solid #ccc !important;
+    padding: 4px 6px !important;
+  }
+  .challan-table th {
+    background: #f3f4f6 !important;
+    font-weight: 800 !important;
+  }
+}
+
+/* ── Animate in utility ──────────────────────────────────────────── */
+.animate-in { animation: fadeIn 0.3s ease; }
+.fade-in    { animation: fadeIn 0.3s ease; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+.zoom-in { animation: zoomIn 0.2s ease; }
+@keyframes zoomIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1);    }
+}
+
+/* ── Skip to content (accessibility) ─────────────────────────── */
+.skip-to-content {
+  position: absolute;
+  top: -100%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: var(--sap-blue);
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0 0 0.75rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: top 0.2s;
+}
+.skip-to-content:focus {
+  top: 0;
+}
+
+/* ── Professional card shadows ───────────────────────────────── */
+.shadow-card {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.03);
+}
+.shadow-card-hover {
+  box-shadow: 0 8px 20px -4px rgba(0,0,0,0.08), 0 4px 8px -2px rgba(0,0,0,0.04);
+}
+
+/* ── Refined focus ring (replaces default) ───────────────────── */
+.focus-ring:focus-visible {
+  outline: 2px solid var(--sap-blue);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   POLISH: Micro-Transitions & Animations
+   Subtle, professional — like SAP Fiori / Stripe Dashboard
+══════════════════════════════════════════════════════════════ */
+
+/* ── Refined card lift on hover ──────────────────────────────── */
+.sap-tile:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px -4px rgba(0,0,0,0.08), 0 4px 8px -2px rgba(0,0,0,0.04);
+}
+
+/* ── Smooth page content entry ───────────────────────────────── */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Tab content switch (used in Finance categories etc) ─────── */
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.animate-tab-switch {
+  animation: slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Staggered card entry ────────────────────────────────────── */
+@keyframes staggerIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-stagger > *:nth-child(1) { animation: staggerIn 0.3s 0.00s cubic-bezier(0.16,1,0.3,1) both; }
+.animate-stagger > *:nth-child(2) { animation: staggerIn 0.3s 0.06s cubic-bezier(0.16,1,0.3,1) both; }
+.animate-stagger > *:nth-child(3) { animation: staggerIn 0.3s 0.12s cubic-bezier(0.16,1,0.3,1) both; }
+.animate-stagger > *:nth-child(4) { animation: staggerIn 0.3s 0.18s cubic-bezier(0.16,1,0.3,1) both; }
+.animate-stagger > *:nth-child(5) { animation: staggerIn 0.3s 0.24s cubic-bezier(0.16,1,0.3,1) both; }
+.animate-stagger > *:nth-child(6) { animation: staggerIn 0.3s 0.30s cubic-bezier(0.16,1,0.3,1) both; }
+
+/* ── Button press feedback ───────────────────────────────────── */
+.sap-btn-primary:active,
+.sap-btn-ghost:active {
+  transform: scale(0.97);
+  transition: transform 0.1s;
+}
+
+/* ── Smooth sidebar toggle ───────────────────────────────────── */
+aside[role="navigation"] {
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), 
+              transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── SidePanel slide-in ──────────────────────────────────────── */
+@keyframes panelSlideIn {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes backdropFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Tooltip fade ────────────────────────────────────────────── */
+[title] {
+  position: relative;
+}
+
+/* ── Respect reduced motion ──────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   POLISH: Loading Skeletons
+   Shimmer effect — content-shaped placeholders
+══════════════════════════════════════════════════════════════ */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 8px;
+}
+.skeleton-text {
+  height: 14px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+}
+.skeleton-heading {
+  height: 22px;
+  width: 40%;
+  margin-bottom: 16px;
+  border-radius: 6px;
+}
+.skeleton-card {
+  height: 100px;
+  border-radius: 12px;
+}
+.skeleton-row {
+  height: 48px;
+  margin-bottom: 4px;
+  border-radius: 8px;
+}
+.skeleton-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   POLISH: Table Row Interactions
+   Hover highlight + selected row + smooth transitions
+══════════════════════════════════════════════════════════════ */
+.sap-table tbody tr {
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  cursor: default;
+}
+.sap-table tbody tr:hover {
+  background: #f1f5f9;
+}
+.sap-table tbody tr.row-selected {
+  background: #eff6ff;
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+.sap-table tbody tr.row-selected:hover {
+  background: #dbeafe;
+}
+
+/* ── Clickable row ───────────────────────────────────────────── */
+.sap-table tbody tr.row-clickable {
+  cursor: pointer;
+}
+.sap-table tbody tr.row-clickable:active {
+  background: #e2e8f0;
+  transition: background-color 0.05s;
+}
+
+/* ── Row action buttons — appear on hover ────────────────────── */
+.row-actions {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+tr:hover .row-actions,
+tr.row-selected .row-actions {
+  opacity: 1;
+}
+
+/* ── Striped variant (optional) ──────────────────────────────── */
+.sap-table.table-striped tbody tr:nth-child(even) {
+  background: #fafbfc;
+}
+.sap-table.table-striped tbody tr:nth-child(even):hover {
+  background: #f1f5f9;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   POLISH: Focus Visible Ring
+   Only shows on keyboard navigation (not mouse clicks)
+   Professional blue ring — matches SAP Fiori style
+══════════════════════════════════════════════════════════════ */
+
+/* Global focus-visible for all interactive elements */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 4px;
+  transition: outline-offset 0.1s ease;
+}
+
+/* Remove default outline for mouse users */
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible),
+[tabindex]:focus:not(:focus-visible),
+[role="button"]:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Sidebar nav links — custom focus style */
+aside[role="navigation"] a:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
+/* Table row focus */
+tr[tabindex]:focus-visible {
+  outline: none;
+  box-shadow: inset 3px 0 0 #2563eb;
+  background: #eff6ff;
+}
+
+/* Tab buttons focus */
+.sap-scroll-container button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -1px;
+  border-radius: 8px;
+}
+
+/* Tile focus */
+.sap-tile:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 3px;
+  border-radius: 1rem;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SAP Tab Buttons — consistent across all modules
+══════════════════════════════════════════════════════════════ */
+.sap-tab-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.625rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sap-tab-button:hover {
+  color: #334155;
+  background: #f1f5f9;
+}
+.sap-tab-button.sap-tab-active {
+  color: #2563eb;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.08);
+}
+
+
+/* ── Sprint 26: Mobile-First touch targets (WCAG 2.5.5) ────────────── */
+/* Coarse pointer = touch device. On those, ALL clickable controls get
+   a 44 × 44 px minimum hit area — the WCAG / Apple / Material spec.
+   Targets that are visually smaller still register the larger tap area. */
+@media (pointer: coarse) {
+  button:not(.sap-tab-button):not(.no-touch-target),
+  [role="button"]:not(.no-touch-target),
+  a.button,
+  input[type="checkbox"]:not(.no-touch-target),
+  input[type="radio"]:not(.no-touch-target),
+  select:not(.no-touch-target) {
+    min-height: 44px;
+    min-width:  44px;
+  }
+
+  /* Tap-padding helper — keeps visual sizes small while expanding hit area */
+  .tap-44 {
+    position: relative;
+  }
+  .tap-44::before {
+    content: "";
+    position: absolute;
+    inset: -8px;
+    /* keeps clickable but invisible */
+  }
+}
+
+/* Mobile-only utility: hide horizontal scroll on tables (apps should
+   prefer ResponsiveTable; this is a backstop for legacy markup) */
+@media (max-width: 767px) {
+  .auto-mobile-cards table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+

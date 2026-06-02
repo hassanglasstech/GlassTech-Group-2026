@@ -1,0 +1,5 @@
+{
+  "name": "Glasstech Final 2026 ERP",
+  "description": "A comprehensive HR and Payroll management system for Glasstech group companies (GTK, GTI, Glassco, Nippon, and Factory) with offline data persistence.",
+  "requestFramePermissions": []
+}
