@@ -114,10 +114,7 @@ const PublicTrackingMap = React.lazy(() => import('./src/pages/LiveDispatchMap')
 // ── Core nav — always visible (role-filtered) ───────────────────────
 const CORE_NAV = [
   { name: 'Home',              path: '/',                 icon: LayoutDashboard, key: 'dashboard'        },
-  { name: 'Sales & Orders',    path: '/sales',            icon: Briefcase,       key: 'sales'            },
-  // Sprint 19: Single production entry — points to Workbench (Sprint 15-17).
-  // Legacy tabs accessible via /production/legacy/* until 2026-06-10.
-  { name: 'Workbench',         path: '/production/workbench', icon: Factory,     key: 'production'       },
+  { name: 'Sales',             path: '/sales',            icon: Briefcase,       key: 'sales'            },
   { name: 'Material Mgmt',     path: '/inventory',        icon: Warehouse,       key: 'inventory'        },
   { name: 'Procurement',       path: '/requisitions',     icon: Package,         key: 'requisitions'     },
   { name: 'Finance (FICO)',     path: '/accounts',         icon: Landmark,        key: 'accounts'         },
@@ -131,19 +128,9 @@ const ROLE_NAV: Record<string, { name: string; path: string; icon: any; key: str
   super_admin:        [{ name: 'MD Dashboard', path: '/md-dashboard',    icon: BarChart3,  key: 'md-dashboard'     }, { name: 'Basis Admin', path: '/admin', icon: ShieldCheck, key: 'admin' }],
   owner:              [{ name: 'MD Dashboard', path: '/md-dashboard',    icon: BarChart3,  key: 'md-dashboard'     }],
   hassan:             [{ name: 'MD Dashboard', path: '/md-dashboard',    icon: BarChart3,  key: 'md-dashboard'     }, { name: 'Basis Admin', path: '/admin', icon: ShieldCheck, key: 'admin' }],
-  factory_manager:    [{ name: 'Factory Desk', path: '/factory-incharge',icon: Factory,   key: 'factory-incharge' }],
-  glassco_supervisor: [],
-  gtk_supervisor:     [],
-  gti_supervisor:     [],
-  // Sprint 6 — direct link to mobile-first Cutter Workbench
-  glassco_cutter:     [{ name: 'Cutter Workbench', path: '/cutter', icon: ScanLine, key: 'cutter' }],
-  // Sprint 7 — direct link to mobile-first QC Workbench
-  dispatch_staff:     [{ name: 'QC Workbench', path: '/qc', icon: ShieldCheck, key: 'qc' }],
-  admin_officer:      [],
-  gtk_admin:          [{ name: 'MD Dashboard', path: '/md-dashboard',    icon: BarChart3,  key: 'md-dashboard'     }],
-  glassco_admin:      [],
-  glassco_production: [],
+  // Nippon-only deployment — no glass/aluminium factory, cutter or QC roles.
   nippon_admin:       [],
+  admin_officer:      [],
 };
 
 // Legacy — kept for backward compat
@@ -278,8 +265,7 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
   // Build nav: core items filtered by role permissions + role-specific items
   const coreItems = CORE_NAV.filter(item => {
     if (allowedModuleKeys && !allowedModuleKeys.includes(item.key)) return false;
-    if (item.key === 'production' && selectedCompany !== 'Glassco') return false;
-    if (['sales'].includes(item.key) && selectedCompany === 'Factory') return false;
+    // Nippon-only: production/factory floor not applicable to a trading company.
     return true;
   });
 
