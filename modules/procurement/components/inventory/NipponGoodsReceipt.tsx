@@ -46,6 +46,9 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
     const [isParsing, setIsParsing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [importedItems, setImportedItems] = useState<ImportedItem[]>([]);
+    // Leakages #2/#9: bulk-import landed cost + 2-way vendor-invoice match.
+    const [importFreight, setImportFreight] = useState(0);
+    const [vendorInvoiceAmount, setVendorInvoiceAmount] = useState(0);
 
     // Manual Form
     const [grnData, setGrnData] = useState({
@@ -148,6 +151,18 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
             return;
         }
 
+        // Leakage #9 fix: 2-way GRN <-> vendor-invoice match. If an invoice
+        // amount is entered, block posting when it disagrees with received
+        // material value beyond tolerance (prevents silent over/under-payment).
+        const totalMaterial = matched.reduce((sum, { item }) => sum + item.qty * item.price, 0);
+        if (vendorInvoiceAmount > 0) {
+            const tol = Math.max(1, totalMaterial * 0.005); // PKR 1 or 0.5%
+            if (Math.abs(vendorInvoiceAmount - totalMaterial) > tol) {
+                toast.error(`Invoice mismatch: received PKR ${Math.round(totalMaterial).toLocaleString()} vs invoice PKR ${Math.round(vendorInvoiceAmount).toLocaleString()}. Fix qty/price or invoice amount before posting.`, { duration: 8000 });
+                return;
+            }
+        }
+
         setIsPosting(true);
         try {
             const grnId = `GRN-${company.substring(0,3).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
@@ -166,6 +181,7 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
                     qty: item.qty,
                     rate: item.price,
                 })),
+                freightTotal: importFreight || 0,
             });
             if (!txId) {
                 toast.error('GL posting failed. Stock NOT received. Fix accounts and retry.');
@@ -183,7 +199,11 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
                 const sIdx = updatedStore.findIndex(s => s.id === prod.id);
                 if (sIdx === -1) continue;
                 const s = { ...updatedStore[sIdx] };
-                const newVal = item.qty * item.price;
+                // Leakage #2 fix: absorb freight pro-rata (by material value)
+                // into each line's value so MAP reflects true landed cost.
+                const lineMaterial = item.qty * item.price;
+                const lineFreight  = totalMaterial > 0 ? (importFreight || 0) * (lineMaterial / totalMaterial) : 0;
+                const newVal = lineMaterial + lineFreight;
                 s.quantity = (s.quantity || 0) + item.qty;
                 s.unrestrictedQty = (s.unrestrictedQty || 0) + item.qty;
                 s.totalValue = (s.totalValue || 0) + newVal;
@@ -386,6 +406,16 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
                                         {isParsing ? <Loader2 className="animate-spin" size={14}/> : <FileUp size={14}/>} Upload
                                     </button>
                                 </div>
+                             </div>
+                         </div>
+                         <div className="grid grid-cols-2 gap-4">
+                             <div className="space-y-1">
+                                 <label className="text-[10px] font-bold uppercase text-slate-500">Total Freight / Landed Cost (PKR) — optional</label>
+                                 <input type="number" className="sap-input w-full font-bold" value={importFreight || ''} onChange={e => setImportFreight(Number(e.target.value))} placeholder="0" />
+                             </div>
+                             <div className="space-y-1">
+                                 <label className="text-[10px] font-bold uppercase text-slate-500">Vendor Invoice Amount (PKR) — optional, checked vs received</label>
+                                 <input type="number" className="sap-input w-full font-bold" value={vendorInvoiceAmount || ''} onChange={e => setVendorInvoiceAmount(Number(e.target.value))} placeholder="0" />
                              </div>
                          </div>
                          {importedItems.length > 0 && (
