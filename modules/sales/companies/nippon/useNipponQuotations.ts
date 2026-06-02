@@ -112,31 +112,24 @@ export const useNipponQuotations = () => {
 
   const updateItem = (index: number, field: string, value: unknown) => {
     setFormData(prev => {
-      const next = [...(prev.items || [])];
+      const items = prev.items || [];
+      // Bounds guard — ignore updates for out-of-range rows to prevent sparse
+      // arrays / silent data corruption from stale indices.
+      if (index < 0 || index >= items.length) return prev;
+      const next = [...items];
       const item = { ...next[index], [field]: value };
-      
+
       if (!item.isSection) {
-        // If description is updated, we might be selecting a product
-        // But we handle explicit selection in the UI for better control
         item.amount = (Number(item.qty) || 0) * (Number(item.pricePerUnit) || 0);
       }
-      
+
       next[index] = item;
       return { ...prev, items: next };
     });
-    // ── Set suggestion: if product is part of a set, prompt user ──
-    // `prod` was orphaned from an earlier refactor — would have crashed at
-    // runtime as ReferenceError. Resolve from the value when the field
-    // looks like a product selection; bail out otherwise.
-    const maybeProduct = (field === 'productId' || field === 'product') ? value : null;
-    const prod = maybeProduct as Product | null;
-    if (prod && prod.isSet && prod.setComponents && prod.setComponents.length > 0) {
-      setPendingSetSuggestion({
-        index,
-        setProduct: prod,
-        remainingComponents: prod.setComponents,
-      });
-    }
+    // NOTE: set-component suggestions are triggered from selectProduct (where
+    // the full Product object is available). updateItem only receives scalar
+    // field values, so the previous product-detection block here was dead code
+    // and has been removed.
   };
 
   // ── Set suggestion state ───────────────────────────────────────────
@@ -220,10 +213,19 @@ export const useNipponQuotations = () => {
       item.glazingSpecs = prod.brand || ''; // Brand
       item.amount = (Number(item.qty) || 1) * (Number(item.pricePerUnit) || 0);
       item.attachedImage = prod.imageUrl || prod.image;
-      
+
       next[index] = item;
       return { ...prev, items: next };
     });
+
+    // If the selected product is a set, offer to add its components as lines.
+    if (prod.isSet && Array.isArray(prod.setComponents) && prod.setComponents.length > 0) {
+      setPendingSetSuggestion({
+        index,
+        setProduct: prod,
+        remainingComponents: prod.setComponents,
+      });
+    }
   };
 
   const handleRemoveItem = (index: number) => {
@@ -256,6 +258,14 @@ export const useNipponQuotations = () => {
 
     const itemsSubtotal = lineItems.reduce((s, i) => s + (Number(i.amount) || 0), 0);
     if (itemsSubtotal <= 0) return toast.error("Quotation total must be greater than zero.");
+
+    // Line-item + discount sanity checks (block negative/zero qty, negative
+    // price, and over-discounting that would yield a zero/negative invoice).
+    if (lineItems.some(i => (Number(i.qty) || 0) <= 0)) return toast.error("Each item quantity must be at least 1.");
+    if (lineItems.some(i => (Number(i.pricePerUnit) || 0) < 0)) return toast.error("Item price cannot be negative.");
+    const discAmt = Number(formData.discountAmount) || 0;
+    if (discAmt < 0) return toast.error("Discount cannot be negative.");
+    if (discAmt > itemsSubtotal) return toast.error("Discount cannot exceed the subtotal.");
 
     // P1-5: block edit-after-approval to prevent inventory double-decrement.
     // Once approved, the quote becomes a Sales Order — edits must go through

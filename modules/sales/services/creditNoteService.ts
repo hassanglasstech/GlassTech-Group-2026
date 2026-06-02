@@ -112,6 +112,11 @@ export async function issueCreditNote(params: {
 
   const today = new Date().toISOString().split('T')[0];
 
+  // Allocate the sequential CN number atomically. This was previously missing:
+  // `cnId` was referenced below but never defined, throwing a ReferenceError
+  // on every credit-note issuance (feature was completely broken).
+  const cnId = await getNextCNNumber(company);
+
   // Persist the pending CN first — GL only posts after approval.
   const pendingCN: CreditNote = {
     id: cnId, company,

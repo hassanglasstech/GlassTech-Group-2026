@@ -253,7 +253,7 @@ const NipponQuotationManager: React.FC = () => {
                                 <span className="bg-amber-500 text-white text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest">SET</span>
                                 <span className="font-black uppercase tracking-widest text-amber-800 text-xs">{item.description}</span>
                                 {!isLocked && (
-                                  <button onClick={() => { const next = [...(formData.items||[])]; next.splice(idx,1); }} className="ml-auto text-[10px] text-rose-400 hover:text-rose-600 font-bold">Remove Set Header</button>
+                                  <button onClick={() => { const next = [...(formData.items||[])]; next.splice(idx,1); setFormData({...formData, items: next}); }} className="ml-auto text-[10px] text-rose-400 hover:text-rose-600 font-bold">Remove Set Header</button>
                                 )}
                               </div>
                             ) : (
@@ -379,7 +379,7 @@ const NipponQuotationManager: React.FC = () => {
                                 <input readOnly={isLocked} type="text" placeholder="Unit" className="sap-input w-full py-1 text-center text-xs font-bold uppercase" value={item.glassSize || ''} onChange={e => updateItem(idx, 'glassSize', e.target.value)} />
                             </td>
                             <td className="w-20">
-                                <input readOnly={isLocked} type="number" className="sap-input w-full py-1 text-center text-xs font-bold" value={item.qty || ''} onChange={e => updateItem(idx, 'qty', Number(e.target.value))} />
+                                <input readOnly={isLocked} type="number" min="1" className="sap-input w-full py-1 text-center text-xs font-bold" value={item.qty || ''} onChange={e => updateItem(idx, 'qty', Math.max(0, Number(e.target.value)))} />
                             </td>
                             <td className="w-28">
                                 <input readOnly={isLocked} type="number" className="sap-input w-full py-1 text-right text-xs font-bold text-blue-600" value={item.pricePerUnit || ''} onChange={e => updateItem(idx, 'pricePerUnit', Number(e.target.value))} />
@@ -413,15 +413,15 @@ const NipponQuotationManager: React.FC = () => {
                   <div className="flex justify-end items-center space-x-8">
                     <div className="flex items-center space-x-2">
                         <label className="text-[10px] font-black uppercase text-slate-400">Discount %</label>
-                        <input disabled={isLocked} type="number" className="sap-input w-20 text-right font-bold text-rose-600 py-1" value={formData.discountPercent || ''} onChange={e => {
-                            const pct = Number(e.target.value);
+                        <input disabled={isLocked} type="number" min="0" max="100" className="sap-input w-20 text-right font-bold text-rose-600 py-1" value={formData.discountPercent || ''} onChange={e => {
+                            const pct = Math.min(100, Math.max(0, Number(e.target.value)));
                             setFormData({...formData, discountPercent: pct, discountAmount: subTotal * (pct/100)});
                         }} />
                     </div>
                     <div className="flex items-center space-x-2">
                         <label className="text-[10px] font-black uppercase text-slate-400">Discount Rs</label>
-                        <input disabled={isLocked} type="number" className="sap-input w-24 text-right font-bold text-rose-600 py-1" value={formData.discountAmount || ''} onChange={e => {
-                            const amt = Number(e.target.value);
+                        <input disabled={isLocked} type="number" min="0" className="sap-input w-24 text-right font-bold text-rose-600 py-1" value={formData.discountAmount || ''} onChange={e => {
+                            const amt = Math.min(subTotal, Math.max(0, Number(e.target.value)));
                             setFormData({...formData, discountAmount: amt, discountPercent: subTotal > 0 ? (amt/subTotal)*100 : 0});
                         }} />
                     </div>
@@ -454,13 +454,6 @@ const NipponQuotationManager: React.FC = () => {
                     </div>
 
                     <div className="flex items-center space-x-3">
-                      <button
-                        disabled={isLocked || isSaving}
-                        onClick={() => handleSave(false)}
-                        className={`text-[10px] py-2.5 px-6 flex items-center space-x-2 shadow-sm font-black uppercase tracking-widest transition-all rounded-lg border ${(isLocked || isSaving) ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
-                      >
-                        <Save size={16}/> <span>{isSaving ? 'Saving…' : 'Save Draft'}</span>
-                      </button>
                       <button
                         disabled={isLocked || isSaving}
                         onClick={() => handleSave(false)}

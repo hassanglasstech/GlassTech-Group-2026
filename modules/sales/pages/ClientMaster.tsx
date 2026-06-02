@@ -101,10 +101,14 @@ const ClientMaster: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     if (await confirmModal("Delete this Business Partner profile?")) {
-      const all = await AsyncSalesService.getClients();
-      await AsyncSalesService.saveClients(all.filter(c => c.id !== id));
-      refreshData();
-      toast.success("Business Partner profile deleted.");
+      try {
+        const all = await AsyncSalesService.getClients();
+        await AsyncSalesService.saveClients(all.filter(c => c.id !== id));
+        refreshData();
+        toast.success("Business Partner profile deleted.");
+      } catch (err) {
+        toast.error(`Delete failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
     }
   };
 
@@ -177,9 +181,9 @@ const ClientMaster: React.FC = () => {
                 </td>
                 <td className="px-4 py-3 text-center">
                   <div className="flex justify-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => handleEdit(client)} className="text-slate-400 hover:text-blue-600" title="Edit"><Edit2 size={14} /></button>
-                    <button onClick={() => handleDelete(client.id)} className="text-slate-400 hover:text-red-600"><Trash2 size={14} /></button>
-                    <button onClick={() => setStatementClient(client)} className="text-slate-400 hover:text-blue-600" title="AR Statement"><FileText size={14} /></button>
+                    <button onClick={() => handleEdit(client)} aria-label="Edit Business Partner" className="text-slate-400 hover:text-blue-600" title="Edit"><Edit2 size={14} /></button>
+                    <button onClick={() => handleDelete(client.id)} aria-label="Delete Business Partner" title="Delete" className="text-slate-400 hover:text-red-600"><Trash2 size={14} /></button>
+                    <button onClick={() => setStatementClient(client)} aria-label="View AR Statement" className="text-slate-400 hover:text-blue-600" title="AR Statement"><FileText size={14} /></button>
                   </div>
                 </td>
               </tr>
