@@ -304,6 +304,35 @@ export const useNipponQuotations = () => {
         orderNo: approve ? `SO-${mmyy}-${formData.manualSerial}` : undefined
       };
 
+      // Leakage #5 fix: block double-approval (e.g. rapid double-click). If the
+      // persisted row is already Approved, stock was already decremented.
+      if (approve && all.some(x => x.id === finalQuo.id && x.status === 'Approved')) {
+        toast.error('This quote is already approved — stock already updated.');
+        return;
+      }
+
+      // Leakage #4 fix: oversell / negative-stock guard. Verify sufficient
+      // unrestricted stock BEFORE approving (decrement happens below). Aggregate
+      // qty per store item so multiple lines on the same SKU are summed.
+      if (approve) {
+        const stockNow = InventoryService.getStore();
+        const need = new Map<string, number>();
+        for (const item of lineItems) {
+          if (!item.locationCode) continue;
+          need.set(item.locationCode, (need.get(item.locationCode) || 0) + (Number(item.qty) || 0));
+        }
+        for (const [sid, qty] of need) {
+          const si = stockNow.find(s => s.id === sid);
+          if (si) {
+            const avail = Number(si.unrestrictedQty ?? si.quantity ?? 0);
+            if (qty > avail) {
+              toast.error(`Insufficient stock for ${si.name || sid}: need ${qty}, available ${avail}.`);
+              return;
+            }
+          }
+        }
+      }
+
       // P1-7: persist quote FIRST, then decrement inventory only on success.
       // Previous order (inventory → quote) left stock out of sync when the
       // quote save failed.

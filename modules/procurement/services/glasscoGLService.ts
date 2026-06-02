@@ -960,6 +960,10 @@ export function reverseDeliveryCOGS(params: {
   // to identify the credit-Inventory amount and restore proportionally
   // across raw store items (totalValue weighted).
   try {
+    // Leakage #1 fix: trading companies (Nippon) hold non-'Raw' stock
+    // ('General Hardware'), so the original Raw-only restore never ran and
+    // inventory value stayed permanently understated after a return/void.
+    const isTrading = company === 'Nippon';
     const accs = glassAccounts(company);
     const invCreditLine = (cogsTx.details || []).find(
       (d: any) => d.accountId === accs.glassInv.id && (Number(d.credit) || 0) > 0
@@ -968,11 +972,11 @@ export function reverseDeliveryCOGS(params: {
     const restoreAmount     = Math.round(inventoryRelieved * proportion);
     if (restoreAmount > 0) {
       const store    = InventoryService.getStore();
-      const rawItems = store.filter((s: any) => s.company === company && s.category === 'Raw');
+      const rawItems = store.filter((s: any) => s.company === company && (isTrading || s.category === 'Raw'));
       const totalRawValue = rawItems.reduce((sum: number, s: any) => sum + (Number(s.totalValue) || 0), 0);
       // Weighted distribution; if total is zero, dump on the first raw item.
       const updated = store.map((item: any) => {
-        if (item.company !== company || item.category !== 'Raw') return item;
+        if (item.company !== company || (!isTrading && item.category !== 'Raw')) return item;
         let share = 0;
         if (totalRawValue > 0) {
           share = Math.round(((Number(item.totalValue) || 0) / totalRawValue) * restoreAmount);
