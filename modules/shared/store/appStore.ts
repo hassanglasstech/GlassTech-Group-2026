@@ -11,7 +11,7 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>((set) => ({
-  selectedCompany: 'GTK',
+  selectedCompany: 'Nippon',
   isSidebarOpen: window.innerWidth > 1024,
   setSelectedCompany: (company) => set({ selectedCompany: company }),
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),

@@ -266,9 +266,8 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
   const { user, signOut } = useAuthStore();
 
   // Compute which companies this user can switch to
-  const companies: Company[] = (user?.allowedCompanies?.length
-    ? user.allowedCompanies
-    : ['GTK', 'GTI', 'Glassco', 'Nippon', 'Factory']) as Company[];
+  // Nippon-only deployment — single company, no switcher.
+  const companies: Company[] = ['Nippon'] as Company[];
 
   // Compute which nav items to show.
   // BUG-1 fix: empty allowedModules now means NO ACCESS (was: "all access").
@@ -557,12 +556,10 @@ const App: React.FC = () => {
   useEffect(() => {
     if (user) {
       // Set logger context
-      setLogContext(user.fullName || user.email, user.allowedCompanies[0] || 'GTK');
+      setLogContext(user.fullName || user.email, 'Nippon');
       Logger.auth('LOGIN', user.email);
-      const defaultCompany = ROLE_DEFAULT_COMPANY[user.role];
-      if (defaultCompany && !user.allowedCompanies.includes(selectedCompany)) {
-        setSelectedCompany(defaultCompany as Company);
-      }
+      // Nippon-only deployment — always operate as the Nippon company.
+      if (selectedCompany !== 'Nippon') setSelectedCompany('Nippon' as Company);
 
       // Sprint 18: role-based landing — if user is on root or empty hash,
       // jump to their dedicated mini-app/page (cutter → /cutter,
