@@ -534,7 +534,7 @@ const NipponProductMaster: React.FC = () => {
                     {filtered.map(p => {
                         const stock = getStockLevel(p.id);
                         return (
-                            <tr key={p.id} className="hover:bg-slate-50 transition-colors text-xs group">
+                            <tr key={p.id} onClick={() => handleEdit(p)} className="hover:bg-slate-50 transition-colors text-xs group cursor-pointer">
                                 <td className="px-6 py-3 font-mono font-bold text-slate-400 uppercase">{p.profileCode || '-'}</td>
                                 <td className="py-3">
                                     <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center">
@@ -577,8 +577,8 @@ const NipponProductMaster: React.FC = () => {
                                 </td>
                                 <td className="pr-6 text-right">
                                     <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => handleEdit(p)} className="p-1.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded transition-all"><Edit2 size={12}/></button>
-                                        <button onClick={() => handleDelete(p.id)} className="p-1.5 text-slate-400 hover:text-red-600 bg-white border border-slate-200 rounded transition-all"><Trash2 size={12}/></button>
+                                        <button onClick={(e) => { e.stopPropagation(); handleEdit(p); }} className="p-1.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded transition-all"><Edit2 size={12}/></button>
+                                        <button onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }} className="p-1.5 text-slate-400 hover:text-red-600 bg-white border border-slate-200 rounded transition-all"><Trash2 size={12}/></button>
                                     </div>
                                 </td>
                             </tr>
