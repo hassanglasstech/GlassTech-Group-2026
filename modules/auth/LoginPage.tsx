@@ -247,7 +247,7 @@ const LoginPage: React.FC = () => {
 
   // ── STEP: Verify OTP ─────────────────────────────────────────────────
   const handleVerifyOtp = async () => {
-    if (otp.length < 6) return setError('Enter 6-digit OTP.');
+    if (otp.length < 6) return setError('Enter the OTP code from your email.');
     setBusy(true);
     setError('');
 
@@ -510,7 +510,7 @@ const LoginPage: React.FC = () => {
               <button onClick={handleSendOtp} disabled={busy || !email.includes('@')}
                 className="w-full flex items-center justify-center space-x-2 bg-transparent hover:bg-white/5 border border-white/10 text-slate-300 text-xs font-bold uppercase tracking-widest py-2.5 rounded-xl transition-all">
                 {busy ? <Loader2 size={14} className="animate-spin" /> : (
-                  <><Mail size={13} /><span>Send 6-digit OTP instead</span></>
+                  <><Mail size={13} /><span>Send OTP code instead</span></>
                 )}
               </button>
 
@@ -536,22 +536,22 @@ const LoginPage: React.FC = () => {
 
               {/* 6-digit code entry */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase text-slate-500 tracking-widest">6-Digit Code</label>
+                <label className="text-[10px] font-bold uppercase text-slate-500 tracking-widest">OTP Code</label>
                 <input
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
-                  maxLength={6}
+                  maxLength={8}
                   value={otp}
-                  onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 8))}
                   onKeyDown={e => e.key === 'Enter' && handleVerifyOtp()}
-                  placeholder="123456"
+                  placeholder="Enter code"
                   className="w-full bg-[#0f1923] border border-white/10 rounded-xl py-3 px-4 text-white text-center text-2xl font-mono tracking-[0.5em] focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30 transition-all"
                   autoFocus
                 />
               </div>
 
-              <button onClick={handleVerifyOtp} disabled={busy || otp.length !== 6}
+              <button onClick={handleVerifyOtp} disabled={busy || otp.length < 6}
                 className="w-full flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/30 text-white font-black uppercase tracking-widest py-3 rounded-xl transition-all shadow-lg">
                 {busy ? <Loader2 size={18} className="animate-spin" /> : (
                   <><CheckCircle2 size={16} /><span>Verify & Sign In</span></>
@@ -559,7 +559,7 @@ const LoginPage: React.FC = () => {
               </button>
 
               <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-[11px] text-slate-400">
-                <p>📧 Email me code aaya hoga. <strong className="text-blue-300">Link click karne ki zarurat nahi</strong> — bas 6-digit code yahan daalo.</p>
+                <p>📧 Email me code aaya hoga. <strong className="text-blue-300">Link click karne ki zarurat nahi</strong> — bas email wala code yahan daalo.</p>
                 <p className="mt-1">Agar code visible nahi to email template me <code className="text-blue-300">{'{{ .Token }}'}</code> add karen.</p>
               </div>
 
