@@ -1,0 +1,29 @@
+name: CI
+
+# Go-live control: every push/PR to nippon must build clean and pass all tests.
+# HOW TO ADD THIS FILE TO THE REPO (PAT lacks 'workflow' scope, so it couldn't
+# be pushed automatically). Pick ONE:
+#   1) GitHub web UI: repo -> Add file -> Create new file ->
+#      path ".github/workflows/ci.yml" -> paste this content -> Commit to nippon.
+#   2) Or create a Personal Access Token WITH the "workflow" scope and re-push.
+on:
+  push:
+    branches: [nippon]
+  pull_request:
+    branches: [nippon]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Type-check + build
+        run: npm run build
+      - name: Run tests
+        run: npm test
