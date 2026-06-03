@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { Product } from '@/modules/shared/types';
+import { ProductImage } from '@/modules/shared/components/ProductImage';
 import {
   Printer, Filter, FileText, Search, Image as ImageIcon,
   Building2,
@@ -283,15 +284,7 @@ const NipponCataloguePage: React.FC = () => {
                       <div key={p.id} className="cat-card border border-slate-200 rounded-lg overflow-hidden bg-white">
                         {/* Image */}
                         <div className="aspect-square bg-slate-50 flex items-center justify-center border-b border-slate-100">
-                          {p.imageUrl ? (
-                            <img src={p.imageUrl} alt={p.description}
-                              className="w-full h-full object-contain p-2"/>
-                          ) : (
-                            <div className="text-slate-300 flex flex-col items-center">
-                              <ImageIcon size={24}/>
-                              <span className="text-[8px] font-bold uppercase mt-1">No Image</span>
-                            </div>
-                          )}
+                          <ProductImage code={p.modelNo} url={p.imageUrl} alt={p.description} className="w-full h-full object-contain p-2" iconSize={24} />
                         </div>
                         {/* Details */}
                         <div className="p-2.5">
