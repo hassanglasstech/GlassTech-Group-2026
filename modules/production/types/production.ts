@@ -61,6 +61,9 @@ export interface QuotationItem {
   aptCharges?: number;
   notchCharges?: number;
   drawingNote?: string;
+  /** Nippon: stores the product.id (NIP-KL-...) for inventory lookup.
+   *  locationCode is repurposed to hold the visible model_no on Nippon quotes. */
+  productRef?: string;
 }
 
 export interface GlassServiceCharge {

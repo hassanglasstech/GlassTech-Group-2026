@@ -266,8 +266,13 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                                                                 )}
                                                             </td>
                                                             <td className="py-2 px-2">
+                                                                {item.locationCode && (
+                                                                    <p className="text-[7.5px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-0.5">
+                                                                        {item.locationCode}
+                                                                    </p>
+                                                                )}
                                                                 <p className="font-black text-slate-800 uppercase leading-tight text-[10px] whitespace-pre-wrap">
-                                                                    {item.description?.replace(/^PCS\s+/i, '')}
+                                                                    {(item.description ?? '').replace(/^PCS\s+/i, '').replace(/\s*\([^)]*\)\s*$/, '').trim()}
                                                                 </p>
                                                             </td>
                                                             <td className="py-2 px-2 text-center font-bold text-slate-500 uppercase text-[9px]">{item.glassSize || 'PCS'}</td>

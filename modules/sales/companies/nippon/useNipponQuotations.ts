@@ -199,15 +199,18 @@ export const useNipponQuotations = () => {
         ...(prod.technicalSpecs ? Object.values(prod.technicalSpecs) : [])
       ].filter(Boolean).join(' | ');
 
-      let desc = `${prod.itemCode || prod.profileCode ? (prod.itemCode || prod.profileCode) + ' ' : ''}${prod.name || prod.description || ''} ${specs ? `(${specs})` : ''}`;
-      
+      // Nippon: clean description only — no specs in parens, no internal ID prefix.
+      // locationCode = modelNo (visible item code on print/editor).
+      // productRef  = prod.id  (internal ID used for inventory decrement — never shown).
+      let desc = prod.description || prod.name || '';
       if (prod.isSet && prod.setComponents && prod.setComponents.length > 0) {
           const compNames = (prod.setComponents as Array<{ description?: string; qtyPerSet?: number; unit?: string }>).map((c) => `${c.description} (${c.qtyPerSet} ${c.unit})`).join(', ');
           desc += `\n[Includes: ${compNames}]`;
       }
 
       item.description = desc;
-      item.locationCode = prod.itemCode || prod.profileCode || '';
+      item.locationCode = prod.modelNo || '';
+      item.productRef   = prod.id;
       item.pricePerUnit = prod.price || prod.basePrice || 0;
       item.glassSize = prod.unit || 'PCS';
       item.glazingSpecs = prod.brand || ''; // Brand
@@ -370,7 +373,9 @@ export const useNipponQuotations = () => {
 
         finalQuo.items.forEach(item => {
           if (item.isSection) return;
-          const storeIdx = updatedStore.findIndex(s => s.id === item.locationCode);
+          // productRef holds the real product.id (NIP-KL-...) for inventory lookup.
+          // locationCode now holds the visible modelNo — do NOT use it for stock search.
+          const storeIdx = updatedStore.findIndex(s => s.id === (item.productRef || item.locationCode));
           if (storeIdx !== -1) {
             updatedStore[storeIdx] = {
               ...updatedStore[storeIdx],
