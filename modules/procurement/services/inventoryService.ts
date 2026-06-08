@@ -437,7 +437,10 @@ export const InventoryService = {
       unit: s.unit||'Sqft',
       moving_average_price: s.movingAveragePrice||0,
       total_value: s.totalValue||0, storage_bin: s.storageBin||'',
-      last_movement_date: s.lastMovementDate||'',
+      // Postgres timestamptz rejects '' — must be null when no date is set,
+      // else the whole batch upsert 400s (invalid input syntax for type
+      // timestamp with time zone: "").
+      last_movement_date: s.lastMovementDate || null,
       min_level: s.minLevel||0, reorder_point: s.reorderPoint||0,
       per_sheet_weight_kg: (s as any).perSheetWeightKg||0,
       per_sqft_weight_kg:  (s as any).perSqftWeightKg||0,
@@ -499,7 +502,8 @@ export const InventoryService = {
       id: e.id,
       company: e.company || '',
       material_id: e.materialId || '',
-      timestamp: e.timestamp || '',
+      // timestamptz — null not '' when absent (see store_items fix above).
+      timestamp: e.timestamp || null,
       mvmnt_code: e.mvmntCode || '',
       qty: e.qty || 0,
       uom: e.uom || '',
