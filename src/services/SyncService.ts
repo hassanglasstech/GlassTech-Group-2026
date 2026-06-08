@@ -294,7 +294,8 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     unit: s.unit||'Sqft',
     moving_average_price: s.movingAveragePrice||0,
     total_value: s.totalValue||0, storage_bin: s.storageBin||'',
-    last_movement_date: s.lastMovementDate||'',
+    // timestamptz rejects '' (Postgres 22007) — null when absent.
+    last_movement_date: s.lastMovementDate || null,
     min_level: s.minLevel||0, reorder_point: s.reorderPoint||0,
   }),
   warehouse_spots: (s: any) => ({

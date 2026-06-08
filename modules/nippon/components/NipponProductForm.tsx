@@ -3,7 +3,27 @@ import React, { useState, useEffect } from 'react';
 import { Product, StoreItem, Vendor } from '../../shared/types';
 import { SalesService } from '../../sales/services/salesService';
 import { toast } from 'sonner';
-import { X, Box, Tag, Building2, Hash, Layout, ListFilter, UploadCloud, Star } from 'lucide-react';
+import { supabase } from '@/src/services/supabaseClient';
+import { X, Box, Tag, Building2, Hash, Layout, ListFilter, UploadCloud } from 'lucide-react';
+
+const PRODUCT_IMAGE_BUCKET = 'product-images';
+
+// Upload a base64 data-URL to the product-images bucket, named by product id.
+// Returns the public URL. Storing a short URL (not a ~50KB base64 blob) in
+// products.image_url is what keeps the row small enough to persist — base64
+// payloads silently bust Supabase's body limit on batch upsert, so the image
+// "vanishes" from the list after refresh even though the edit form still holds
+// it in memory.
+async function uploadProductImage(productId: string, dataUrl: string): Promise<string> {
+  const blob = await (await fetch(dataUrl)).blob();
+  const path = `${productId}.jpg`;
+  const { error } = await supabase.storage
+    .from(PRODUCT_IMAGE_BUCKET)
+    .upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+  if (error) throw error;
+  const { data } = supabase.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
 
 interface NipponProductFormProps {
   isOpen: boolean;
@@ -33,7 +53,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
       tongueLength: '',
       spindleLength: '',
       minLevel: 10,
-      images: [] as string[],
+      image: '',
       technicalSpecs: {} as Record<string, string>,
       width: 0,
       height: 0,
@@ -56,10 +76,6 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
         setNipponVendors(allVendors.filter(v => v.company === 'Nippon'));
 
         if (editingProduct) {
-            const _specs: Record<string, string> = { ...(editingProduct.technicalSpecs || {}) };
-            let _imgs: string[] = [];
-            if (_specs.__images) { try { _imgs = JSON.parse(_specs.__images); } catch { _imgs = []; } delete _specs.__images; }
-            if (_imgs.length === 0 && editingProduct.imageUrl) _imgs = [editingProduct.imageUrl];
             setFormData({
                 internalId: editingProduct.profileCode || '',
                 modelNo: editingProduct.modelNo || '',
@@ -77,8 +93,8 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                 tongueLength: editingProduct.tongueLength || '',
                 spindleLength: editingProduct.spindleLength || '',
                 minLevel: 10,
-                images: _imgs,
-                technicalSpecs: _specs,
+                image: editingProduct.imageUrl || '',
+                technicalSpecs: editingProduct.technicalSpecs || {},
                 width: editingProduct.width || 0,
                 height: editingProduct.height || 0,
                 frameColor: editingProduct.frameColor || '',
@@ -94,7 +110,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                 mainCategory: '', subCategory: '', category: 'Hardware',
                 unit: 'PCS', costPrice: 0, basePrice: 0, finishColor: '', material: '',
                 direction: '', tongueLength: '', spindleLength: '', minLevel: 10,
-                images: [], technicalSpecs: {}, width: 0, height: 0, frameColor: '', meshColor: '',
+                image: '', technicalSpecs: {}, width: 0, height: 0, frameColor: '', meshColor: '',
                 isSet: false, setComponents: [], hsCode: '', subDescription: ''
             });
         }
@@ -133,7 +149,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
             }
             
             const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
-            setFormData(prev => ({ ...prev, images: [...prev.images, compressedBase64] }));
+            setFormData(prev => ({ ...prev, image: compressedBase64 }));
         };
         img.src = event.target?.result as string;
     };
@@ -143,9 +159,8 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
   if (!isOpen) return null;
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files) Array.from(files).forEach(processFile);
-    e.target.value = '';
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -161,15 +176,34 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const files = e.dataTransfer.files;
-    if (files) Array.from(files).forEach(processFile);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processFile(file);
   };
 
-  const handleSave = () => {
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
       if (!formData.description || !formData.unit) return toast.error("Description and Unit are required.");
-      
+      if (isSaving) return;
+      setIsSaving(true);
+
+      const prodId = editingProduct ? editingProduct.id : `NIP-${formData.modelNo || Date.now()}`;
+
+      // If a new image was picked it's an in-memory base64 data-URL. Push it to
+      // the bucket and keep only the public URL on the product. Already-uploaded
+      // images (http URL) pass through untouched.
+      let finalImageUrl = formData.image;
+      if (formData.image && formData.image.startsWith('data:')) {
+        try {
+          finalImageUrl = await uploadProductImage(prodId, formData.image);
+        } catch (err) {
+          setIsSaving(false);
+          return toast.error(`Image upload failed: ${(err as Error)?.message || 'unknown'}. Product not saved.`);
+        }
+      }
+
       const newProduct: Product = {
-          id: editingProduct ? editingProduct.id : `NIP-${formData.modelNo || Date.now()}`,
+          id: prodId,
           company: 'Nippon',
           category: formData.category,
           mainCategory: formData.mainCategory,
@@ -186,9 +220,9 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
           direction: formData.direction,
           tongueLength: formData.tongueLength,
           spindleLength: formData.spindleLength,
-          imageUrl: formData.images[0] || '',
+          imageUrl: finalImageUrl,
           variants: [],
-          technicalSpecs: { ...formData.technicalSpecs, ...(formData.images.length ? { __images: JSON.stringify(formData.images) } : {}) },
+          technicalSpecs: formData.technicalSpecs,
           width: Number(formData.width),
           height: Number(formData.height),
           frameColor: formData.frameColor,
@@ -205,6 +239,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
       };
 
       onSave(newProduct, storeData);
+      setIsSaving(false);
   };
 
   return (
@@ -219,44 +254,35 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
             </div>
             
             <div className="p-8 space-y-6 bg-slate-50 overflow-y-auto max-h-[70vh]">
-                {/* IMAGE GALLERY SECTION (multiple images) */}
-                <div
-                    className={`bg-white p-4 rounded-2xl border-2 border-dashed transition-all ${isDragging ? 'border-red-500 bg-red-50' : 'border-slate-200 hover:border-red-300'}`}
+                {/* IMAGE UPLOAD SECTION */}
+                <div 
+                    className={`flex items-center space-x-6 bg-white p-4 rounded-2xl border-2 border-dashed transition-all group ${isDragging ? 'border-red-500 bg-red-50' : 'border-slate-200 hover:border-red-300'}`}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
                 >
-                    <div className="flex items-center justify-between mb-3">
-                        <div>
-                            <h4 className="text-xs font-black uppercase text-slate-700">Product Images</h4>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">First image = primary (catalog &amp; invoices). Add multiple, drag &amp; drop supported.</p>
-                        </div>
-                        <span className="text-[10px] font-black text-slate-400 uppercase">{formData.images.length} image{formData.images.length === 1 ? '' : 's'}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-3">
-                        {formData.images.map((img, idx) => (
-                            <div key={idx} className="relative w-24 h-24 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 group/img shrink-0">
-                                <img src={img} alt={`Image ${idx + 1}`} className="w-full h-full object-cover" />
-                                {idx === 0 && (
-                                    <span className="absolute top-1 left-1 bg-red-600 text-white text-[8px] font-black uppercase px-1.5 py-0.5 rounded">Primary</span>
-                                )}
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                    {idx !== 0 && (
-                                        <button type="button" title="Make primary"
-                                            onClick={() => setFormData(prev => { const a = [...prev.images]; const [m] = a.splice(idx, 1); a.unshift(m); return { ...prev, images: a }; })}
-                                            className="bg-white/90 text-amber-600 rounded-full p-1"><Star size={12} /></button>
-                                    )}
-                                    <button type="button" title="Remove"
-                                        onClick={() => setFormData(prev => ({ ...prev, images: prev.images.filter((_, i) => i !== idx) }))}
-                                        className="bg-white/90 text-rose-600 rounded-full p-1"><X size={12} /></button>
-                                </div>
-                            </div>
-                        ))}
-                        <label className="w-24 h-24 rounded-xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center cursor-pointer text-slate-400 hover:border-red-400 hover:text-red-500 transition-all shrink-0">
-                            <UploadCloud size={22} />
-                            <span className="text-[9px] font-black uppercase mt-1">Add</span>
-                            <input type="file" className="hidden" accept="image/*" multiple onChange={handleImageUpload} />
+                    <div className="relative w-24 h-24 bg-slate-100 rounded-xl overflow-hidden flex items-center justify-center border border-slate-200 shrink-0">
+                        {formData.image ? (
+                            <img src={formData.image} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                            <Box size={32} className="text-slate-300" />
+                        )}
+                        <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
+                            <UploadCloud size={20} className="text-white" />
+                            <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
                         </label>
+                    </div>
+                    <div>
+                        <h4 className="text-xs font-black uppercase text-slate-700">Product Image</h4>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Upload a clear photo for the catalog and invoices.</p>
+                        {formData.image && (
+                            <button 
+                                onClick={() => setFormData({ ...formData, image: '' })}
+                                className="text-[10px] font-black text-rose-500 uppercase mt-2 hover:underline"
+                            >
+                                Remove Image
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -583,8 +609,8 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
 
             <div className="px-8 py-6 bg-white border-t flex justify-end space-x-3">
                 <button onClick={onClose} className="px-6 py-2 text-slate-400 font-bold uppercase text-xs hover:text-slate-600">Cancel</button>
-                <button onClick={handleSave} className="bg-red-600 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-red-700 transition-all flex items-center gap-2">
-                    <Box size={16}/> <span>Save Hardware</span>
+                <button onClick={handleSave} disabled={isSaving} className="bg-red-600 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-red-700 transition-all flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+                    <Box size={16}/> <span>{isSaving ? 'Saving…' : 'Save Hardware'}</span>
                 </button>
             </div>
 
