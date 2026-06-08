@@ -242,6 +242,9 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
       description: `RECEIPT ${receiptId}: ${receiptModalInvoice.clientName} — ${receiptModalInvoice.id} via ${receiptForm.method}`,
       referenceId: receiptId, status: 'Posted',
       reqId: receiptModalInvoice.orderId,
+      // Auto-generated from invoice payment, not a manual JV — mark as
+      // system-auto so the Maker-Checker gate in saveLedger doesn't flag it.
+      createdBy: 'system-auto',
       details: [
         { accountId: cashAcc.id,   debit: receiptForm.amount, credit: 0,                  text: `${receiptForm.method} received${receiptForm.reference ? ': ' + receiptForm.reference : ''}` },
         { accountId: clientAR.id,  debit: 0,                  credit: receiptForm.amount, text: `AR settled: ${receiptModalInvoice.clientName} — ${receiptModalInvoice.id}` },
