@@ -112,24 +112,31 @@ export const useNipponQuotations = () => {
 
   const updateItem = (index: number, field: string, value: unknown) => {
     setFormData(prev => {
-      const items = prev.items || [];
-      // Bounds guard — ignore updates for out-of-range rows to prevent sparse
-      // arrays / silent data corruption from stale indices.
-      if (index < 0 || index >= items.length) return prev;
-      const next = [...items];
+      const next = [...(prev.items || [])];
       const item = { ...next[index], [field]: value };
-
+      
       if (!item.isSection) {
+        // If description is updated, we might be selecting a product
+        // But we handle explicit selection in the UI for better control
         item.amount = (Number(item.qty) || 0) * (Number(item.pricePerUnit) || 0);
       }
-
+      
       next[index] = item;
       return { ...prev, items: next };
     });
-    // NOTE: set-component suggestions are triggered from selectProduct (where
-    // the full Product object is available). updateItem only receives scalar
-    // field values, so the previous product-detection block here was dead code
-    // and has been removed.
+    // ── Set suggestion: if product is part of a set, prompt user ──
+    // `prod` was orphaned from an earlier refactor — would have crashed at
+    // runtime as ReferenceError. Resolve from the value when the field
+    // looks like a product selection; bail out otherwise.
+    const maybeProduct = (field === 'productId' || field === 'product') ? value : null;
+    const prod = maybeProduct as Product | null;
+    if (prod && prod.isSet && prod.setComponents && prod.setComponents.length > 0) {
+      setPendingSetSuggestion({
+        index,
+        setProduct: prod,
+        remainingComponents: prod.setComponents,
+      });
+    }
   };
 
   // ── Set suggestion state ───────────────────────────────────────────
@@ -216,19 +223,10 @@ export const useNipponQuotations = () => {
       item.glazingSpecs = prod.brand || ''; // Brand
       item.amount = (Number(item.qty) || 1) * (Number(item.pricePerUnit) || 0);
       item.attachedImage = prod.imageUrl || prod.image;
-
+      
       next[index] = item;
       return { ...prev, items: next };
     });
-
-    // If the selected product is a set, offer to add its components as lines.
-    if (prod.isSet && Array.isArray(prod.setComponents) && prod.setComponents.length > 0) {
-      setPendingSetSuggestion({
-        index,
-        setProduct: prod,
-        remainingComponents: prod.setComponents,
-      });
-    }
   };
 
   const handleRemoveItem = (index: number) => {
@@ -261,14 +259,6 @@ export const useNipponQuotations = () => {
 
     const itemsSubtotal = lineItems.reduce((s, i) => s + (Number(i.amount) || 0), 0);
     if (itemsSubtotal <= 0) return toast.error("Quotation total must be greater than zero.");
-
-    // Line-item + discount sanity checks (block negative/zero qty, negative
-    // price, and over-discounting that would yield a zero/negative invoice).
-    if (lineItems.some(i => (Number(i.qty) || 0) <= 0)) return toast.error("Each item quantity must be at least 1.");
-    if (lineItems.some(i => (Number(i.pricePerUnit) || 0) < 0)) return toast.error("Item price cannot be negative.");
-    const discAmt = Number(formData.discountAmount) || 0;
-    if (discAmt < 0) return toast.error("Discount cannot be negative.");
-    if (discAmt > itemsSubtotal) return toast.error("Discount cannot exceed the subtotal.");
 
     // P1-5: block edit-after-approval to prevent inventory double-decrement.
     // Once approved, the quote becomes a Sales Order — edits must go through
@@ -306,61 +296,6 @@ export const useNipponQuotations = () => {
         status: approve ? 'Approved' : 'Draft',
         orderNo: approve ? `SO-${mmyy}-${formData.manualSerial}` : undefined
       };
-
-      // Leakage #3 fix: snapshot cost basis (MAP at approval) onto each line so
-      // COGS at invoice time uses the cost at the moment of sale, not a later
-      // (possibly changed) MAP. Backward-compatible: invoice falls back to live
-      // MAP when costBasis is absent.
-      if (approve) {
-        const snap = InventoryService.getStore();
-        finalQuo.items = ((finalQuo.items || []).map(it => {
-          if (it.isSection || !it.locationCode) return it;
-          const si = snap.find(s => s.id === it.locationCode);
-          return si ? ({ ...it, costBasis: Number(si.movingAveragePrice) || 0 } as any) : it;
-        })) as any;
-      }
-
-      // Leakage #5 fix: block double-approval (e.g. rapid double-click). If the
-      // persisted row is already Approved, stock was already decremented.
-      if (approve && all.some(x => x.id === finalQuo.id && x.status === 'Approved')) {
-        toast.error('This quote is already approved — stock already updated.');
-        return;
-      }
-
-      // Leakage #4 fix: oversell / negative-stock guard. Verify sufficient
-      // unrestricted stock BEFORE approving (decrement happens below). Aggregate
-      // qty per store item so multiple lines on the same SKU are summed.
-      if (approve) {
-        const stockNow = InventoryService.getStore();
-        const need = new Map<string, number>();
-        for (const item of lineItems) {
-          if (!item.locationCode) continue;
-          const si = stockNow.find(s => s.id === item.locationCode);
-          // Leakage #10 fix: Unit-of-Measure lock. Block if the quote line's
-          // unit differs from the stock item's unit (e.g. selling in BOX while
-          // stock is tracked in PCS) — otherwise the decrement is off by the
-          // pack factor. Trivial case/whitespace differences are ignored.
-          if (si) {
-            const lineUnit  = String((item as any).glassSize || '').trim().toUpperCase();
-            const stockUnit = String((si as any).unit || '').trim().toUpperCase();
-            if (lineUnit && stockUnit && lineUnit !== stockUnit) {
-              toast.error(`Unit mismatch for ${si.name || item.locationCode}: quote is in "${item.glassSize}" but stock is in "${si.unit}". Align the unit in Material Master before approving.`, { duration: 8000 });
-              return;
-            }
-          }
-          need.set(item.locationCode, (need.get(item.locationCode) || 0) + (Number(item.qty) || 0));
-        }
-        for (const [sid, qty] of need) {
-          const si = stockNow.find(s => s.id === sid);
-          if (si) {
-            const avail = Number(si.unrestrictedQty ?? si.quantity ?? 0);
-            if (qty > avail) {
-              toast.error(`Insufficient stock for ${si.name || sid}: need ${qty}, available ${avail}.`);
-              return;
-            }
-          }
-        }
-      }
 
       // P1-7: persist quote FIRST, then decrement inventory only on success.
       // Previous order (inventory → quote) left stock out of sync when the

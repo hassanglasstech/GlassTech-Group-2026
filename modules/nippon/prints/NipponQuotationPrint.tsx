@@ -266,16 +266,31 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                                                                 )}
                                                             </td>
                                                             <td className="py-2 px-2">
-                                                                {/* Model No — show locationCode if set (new quotes), else nothing */}
-                                                                {item.locationCode && (
-                                                                    <p className="text-[7.5px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-0.5">
-                                                                        {item.locationCode}
-                                                                    </p>
-                                                                )}
-                                                                <p className="font-black text-slate-800 uppercase leading-tight text-[10px] whitespace-pre-wrap">
-                                                                    {/* Strip any legacy "(spec | spec)" suffix saved before this fix */}
-                                                                    {(item.description ?? '').replace(/^PCS\s+/i, '').replace(/\s*\([^)]*\)\s*$/, '').trim()}
-                                                                </p>
+                                                                {(() => {
+                                                                    const raw = item.description ?? '';
+                                                                    // New quotes: locationCode = modelNo, description = clean.
+                                                                    // Old quotes: locationCode is empty, description = "Handle (CZS133-L55 | White)".
+                                                                    // For old quotes, extract first token inside parens as the model no.
+                                                                    const modelNo = item.locationCode
+                                                                        || raw.match(/\(([^|)\s][^|)]*?)(?:\s*\|[^)]*)?\)/)?.[1]?.trim()
+                                                                        || '';
+                                                                    const cleanName = raw
+                                                                        .replace(/^PCS\s+/i, '')
+                                                                        .replace(/\s*\([^)]*\)\s*$/, '')
+                                                                        .trim();
+                                                                    return (
+                                                                        <>
+                                                                            {modelNo && (
+                                                                                <p className="text-[7.5px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-0.5">
+                                                                                    {modelNo}
+                                                                                </p>
+                                                                            )}
+                                                                            <p className="font-black text-slate-800 uppercase leading-tight text-[10px] whitespace-pre-wrap">
+                                                                                {cleanName}
+                                                                            </p>
+                                                                        </>
+                                                                    );
+                                                                })()}
                                                             </td>
                                                             <td className="py-2 px-2 text-center font-bold text-slate-500 uppercase text-[9px]">{item.glassSize || 'PCS'}</td>
                                                             <td className="py-2 px-2 text-center font-black text-slate-900 text-[10px]">{item.qty}</td>
