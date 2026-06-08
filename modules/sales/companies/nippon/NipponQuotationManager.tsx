@@ -11,10 +11,6 @@ import { useNipponQuotations } from './useNipponQuotations';
 
 const NipponQuotationManager: React.FC = () => {
   const [nipponPrintType, setNipponPrintType] = React.useState<'KinLong' | 'Glasstech' | 'General'>('Glasstech');
-  // Inline section-heading entry (replaces blocking window.prompt — better UX,
-  // mobile-friendly, validates empty input).
-  const [sectionModal, setSectionModal] = React.useState<{ afterIdx?: number } | null>(null);
-  const [sectionTitle, setSectionTitle] = React.useState('');
   const {
     quotations,
     clients,
@@ -257,7 +253,7 @@ const NipponQuotationManager: React.FC = () => {
                                 <span className="bg-amber-500 text-white text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest">SET</span>
                                 <span className="font-black uppercase tracking-widest text-amber-800 text-xs">{item.description}</span>
                                 {!isLocked && (
-                                  <button onClick={() => { const next = [...(formData.items||[])]; next.splice(idx,1); setFormData({...formData, items: next}); }} className="ml-auto text-[10px] text-rose-400 hover:text-rose-600 font-bold">Remove Set Header</button>
+                                  <button onClick={() => { const next = [...(formData.items||[])]; next.splice(idx,1); }} className="ml-auto text-[10px] text-rose-400 hover:text-rose-600 font-bold">Remove Set Header</button>
                                 )}
                               </div>
                             ) : (
@@ -321,7 +317,7 @@ const NipponQuotationManager: React.FC = () => {
                                        const available = s.unrestrictedQty || 0;
                                        const total = s.quantity || 0;
                                        const displayName = prod?.name || prod?.description || s.name || s.id;
-                                       const code = prod?.itemCode || prod?.profileCode || s.id;
+                                       const code = prod?.modelNo || prod?.itemCode || prod?.profileCode || s.id;
                                        const unit = prod?.unit || s.unit || 'PCS';
                                        const price = prod?.price || prod?.basePrice || s.movingAveragePrice || 0;
                                        const brand = prod?.brand || '';
@@ -383,7 +379,7 @@ const NipponQuotationManager: React.FC = () => {
                                 <input readOnly={isLocked} type="text" placeholder="Unit" className="sap-input w-full py-1 text-center text-xs font-bold uppercase" value={item.glassSize || ''} onChange={e => updateItem(idx, 'glassSize', e.target.value)} />
                             </td>
                             <td className="w-20">
-                                <input readOnly={isLocked} type="number" min="1" className="sap-input w-full py-1 text-center text-xs font-bold" value={item.qty || ''} onChange={e => updateItem(idx, 'qty', Math.max(0, Number(e.target.value)))} />
+                                <input readOnly={isLocked} type="number" className="sap-input w-full py-1 text-center text-xs font-bold" value={item.qty || ''} onChange={e => updateItem(idx, 'qty', Number(e.target.value))} />
                             </td>
                             <td className="w-28">
                                 <input readOnly={isLocked} type="number" className="sap-input w-full py-1 text-right text-xs font-bold text-blue-600" value={item.pricePerUnit || ''} onChange={e => updateItem(idx, 'pricePerUnit', Number(e.target.value))} />
@@ -396,7 +392,10 @@ const NipponQuotationManager: React.FC = () => {
                         <td className="w-12 text-center">
                             {!isLocked && (
                               <div className="flex items-center justify-center gap-1">
-                                <button onClick={() => { setSectionTitle(''); setSectionModal({ afterIdx: idx }); }} className="text-slate-400 hover:text-emerald-600" title="Add Section Below"><Layers size={14}/></button>
+                                <button onClick={() => {
+                                  const title = prompt("Enter Section Heading:");
+                                  if (title !== null) handleAddSection(title, idx);
+                                }} className="text-slate-400 hover:text-emerald-600" title="Add Section Below"><Layers size={14}/></button>
                                 <button onClick={() => handleDuplicateItem(idx)} className="text-slate-400 hover:text-blue-600" title="Duplicate Row"><Copy size={14}/></button>
                                 <button onClick={() => handleRemoveItem(idx)} className="text-slate-400 hover:text-red-500" title="Remove Row"><Trash2 size={14}/></button>
                               </div>
@@ -414,15 +413,15 @@ const NipponQuotationManager: React.FC = () => {
                   <div className="flex justify-end items-center space-x-8">
                     <div className="flex items-center space-x-2">
                         <label className="text-[10px] font-black uppercase text-slate-400">Discount %</label>
-                        <input disabled={isLocked} type="number" min="0" max="100" className="sap-input w-20 text-right font-bold text-rose-600 py-1" value={formData.discountPercent || ''} onChange={e => {
-                            const pct = Math.min(100, Math.max(0, Number(e.target.value)));
+                        <input disabled={isLocked} type="number" className="sap-input w-20 text-right font-bold text-rose-600 py-1" value={formData.discountPercent || ''} onChange={e => {
+                            const pct = Number(e.target.value);
                             setFormData({...formData, discountPercent: pct, discountAmount: subTotal * (pct/100)});
                         }} />
                     </div>
                     <div className="flex items-center space-x-2">
                         <label className="text-[10px] font-black uppercase text-slate-400">Discount Rs</label>
-                        <input disabled={isLocked} type="number" min="0" className="sap-input w-24 text-right font-bold text-rose-600 py-1" value={formData.discountAmount || ''} onChange={e => {
-                            const amt = Math.min(subTotal, Math.max(0, Number(e.target.value)));
+                        <input disabled={isLocked} type="number" className="sap-input w-24 text-right font-bold text-rose-600 py-1" value={formData.discountAmount || ''} onChange={e => {
+                            const amt = Number(e.target.value);
                             setFormData({...formData, discountAmount: amt, discountPercent: subTotal > 0 ? (amt/subTotal)*100 : 0});
                         }} />
                     </div>
@@ -444,7 +443,10 @@ const NipponQuotationManager: React.FC = () => {
                       </button>
                       <button 
                         disabled={isLocked} 
-                        onClick={() => { setSectionTitle(''); setSectionModal({}); }} 
+                        onClick={() => {
+                          const title = prompt("Enter Section Heading:");
+                          if (title !== null) handleAddSection(title);
+                        }} 
                         className={`text-[10px] py-2.5 px-6 flex items-center space-x-2 shadow-sm font-black uppercase tracking-widest transition-all rounded-lg border ${isLocked ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
                       >
                         <Layers size={16}/> <span>Add New Section</span>
@@ -452,6 +454,13 @@ const NipponQuotationManager: React.FC = () => {
                     </div>
 
                     <div className="flex items-center space-x-3">
+                      <button
+                        disabled={isLocked || isSaving}
+                        onClick={() => handleSave(false)}
+                        className={`text-[10px] py-2.5 px-6 flex items-center space-x-2 shadow-sm font-black uppercase tracking-widest transition-all rounded-lg border ${(isLocked || isSaving) ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+                      >
+                        <Save size={16}/> <span>{isSaving ? 'Saving…' : 'Save Draft'}</span>
+                      </button>
                       <button
                         disabled={isLocked || isSaving}
                         onClick={() => handleSave(false)}
@@ -514,41 +523,6 @@ const NipponQuotationManager: React.FC = () => {
                   className="col-span-1 py-2.5 text-xs font-bold text-white bg-amber-600 rounded-xl hover:bg-amber-700 transition-colors uppercase shadow-md"
                 >
                   Add Full Set
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {sectionModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[600]" onClick={() => setSectionModal(null)}>
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center gap-2">
-              <Layers size={16} />
-              <h4 className="font-black uppercase tracking-tight text-sm">Add Section Heading</h4>
-            </div>
-            <div className="p-6 space-y-4">
-              <input
-                autoFocus
-                type="text"
-                value={sectionTitle}
-                onChange={e => setSectionTitle(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && sectionTitle.trim()) { handleAddSection(sectionTitle.trim(), sectionModal.afterIdx); setSectionModal(null); }
-                  if (e.key === 'Escape') setSectionModal(null);
-                }}
-                placeholder="e.g. Ground Floor Windows"
-                className="sap-input w-full font-bold"
-              />
-              <div className="flex justify-end gap-2">
-                <button onClick={() => setSectionModal(null)} className="sap-btn-ghost text-xs">Cancel</button>
-                <button
-                  disabled={!sectionTitle.trim()}
-                  onClick={() => { handleAddSection(sectionTitle.trim(), sectionModal.afterIdx); setSectionModal(null); }}
-                  className="sap-btn-primary text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Add Section
                 </button>
               </div>
             </div>
