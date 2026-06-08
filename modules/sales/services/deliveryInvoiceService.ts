@@ -93,17 +93,59 @@ function buildNipponTradingCOGSPlan(params: {
   }
 
   const store = InventoryService.getStore();
+  // Resolve the store_item (whose id === product.id, e.g. NIP-KL-CZS133-L55-W)
+  // for each quote line. The line may reference the product three ways:
+  //   1. productRef   — set on new quotes; holds the real product.id  (preferred)
+  //   2. locationCode — legacy quotes held the id here; new quotes hold the modelNo
+  //   3. modelNo→id   — map via products master when locationCode is a modelNo
+  // Without this chain, store.find(s => s.id === locationCode) silently misses
+  // (modelNo ≠ store id) → unitCost 0 → COGS 0 → inventory never relieved. P1.
+  const nipponProducts = SalesService.getProducts().filter((p) => p.company === company);
+  const idByModelNo = new Map<string, string>();
+  nipponProducts.forEach((p) => {
+    if (p.modelNo) idByModelNo.set(p.modelNo, p.id);
+  });
+  const resolveStoreItem = (item: { productRef?: string; locationCode?: string }) => {
+    if (item.productRef) {
+      const byRef = store.find((s) => s.id === item.productRef);
+      if (byRef) return byRef;
+    }
+    if (item.locationCode) {
+      const byCode = store.find((s) => s.id === item.locationCode);
+      if (byCode) return byCode;
+      const mappedId = idByModelNo.get(item.locationCode);
+      if (mappedId) {
+        const byModel = store.find((s) => s.id === mappedId);
+        if (byModel) return byModel;
+      }
+    }
+    return undefined;
+  };
+
   let totalCogs = 0;
+  const unmatched: string[] = [];
   (items || []).forEach((item) => {
     if (item.isSection) return;
     const qty = Number(item.qty) || 0;
     if (qty <= 0) return;
-    const si = store.find((s) => s.id === item.locationCode);
-    // Leakage #3 fix: prefer the cost basis snapshotted at SO approval; fall
-    // back to live MAP for legacy orders saved before this change.
-    const unitCost = (item as any).costBasis ?? (si?.movingAveragePrice ?? 0);
+    const si = resolveStoreItem(item);
+    if (!si) {
+      unmatched.push(item.locationCode || item.productRef || item.description || '?');
+      return;
+    }
+    const unitCost = si.movingAveragePrice || 0;
     totalCogs += qty * unitCost;
   });
+
+  // Surface a loud warning if any line could not be cost-matched — a missing
+  // COGS line understates COGS and overstates gross profit. Better the user
+  // knows than the books silently drift.
+  if (unmatched.length > 0) {
+    console.warn(
+      `[Nippon COGS] ${unmatched.length} line(s) had no matching stock item — ` +
+      `COGS excluded for: ${unmatched.join(', ')}`
+    );
+  }
 
   if (totalCogs <= 0) {
     return { ledgerTx: null, totalCogs: 0, alreadyPosted: false };
