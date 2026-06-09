@@ -69,6 +69,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isSetModalOpen, setIsSetModalOpen] = useState(false);
   const [newComponent, setNewComponent] = useState({ description: '', unit: 'PCS', qtyPerSet: 1 });
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -179,8 +180,6 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
     const file = e.dataTransfer.files?.[0];
     if (file) processFile(file);
   };
-
-  const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
       if (!formData.description || !formData.unit) return toast.error("Description and Unit are required.");
