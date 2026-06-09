@@ -237,8 +237,14 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
           unit: formData.unit
       };
 
-      onSave(newProduct, storeData);
-      setIsSaving(false);
+      // onSave is async (parent does Supabase upsert + refresh). Await it so
+      // the "Saving…" button state actually reflects the cloud round-trip and
+      // any toast the parent fires lands before the modal closes.
+      try {
+        await Promise.resolve(onSave(newProduct, storeData));
+      } finally {
+        setIsSaving(false);
+      }
   };
 
   return (

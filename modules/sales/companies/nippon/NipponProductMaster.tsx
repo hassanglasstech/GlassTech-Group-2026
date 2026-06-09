@@ -10,7 +10,6 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { ProductImage } from '@/modules/shared/components/ProductImage';
 import NipponProductForm from '@/modules/nippon/components/NipponProductForm';
 import NipponSmartImporter from './components/NipponSmartImporter';
 import NipponDirectImporter from './components/NipponDirectImporter';
@@ -105,10 +104,15 @@ const NipponProductMaster: React.FC = () => {
         });
     }
 
-    await AsyncSalesService.saveProducts(updatedProducts);
-    InventoryService.saveStore(updatedStore);
-    await refreshData();
-    setIsModalOpen(false);
+    try {
+      await AsyncSalesService.saveProducts(updatedProducts);
+      InventoryService.saveStore(updatedStore);
+      await refreshData();
+      setIsModalOpen(false);
+      toast.success(editingProduct ? `Updated: ${product.description}` : `Added: ${product.description}`);
+    } catch (err) {
+      toast.error(`Save failed: ${(err as Error)?.message || 'unknown'}`);
+    }
   };
 
   const openAddModal = () => {
@@ -535,11 +539,15 @@ const NipponProductMaster: React.FC = () => {
                     {filtered.map(p => {
                         const stock = getStockLevel(p.id);
                         return (
-                            <tr key={p.id} onClick={() => handleEdit(p)} className="hover:bg-slate-50 transition-colors text-xs group cursor-pointer">
+                            <tr key={p.id} className="hover:bg-slate-50 transition-colors text-xs group">
                                 <td className="px-6 py-3 font-mono font-bold text-slate-400 uppercase">{p.profileCode || '-'}</td>
                                 <td className="py-3">
                                     <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center">
-                                        <ProductImage code={p.modelNo} url={p.imageUrl} alt={p.description} className="w-full h-full object-cover" iconSize={16} />
+                                        {p.imageUrl ? (
+                                            <img src={p.imageUrl} alt={p.description} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <Package size={16} className="text-slate-300" />
+                                        )}
                                     </div>
                                 </td>
                                 <td className="font-black text-slate-500 uppercase">
@@ -574,8 +582,8 @@ const NipponProductMaster: React.FC = () => {
                                 </td>
                                 <td className="pr-6 text-right">
                                     <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={(e) => { e.stopPropagation(); handleEdit(p); }} className="p-1.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded transition-all"><Edit2 size={12}/></button>
-                                        <button onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }} className="p-1.5 text-slate-400 hover:text-red-600 bg-white border border-slate-200 rounded transition-all"><Trash2 size={12}/></button>
+                                        <button onClick={() => handleEdit(p)} className="p-1.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded transition-all"><Edit2 size={12}/></button>
+                                        <button onClick={() => handleDelete(p.id)} className="p-1.5 text-slate-400 hover:text-red-600 bg-white border border-slate-200 rounded transition-all"><Trash2 size={12}/></button>
                                     </div>
                                 </td>
                             </tr>
