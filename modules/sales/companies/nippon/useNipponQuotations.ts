@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { Company, Client, Quotation, QuotationItem, Product } from '@/modules/shared/types';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
-import { StoreItem } from '@/modules/procurement/types/inventory';
+import { StoreItem, ProductComponent } from '@/modules/procurement/types/inventory';
 import { Logger } from '@/modules/shared/services/logger';
 
 export const useNipponQuotations = () => {
@@ -143,7 +143,7 @@ export const useNipponQuotations = () => {
   const [pendingSetSuggestion, setPendingSetSuggestion] = useState<{
     index: number;
     setProduct: Product;
-    remainingComponents: unknown[];
+    remainingComponents: ProductComponent[];
   } | null>(null);
 
   const addFullSet = (index: number, setProduct: Product, allProducts: Product[]) => {

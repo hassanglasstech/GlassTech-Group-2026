@@ -82,7 +82,7 @@ const NipponQuotationManager: React.FC = () => {
     if (!pendingSetSuggestion) return;
     const idx = pendingSetSuggestion.index;
     const comps = pendingSetSuggestion.remainingComponents;
-    const newLines = comps.map((c: Record<string, unknown>, ci: number) => {
+    const newLines = comps.map((c, ci) => {
       const matchProd = products.find((p) =>
         p.id === c.id || p.description.toUpperCase() === c.description.toUpperCase()
       );
@@ -240,7 +240,7 @@ const NipponQuotationManager: React.FC = () => {
                             : (() => {
                                 // Count only non-section, non-setHeader items before this index
                                 const serialNo = formData.items!.slice(0, idx).filter(
-                                  (i: QuotationItem) => !i.isSection && !(i as Record<string, unknown>).isSetHeader
+                                  (i: QuotationItem) => !i.isSection && !i.isSetHeader
                                 ).length + 1;
                                 return serialNo;
                               })()
@@ -501,7 +501,7 @@ const NipponQuotationManager: React.FC = () => {
             <div className="p-6 space-y-4">
               <p className="text-xs text-slate-600 font-medium">This product is part of a set with {pendingSetSuggestion.remainingComponents.length} components:</p>
               <div className="bg-slate-50 rounded-xl p-3 space-y-1.5 border border-slate-200">
-                {pendingSetSuggestion.remainingComponents.map((c: Record<string, unknown>, ci: number) => (
+                {pendingSetSuggestion.remainingComponents.map((c, ci) => (
                   <div key={ci} className="flex justify-between text-xs">
                     <span className="font-bold text-slate-800 uppercase">{c.description}</span>
                     <span className="text-slate-500 font-medium">{c.qtyPerSet} {c.unit}</span>
