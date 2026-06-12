@@ -73,6 +73,7 @@ export interface SbProductRow extends SbBaseRow {
   frame_color?:     string | null;
   mesh_color?:      string | null;
   sub_description?: string | null;
+  nick_name?:       string | null;
 }
 
 // ── quotations table ─────────────────────────────────────────────────────────

@@ -62,7 +62,8 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
       isSet: false,
       setComponents: [] as { id: string; description: string; unit: string; qtyPerSet: number }[],
       hsCode: '',
-      subDescription: ''
+      subDescription: '',
+      nickName: ''
   });
   const [newSpecKey, setNewSpecKey] = useState('');
   const [newSpecValue, setNewSpecValue] = useState('');
@@ -103,7 +104,8 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                 isSet: editingProduct.isSet || false,
                 setComponents: editingProduct.setComponents || [],
                 hsCode: editingProduct.hsCode || '',
-                subDescription: (editingProduct as any).subDescription || ''
+                subDescription: (editingProduct as any).subDescription || '',
+                nickName: (editingProduct as any).nickName || ''
             });
         } else {
             setFormData({
@@ -112,7 +114,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                 unit: 'PCS', costPrice: 0, basePrice: 0, finishColor: '', material: '',
                 direction: '', tongueLength: '', spindleLength: '', minLevel: 10,
                 image: '', technicalSpecs: {}, width: 0, height: 0, frameColor: '', meshColor: '',
-                isSet: false, setComponents: [], hsCode: '', subDescription: ''
+                isSet: false, setComponents: [], hsCode: '', subDescription: '', nickName: ''
             });
         }
     }
@@ -229,7 +231,8 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
           isSet: formData.isSet,
           setComponents: formData.isSet ? formData.setComponents : [],
           hsCode: formData.hsCode,
-          subDescription: (formData as any).subDescription || ''
+          subDescription: (formData as any).subDescription || '',
+          nickName: (formData as any).nickName || ''
       };
 
       const storeData: Partial<StoreItem> = {
@@ -403,6 +406,10 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                 <div className="space-y-1">
                     <label className="text-[10px] font-bold uppercase text-slate-400">Sub Description <span className="text-slate-300 normal-case font-normal">(optional detail line)</span></label>
                     <input type="text" className="sap-input w-full text-slate-500" value={(formData as any).subDescription || ''} onChange={e => setFormData({...formData, subDescription: e.target.value} as any)} placeholder="e.g. For sliding windows, concealed type..."/>
+                </div>
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-amber-600">Nick Name <span className="text-amber-400 normal-case font-normal">(local market name — searchable, never printed)</span></label>
+                    <input type="text" className="sap-input w-full font-bold text-amber-700 bg-amber-50/40" value={(formData as any).nickName || ''} onChange={e => setFormData({...formData, nickName: e.target.value} as any)} placeholder="e.g. Lahori handle, Pati, Jali..."/>
                 </div>
 
                 <div className="space-y-1">

@@ -7,7 +7,8 @@ import { getBrandNick } from '@/modules/shared/utils/brandUtils';
 import {
   Plus, Search, Edit2, Trash2, Package, Filter, Download, Box,
   FileJson, FileSpreadsheet, FileUp, UploadCloud, Printer, Layers,
-  Image as ImageIcon
+  Image as ImageIcon, Wrench, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { toast } from 'sonner';
 import NipponProductForm from '@/modules/nippon/components/NipponProductForm';
@@ -22,12 +23,46 @@ const NipponProductMaster: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [catFilter, setCatFilter] = useState('All');
+  const [subFilter, setSubFilter] = useState('All');
   const [imageFilter, setImageFilter] = useState<'all' | 'has' | 'missing'>('all');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'import' | 'direct'>('list');
+  // Sorting — click any column header to sort; click again to flip direction.
+  type SortKey = 'profileCode' | 'modelNo' | 'description' | 'mainCategory' | 'basePrice' | 'stock';
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'description', dir: 'asc' });
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 25;
+  const [showTools, setShowTools] = useState(false);
 
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const excelInputRef = useRef<HTMLInputElement>(null);
+
+  const requestSort = (key: SortKey) => {
+    setSortConfig(prev => prev.key === key
+      ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+      : { key, dir: 'asc' });
+  };
+  // Reset sub-filter when main category changes; reset page on any filter/sort change.
+  useEffect(() => { setSubFilter('All'); }, [catFilter]);
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, catFilter, subFilter, imageFilter, sortConfig]);
+
+  // Sortable column header — click to sort, click again to flip.
+  const Th = ({ label, k, right }: { label: string; k?: SortKey; right?: boolean }) => {
+    if (!k) return <th className={right ? 'text-right' : undefined}>{label}</th>;
+    const active = sortConfig.key === k;
+    return (
+      <th
+        onClick={() => requestSort(k)}
+        className={`cursor-pointer select-none hover:text-slate-600 transition-colors ${right ? 'text-right' : ''}`}
+        title={`Sort by ${label}`}
+      >
+        <span className={`inline-flex items-center gap-1 ${right ? 'justify-end' : ''} ${active ? 'text-red-600' : ''}`}>
+          {label}
+          {active ? (sortConfig.dir === 'asc' ? <ArrowUp size={10}/> : <ArrowDown size={10}/>) : <ArrowUpDown size={10} className="opacity-25"/>}
+        </span>
+      </th>
+    );
+  };
 
   useEffect(() => {
     refreshData();
@@ -381,27 +416,57 @@ const NipponProductMaster: React.FC = () => {
     return [...set].sort();
   }, [products]);
 
+  // Sub-categories available under the currently selected main category.
+  const availableSubs = useMemo(() => {
+    if (catFilter === 'All') return [] as string[];
+    const set = new Set<string>();
+    for (const p of products) {
+      if ((p.mainCategory || p.category) === catFilter && p.subCategory?.trim()) {
+        set.add(p.subCategory.trim());
+      }
+    }
+    return [...set].sort();
+  }, [products, catFilter]);
+
   const missingImgCount = useMemo(() => products.filter(p => !p.imageUrl).length, [products]);
   const hasImgCount     = useMemo(() => products.filter(p => !!p.imageUrl).length, [products]);
 
   const filtered = useMemo(() => {
-    const q = searchTerm.toLowerCase();
-    return products
-      .filter(p => {
-        const matchesSearch =
-          (p.description || '').toLowerCase().includes(q) ||
-          String(p.modelNo || '').toLowerCase().includes(q) ||
-          String(p.profileCode || '').toLowerCase().includes(q);
-        const matchesCat = catFilter === 'All' ||
-          p.mainCategory === catFilter || p.category === catFilter;
-        const matchesImg =
-          imageFilter === 'all'     ? true :
-          imageFilter === 'has'     ? !!p.imageUrl :
-          /* missing */               !p.imageUrl;
-        return matchesSearch && matchesCat && matchesImg;
-      })
-      .sort((a, b) => (a.description || '').localeCompare(b.description || ''));
-  }, [products, searchTerm, catFilter, imageFilter]);
+    const q = searchTerm.toLowerCase().trim();
+    const result = products.filter(p => {
+      // Search across description, ERP model, KinLong code, nick name, sub-group, brand.
+      const haystack = [
+        p.description, p.modelNo, p.profileCode,
+        (p as { nickName?: string }).nickName, p.subCategory, p.brand,
+      ].filter(Boolean).join(' ').toLowerCase();
+      const matchesSearch = !q || haystack.includes(q);
+      const matchesCat = catFilter === 'All' || p.mainCategory === catFilter || p.category === catFilter;
+      const matchesSub = subFilter === 'All' || p.subCategory === subFilter;
+      const matchesImg =
+        imageFilter === 'all' ? true :
+        imageFilter === 'has' ? !!p.imageUrl :
+        /* missing */           !p.imageUrl;
+      return matchesSearch && matchesCat && matchesSub && matchesImg;
+    });
+
+    const { key, dir } = sortConfig;
+    const factor = dir === 'asc' ? 1 : -1;
+    const valOf = (p: Product): string | number =>
+      key === 'basePrice' ? (p.basePrice || 0) :
+      key === 'stock'     ? getStockLevel(p.id) :
+      ((p[key as keyof Product] as string) || '').toString().toLowerCase();
+    return result.sort((a, b) => {
+      const va = valOf(a), vb = valOf(b);
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * factor;
+      return String(va).localeCompare(String(vb)) * factor;
+    });
+  }, [products, searchTerm, catFilter, subFilter, imageFilter, sortConfig, storeItems]);
+
+  const paginated = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filtered.slice(start, start + itemsPerPage);
+  }, [filtered, currentPage]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -442,13 +507,29 @@ const NipponProductMaster: React.FC = () => {
            <input type="file" ref={jsonInputRef} className="hidden" accept=".json" onChange={handleImportJson} />
            <input type="file" ref={excelInputRef} className="hidden" accept=".xlsx,.xls" onChange={handleImportExcel} />
 
-           <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl">
-               <button onClick={handleExportJson} className="p-2 text-slate-600 hover:bg-white rounded-lg transition-all" title="Backup JSON"><FileJson size={18}/></button>
-               <button onClick={handleExportExcel} className="p-2 text-emerald-600 hover:bg-white rounded-lg transition-all" title="Export Template/Excel (Flat)"><FileSpreadsheet size={18}/></button>
-               <button onClick={handleExportCategoryWise} className="p-2 text-amber-600 hover:bg-white rounded-lg transition-all" title="Export Category-wise (multi-sheet)"><Layers size={18}/></button>
-               <div className="w-px h-6 bg-slate-200 mx-1"></div>
-               <button onClick={() => jsonInputRef.current?.click()} className="p-2 text-slate-600 hover:bg-white rounded-lg transition-all" title="Restore JSON"><UploadCloud size={18}/></button>
-               <button onClick={() => excelInputRef.current?.click()} className="p-2 text-emerald-600 hover:bg-white rounded-lg transition-all" title="Import Excel"><FileUp size={18}/></button>
+           {/* Data tools — grouped into one menu to declutter the toolbar */}
+           <div className="relative shrink-0">
+               <button onClick={() => setShowTools(v => !v)} className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 transition-all">
+                   <Wrench size={14}/> Tools <ChevronDown size={12} className={showTools ? 'rotate-180 transition-transform' : 'transition-transform'}/>
+               </button>
+               {showTools && (
+                   <>
+                     <div className="fixed inset-0 z-10" onClick={() => setShowTools(false)} />
+                     <div className="absolute left-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-20 py-1.5 animate-in fade-in zoom-in duration-150">
+                         {[
+                           { label: 'Backup (JSON)',          icon: FileJson,        on: handleExportJson },
+                           { label: 'Export Excel (flat)',    icon: FileSpreadsheet, on: handleExportExcel },
+                           { label: 'Export by Category',     icon: Layers,          on: handleExportCategoryWise },
+                           { label: 'Restore (JSON)',         icon: UploadCloud,     on: () => jsonInputRef.current?.click() },
+                           { label: 'Import Excel',           icon: FileUp,          on: () => excelInputRef.current?.click() },
+                         ].map(({ label, icon: Icon, on }) => (
+                           <button key={label} onClick={() => { setShowTools(false); on(); }} className="w-full flex items-center gap-2.5 px-4 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 transition-all">
+                               <Icon size={14} className="text-slate-400"/> {label}
+                           </button>
+                         ))}
+                     </div>
+                   </>
+               )}
            </div>
 
            <div className="h-8 w-px bg-slate-200 hidden lg:block mx-2"></div>
@@ -473,6 +554,20 @@ const NipponProductMaster: React.FC = () => {
               </select>
            </div>
 
+           {/* Cascading sub-group filter (only when a category is chosen) */}
+           {catFilter !== 'All' && availableSubs.length > 0 && (
+              <div className="relative shrink-0">
+                 <select
+                   className="pl-3 pr-4 py-2 bg-slate-100 border-none rounded-xl font-bold text-xs uppercase focus:ring-2 focus:ring-red-500 outline-none"
+                   value={subFilter}
+                   onChange={e => setSubFilter(e.target.value)}
+                 >
+                     <option value="All">All Sub-Groups</option>
+                     {availableSubs.map(sg => <option key={sg} value={sg}>{sg}</option>)}
+                 </select>
+              </div>
+           )}
+
            {/* Image filter — quick audit of products missing images */}
            <div className="flex items-center bg-slate-100 p-1 rounded-xl shrink-0">
              <button
@@ -495,7 +590,7 @@ const NipponProductMaster: React.FC = () => {
            
            <div className="relative w-48 shrink-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-              <input type="text" placeholder="Search..." className="w-full pl-9 pr-4 py-2 bg-slate-100 border-none rounded-xl font-bold text-xs uppercase focus:ring-2 focus:ring-red-500 outline-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+              <input type="text" placeholder="Name / code / nick…" className="w-full pl-9 pr-4 py-2 bg-slate-100 border-none rounded-xl font-bold text-xs uppercase focus:ring-2 focus:ring-red-500 outline-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
            </div>
 
            <button
@@ -518,27 +613,30 @@ const NipponProductMaster: React.FC = () => {
               <table className="w-full text-left sap-table">
                   <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400 tracking-widest">
                     <tr>
-                        <th className="px-6 py-4">KinLong Code</th>
-                        <th>Image</th>
-                        <th>Group</th>
-                        <th>ERP Model No</th>
-                        <th>Description</th>
-                        <th>Status</th>
-                        <th>Brand</th>
-                        <th>Color</th>
-                        <th>Material</th>
-                        <th>Dir</th>
-                        <th>Size</th>
-                        <th>Spindle</th>
-                        <th>Category</th>
-                        <th className="text-right">Unit Price</th>
-                        <th className="text-right">Stock</th>
+                        <th className="px-6 py-4 cursor-pointer select-none hover:text-slate-600" onClick={() => requestSort('profileCode')} title="Sort by KinLong Code">
+                          <span className={`inline-flex items-center gap-1 ${sortConfig.key === 'profileCode' ? 'text-red-600' : ''}`}>KinLong Code {sortConfig.key === 'profileCode' ? (sortConfig.dir === 'asc' ? <ArrowUp size={10}/> : <ArrowDown size={10}/>) : <ArrowUpDown size={10} className="opacity-25"/>}</span>
+                        </th>
+                        <Th label="Image" />
+                        <Th label="Group" k="mainCategory" />
+                        <Th label="ERP Model No" k="modelNo" />
+                        <Th label="Description" k="description" />
+                        <Th label="Nick" />
+                        <Th label="Status" />
+                        <Th label="Brand" />
+                        <Th label="Color" />
+                        <Th label="Material" />
+                        <Th label="Dir" />
+                        <Th label="Size" />
+                        <Th label="Category" />
+                        <Th label="Unit Price" k="basePrice" right />
+                        <Th label="Stock" k="stock" right />
                         <th className="text-right pr-6">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {filtered.map(p => {
+                    {paginated.map(p => {
                         const stock = getStockLevel(p.id);
+                        const nick = (p as { nickName?: string }).nickName || '';
                         return (
                             <tr key={p.id} className="hover:bg-slate-50 transition-colors text-xs group">
                                 <td className="px-6 py-3 font-mono font-bold text-slate-400 uppercase">{p.profileCode || '-'}</td>
@@ -552,13 +650,7 @@ const NipponProductMaster: React.FC = () => {
                                     </div>
                                 </td>
                                 <td className="font-black text-slate-500 uppercase">
-                                    <span className={`px-2 py-0.5 rounded border text-[9px] ${
-                                        p.mainCategory === 'Aluminium Products' ? 'bg-blue-50 text-blue-700 border-blue-100' : 
-                                        p.mainCategory === 'UPVC' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 
-                                        p.mainCategory === 'Steel Mesh' ? 'bg-slate-100 text-slate-700 border-slate-200' :
-                                        p.mainCategory === 'Silicon' ? 'bg-purple-50 text-purple-700 border-purple-100' :
-                                        'bg-slate-50 text-slate-500'
-                                    }`}>
+                                    <span className="px-2 py-0.5 rounded border text-[9px] bg-blue-50 text-blue-700 border-blue-100">
                                         {p.mainCategory || 'Generic'}
                                     </span>
                                 </td>
@@ -568,6 +660,11 @@ const NipponProductMaster: React.FC = () => {
                                         <span>{p.description}</span>
                                         {p.subCategory && <span className="text-[9px] text-slate-400 font-medium">TYPE: {p.subCategory}</span>}
                                     </div>
+                                </td>
+                                <td className="text-[10px] uppercase">
+                                    {nick
+                                        ? <span className="font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 whitespace-nowrap">{nick}</span>
+                                        : <span className="text-slate-300">-</span>}
                                 </td>
                                 <td>
                                     {(() => {
@@ -584,7 +681,6 @@ const NipponProductMaster: React.FC = () => {
                                 <td className="font-medium text-slate-500 text-[10px] uppercase">{p.material || '-'}</td>
                                 <td className="font-medium text-slate-500 text-[10px] uppercase">{p.direction || '-'}</td>
                                 <td className="font-medium text-slate-500 text-[10px] uppercase">{p.tongueLength || p.thickness || '-'}</td>
-                                <td className="font-medium text-slate-500 text-[10px] uppercase">{p.spindleLength || '-'}</td>
                                 <td className="font-bold text-slate-500 text-[10px] uppercase"><span className="bg-slate-100 px-2 py-0.5 rounded border">{p.category}</span></td>
                                 <td className="text-right font-bold text-slate-700 whitespace-nowrap">PKR {p.basePrice?.toLocaleString()}</td>
                                 <td className="text-right">
@@ -607,6 +703,21 @@ const NipponProductMaster: React.FC = () => {
                       <Package size={48} className="mx-auto mb-4 opacity-10"/>
                       No hardware items found in selection.
                   </div>
+              )}
+              {/* Pagination footer */}
+              {filtered.length > 0 && (
+                <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/40">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        {filtered.length} item{filtered.length !== 1 ? 's' : ''} · showing {(currentPage - 1) * itemsPerPage + 1}–{Math.min(currentPage * itemsPerPage, filtered.length)}
+                    </span>
+                    <div className="flex items-center gap-1">
+                        <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
+                            className="p-2 rounded-lg border border-slate-200 bg-white text-slate-500 disabled:opacity-30 hover:bg-slate-50 transition-all"><ChevronLeft size={14}/></button>
+                        <span className="px-3 text-[11px] font-black text-slate-600">{currentPage} / {totalPages}</span>
+                        <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages}
+                            className="p-2 rounded-lg border border-slate-200 bg-white text-slate-500 disabled:opacity-30 hover:bg-slate-50 transition-all"><ChevronRight size={14}/></button>
+                    </div>
+                </div>
               )}
           </div>
       )}

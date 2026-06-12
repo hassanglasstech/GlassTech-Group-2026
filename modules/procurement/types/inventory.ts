@@ -47,6 +47,9 @@ export interface Product {
   hsCode?: string;
   /** Optional second detail line shown under the description (Nippon: KinLong Notes). */
   subDescription?: string;
+  /** Internal local-market nick name (Nippon). Searchable, but never printed
+   *  on quotations/invoices — staff-facing alias only. */
+  nickName?: string;
   // ── Price History (version tracking) ────────────────────────────
   priceHistory?: PriceHistoryEntry[];
 }

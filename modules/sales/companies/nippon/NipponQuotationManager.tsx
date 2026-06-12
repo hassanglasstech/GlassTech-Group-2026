@@ -307,6 +307,9 @@ const NipponQuotationManager: React.FC = () => {
                                      prod?.itemCode,
                                      prod?.profileCode,
                                      prod?.brand,
+                                     // Nick name = internal local-market alias (searchable only,
+                                     // never written to the quotation line or print output).
+                                     (prod as { nickName?: string } | undefined)?.nickName,
                                    ].filter(Boolean).join(' ').toLowerCase();
                                    return !q || haystack.includes(q);
                                  });

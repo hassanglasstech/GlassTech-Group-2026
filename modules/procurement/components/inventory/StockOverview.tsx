@@ -5,9 +5,17 @@ import { useAppStore } from '@/modules/shared/store/appStore';
 import { StoreItem } from '@/modules/shared/types';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
-import { AlertTriangle, LayoutGrid, List } from 'lucide-react';
+import { AlertTriangle, LayoutGrid, List, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { Search, Box, Image as ImageIcon, Filter } from 'lucide-react';
 import Pagination from '@/components/Pagination';
+
+// Material Master v3 — supplier-aligned KinLong taxonomy (8 groups, domain order).
+const MAIN_ORDER = [
+    'Handles', 'Hinges & Stays', 'Locking System', 'Sliding & Lift System',
+    'Profiles & Point-Fixing', 'Door Closing', 'Sealants', 'Fasteners & Consumables',
+];
+
+type StockSortKey = 'code' | 'name' | 'qty' | 'price' | 'value';
 
 interface StockOverviewProps {
     items: StoreItem[];
@@ -22,9 +30,24 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
     const [currentPage, setCurrentPage] = useState(1);
     // Default to grouped view for Nippon (category-rich); flat for others.
     const [viewMode, setViewMode] = useState<'flat' | 'grouped'>(company === 'Nippon' ? 'grouped' : 'flat');
+    const [sortConfig, setSortConfig] = useState<{ key: StockSortKey; dir: 'asc' | 'desc' }>({ key: 'name', dir: 'asc' });
+    const [lowStockOnly, setLowStockOnly] = useState(false);
     const itemsPerPage = 20;
+    const isNippon = company === 'Nippon';
 
-    const allProducts = SalesService.getProducts();
+    const requestSort = (key: StockSortKey) => {
+        setSortConfig(prev => prev.key === key
+            ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+            : { key, dir: 'asc' });
+    };
+
+    // Memoize product list + an id→product map (was an O(n×m) .find per row, per render).
+    const allProducts = useMemo(() => SalesService.getProducts(), [company, items]);
+    const productMap = useMemo(() => {
+        const m = new Map<string, ReturnType<typeof SalesService.getProducts>[number]>();
+        for (const p of allProducts) m.set(p.id, p);
+        return m;
+    }, [allProducts]);
 
     // Category tree — derived from actual products so the dropdowns always
     // reflect what's in the database, not a hardcoded list. Falls back to
@@ -40,11 +63,6 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
             if (!tree.has(main)) tree.set(main, new Set());
             if (sub) tree.get(main)!.add(sub);
         }
-        const MAIN_ORDER = [
-            'Window Hardware', 'Door Hardware', 'Sliding Hardware',
-            'Profile & Frame Hardware', 'Silicon & Sealants',
-            'Mesh & Screens', 'Fasteners & Consumables',
-        ];
         const ordered = new Map<string, string[]>();
         for (const m of MAIN_ORDER) if (tree.has(m)) ordered.set(m, [...tree.get(m)!].sort());
         for (const [m, subs] of tree) if (!ordered.has(m)) ordered.set(m, [...subs].sort());
@@ -63,10 +81,10 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
     const lowStockMap: Record<string, 'red' | 'orange'> = {};
     lowStockAlerts.forEach(a => { lowStockMap[a.item.id] = a.alertLevel; });
 
-    // Reset pagination when filter changes
+    // Reset pagination when any filter / sort / view changes
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, mainFilter, subFilter]);
+    }, [searchTerm, mainFilter, subFilter, lowStockOnly, sortConfig, viewMode]);
 
     // Reset subFilter when mainFilter changes — a sub selected under one
     // main should not silently linger when the user switches main.
@@ -75,39 +93,60 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
     }, [mainFilter]);
 
     const filteredItems = useMemo(() => {
-        return items.filter(i => {
-            const product = allProducts.find(p => p.id === i.id);
-            const matchesSearch = i.name.toLowerCase().includes(searchTerm.toLowerCase());
+        const q = searchTerm.toLowerCase().trim();
+        const result = items.filter(i => {
+            const product = productMap.get(i.id);
+            // Search across item name + ERP model + KinLong code + nick name + description.
+            const haystack = [
+                i.name, product?.modelNo, product?.profileCode,
+                (product as { nickName?: string } | undefined)?.nickName, product?.description,
+            ].filter(Boolean).join(' ').toLowerCase();
+            const matchesSearch = !q || haystack.includes(q);
             const matchesMain = mainFilter === 'All' || product?.mainCategory === mainFilter;
             const matchesSub  = subFilter  === 'All' || product?.subCategory  === subFilter;
-            return matchesSearch && matchesMain && matchesSub;
+            const matchesLow  = !lowStockOnly || !!lowStockMap[i.id];
+            return matchesSearch && matchesMain && matchesSub && matchesLow;
         });
-    }, [items, searchTerm, mainFilter, subFilter, allProducts]);
 
-    const paginatedItems = useMemo(() => {
+        // Sort
+        const { key, dir } = sortConfig;
+        const factor = dir === 'asc' ? 1 : -1;
+        const valOf = (i: StoreItem): string | number => {
+            const p = productMap.get(i.id);
+            switch (key) {
+                case 'code':  return (p?.modelNo || i.id).toLowerCase();
+                case 'qty':   return i.unrestrictedQty || 0;
+                case 'price': return i.movingAveragePrice || 0;
+                case 'value': return i.totalValue || 0;
+                default:      return (i.name || '').toLowerCase();
+            }
+        };
+        return result.sort((a, b) => {
+            const va = valOf(a), vb = valOf(b);
+            if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * factor;
+            return String(va).localeCompare(String(vb)) * factor;
+        });
+    }, [items, searchTerm, mainFilter, subFilter, lowStockOnly, sortConfig, productMap]);
+
+    // Paginate first — both flat AND grouped views render this same page slice,
+    // so grouped no longer dumps the entire (potentially huge) list at once.
+    const pagedItems = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
         return filteredItems.slice(startIndex, startIndex + itemsPerPage);
     }, [filteredItems, currentPage]);
 
-    // Group items by main_category → sub_category for the grouped view.
-    // Falls back to "Uncategorized" when product or category is missing.
+    // Group the current page by main_category → sub_category for the grouped view.
     const grouped = useMemo(() => {
         if (viewMode !== 'grouped') return null;
         const tree: Record<string, Record<string, StoreItem[]>> = {};
-        for (const item of filteredItems) {
-            const product = allProducts.find(p => p.id === item.id);
+        for (const item of pagedItems) {
+            const product = productMap.get(item.id);
             const main = product?.mainCategory?.trim() || 'Uncategorized';
             const sub  = product?.subCategory?.trim()  || 'General';
             if (!tree[main]) tree[main] = {};
             if (!tree[main][sub]) tree[main][sub] = [];
             tree[main][sub].push(item);
         }
-        // Order using the same MAIN_ORDER as categoryTree
-        const MAIN_ORDER = [
-            'Window Hardware', 'Door Hardware', 'Sliding Hardware',
-            'Profile & Frame Hardware', 'Silicon & Sealants',
-            'Mesh & Screens', 'Fasteners & Consumables',
-        ];
         const orderedMains = [
             ...MAIN_ORDER.filter(m => m in tree),
             ...Object.keys(tree).filter(m => !MAIN_ORDER.includes(m)).sort(),
@@ -117,7 +156,7 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
             subs: Object.entries(tree[main]).sort(([a],[b]) => a.localeCompare(b)),
             total: Object.values(tree[main]).flat().length,
         }));
-    }, [filteredItems, allProducts, viewMode]);
+    }, [pagedItems, productMap, viewMode]);
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
@@ -184,7 +223,7 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                 </div>
              </div>
              
-             {/* Low Stock Alert Banner */}
+             {/* Low Stock Alert Banner — click to filter the table to low-stock items */}
              {lowStockAlerts.length > 0 && (
                <div className="px-6 py-3 bg-red-50 border-b border-red-100 flex items-center gap-3">
                  <AlertTriangle size={15} className="text-red-500 shrink-0"/>
@@ -197,7 +236,12 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                        {a.item.name.slice(0,20)} — {a.unrestrictedQty.toFixed(0)} {a.item.unit}
                      </span>
                    ))}
-                   {lowStockAlerts.length > 5 && <span className="text-[9px] text-red-400 font-bold">+{lowStockAlerts.length - 5} more</span>}
+                   <button
+                     onClick={() => setLowStockOnly(v => !v)}
+                     className={`text-[9px] font-black px-2.5 py-0.5 rounded-full border uppercase tracking-widest transition-all ${lowStockOnly ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-600 border-red-200 hover:bg-red-100'}`}
+                   >
+                     {lowStockOnly ? '✕ Show all' : `Show only low (${lowStockAlerts.length})`}
+                   </button>
                  </div>
                </div>
              )}
@@ -205,14 +249,19 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
              {/* Render a single item row — reused by flat AND grouped views */}
              {(() => {
                const renderRow = (item: StoreItem) => {
-                 const product = allProducts.find(p => p.id === item.id);
-                 const hasImportSpecs = product && (product.finishColor || product.direction || product.tongueLength);
+                 const product = productMap.get(item.id);
+                 const specs = product?.technicalSpecs as Record<string, string> | undefined;
+                 const status = specs?.matchStatus || '';
+                 const nick = (product as { nickName?: string } | undefined)?.nickName || '';
                  const currencySymbol = 'PKR';
                  const sqftPerSheet = product?.sheetSize ? (() => {
                    const [w, h] = (product.sheetSize || '').split('x').map(Number);
                    return w && h ? Number(((w * h) / 144).toFixed(3)) : 0;
                  })() : 0;
                  const sheetCount = sqftPerSheet > 0 ? Math.round((item.unrestrictedQty || 0) / sqftPerSheet) : null;
+                 const statusCls = status === 'Exact Match' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                   : status === 'Near-Match' ? 'bg-amber-50 text-amber-700 border-amber-200'
+                   : 'bg-blue-50 text-blue-700 border-blue-200';
 
                  return (
                    <tr key={item.id} className="hover:bg-slate-50 group">
@@ -225,9 +274,13 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                      </td>
                      <td className="px-6 py-4">
                        <p className="font-black text-blue-600 text-xs uppercase">{product?.modelNo || item.id}</p>
+                       {isNippon && product?.profileCode && (
+                         <p className="font-mono text-[9px] text-slate-400 uppercase mt-0.5">KL: {product.profileCode}</p>
+                       )}
                      </td>
                      <td className="px-6 py-4">
                        <p className="font-bold text-slate-700 text-xs uppercase">{item.name}</p>
+                       {nick && <p className="text-[9px] font-bold text-amber-600 uppercase mt-0.5">≈ {nick}</p>}
                        <div className="flex gap-1 mt-1 flex-wrap">
                          {product?.mainCategory && (
                            <span className="inline-block px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[9px] font-black uppercase border border-blue-100">{product.mainCategory}</span>
@@ -238,7 +291,11 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                        </div>
                      </td>
                      <td className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase">
-                       {hasImportSpecs ? (
+                       {isNippon ? (
+                         status
+                           ? <span className={`px-2 py-0.5 rounded border text-[8px] font-black uppercase whitespace-nowrap ${statusCls}`}>{status}</span>
+                           : <span className="text-slate-300">-</span>
+                       ) : (product?.finishColor || product?.direction || product?.tongueLength) ? (
                          <span>{product?.finishColor || '-'} <span className="text-slate-300">|</span> {product?.direction || '-'} <span className="text-slate-300">|</span> {product?.tongueLength || '-'}</span>
                        ) : (
                          <span className="text-slate-300">-</span>
@@ -251,13 +308,15 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                          <span className="text-[10px] text-slate-300">—</span>
                        )}
                      </td>
-                     <td className="px-6 py-4 text-right">
-                       {sheetCount !== null ? (
-                         <span className="font-black text-slate-700 text-sm">{sheetCount}</span>
-                       ) : (
-                         <span className="text-[9px] text-slate-300">—</span>
-                       )}
-                     </td>
+                     {!isNippon && (
+                       <td className="px-6 py-4 text-right">
+                         {sheetCount !== null ? (
+                           <span className="font-black text-slate-700 text-sm">{sheetCount}</span>
+                         ) : (
+                           <span className="text-[9px] text-slate-300">—</span>
+                         )}
+                       </td>
+                     )}
                      <td className="px-6 py-4 text-right font-black text-slate-900 text-base">
                        <div className="flex items-center justify-end gap-2">
                          {lowStockMap[item.id] && (
@@ -278,24 +337,39 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                  );
                };
 
+               // Sortable column header
+               const sortable = (label: string, k: StockSortKey, right = false) => {
+                 const active = sortConfig.key === k;
+                 return (
+                   <th onClick={() => requestSort(k)} className={`px-6 py-4 cursor-pointer select-none hover:text-slate-600 transition-colors ${right ? 'text-right' : ''}`} title={`Sort by ${label}`}>
+                     <span className={`inline-flex items-center gap-1 ${active ? 'text-blue-600' : ''}`}>
+                       {label}
+                       {active ? (sortConfig.dir === 'asc' ? <ArrowUp size={10}/> : <ArrowDown size={10}/>) : <ArrowUpDown size={10} className="opacity-25"/>}
+                     </span>
+                   </th>
+                 );
+               };
+
+               const colCount = isNippon ? 8 : 9;
                const tableHeader = (
                  <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400">
                    <tr>
                      <th className="px-6 py-4">Visual</th>
-                     <th className="px-6 py-4">Item & Code</th>
-                     <th className="px-6 py-4">Description</th>
-                     <th className="px-6 py-4">Specs (Color/Dir/Tng)</th>
+                     {sortable('Item & Code', 'code')}
+                     {sortable('Description', 'name')}
+                     <th className="px-6 py-4">{isNippon ? 'Status' : 'Specs (Color/Dir/Tng)'}</th>
                      <th className="px-6 py-4">Location</th>
-                     <th className="px-6 py-4 text-right">Sheets</th>
-                     <th className="px-6 py-4 text-right">Balance Qty</th>
-                     <th className="px-6 py-4 text-right">Unit Price</th>
-                     <th className="px-6 py-4 text-right">Amount</th>
+                     {!isNippon && <th className="px-6 py-4 text-right">Sheets</th>}
+                     {sortable('Balance Qty', 'qty', true)}
+                     {sortable('Unit Price', 'price', true)}
+                     {sortable('Amount', 'value', true)}
                    </tr>
                  </thead>
                );
 
                if (viewMode === 'grouped' && grouped) {
                  return (
+                   <>
                    <div className="flex-1 overflow-x-auto">
                      {grouped.length === 0 && (
                        <div className="py-20 text-center text-slate-300 font-bold uppercase italic">No items found matching your filters.</div>
@@ -324,6 +398,13 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                        </div>
                      ))}
                    </div>
+                   <Pagination
+                     totalItems={filteredItems.length}
+                     itemsPerPage={itemsPerPage}
+                     currentPage={currentPage}
+                     onPageChange={setCurrentPage}
+                   />
+                   </>
                  );
                }
 
@@ -333,9 +414,9 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                      <table className="w-full text-left">
                        {tableHeader}
                        <tbody className="divide-y divide-slate-100">
-                         {paginatedItems.map(renderRow)}
-                         {paginatedItems.length === 0 && (
-                           <tr><td colSpan={9} className="text-center py-20 text-slate-300 font-bold uppercase italic">No items found matching your filters.</td></tr>
+                         {pagedItems.map(renderRow)}
+                         {pagedItems.length === 0 && (
+                           <tr><td colSpan={colCount} className="text-center py-20 text-slate-300 font-bold uppercase italic">No items found matching your filters.</td></tr>
                          )}
                        </tbody>
                      </table>

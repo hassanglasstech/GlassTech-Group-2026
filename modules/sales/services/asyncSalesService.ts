@@ -214,6 +214,7 @@ export const AsyncSalesService = {
       width: r.width ?? 0, height: r.height ?? 0,
       frameColor: r.frame_color ?? '', meshColor: r.mesh_color ?? '',
       subDescription: r.sub_description ?? '',
+      nickName: r.nick_name ?? '',
     } as unknown as Product));
     } catch (err: unknown) {
       console.error('[AsyncSalesService] getProducts exception:', errMsg(err));
@@ -277,6 +278,8 @@ export const AsyncSalesService = {
         row.profile_code   = p.profileCode   ?? p.profile_code   ?? '';
         row.sub_category   = p.subCategory   ?? p.sub_category   ?? '';
         row.sub_description = (p.subDescription ?? p.sub_description ?? '') as string;
+        // Nick name = internal local-market name (searchable, never printed).
+        row.nick_name      = (p.nickName ?? p.nick_name ?? '') as string;
         row.finish_color   = p.finishColor   ?? p.finish_color   ?? '';
         row.direction      = p.direction     ?? '';
         row.tongue_length  = p.tongueLength  ?? p.tongue_length  ?? '';
