@@ -64,7 +64,7 @@ export interface QuotationItem {
   /** Nippon: stores the product.id (NIP-KL-...) for inventory lookup.
    *  locationCode is repurposed to hold the visible model_no on Nippon quotes. */
   productRef?: string;
-  /** Set-feature flags (Nippon): header row + member lines of a product set. */
+  /** Nippon set-feature flags carried at runtime: header row + member lines of a product set. */
   isSetHeader?: boolean;
   isSetMember?: boolean;
   setId?: string;

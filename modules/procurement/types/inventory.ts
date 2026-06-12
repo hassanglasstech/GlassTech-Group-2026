@@ -44,8 +44,12 @@ export interface Product {
   meshColor?: string;
   isSet?: boolean;
   setComponents?: ProductComponent[];
+  /** When a product is a member of a set, points to the parent set product's id. */
+  setId?: string;
+  /** Legacy alias used by some Nippon UI/import paths; mirrors imageUrl. */
+  image?: string;
   hsCode?: string;
-  /** Optional second detail line shown under the description (Nippon: KinLong Notes). */
+  /** Optional second detail line shown under the description (Nippon: KinLong Notes / supplier notes). */
   subDescription?: string;
   /** Internal local-market nick name (Nippon). Searchable, but never printed
    *  on quotations/invoices — staff-facing alias only. */

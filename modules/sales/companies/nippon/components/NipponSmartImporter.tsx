@@ -345,7 +345,7 @@ const NipponSmartImporter: React.FC<{ onComplete: () => void }> = ({ onComplete 
           const specName = m.targetField.split('.')[1];
           p.technicalSpecs[specName] = String(val || '');
         } else {
-          p[m.targetField] = val;
+          (p as Record<string, unknown>)[m.targetField] = val;
         }
       });
 
@@ -376,7 +376,7 @@ const NipponSmartImporter: React.FC<{ onComplete: () => void }> = ({ onComplete 
       
       if (field.startsWith('technicalSpecs.')) {
         const specName = field.split('.')[1];
-        item.technicalSpecs = { ...item.technicalSpecs, [specName]: value };
+        item.technicalSpecs = { ...item.technicalSpecs, [specName]: String(value ?? '') };
       } else {
         (item as any)[field] = value;
       }

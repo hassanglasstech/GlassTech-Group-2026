@@ -86,19 +86,20 @@ const NipponQuotationManager: React.FC = () => {
       const matchProd = products.find((p) =>
         p.id === c.id || p.description.toUpperCase() === c.description.toUpperCase()
       );
+      const qtyPerSet = c.qtyPerSet || 1;
       return {
         id: `SET-ADD-${Date.now()}-${ci}`,
         description: matchProd ? matchProd.description : c.description,
         locationCode: matchProd?.profileCode || '',
         glazingSpecs: matchProd?.brand || '',
         glassSize: c.unit || 'PCS',
-        qty: c.qtyPerSet || 1,
+        qty: qtyPerSet,
         width: 0, height: 0, totalSqFt: 0,
         pricePerUnit: matchProd?.basePrice || 0,
-        amount: (c.qtyPerSet || 1) * (matchProd?.basePrice || 0),
+        amount: qtyPerSet * (matchProd?.basePrice || 0),
         isSetMember: true,
         setId: pendingSetSuggestion.setProduct.id,
-      };
+      } as QuotationItem;
     });
     setFormData((prev: Partial<Quotation>) => {
       const next = [...(prev.items || [])];
@@ -224,7 +225,7 @@ const NipponQuotationManager: React.FC = () => {
                   <tbody className="divide-y text-xs font-medium">
                     {formData.items?.map((item, idx) => (
                       <tr key={idx} className={
-                        (item as any).isSetHeader
+                        item.isSetHeader
                           ? "bg-amber-50 border-l-4 border-amber-400"
                           : (item as any).isSetMember
                           ? "bg-amber-50/30 pl-4"
@@ -233,9 +234,9 @@ const NipponQuotationManager: React.FC = () => {
                           : "hover:bg-slate-50"
                       }>
                         <td className="text-center text-slate-300 font-bold">
-                          {(item as any).isSetHeader
+                          {item.isSetHeader
                             ? <span className="text-[9px] text-amber-400 font-black uppercase">SET</span>
-                            : (item.isSection && !(item as any).isSetHeader)
+                            : (item.isSection && !item.isSetHeader)
                             ? ''
                             : (() => {
                                 // Count only non-section, non-setHeader items before this index
@@ -248,7 +249,7 @@ const NipponQuotationManager: React.FC = () => {
                         </td>
                         {item.isSection ? (
                           <td colSpan={7} className="py-2">
-                            {(item as any).isSetHeader ? (
+                            {item.isSetHeader ? (
                               <div className="flex items-center space-x-2">
                                 <span className="bg-amber-500 text-white text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest">SET</span>
                                 <span className="font-black uppercase tracking-widest text-amber-800 text-xs">{item.description}</span>

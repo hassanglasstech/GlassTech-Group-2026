@@ -231,8 +231,8 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
           isSet: formData.isSet,
           setComponents: formData.isSet ? formData.setComponents : [],
           hsCode: formData.hsCode,
-          subDescription: (formData as any).subDescription || '',
-          nickName: (formData as any).nickName || ''
+          subDescription: formData.subDescription || '',
+          nickName: (formData as Record<string, unknown>).nickName as string || ''
       };
 
       const storeData: Partial<StoreItem> = {
