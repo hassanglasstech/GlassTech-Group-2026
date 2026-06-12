@@ -293,10 +293,10 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Internal ID (Reference #)</label>
+                        <label className="text-[10px] font-bold uppercase text-slate-400 ml-1">KinLong Doc Code</label>
                         <div className="relative">
                             <Hash size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <input type="text" className="sap-input w-full font-black uppercase text-indigo-600 pl-9" value={formData.internalId} onChange={e => setFormData({...formData, internalId: e.target.value})} placeholder="e.g. ERP-H-1001"/>
+                            <input type="text" className="sap-input w-full font-black uppercase text-indigo-600 pl-9" value={formData.internalId} onChange={e => setFormData({...formData, internalId: e.target.value})} placeholder="e.g. CZS133 (on supplier PI)"/>
                         </div>
                     </div>
                     <div className="space-y-1">
@@ -307,55 +307,69 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-slate-400">Main Category</label>
+                        <label className="text-[10px] font-bold uppercase text-slate-400">Material Group</label>
                         <div className="relative">
                             <Layout size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 z-10" />
-                            <select 
+                            <select
                                 className="sap-input w-full font-bold uppercase text-xs pl-9"
                                 value={formData.mainCategory}
-                                onChange={e => {
-                                    const newMain = e.target.value;
-                                    setFormData({
-                                        ...formData, 
-                                        mainCategory: newMain,
-                                        subCategory: newMain === 'Silicon' ? '' : formData.subCategory
-                                    });
-                                }}
+                                onChange={e => setFormData({...formData, mainCategory: e.target.value})}
                             >
-                                <option value="">-- Select Category --</option>
-                                <option value="Aluminium Products">Aluminium Products</option>
-                                <option value="UPVC">UPVC</option>
-                                <option value="Steel Mesh">Steel Mesh</option>
-                                <option value="Silicon">Silicon</option>
+                                <option value="">-- Select Group --</option>
+                                <option value="Handles">Handles</option>
+                                <option value="Hinges & Stays">Hinges &amp; Stays</option>
+                                <option value="Locking System">Locking System</option>
+                                <option value="Sliding & Lift System">Sliding &amp; Lift System</option>
+                                <option value="Profiles & Point-Fixing">Profiles &amp; Point-Fixing</option>
+                                <option value="Sealants">Sealants</option>
+                                <option value="Door Closing">Door Closing</option>
+                                <option value="Fasteners & Consumables">Fasteners &amp; Consumables</option>
                             </select>
                         </div>
                     </div>
                     <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-slate-400">Sub Category</label>
+                        <label className="text-[10px] font-bold uppercase text-slate-400">Sub-Group</label>
                         <div className="relative">
                             <ListFilter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 z-10" />
-                            <select 
+                            <input
+                                type="text"
                                 className="sap-input w-full font-bold uppercase text-xs pl-9"
                                 value={formData.subCategory}
                                 onChange={e => setFormData({...formData, subCategory: e.target.value})}
-                                disabled={formData.mainCategory === 'Silicon'}
-                            >
-                                <option value="">-- Select Sub Category --</option>
-                                {formData.mainCategory !== 'Silicon' && (
-                                    <>
-                                        <option value="Windows">Windows</option>
-                                        <option value="Doors">Doors</option>
-                                    </>
-                                )}
-                            </select>
+                                placeholder="e.g. Window Handle"
+                            />
                         </div>
                     </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-slate-400">Model No / Code</label>
-                        <input type="text" className="sap-input w-full font-black uppercase text-blue-600" value={formData.modelNo} onChange={e => setFormData({...formData, modelNo: e.target.value})} placeholder="e.g. CZS133"/>
+                        <label className="text-[10px] font-bold uppercase text-slate-400">Match Status</label>
+                        <select
+                            className="sap-input w-full font-bold uppercase text-xs"
+                            value={(formData.technicalSpecs as Record<string, string>)['matchStatus'] || ''}
+                            onChange={e => setFormData({...formData, technicalSpecs: {...formData.technicalSpecs, matchStatus: e.target.value}})}
+                        >
+                            <option value="">-- Not Set --</option>
+                            <option value="Exact Match">Exact Match</option>
+                            <option value="Near-Match">Near-Match</option>
+                            <option value="ERP Only">ERP Only</option>
+                        </select>
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-slate-400">Main Material Type</label>
+                        <select className="sap-input w-full font-bold" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value as any})}>
+                            <option value="Hardware">Hardware</option>
+                            <option value="Accessory">Accessory</option>
+                            <option value="Consumable">Consumable</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-slate-400">ERP Model No</label>
+                        <input type="text" className="sap-input w-full font-black uppercase text-blue-600" value={formData.modelNo} onChange={e => setFormData({...formData, modelNo: e.target.value})} placeholder="e.g. CZS133-L55"/>
                     </div>
                     <div className="space-y-1">
                         <label className="text-[10px] font-bold uppercase text-slate-400">Brand / Vendor</label>
@@ -367,9 +381,15 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                                 onChange={e => setFormData({...formData, brand: e.target.value})}
                             >
                                 <option value="">-- Select Partner --</option>
-                                {nipponVendors.map(v => (
-                                    <option key={v.id} value={v.name}>{v.name}</option>
-                                ))}
+                                <option value="KIN LONG">KIN LONG</option>
+                                <option value="Soleron">Soleron</option>
+                                <option value="HuangXing">HuangXing</option>
+                                <option value="SIWAY">SIWAY</option>
+                                {nipponVendors
+                                    .filter(v => !['KIN LONG', 'Soleron', 'HuangXing', 'SIWAY'].includes(v.name))
+                                    .map(v => (
+                                        <option key={v.id} value={v.name}>{v.name}</option>
+                                    ))}
                                 <option value="Generic">Generic / Unlisted</option>
                             </select>
                         </div>
@@ -385,26 +405,16 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                     <input type="text" className="sap-input w-full text-slate-500" value={(formData as any).subDescription || ''} onChange={e => setFormData({...formData, subDescription: e.target.value} as any)} placeholder="e.g. For sliding windows, concealed type..."/>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-slate-400">Material Group</label>
-                        <select className="sap-input w-full font-bold" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value as any})}>
-                            <option value="Hardware">Hardware</option>
-                            <option value="Accessory">Accessory</option>
-                            <option value="Consumable">Consumable</option>
-                        </select>
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-slate-400">Unit</label>
-                        <select className="sap-input w-full font-bold" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})}>
-                            <option value="PCS">Piece (PCS)</option>
-                            <option value="Set">Set</option>
-                            <option value="Pair">Pair</option>
-                            <option value="Box">Box</option>
-                            <option value="Roll">Roll</option>
-                            <option value="Kg">Kg</option>
-                        </select>
-                    </div>
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-slate-400">Unit</label>
+                    <select className="sap-input w-full font-bold" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})}>
+                        <option value="PCS">Piece (PCS)</option>
+                        <option value="Set">Set</option>
+                        <option value="Pair">Pair</option>
+                        <option value="Box">Box</option>
+                        <option value="Roll">Roll</option>
+                        <option value="Kg">Kg</option>
+                    </select>
                 </div>
 
                 {formData.unit === 'Set' && (
@@ -557,8 +567,8 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                             <input type="text" className="w-full p-2 bg-white border rounded-lg text-xs font-bold uppercase" value={formData.meshColor} onChange={e => setFormData({...formData, meshColor: e.target.value})} placeholder="e.g. Grey"/>
                         </div>
 
-                        {/* DYNAMIC SPECS */}
-                        {Object.entries(formData.technicalSpecs).map(([key, value]) => (
+                        {/* DYNAMIC SPECS (matchStatus is edited via the Match Status dropdown above) */}
+                        {Object.entries(formData.technicalSpecs).filter(([key]) => key !== 'matchStatus').map(([key, value]) => (
                             <div key={key} className="space-y-1 relative group">
                                 <label className="text-[9px] font-bold uppercase text-slate-400">{key}</label>
                                 <input 

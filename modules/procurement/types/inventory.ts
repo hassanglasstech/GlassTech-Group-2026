@@ -45,6 +45,8 @@ export interface Product {
   isSet?: boolean;
   setComponents?: ProductComponent[];
   hsCode?: string;
+  /** Optional second detail line shown under the description (Nippon: KinLong Notes). */
+  subDescription?: string;
   // ── Price History (version tracking) ────────────────────────────
   priceHistory?: PriceHistoryEntry[];
 }

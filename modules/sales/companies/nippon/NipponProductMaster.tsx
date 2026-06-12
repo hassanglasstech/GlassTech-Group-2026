@@ -518,11 +518,12 @@ const NipponProductMaster: React.FC = () => {
               <table className="w-full text-left sap-table">
                   <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400 tracking-widest">
                     <tr>
-                        <th className="px-6 py-4">Internal ID</th>
+                        <th className="px-6 py-4">KinLong Code</th>
                         <th>Image</th>
-                        <th>System</th>
-                        <th>Model No</th>
+                        <th>Group</th>
+                        <th>ERP Model No</th>
                         <th>Description</th>
+                        <th>Status</th>
                         <th>Brand</th>
                         <th>Color</th>
                         <th>Material</th>
@@ -567,6 +568,16 @@ const NipponProductMaster: React.FC = () => {
                                         <span>{p.description}</span>
                                         {p.subCategory && <span className="text-[9px] text-slate-400 font-medium">TYPE: {p.subCategory}</span>}
                                     </div>
+                                </td>
+                                <td>
+                                    {(() => {
+                                        const st = (p.technicalSpecs as Record<string, string> | undefined)?.matchStatus || '';
+                                        if (!st) return <span className="text-slate-300 text-[10px]">-</span>;
+                                        const cls = st === 'Exact Match' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                            : st === 'Near-Match' ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                            : 'bg-blue-50 text-blue-700 border-blue-200';
+                                        return <span className={`px-2 py-0.5 rounded border text-[8px] font-black uppercase whitespace-nowrap ${cls}`}>{st}</span>;
+                                    })()}
                                 </td>
                                 <td className="font-bold text-slate-500 text-[10px] uppercase">{getBrandNick(p.brand || '-')}</td>
                                 <td className="font-medium text-slate-500 text-[10px] uppercase">{p.finishColor || '-'}</td>

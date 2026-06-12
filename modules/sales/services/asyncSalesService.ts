@@ -271,6 +271,12 @@ export const AsyncSalesService = {
         // GTK/GTI already get main_category mapped above; Nippon also needs
         // it or the Material Management cascading filter sees nothing.
         row.main_category  = p.mainCategory  ?? p.main_category  ?? '';
+        // Dual coding (Master v3): profile_code holds the KinLong Doc Code seen
+        // on supplier quotations. Without this, editing a Nippon product in the
+        // form would not persist the KinLong code to Supabase.
+        row.profile_code   = p.profileCode   ?? p.profile_code   ?? '';
+        row.sub_category   = p.subCategory   ?? p.sub_category   ?? '';
+        row.sub_description = (p.subDescription ?? p.sub_description ?? '') as string;
         row.finish_color   = p.finishColor   ?? p.finish_color   ?? '';
         row.direction      = p.direction     ?? '';
         row.tongue_length  = p.tongueLength  ?? p.tongue_length  ?? '';
