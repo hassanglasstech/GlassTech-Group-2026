@@ -247,14 +247,21 @@ export const useNipponQuotations = () => {
     });
   };
 
-  const handleSave = async (approve: boolean) => {
+  const handleSave = async (approve: boolean, quoteOverride?: Quotation) => {
     if (isSaving) return;
 
-    // P1-4: required-field + business validation
-    if (!formData.clientId) return toast.error("Client is required.");
-    if (!formData.manualSerial) return toast.error("Serial Number is required.");
+    // Approve-from-list passes the row explicitly via quoteOverride. Without it,
+    // the list button did `setFormData(q); handleSave(true)` — but setFormData is
+    // an async React setter, so handleSave read the STALE formData closure (usually
+    // the empty initial quote). That fired a misleading "Client is required" error
+    // or, if a prior quote was loaded, approved the WRONG quote. Prefer the override.
+    const src = quoteOverride ?? formData;
 
-    const lineItems = (formData.items || []).filter(i => !i.isSection);
+    // P1-4: required-field + business validation
+    if (!src.clientId) return toast.error("Client is required.");
+    if (!src.manualSerial) return toast.error("Serial Number is required.");
+
+    const lineItems = (src.items || []).filter(i => !i.isSection);
     if (lineItems.length === 0) return toast.error("Add at least one item before saving.");
 
     const itemsSubtotal = lineItems.reduce((s, i) => s + (Number(i.amount) || 0), 0);
@@ -263,12 +270,36 @@ export const useNipponQuotations = () => {
     // P1-5: block edit-after-approval to prevent inventory double-decrement.
     // Once approved, the quote becomes a Sales Order — edits must go through
     // credit notes / amendments, not direct re-save.
-    if (formData.status === 'Approved') {
+    if (src.status === 'Approved') {
       return toast.error("This quote is already approved. Use a Credit Note to amend.");
     }
 
     setIsSaving(true);
     try {
+      // Pre-flight stock check (over-sell guard): validate availability BEFORE
+      // persisting the approval. Previously the quote was saved as 'Approved' in
+      // the cloud and only THEN did saveStore throw InsufficientStockError —
+      // leaving an approved Sales Order with stock never decremented plus a
+      // cryptic "Save failed" the solo user could not act on. Block up-front
+      // with a clear, actionable message instead.
+      if (approve) {
+        const stock = InventoryService.getStore();
+        const shortfalls: string[] = [];
+        lineItems.forEach(item => {
+          const si = stock.find(s => s.id === (item.productRef || item.locationCode));
+          if (!si) return; // unmatched (service / set) lines are not stock-controlled here
+          const available = (si.unrestrictedQty ?? si.quantity ?? 0);
+          const need = Number(item.qty) || 0;
+          if (available < need) {
+            shortfalls.push(`• ${item.description || si.name || si.id}: need ${need}, have ${available}`);
+          }
+        });
+        if (shortfalls.length > 0) {
+          toast.error(`Not enough stock to approve — receive via Hardware GRN first:\n${shortfalls.join('\n')}`);
+          return;
+        }
+      }
+
       const now = new Date();
       const mm = String(now.getMonth() + 1).padStart(2, '0');
       const yy = String(now.getFullYear()).slice(-2);
@@ -278,23 +309,23 @@ export const useNipponQuotations = () => {
 
       const isDuplicate = all.some(q =>
           q.company === company &&
-          q.manualSerial === formData.manualSerial &&
-          q.id !== formData.id
+          q.manualSerial === src.manualSerial &&
+          q.id !== src.id
       );
       if (isDuplicate) {
-        toast.error(`Serial Number ${formData.manualSerial} is already used.`);
+        toast.error(`Serial Number ${src.manualSerial} is already used.`);
         return;
       }
 
-      let finalId = formData.id;
-      if (!finalId) finalId = `QT-${mmyy}-${formData.manualSerial}`;
+      let finalId = src.id;
+      if (!finalId) finalId = `QT-${mmyy}-${src.manualSerial}`;
 
       const finalQuo: Quotation = {
-        ...(formData as Quotation),
+        ...(src as Quotation),
         id: finalId!,
         company,
         status: approve ? 'Approved' : 'Draft',
-        orderNo: approve ? `SO-${mmyy}-${formData.manualSerial}` : undefined
+        orderNo: approve ? `SO-${mmyy}-${src.manualSerial}` : undefined
       };
 
       // P1-7: persist quote FIRST, then decrement inventory only on success.

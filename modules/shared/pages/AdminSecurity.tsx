@@ -6,7 +6,7 @@ import { AppService } from '../services/appService';
 import {
   ShieldCheck, Database, FileUp, Download,
   History, Users, X, Info, Activity, Filter, RefreshCw, BarChart2,
-  AlertTriangle, Trash2, Archive, ShieldAlert, Zap, CheckCircle2, Loader2
+  AlertTriangle, Trash2, Archive, ShieldAlert, Zap, CheckCircle2, Loader2, Percent
 } from 'lucide-react';
 
 import { useAppStore } from '../store/appStore';
@@ -15,6 +15,7 @@ import { useAuthStore } from '@/modules/auth/authStore';
 import GlasscoDataWiper from '@/modules/shared/components/GlasscoDataWiper';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 const BypassLogDashboard = React.lazy(() => import('@/modules/admin/components/BypassLogDashboard'));
+const TaxSettingsPage = React.lazy(() => import('@/modules/admin/pages/TaxSettings'));
 
 const AdminSecurity: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
@@ -23,7 +24,7 @@ const AdminSecurity: React.FC = () => {
   // Previously was gated by company === 'Factory' (UX trap — user had to
   // switch company to Factory just to see User Roles).
   const canManageUsers = ['super_admin', 'owner', 'hassan'].includes(user?.role || '');
-  const [activeTab, setActiveTab] = useState<'command_center' | 'admin' | 'users' | 'data_reset' | 'exceptions'>('command_center');
+  const [activeTab, setActiveTab] = useState<'command_center' | 'admin' | 'users' | 'data_reset' | 'exceptions' | 'tax'>('command_center');
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [filterModule, setFilterModule] = useState<string>('All');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -230,6 +231,7 @@ const AdminSecurity: React.FC = () => {
             { id: 'admin', label: 'Basis (DB Management)', icon: Database },
           { id: 'data_reset', label: 'Data Reset', icon: ShieldCheck },
             { id: 'exceptions', label: 'Exception Register', icon: ShieldAlert },
+            { id: 'tax', label: 'Tax / GST', icon: Percent },
             ...(canManageUsers ? [{ id: 'users', label: 'User Roles (SU01)', icon: Users }] : []),
           ].map(tab => (
             <button
@@ -247,6 +249,11 @@ const AdminSecurity: React.FC = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto p-8">
+        {activeTab === 'tax' && (
+          <React.Suspense fallback={<div className="p-8 text-slate-400 text-sm">Loading Tax Settings…</div>}>
+            <TaxSettingsPage />
+          </React.Suspense>
+        )}
         {activeTab === 'command_center' && (
             <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

@@ -37,6 +37,22 @@ import {
 import { COMPANY_COA, COAAccount } from '../constants/coa.index';
 import { PeriodService } from './periodService';
 import { useAuthStore, UserRole } from '@/modules/auth/authStore';
+import { useAppStore } from '@/modules/shared/store/appStore';
+
+// ── Active company resolver (mirrors asyncSalesService.activeCompany) ──
+// The sidebar switcher updates ONLY appStore.selectedCompany. The go-live
+// user's profile.company is 'GTK' (super_admin seed) while App.tsx forces
+// selectedCompany='Nippon'. Loading the finance cache by profile.company
+// fetched GTK accounts/ledger, so the Nippon COA, trial balance, statements,
+// aging and posting inbox all rendered EMPTY. Prefer the selected company;
+// fall back to the auth profile only before the app store has bootstrapped.
+const activeCompany = (): string => {
+  try {
+    const sel = useAppStore.getState().selectedCompany;
+    if (sel) return sel;
+  } catch { /* appStore not initialised yet */ }
+  return useAuthStore.getState().profile?.company ?? '';
+};
 
 // ── GL Balance Assertion (private) ────────────────────────────────────
 // Integer-cent arithmetic eliminates IEEE-754 rounding drift.
@@ -169,7 +185,7 @@ const rowToFinancialEvent = (r: any): FinancialEvent => ({
 // DB-level RLS policy and the application filter are both in effect.
 // Neither can be bypassed independently.
 const _loadCache = async (): Promise<void> => {
-  const company = useAuthStore.getState().profile?.company ?? '';
+  const company = activeCompany();
   if (!company) {
     Logger.warn('Finance', '_loadCache called with no company — skipping Supabase load');
     return;

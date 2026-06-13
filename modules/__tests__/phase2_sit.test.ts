@@ -85,6 +85,12 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }));
 
+// F3 GST cases exercise the GST-ON path; generateDeliveryInvoice now gates GST
+// on the admin Tax Settings toggle, so mock it enabled for these tests.
+vi.mock('@/modules/admin/services/taxSettingsService', () => ({
+  isTaxEnabled: vi.fn(() => Promise.resolve(true)),
+}));
+
 vi.mock('@/modules/sales/services/asyncSalesService', () => ({
   AsyncSalesService: {
     saveClients:         vi.fn(() => Promise.resolve()),

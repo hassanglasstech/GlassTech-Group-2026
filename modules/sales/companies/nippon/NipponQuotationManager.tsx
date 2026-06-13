@@ -150,7 +150,7 @@ const NipponQuotationManager: React.FC = () => {
           onNew={() => { setFormData(initialQuotation); setView('edit'); }} 
           onEdit={(q) => { setFormData(q); setView('edit'); }} 
           onPrint={(q) => { setPrintingQuote(q); setTimeout(() => { window.print(); setPrintingQuote(null); }, 500); }} 
-          onApprove={(q) => { setFormData(q); handleSave(true); }} 
+          onApprove={(q) => handleSave(true, q)}
           onDelete={handleDelete}
         />
       ) : (

@@ -170,7 +170,15 @@ export const safeSave = (key: string, data: any): boolean => {
     if (Array.isArray(toSave)) {
       dbWrite(key, toSave)
         .then(() => {
-          if (isHeavy && wroteLocal) {
+          // CRITICAL (offline data-loss fix): only clear the local heavy-table
+          // queue when we are actually ONLINE. dbWrite resolves immediately even
+          // offline (it just flags the table dirty), so the old unconditional
+          // removeItem deleted the ONLY copy of an offline-created product /
+          // quotation / invoice / stock-ledger row. On reconnect SyncService
+          // then read an empty key and pushed nothing — silent, permanent loss.
+          // When offline we KEEP the copy; SyncService.pushPending replays it.
+          const online = typeof navigator === 'undefined' || navigator.onLine;
+          if (isHeavy && wroteLocal && online) {
             try {
               localStorage.removeItem(key);
               // Log only occasionally to avoid console spam

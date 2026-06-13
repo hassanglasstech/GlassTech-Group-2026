@@ -80,6 +80,13 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }));
 
+// GST tests (N-02, N-06) exercise the GST-ON path, so the admin Tax Settings
+// toggle is mocked enabled. The service now gates GST on isTaxEnabled(company);
+// with this true, gstPercent flows through as before.
+vi.mock('@/modules/admin/services/taxSettingsService', () => ({
+  isTaxEnabled: vi.fn(() => Promise.resolve(true)),
+}));
+
 vi.mock('@/modules/sales/services/asyncSalesService', () => ({
   AsyncSalesService: {
     saveClients:         vi.fn(() => Promise.resolve()),
@@ -360,7 +367,7 @@ describe('Nippon SIT · COGS-at-delivery from inventory', () => {
 
     const cogsLine = details.find(d => d.debit > 0);
     const invLine  = details.find(d => d.credit > 0);
-    expect(cogsLine?.accountId).toBe('Nippon-5114');  // GENERAL HARDWARE — COGS
+    expect(cogsLine?.accountId).toBe('Nippon-51114');  // GENERAL HARDWARE — COGS (COA leaf)
     expect(invLine?.accountId).toBe('Nippon-11514');  // GENERAL HARDWARE — STOCK
   });
 

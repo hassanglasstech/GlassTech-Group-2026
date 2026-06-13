@@ -20,6 +20,8 @@ import { ProductionService } from '@/modules/production/services/productionServi
 import { allocateSerial } from '@/modules/sales/services/serialAllocator';
 import { supabase } from '../../../src/services/supabaseClient';
 import { safeParse, safeSave } from '@/modules/shared/services/utils';
+import { isTaxEnabled } from '@/modules/admin/services/taxSettingsService';
+import { toast } from 'sonner';
 
 // Sprint 1: localStorage cache keys mirrored after the atomic RPC commits,
 // so synchronous getters (SalesService.getInvoices, FinanceService.getLedger)
@@ -145,6 +147,14 @@ function buildNipponTradingCOGSPlan(params: {
       `[Nippon COGS] ${unmatched.length} line(s) had no matching stock item — ` +
       `COGS excluded for: ${unmatched.join(', ')}`
     );
+    // Surface to the operator (was console-only): these lines book revenue with
+    // NO cost, overstating gross profit. They usually mean the product was never
+    // received via GRN, or is a set-component line without a stock link.
+    toast.warning(
+      `${unmatched.length} line(s) posted with NO COGS (no stock match): ${unmatched.slice(0, 3).join(', ')}` +
+      `${unmatched.length > 3 ? '…' : ''}. Receive these via Hardware GRN so profit isn't overstated.`,
+      { id: 'nippon-cogs-unmatched', duration: 9000 },
+    );
   }
 
   if (totalCogs <= 0) {
@@ -160,7 +170,11 @@ function buildNipponTradingCOGSPlan(params: {
   const expParent  = FinanceService.ensureAccount(company, 'EXPENSES',             1, null,            'Expense', '50');
   const cogsRoot   = FinanceService.ensureAccount(company, 'COST OF GOODS SOLD',   2, expParent.id,    'Expense', '51');
   const cogsGroup  = FinanceService.ensureAccount(company, 'COGS',                 3, cogsRoot.id,     'Expense', '511');
-  const cogsGen    = FinanceService.ensureAccount(company, 'GENERAL HARDWARE — COGS', 4, cogsGroup.id, 'Expense', '5114');
+  // Post to the COA-defined leaf 51114 (511 → 5111 Purchase Cost → 51114) instead
+  // of a phantom 5114 that did not exist in the seeded Nippon chart — keeps COGS on
+  // the real "General Hardware — COGS" account so reports reconcile.
+  const cogsPurch  = FinanceService.ensureAccount(company, 'Purchase Cost',        4, cogsGroup.id,    'Expense', '5111');
+  const cogsGen    = FinanceService.ensureAccount(company, 'GENERAL HARDWARE — COGS', 5, cogsPurch.id, 'Expense', '51114');
 
   const ledgerTx: LedgerTransaction = {
     id: txId,
@@ -267,7 +281,13 @@ export async function generateDeliveryInvoice(
   const discount = order.discountAmount ||
     (subtotal * ((order.discountPercent || 0) / 100));
   const finalAmount = subtotal - discount;
-  const gstAmount = gstPercent > 0 ? Math.round(finalAmount * (gstPercent / 100)) : 0;
+  // GST gate (admin Tax Settings toggle, default OFF): GST only applies when an
+  // admin has enabled tax for this company. Until then every invoice is GST-free
+  // regardless of any gstPercent passed in — this also keeps the GST GL branch
+  // (and its account chain) unreachable, so no tax is ever posted by accident.
+  const taxOn = await isTaxEnabled(company);
+  const effectiveGstPercent = taxOn ? gstPercent : 0;
+  const gstAmount = effectiveGstPercent > 0 ? Math.round(finalAmount * (effectiveGstPercent / 100)) : 0;
   const grandTotal = finalAmount + gstAmount;
 
   // ── Amount guard: reject zero/negative invoices ───────────────────
@@ -355,10 +375,22 @@ export async function generateDeliveryInvoice(
   // ── GST Payable account ───────────────────────────────────────────
   let gstPayableAcc: ReturnType<typeof FinanceService.ensureAccount> | null = null;
   if (gstAmount > 0) {
-    const liabParent = FinanceService.ensureAccount(company, 'LIABILITIES',         1, null,           'Liability', '20');
-    const liabCurr   = FinanceService.ensureAccount(company, 'CURRENT LIABILITIES', 2, liabParent.id,  'Liability', '22');
-    const taxLiab    = FinanceService.ensureAccount(company, 'TAX LIABILITIES',     3, liabCurr.id,    'Liability', '221');
-    gstPayableAcc    = FinanceService.ensureAccount(company, 'GST Payable',         4, taxLiab.id,     'Liability', '2214');
+    if (isTradingCompany) {
+      // Nippon trading COA: output GST belongs in Sales Tax Payable 21211 under
+      // CURRENT LIABILITIES(21) → TAX LIABILITIES(212) → TAX(2121). The old generic
+      // 20/22/221/2214 chain landed GST on 2214 = GR/IR Clearing, corrupting the
+      // three-way-match clearing account and under-stating tax owed to FBR.
+      const liab    = FinanceService.ensureAccount(company, 'Liabilities',         1, null,       'Liability', '2');
+      const curLiab = FinanceService.ensureAccount(company, 'Current Liabilities', 2, liab.id,    'Liability', '21');
+      const taxLiab = FinanceService.ensureAccount(company, 'Tax Liabilities',     3, curLiab.id, 'Liability', '212');
+      const taxGrp  = FinanceService.ensureAccount(company, 'Tax',                 4, taxLiab.id, 'Liability', '2121');
+      gstPayableAcc = FinanceService.ensureAccount(company, 'Sales Tax Payable',   5, taxGrp.id,  'Liability', '21211');
+    } else {
+      const liabParent = FinanceService.ensureAccount(company, 'LIABILITIES',         1, null,           'Liability', '20');
+      const liabCurr   = FinanceService.ensureAccount(company, 'CURRENT LIABILITIES', 2, liabParent.id,  'Liability', '22');
+      const taxLiab    = FinanceService.ensureAccount(company, 'TAX LIABILITIES',     3, liabCurr.id,    'Liability', '221');
+      gstPayableAcc    = FinanceService.ensureAccount(company, 'GST Payable',         4, taxLiab.id,     'Liability', '2214');
+    }
   }
 
   // ── Invoice ID (sequential, atomic via Postgres allocate_serial RPC) ─
@@ -386,7 +418,7 @@ export async function generateDeliveryInvoice(
       accountId: gstPayableAcc.id,
       debit: 0,
       credit: gstAmount,
-      text: 'GST ' + gstPercent + '%: ' + invoiceId,
+      text: 'GST ' + effectiveGstPercent + '%: ' + invoiceId,
     });
   }
 
@@ -465,7 +497,7 @@ export async function generateDeliveryInvoice(
     clientId: order.clientId, clientName,
     date: today, dueDate: dueDate.toISOString().split('T')[0],
     subtotal: finalAmount,
-    gstPercent,
+    gstPercent: effectiveGstPercent,
     gstAmount,
     totalAmount: grandTotal,
     receivedAmount: 0,

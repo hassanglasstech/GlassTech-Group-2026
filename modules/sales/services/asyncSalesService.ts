@@ -223,6 +223,13 @@ export const AsyncSalesService = {
     }
   },
   saveProducts: async (data: Product[]): Promise<void> => {
+    // Offline persistence: write to localStorage FIRST, like saveClients/
+    // saveQuotations/saveInvoices. Without this, a form-based product add
+    // (NipponProductMaster → AsyncSalesService.saveProducts) had zero local
+    // copy, so when offline the chunk upserts failed, _queueRetry('products')
+    // fired, and SyncService.pushPending read an empty key on reconnect —
+    // silently losing the new/edited product. _mergeIntoLocal preserves siblings.
+    _mergeIntoLocal<Product>(KEYS.PRODUCTS, data);
     const mapped = (data as Array<Product & Record<string, unknown>>).map((p) => {
       const isNippon = p.company === 'Nippon';
 

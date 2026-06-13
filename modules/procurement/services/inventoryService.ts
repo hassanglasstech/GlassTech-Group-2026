@@ -8,7 +8,25 @@ import { initDB } from '@/modules/shared/services/db';
 import { bgSaveToIDB, safeParse, safeSave } from '@/modules/shared/services/utils';
 import { supabase } from '../../../src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
+import { useAppStore } from '@/modules/shared/store/appStore';
 import { toast } from 'sonner';
+
+// ── Active company resolver (mirrors asyncSalesService.activeCompany) ──
+// The sidebar company switcher updates ONLY appStore.selectedCompany, not
+// authStore.profile.company. The go-live user's profile.company is 'GTK'
+// (super_admin seed) while App.tsx forces selectedCompany='Nippon' for the
+// Nippon-only deployment. Reading profile.company here fetched GTK
+// store_items/stock_ledger and overwrote the shared local cache, leaving
+// every Nippon inventory/GRN screen empty (and COGS matching corrupted).
+// Prefer the explicitly-selected company; fall back to the auth profile only
+// before the app store has bootstrapped.
+const activeCompany = (): string => {
+  try {
+    const sel = useAppStore.getState().selectedCompany;
+    if (sel) return sel;
+  } catch { /* appStore not initialised yet */ }
+  return useAuthStore.getState().profile?.company ?? '';
+};
 
 // ── Visible Supabase upsert — never silent, surfaces schema/permission errors to user ──
 const _inventoryUpsert = async (table: string, rows: any[], label: string): Promise<void> => {
@@ -371,7 +389,7 @@ export const InventoryService = {
   getStore: (): StoreItem[] => safeParse(KEYS.STORE),
   getStoreAsync: async (): Promise<StoreItem[]> => {
     // SEC-4: scope to authenticated user's company — defence-in-depth over DB RLS.
-    const company = useAuthStore.getState().profile?.company ?? '';
+    const company = activeCompany();
     try {
       const { data, error } = await supabase.from('store_items').select('*').eq('company', company);
       if (!error && data && data.length > 0) {
@@ -451,7 +469,7 @@ export const InventoryService = {
   // ── Stock Ledger ───────────────────────────────────────────────────
   getStockLedger: (): MaterialLedgerEntry[] => safeParse(KEYS.STOCK_LEDGER),
   getStockLedgerAsync: async (): Promise<MaterialLedgerEntry[]> => {
-    const company = useAuthStore.getState().profile?.company ?? '';
+    const company = activeCompany();
     try {
       const { data, error } = await supabase.from('stock_ledger').select('*').eq('company', company);
       if (!error && data && data.length > 0) {
@@ -840,7 +858,7 @@ export const InventoryService = {
           reorderPoint: s.reorderPoint,
         };
       })
-      .filter(x => x.alertLevel !== null) as any[];
+      .filter((x: { alertLevel: string | null }) => x.alertLevel !== null) as any[];
   },
 
   // ── Vendor Performance (computed) ─────────────────────────────────

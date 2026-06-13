@@ -23,6 +23,7 @@ import { SalesService } from '../../sales/services/salesService';
 import { AsyncSalesService } from '../../sales/services/asyncSalesService';
 import { ProductionService } from '../../production/services/productionService';
 import { generateDeliveryInvoice } from '@/modules/sales/services/deliveryInvoiceService';
+import { isTaxEnabled } from '@/modules/admin/services/taxSettingsService';
 import { voidInvoice } from '@/modules/sales/services/creditNoteService';
 import CreditNoteModule from '@/modules/finance/components/CreditNoteModule';
 import SalesInvoicePrint from '@/modules/sales/components/prints/SalesInvoicePrint';
@@ -85,11 +86,21 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
 
   const [gstModalOrder, setGstModalOrder] = useState<Quotation | null>(null);
   const [gstPercent, setGstPercent]       = useState(0);
+  // GST is off until an admin enables it in Admin → Tax / GST. While off, the
+  // invoice modal hides the GST selector and the service forces 0% anyway.
+  const [taxEnabled, setTaxEnabled]       = useState(false);
 
   const [printInvoice, setPrintInvoice]   = useState<any | null>(null);
   const [voidingId, setVoidingId]         = useState<string | null>(null);
 
   useEffect(() => { refreshData(); }, [company]);
+
+  // Load the admin GST toggle for this company (default OFF).
+  useEffect(() => {
+    let alive = true;
+    isTaxEnabled(company).then(on => { if (alive) setTaxEnabled(on); }).catch(() => { if (alive) setTaxEnabled(false); });
+    return () => { alive = false; };
+  }, [company]);
 
   // ── Wire Alt+R ────────────────────────────────────────────────────
   useEffect(() => {
@@ -769,20 +780,26 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
                   PKR {(gstModalOrder.items || []).reduce((s: number, i: any) => s + (i.amount || 0), 0).toLocaleString()}
                 </p>
               </div>
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">GST % (0 = exempt)</label>
-                <select
-                  className="sap-input w-full font-bold text-lg"
-                  value={gstPercent}
-                  onChange={e => setGstPercent(Number(e.target.value))}
-                >
-                  <option value={0}>0% — GST Exempt</option>
-                  <option value={5}>5%</option>
-                  <option value={13}>13%</option>
-                  <option value={17}>17% — Standard Rate</option>
-                  <option value={18}>18%</option>
-                </select>
-              </div>
+              {taxEnabled ? (
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">GST % (0 = exempt)</label>
+                  <select
+                    className="sap-input w-full font-bold text-lg"
+                    value={gstPercent}
+                    onChange={e => setGstPercent(Number(e.target.value))}
+                  >
+                    <option value={0}>0% — GST Exempt</option>
+                    <option value={5}>5%</option>
+                    <option value={13}>13%</option>
+                    <option value={17}>17% — Standard Rate</option>
+                    <option value={18}>18%</option>
+                  </select>
+                </div>
+              ) : (
+                <div className="bg-slate-100 border border-slate-200 rounded-lg p-3 text-[11px] font-semibold text-slate-500 text-center">
+                  GST is disabled. Enable it in <span className="font-black text-slate-700">Admin → Tax / GST</span> to add tax to invoices.
+                </div>
+              )}
               {gstPercent > 0 && (() => {
                 const base = (gstModalOrder.items || []).reduce((s: number, i: any) => s + (i.amount || 0), 0);
                 const gst  = Math.round(base * gstPercent / 100);

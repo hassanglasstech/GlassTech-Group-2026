@@ -33,10 +33,13 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
     // for normal use; profile/user are the BUG-1 fix defence.
     const selectedCompany = useAppStore(state => state.selectedCompany);
     const { user, profile } = useAuthStore();
-    // Cast to any-string-but-typed-as-Company via union: the values are
-    // always one of the 5 known company codes; the auth store returns them
-    // as untyped strings.
-    const company = (profile?.company || user?.company || selectedCompany) as Company;
+    // selectedCompany FIRST: this is the Nippon GRN modal and orchestrateNipponGRN
+    // hardcodes the GL to 'Nippon'. The go-live user's profile.company is 'GTK'
+    // (super_admin seed), so the old profile-first order resolved 'GTK' — the
+    // product list loaded GTK items (Nippon hardware never matched) and stock-ledger
+    // rows were stamped GTK while the GL was tagged Nippon. selectedCompany is forced
+    // to 'Nippon' by App.tsx, keeping the physical stock and its GL on the same company.
+    const company = (selectedCompany || profile?.company || user?.company) as Company;
 
     const [entryMode, setEntryMode] = useState<'Manual' | 'VendorImport'>('Manual');
     const [products, setProducts] = useState<Product[]>([]);
@@ -195,7 +198,7 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
             const updatedStore = [...allStore];
             const newLedger: MaterialLedgerEntry[] = [];
 
-            for (const { item, prod } of matched) {
+            for (const [rowIdx, { item, prod }] of matched.entries()) {
                 const sIdx = updatedStore.findIndex(s => s.id === prod.id);
                 if (sIdx === -1) continue;
                 const s = { ...updatedStore[sIdx] };
@@ -211,7 +214,10 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
                 updatedStore[sIdx] = s;
 
                 newLedger.push({
-                    id: `${grnId}-${prod.modelNo || prod.id}`,
+                    // rowIdx makes the id unique per import row — without it, the same
+                    // product on two rows collided to one id and one stock movement was
+                    // silently overwritten in Supabase (breaking GRN↔GL reconciliation).
+                    id: `${grnId}-${rowIdx}-${prod.modelNo || prod.id}`,
                     company,
                     materialId: s.id,
                     timestamp: new Date().toISOString(),
