@@ -96,7 +96,7 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                 @media print {
                     @page { 
                         size: A4; 
-                        margin: 10mm 12mm; 
+                        margin: 0; 
                     }
                     body {
                         margin: 10mm 12mm;

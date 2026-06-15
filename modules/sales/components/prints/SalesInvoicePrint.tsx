@@ -64,10 +64,10 @@ const SalesInvoicePrint: React.FC<InvoicePrintProps> = ({ invoice, company, onCl
 
             <style>{`
               @media print {
-                @page { size: A4 portrait; margin: 12mm; }
+                @page { size: A4 portrait; margin: 0; }
                 body * { visibility: hidden; }
                 #invoice-print, #invoice-print * { visibility: visible; }
-                #invoice-print { position: fixed; left: 0; top: 0; width: 100%; padding: 0 !important; }
+                #invoice-print { position: fixed; left: 0; top: 0; width: 100%; padding: 12mm !important; }
                 .no-print { display: none !important; }
               }
             `}</style>
