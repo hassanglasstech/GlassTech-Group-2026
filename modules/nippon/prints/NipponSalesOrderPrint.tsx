@@ -320,10 +320,6 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                                 </li>
                                 <li className="flex items-start space-x-1">
                                     <span className="text-slate-300">•</span>
-                                    <span>Quotation valid for 2 days only.</span>
-                                </li>
-                                <li className="flex items-start space-x-1">
-                                    <span className="text-slate-300">•</span>
                                     <span>Check samples carefully, no return or exchange.</span>
                                 </li>
                                 <li className="flex items-start space-x-1">
