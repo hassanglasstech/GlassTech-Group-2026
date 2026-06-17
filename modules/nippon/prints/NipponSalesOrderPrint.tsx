@@ -15,8 +15,8 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
         ? quote.discountAmount
         : (subTotal * (quote.discountPercent || 0)) / 100;
     const netAmount = subTotal - discountAmount;
+    const advanceAmount = netAmount * 1.0; // Nippon usually 100% cash per terms
 
-    const advanceAmount = quote.receivedAmount || 0;
     const displayId = quote.orderNo || quote.id;
 
     const summary = useMemo(() => {
@@ -156,7 +156,7 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                     tr { page-break-inside: avoid; page-break-after: auto; }
                     .page-break-before { page-break-before: always; }
                 }
-                .font-pill-order { border: 1.5px solid #0f172a; border-radius: 9999px; padding: 2px 30px; font-weight: 900; letter-spacing: 0.1em; color: #0f172a; }
+                .font-pill { border: 1.5px solid #1e293b; border-radius: 9999px; padding: 2px 30px; font-weight: 900; letter-spacing: 0.1em; }
             `}</style>
             
             <div className="print-container p-[10mm]">
@@ -165,19 +165,19 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
 
                 {/* Pill Title - Compact */}
                 <div className="flex justify-center my-2">
-                    <div className="font-pill-order text-[10px] uppercase">S A L E S &nbsp; O R D E R</div>
+                    <div className="font-pill text-[10px] uppercase text-slate-900">S A L E S &nbsp; O R D E R</div>
                 </div>
 
-                {/* Info Row - Compact */}
+                {/* Inquiry Info Row - Compact */}
                 <div className="flex justify-between mb-3 text-[9px]">
                     <div className="space-y-0.5">
-                        <p className="text-slate-400 font-bold uppercase tracking-tighter text-[7px]">BILLING TO:</p>
+                        <p className="text-slate-400 font-bold uppercase tracking-tighter text-[7px]">INQUIRY FROM:</p>
                         <h3 className="text-lg font-black text-slate-900 leading-none uppercase">{clientName}</h3>
-                        <p className="text-indigo-700 font-black uppercase text-[8px]">Project: {quote.projectName || 'STANDARD ORDER'}</p>
+                        <p className="text-blue-700 font-black uppercase text-[8px]">{quote.projectName || 'STANDARD ORDER'}</p>
                     </div>
                     <div className="text-right space-y-0.5">
                         <div className="flex justify-end space-x-2">
-                            <span className="text-slate-400 font-bold uppercase">ORDER REF:</span>
+                            <span className="text-slate-400 font-bold uppercase">REF NO:</span>
                             <span className="text-blue-700 font-black">{displayId}</span>
                         </div>
                         <div className="flex justify-end space-x-2">
@@ -191,8 +191,8 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 mb-3 flex items-center justify-between">
                     <div className="flex space-x-4 border-r border-slate-200 pr-4">
                         <div>
-                            <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Total Qty</p>
-                            <p className="text-sm font-black text-slate-900">{summary.totalQty} <span className="text-[8px] text-slate-400 font-normal">Pcs</span></p>
+                            <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Total Items</p>
+                            <p className="text-sm font-black text-slate-900">{summary.totalQty} <span className="text-[8px] text-slate-400 font-normal">Units</span></p>
                         </div>
                     </div>
                     <div className="flex flex-wrap gap-x-2 gap-y-0.5 justify-end flex-1 pl-4">
@@ -205,7 +205,7 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                     </div>
                 </div>
 
-                {/* Main Table */}
+                {/* Main Items Table */}
                 <div className="mt-2">
                     {(() => {
                         let serialNum = 0;
@@ -231,7 +231,7 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                                     <div key={chunkIdx} className={chunkIdx > 0 ? 'page-break-before mt-8' : ''}>
                                         <table className="w-full text-left border-collapse text-[10px]">
                                             <thead>
-                                                <tr className="bg-slate-50 border-y border-slate-300 text-[9px] font-black uppercase tracking-widest text-slate-600">
+                                                <tr className="bg-slate-50 border-y border-slate-300 text-[9px] font-black uppercase text-slate-600">
                                                     <th className="py-2 px-2 text-center w-8">S.No</th>
                                                     <th className="py-2 px-2 text-center w-12">Image</th>
                                                     <th className="py-2 px-2">Item Details</th>
@@ -268,6 +268,9 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                                                             <td className="py-2 px-2">
                                                                 {(() => {
                                                                     const raw = item.description ?? '';
+                                                                    // New quotes: locationCode = modelNo, description = clean.
+                                                                    // Old quotes: locationCode is empty, description = "Handle (CZS133-L55 | White)".
+                                                                    // For old quotes, extract first token inside parens as the model no.
                                                                     const modelNo = item.locationCode
                                                                         || raw.match(/\(([^|)\s][^|)]*?)(?:\s*\|[^)]*)?\)/)?.[1]?.trim()
                                                                         || '';
@@ -306,22 +309,26 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                 </div>
 
                 {/* Footer Section */}
-                <div className="mt-2 pt-2 border-t border-slate-900 break-inside-avoid">
+                <div className="mt-2 pt-2 border-t border-slate-200 break-inside-avoid">
                     <div className="flex justify-between items-start">
                         <div className="w-[60%]">
-                            <h4 className="text-[8px] font-black uppercase tracking-widest text-slate-900 mb-1 border-b border-slate-100 pb-0.5">Terms of Sale</h4>
+                            <h4 className="text-[8px] font-black uppercase tracking-widest text-slate-900 mb-1 border-b border-slate-100 pb-0.5">Protocol & Terms</h4>
                             <ul className="text-[7.5px] space-y-0.5 text-slate-600 font-bold leading-tight">
                                 <li className="flex items-start space-x-1">
                                     <span className="text-slate-300">•</span>
-                                    <span>Goods once sold cannot be returned or exchanged.</span>
+                                    <span>100% Cash Deposit before Delivery.</span>
                                 </li>
                                 <li className="flex items-start space-x-1">
                                     <span className="text-slate-300">•</span>
-                                    <span>Supplier not responsible for hardware variation.</span>
+                                    <span>Quotation valid for 2 days only.</span>
                                 </li>
                                 <li className="flex items-start space-x-1">
-                                    <span className="text-rose-500">•</span>
-                                    <span className="text-slate-900">Balance payment required before dispatch.</span>
+                                    <span className="text-slate-300">•</span>
+                                    <span>Check samples carefully, no return or exchange.</span>
+                                </li>
+                                <li className="flex items-start space-x-1">
+                                    <span className="text-slate-300">•</span>
+                                    <span>Prices exclusive of Transportation and Taxes.</span>
                                 </li>
                             </ul>
                         </div>
@@ -344,15 +351,9 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                         </div>
                     </div>
 
-                    <div className="mt-6 grid grid-cols-3 gap-4">
-                        <div className="border-t border-slate-900 pt-1 text-center text-[7px] font-black uppercase text-slate-400">Verification</div>
-                        <div className="border-t border-slate-900 pt-1 text-center text-[7px] font-black uppercase text-slate-400">Accounts</div>
-                        <div className="border-t border-slate-900 pt-1 text-center text-[7px] font-black uppercase text-slate-900">Authorized</div>
-                    </div>
-
-                    <div className="mt-4 text-center">
+                    <div className="mt-6 text-center">
                         <p className="text-[7px] font-black uppercase tracking-[0.2em] text-slate-300 italic">
-                            Computer generated sales document. Valid for Dispatch.
+                            Computer generated document. No signature required.
                         </p>
                     </div>
                 </div>
