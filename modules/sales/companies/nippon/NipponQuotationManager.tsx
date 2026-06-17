@@ -149,7 +149,18 @@ const NipponQuotationManager: React.FC = () => {
           setSearchTerm={setSearchTerm} 
           onNew={() => { setFormData(initialQuotation); setView('edit'); }} 
           onEdit={(q) => { setFormData(q); setView('edit'); }} 
-          onPrint={(q) => { setPrintingQuote(q); setTimeout(() => { window.print(); setPrintingQuote(null); }, 500); }} 
+          onPrint={(q) => {
+            setPrintingQuote(q);
+            setTimeout(() => {
+              // Blank the document title during print so the browser's print header
+              // doesn't show "Glasstech ERP 2026" above the document. Restored after.
+              const prevTitle = document.title;
+              document.title = ' ';
+              window.print();
+              document.title = prevTitle;
+              setPrintingQuote(null);
+            }, 500);
+          }}
           onApprove={(q) => handleSave(true, q)}
           onDelete={handleDelete}
         />

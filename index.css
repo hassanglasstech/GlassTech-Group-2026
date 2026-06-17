@@ -351,10 +351,12 @@ input[type=number] { -moz-appearance: textfield; }
     display: none !important;
   }
 
-  /* Reset page */
+  /* Reset page — margin 0 so the browser does NOT reserve a header/footer band
+     (that band is where Chrome prints the document title + date/time). Page
+     spacing is provided by each print's own container padding. */
   @page {
     size: A4;
-    margin: 10mm 12mm;
+    margin: 0;
   }
 
   html, body {

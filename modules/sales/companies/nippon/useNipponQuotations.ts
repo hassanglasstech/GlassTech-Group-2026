@@ -62,7 +62,10 @@ export const useNipponQuotations = () => {
 
   const refreshData = async () => {
     const all = await AsyncSalesService.getQuotations();
-    setQuotations(all.filter(q => q.company === company && q.status !== 'Approved').sort((a,b) => b.id.localeCompare(a.id)));
+    // Keep approved orders in the list too — they become Sales Orders and the user
+    // needs to find, re-print (Sales Order layout) and track them by serial. The
+    // list already badges status and hides Edit/Approve/Delete for approved rows.
+    setQuotations(all.filter(q => q.company === company).sort((a,b) => b.id.localeCompare(a.id)));
     
     const allClients = await AsyncSalesService.getClients();
     setClients(allClients.filter(c => c.company === company));
