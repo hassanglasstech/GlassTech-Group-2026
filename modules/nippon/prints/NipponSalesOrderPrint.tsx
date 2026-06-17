@@ -1,6 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { Quotation } from '../../shared/types';
+import { nipponImageUrl } from '../../shared/components/ProductImage';
 
 interface Props {
     quote: Quotation;
@@ -259,11 +260,19 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                                                         <tr key={idx}>
                                                             <td className="py-2 px-2 text-center text-slate-400 font-bold">{serialNum}</td>
                                                             <td className="py-2 px-2 text-center">
-                                                                {item.attachedImage && (
-                                                                    <div className="w-10 h-10 border border-slate-200 rounded overflow-hidden mx-auto bg-white">
-                                                                        <img src={item.attachedImage} alt="" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
-                                                                    </div>
-                                                                )}
+                                                                {(() => {
+                                                                    // Use the stored snapshot, else derive the bucket URL from the
+                                                                    // item code (NIP-KL-<code>.png). onError hides the box so a
+                                                                    // missing file leaves no broken icon — same as no image.
+                                                                    const imgSrc = item.attachedImage || nipponImageUrl(item.locationCode);
+                                                                    if (!imgSrc) return null;
+                                                                    return (
+                                                                        <div className="w-10 h-10 border border-slate-200 rounded overflow-hidden mx-auto bg-white">
+                                                                            <img src={imgSrc} alt="" className="w-full h-full object-contain" referrerPolicy="no-referrer"
+                                                                                onError={(e) => { const box = e.currentTarget.parentElement as HTMLElement | null; if (box) box.style.display = 'none'; }} />
+                                                                        </div>
+                                                                    );
+                                                                })()}
                                                             </td>
                                                             <td className="py-2 px-2">
                                                                 {(() => {

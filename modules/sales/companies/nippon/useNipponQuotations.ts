@@ -5,6 +5,7 @@ import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { StoreItem, ProductComponent } from '@/modules/procurement/types/inventory';
 import { Logger } from '@/modules/shared/services/logger';
+import { nipponImageUrl } from '@/modules/shared/components/ProductImage';
 
 // TEMP (inventory module not live yet): stock balances are still 0 because GRN /
 // opening-balance intake isn't wired, so a hard stock gate blocks every approval.
@@ -185,7 +186,7 @@ export const useNipponQuotations = () => {
         width: 0, height: 0, totalSqFt: 0,
         pricePerUnit: mp.basePrice || 0,
         amount: mp.basePrice || 0,
-        attachedImage: mp.imageUrl,
+        attachedImage: mp.imageUrl || nipponImageUrl(mp.modelNo || mp.profileCode),
         setId: setProduct.id,
         isSetMember: true,
       }));
@@ -232,7 +233,10 @@ export const useNipponQuotations = () => {
       item.glassSize = prod.unit || 'PCS';
       item.glazingSpecs = prod.brand || ''; // Brand
       item.amount = (Number(item.qty) || 1) * (Number(item.pricePerUnit) || 0);
-      item.attachedImage = prod.imageUrl || prod.image;
+      // Fall back to the bucket URL derived from the code (NIP-KL-<code>.png) so
+      // images print even when the product's image_url field is blank — same
+      // convention the Material Master uses via <ProductImage>.
+      item.attachedImage = prod.imageUrl || prod.image || nipponImageUrl(prod.modelNo || prod.profileCode);
       
       next[index] = item;
       return { ...prev, items: next };
