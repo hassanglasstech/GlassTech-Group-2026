@@ -1,16 +1,21 @@
 
 import React, { useMemo } from 'react';
-import { Quotation } from '../../shared/types';
+import { Quotation, Product } from '../../shared/types';
 import { nipponImageUrl } from '../../shared/components/ProductImage';
 
 interface Props {
     quote: Quotation;
     clientName: string;
     printType?: 'KinLong' | 'Glasstech' | 'General';
+    products?: Product[];
 }
 
-export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, printType = 'Glasstech' }) => {
+export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, printType = 'Glasstech', products = [] }) => {
     const items = quote.items || [];
+    // Resolve the live product for a line so we can use its current image_url
+    // (the form uploads NIP-KL-<code>.jpg), regardless of when the line was added.
+    const prodFor = (it: { productRef?: string; locationCode?: string }) =>
+        products.find(p => (it.productRef && p.id === it.productRef) || (it.locationCode && p.modelNo === it.locationCode));
     const subTotal = items.reduce((s, i) => s + (i.amount || 0), 0);
     const discountAmount = quote.discountAmount !== undefined && quote.discountAmount > 0
         ? quote.discountAmount
@@ -234,7 +239,7 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                                             <thead>
                                                 <tr className="bg-slate-50 border-y border-slate-300 text-[9px] font-black uppercase text-slate-600">
                                                     <th className="py-2 px-2 text-center w-8">S.No</th>
-                                                    <th className="py-2 px-2 text-center w-12">Image</th>
+                                                    <th className="py-2 px-2 text-center w-20">Image</th>
                                                     <th className="py-2 px-2">Item Details</th>
                                                     <th className="py-2 px-2 text-center w-12">Unit</th>
                                                     <th className="py-2 px-2 text-center w-10">Qty</th>
@@ -264,10 +269,10 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                                                                     // Use the stored snapshot, else derive the bucket URL from the
                                                                     // item code (NIP-KL-<code>.png). onError hides the box so a
                                                                     // missing file leaves no broken icon — same as no image.
-                                                                    const imgSrc = item.attachedImage || nipponImageUrl(item.locationCode);
+                                                                    const imgSrc = item.attachedImage || prodFor(item)?.imageUrl || nipponImageUrl(item.locationCode);
                                                                     if (!imgSrc) return null;
                                                                     return (
-                                                                        <div className="w-10 h-10 border border-slate-200 rounded overflow-hidden mx-auto bg-white">
+                                                                        <div className="w-[60px] h-[60px] border border-slate-200 rounded overflow-hidden mx-auto bg-white">
                                                                             <img src={imgSrc} alt="" className="w-full h-full object-contain" referrerPolicy="no-referrer"
                                                                                 onError={(e) => { const box = e.currentTarget.parentElement as HTMLElement | null; if (box) box.style.display = 'none'; }} />
                                                                         </div>

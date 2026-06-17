@@ -111,7 +111,7 @@ const NipponQuotationManager: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {printingQuote && <NipponPrintTemplate printingQuote={printingQuote} clients={clients} printType={nipponPrintType} />}
+      {printingQuote && <NipponPrintTemplate printingQuote={printingQuote} clients={clients} printType={nipponPrintType} products={products} />}
 
       <div className="no-print bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
         <div className="flex items-center space-x-4">

@@ -32,11 +32,11 @@ export const NipponPrintTemplate: React.FC<Props> = ({
 
     switch(finalMode) {
         case 'SalesOrder':
-            return <NipponSalesOrderPrint quote={printingQuote} clientName={clientName} printType={printType} />;
+            return <NipponSalesOrderPrint quote={printingQuote} clientName={clientName} printType={printType} products={products} />;
         case 'JobCard':
             return <NipponJobCardPrint quote={printingQuote} clientName={clientName} pieces={pieces || []} products={products || []} />;
         case 'Quotation':
         default:
-            return <NipponQuotationPrint quote={printingQuote} clientName={clientName} printType={printType} />;
+            return <NipponQuotationPrint quote={printingQuote} clientName={clientName} printType={printType} products={products} />;
     }
 };
