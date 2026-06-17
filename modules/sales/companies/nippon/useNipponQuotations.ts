@@ -6,6 +6,13 @@ import { InventoryService } from '@/modules/procurement/services/inventoryServic
 import { StoreItem, ProductComponent } from '@/modules/procurement/types/inventory';
 import { Logger } from '@/modules/shared/services/logger';
 
+// TEMP (inventory module not live yet): stock balances are still 0 because GRN /
+// opening-balance intake isn't wired, so a hard stock gate blocks every approval.
+// While false, approval proceeds on zero/short stock (stock is clamped at 0, never
+// negative) and the user just gets a non-blocking heads-up. Flip to `true` once
+// inventory go-live so over-selling is blocked again.
+const ENFORCE_STOCK_ON_APPROVE = false;
+
 export const useNipponQuotations = () => {
   const company: Company = 'Nippon';
   const [quotations, setQuotations] = useState<Quotation[]>([]);
@@ -295,8 +302,13 @@ export const useNipponQuotations = () => {
           }
         });
         if (shortfalls.length > 0) {
-          toast.error(`Not enough stock to approve — receive via Hardware GRN first:\n${shortfalls.join('\n')}`);
-          return;
+          if (ENFORCE_STOCK_ON_APPROVE) {
+            // Inventory live → block over-selling up-front with an actionable message.
+            toast.error(`Not enough stock to approve — receive via Hardware GRN first:\n${shortfalls.join('\n')}`);
+            return;
+          }
+          // Inventory not live yet → let the Sales Order through, just warn.
+          toast.warning(`Sales Order created with a stock shortfall (inventory pending). Receive via Hardware GRN later:\n${shortfalls.join('\n')}`);
         }
       }
 
@@ -343,10 +355,16 @@ export const useNipponQuotations = () => {
           // locationCode now holds the visible modelNo — do NOT use it for stock search.
           const storeIdx = updatedStore.findIndex(s => s.id === (item.productRef || item.locationCode));
           if (storeIdx !== -1) {
+            // Clamp at 0 — never write negative stock. Until inventory go-live,
+            // balances are 0, so this keeps them at 0 instead of going negative
+            // and tripping InsufficientStockError in saveStore (which would fail
+            // the whole approval). Once GRN intake is live, real stock decrements
+            // normally and the clamp only bites on genuine over-sell.
+            const need = Number(item.qty) || 0;
             updatedStore[storeIdx] = {
               ...updatedStore[storeIdx],
-              unrestrictedQty: (updatedStore[storeIdx].unrestrictedQty || 0) - (Number(item.qty) || 0),
-              quantity: (updatedStore[storeIdx].quantity || 0) - (Number(item.qty) || 0)
+              unrestrictedQty: Math.max(0, (updatedStore[storeIdx].unrestrictedQty || 0) - need),
+              quantity: Math.max(0, (updatedStore[storeIdx].quantity || 0) - need)
             };
           }
         });
