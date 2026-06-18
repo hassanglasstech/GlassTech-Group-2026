@@ -4,6 +4,7 @@ import { Product, StoreItem } from '@/modules/shared/types';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { getBrandNick } from '@/modules/shared/utils/brandUtils';
+import { ProductImage } from '@/modules/shared/components/ProductImage';
 import {
   Plus, Search, Edit2, Trash2, Package, Filter, Download, Box,
   FileJson, FileSpreadsheet, FileUp, UploadCloud, Printer, Layers,
@@ -642,11 +643,7 @@ const NipponProductMaster: React.FC = () => {
                                 <td className="px-6 py-3 font-mono font-bold text-slate-400 uppercase">{p.profileCode || '-'}</td>
                                 <td className="py-3">
                                     <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center">
-                                        {p.imageUrl ? (
-                                            <img src={p.imageUrl} alt={p.description} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <Package size={16} className="text-slate-300" />
-                                        )}
+                                        <ProductImage code={p.modelNo || p.profileCode} url={p.imageUrl} alt={p.description} className="w-full h-full object-cover" iconSize={16} />
                                     </div>
                                 </td>
                                 <td className="font-black text-slate-500 uppercase">
