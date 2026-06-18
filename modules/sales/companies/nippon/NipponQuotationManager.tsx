@@ -316,8 +316,9 @@ const NipponQuotationManager: React.FC = () => {
                                      s.id,
                                      prod?.name,
                                      prod?.description,
+                                     prod?.modelNo,      // ERP code (the code shown in the column/dropdown)
                                      prod?.itemCode,
-                                     prod?.profileCode,
+                                     prod?.profileCode,  // KinLong doc code
                                      prod?.brand,
                                      // Nick name = internal local-market alias (searchable only,
                                      // never written to the quotation line or print output).
