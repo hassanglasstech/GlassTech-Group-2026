@@ -361,9 +361,17 @@ export const useNipponQuotations = () => {
 
         finalQuo.items.forEach(item => {
           if (item.isSection) return;
-          // productRef holds the real product.id (NIP-KL-...) for inventory lookup.
-          // locationCode now holds the visible modelNo — do NOT use it for stock search.
-          const refId = item.productRef || item.locationCode;
+          // Resolve the REAL product id. productRef should hold it, but a manually
+          // typed line only carries locationCode (the visible code) — match that
+          // back to a product so we decrement the existing seeded row
+          // (id = NIP-KL-…) instead of creating an orphan row keyed by the bare
+          // code, which would otherwise show up under "Uncategorized" in stock.
+          const matched = products.find(p =>
+            (item.productRef && p.id === item.productRef) ||
+            (item.locationCode && (p.id === item.locationCode || p.modelNo === item.locationCode || p.profileCode === item.locationCode))
+          );
+          const refId = matched?.id || item.productRef || item.locationCode;
+          if (!refId) return;
           const storeIdx = updatedStore.findIndex(s => s.id === refId);
           const need = Number(item.qty) || 0;
           if (storeIdx !== -1) {
@@ -376,17 +384,17 @@ export const useNipponQuotations = () => {
               unrestrictedQty: (updatedStore[storeIdx].unrestrictedQty || 0) - need,
               quantity: (updatedStore[storeIdx].quantity || 0) - need
             };
-          } else if (refId) {
-            // No stock row yet → create one at negative qty so the item shows up in
-            // "Needs stock-taking" for the user to count.
+          } else {
+            // No stock row yet → create one at negative qty (keyed by the real
+            // product id when matched) so it shows in "Needs stock-taking".
             updatedStore.push({
               id: refId,
               company,
-              name: item.description || refId,
-              category: 'Hardware',
+              name: matched?.description || item.description || refId,
+              category: (matched?.category as string) || 'Hardware',
               quantity: -need, unrestrictedQty: -need,
               qiQty: 0, blockedQty: 0, reservedQty: 0, consignmentQty: 0,
-              unit: (item.glassSize || 'PCS') as StoreItem['unit'],
+              unit: (matched?.unit || item.glassSize || 'PCS') as StoreItem['unit'],
               minLevel: 10, reorderPoint: 5,
               movingAveragePrice: Number(item.pricePerUnit) || 0,
               totalValue: 0, storageBin: 'New',

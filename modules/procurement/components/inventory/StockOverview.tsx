@@ -325,6 +325,12 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                          {product?.subCategory && (
                            <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-[9px] font-black uppercase">{product.subCategory}</span>
                          )}
+                         {isNippon && !product && (
+                           <span className="inline-block px-2 py-0.5 bg-rose-50 text-rose-600 rounded text-[9px] font-black uppercase border border-rose-100" title="This stock row has no matching product in the master">No product link</span>
+                         )}
+                         {isNippon && product && !product.mainCategory && (
+                           <span className="inline-block px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-[9px] font-black uppercase border border-amber-100" title="Set a Material Group for this product in Material Master">No group</span>
+                         )}
                        </div>
                      </td>
                      <td className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase">
