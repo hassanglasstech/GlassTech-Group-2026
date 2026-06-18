@@ -6,7 +6,7 @@ import { StoreItem } from '@/modules/shared/types';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { AlertTriangle, LayoutGrid, List, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
-import { Search, Box, Image as ImageIcon, Filter, ClipboardCheck } from 'lucide-react';
+import { Search, Box, Image as ImageIcon, Filter, ClipboardCheck, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import Pagination from '@/components/Pagination';
 
@@ -71,6 +71,28 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
         for (const p of allProducts) m.set(p.id, p);
         return m;
     }, [allProducts]);
+
+    // Orphan stock rows — a store_item with no matching product. They can't be
+    // edited in Material Master, so they're cleaned (deleted) from here instead.
+    const orphanIds = useMemo(
+        () => items.filter(i => !productMap.has(i.id)).map(i => i.id),
+        [items, productMap]
+    );
+
+    const handleDeleteOrphan = async (item: StoreItem) => {
+        if (!window.confirm(`Remove "${item.name}" from stock?\n\nThis row has no product in the Material Master, so it can't be edited — only removed.`)) return;
+        await InventoryService.deleteStoreItems([item.id]);
+        toast.success(`Removed "${item.name}" from stock.`);
+        onStockUpdate?.();
+    };
+
+    const handleCleanOrphans = async () => {
+        if (!orphanIds.length) return;
+        if (!window.confirm(`Remove ${orphanIds.length} orphan stock row(s)?\n\nThese have no product in the Material Master and can't be edited — only removed. Counted/real items are not affected.`)) return;
+        await InventoryService.deleteStoreItems(orphanIds);
+        toast.success(`Removed ${orphanIds.length} orphan stock row(s).`);
+        onStockUpdate?.();
+    };
 
     // Category tree — derived from actual products so the dropdowns always
     // reflect what's in the database, not a hardcoded list. Falls back to
@@ -239,6 +261,15 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                            <ClipboardCheck size={13}/> {needsCountOnly ? 'Show all' : `Needs count (${needsCountIds.size})`}
                        </button>
                    )}
+                   {/* Clean orphan rows (Nippon) — store rows with no product */}
+                   {isNippon && orphanIds.length > 0 && (
+                       <button
+                           onClick={handleCleanOrphans}
+                           title="Remove stock rows that have no product in the Material Master"
+                           className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border flex items-center gap-1.5 transition-all bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100">
+                           <Trash2 size={13}/> Clean orphans ({orphanIds.length})
+                       </button>
+                   )}
                    {/* View mode toggle (Nippon) */}
                    {company === 'Nippon' && (
                        <div className="flex items-center bg-slate-100 rounded-xl p-1 border border-slate-200">
@@ -373,6 +404,12 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                            <button onClick={() => handleStockTake(item)} title="Record physical stock count"
                              className="ml-1 p-1 rounded border border-amber-200 text-amber-600 hover:bg-amber-50 transition-all">
                              <ClipboardCheck size={12}/>
+                           </button>
+                         )}
+                         {isNippon && !product && (
+                           <button onClick={() => handleDeleteOrphan(item)} title="No product in Material Master — remove this stock row"
+                             className="p-1 rounded border border-rose-200 text-rose-600 hover:bg-rose-50 transition-all">
+                             <Trash2 size={12}/>
                            </button>
                          )}
                        </div>

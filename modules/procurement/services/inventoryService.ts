@@ -494,6 +494,21 @@ export const InventoryService = {
     return { opening, sold };
   },
 
+  // Delete store rows by id — used to clean orphan stock rows (a store_item with
+  // no matching product, which can't be edited via Material Master). Removes from
+  // local cache immediately, then from Supabase so they don't re-sync back.
+  deleteStoreItems: async (ids: string[]): Promise<void> => {
+    if (!ids.length) return;
+    const remaining = InventoryService.getStore().filter(s => !ids.includes(s.id));
+    safeSave(KEYS.STORE, remaining);
+    try {
+      const { error } = await supabase.from('store_items').delete().in('id', ids);
+      if (error) console.error('[InventoryService] deleteStoreItems:', error.message);
+    } catch (e) {
+      console.error('[InventoryService] deleteStoreItems exception', e);
+    }
+  },
+
   // ── Stock Ledger ───────────────────────────────────────────────────
   getStockLedger: (): MaterialLedgerEntry[] => safeParse(KEYS.STOCK_LEDGER),
   getStockLedgerAsync: async (): Promise<MaterialLedgerEntry[]> => {
