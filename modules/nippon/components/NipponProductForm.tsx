@@ -369,6 +369,24 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                     </div>
                 </div>
 
+                {/* Supplier-side fields — used when raising a PO to the supplier */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-slate-400">Supplier Category <span className="text-slate-300 normal-case font-normal">(for PO)</span></label>
+                        <input type="text" className="sap-input w-full font-bold uppercase text-xs"
+                            value={(formData.technicalSpecs as Record<string, string>)['Supplier Category'] || ''}
+                            onChange={e => setFormData({...formData, technicalSpecs: {...formData.technicalSpecs, 'Supplier Category': e.target.value}})}
+                            placeholder="e.g. Window Hardware"/>
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-slate-400">Supplier Product Name <span className="text-slate-300 normal-case font-normal">(for PO)</span></label>
+                        <input type="text" className="sap-input w-full font-bold uppercase text-xs"
+                            value={(formData.technicalSpecs as Record<string, string>)['Supplier Name'] || ''}
+                            onChange={e => setFormData({...formData, technicalSpecs: {...formData.technicalSpecs, 'Supplier Name': e.target.value}})}
+                            placeholder="Name as the supplier lists it"/>
+                    </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                         <label className="text-[10px] font-bold uppercase text-slate-400">ERP Model No</label>
@@ -575,7 +593,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                         </div>
 
                         {/* DYNAMIC SPECS (matchStatus is edited via the Match Status dropdown above) */}
-                        {Object.entries(formData.technicalSpecs).filter(([key]) => key !== 'matchStatus').map(([key, value]) => (
+                        {Object.entries(formData.technicalSpecs).filter(([key]) => !['matchStatus', 'Supplier Category', 'Supplier Name'].includes(key)).map(([key, value]) => (
                             <div key={key} className="space-y-1 relative group">
                                 <label className="text-[9px] font-bold uppercase text-slate-400">{key}</label>
                                 <input 
