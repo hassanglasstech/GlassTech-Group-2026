@@ -227,7 +227,10 @@ export const useNipponQuotations = () => {
       }
 
       item.description = desc;
-      item.locationCode = prod.modelNo || '';
+      // Show the same code the dropdown showed: ERP model no first, then the
+      // KinLong/item code, then the id. Was modelNo-only, so it came up blank
+      // for store rows whose product wasn't matched (stub) or had no modelNo.
+      item.locationCode = prod.modelNo || prod.itemCode || prod.profileCode || prod.id || '';
       item.productRef   = prod.id;
       item.pricePerUnit = prod.price || prod.basePrice || 0;
       item.glassSize = prod.unit || 'PCS';
