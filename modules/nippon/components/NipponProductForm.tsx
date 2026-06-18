@@ -8,18 +8,23 @@ import { X, Box, Tag, Building2, Hash, Layout, ListFilter, UploadCloud } from 'l
 
 const PRODUCT_IMAGE_BUCKET = 'product-images';
 
-// Upload a base64 data-URL to the product-images bucket, named by product id.
+// Bucket filename convention — matches nipponImageUrl()/<ProductImage> so the
+// Material Master, catalogue and prints all resolve it by code automatically:
+//   product-images/NIP-KL-<code>.png
+function bucketImageName(code: string): string {
+  const clean = String(code || '').trim().replace(/^NIP-KL-/i, '').replace(/^NIP-/i, '');
+  return `NIP-KL-${clean}.png`;
+}
+
+// Upload a base64 data-URL to the product-images bucket, named NIP-KL-<code>.png.
 // Returns the public URL. Storing a short URL (not a ~50KB base64 blob) in
-// products.image_url is what keeps the row small enough to persist — base64
-// payloads silently bust Supabase's body limit on batch upsert, so the image
-// "vanishes" from the list after refresh even though the edit form still holds
-// it in memory.
-async function uploadProductImage(productId: string, dataUrl: string): Promise<string> {
+// products.image_url keeps the row small enough to persist on batch upsert.
+async function uploadProductImage(code: string, dataUrl: string): Promise<string> {
   const blob = await (await fetch(dataUrl)).blob();
-  const path = `${productId}.jpg`;
+  const path = bucketImageName(code);
   const { error } = await supabase.storage
     .from(PRODUCT_IMAGE_BUCKET)
-    .upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+    .upload(path, blob, { upsert: true, contentType: 'image/png' });
   if (error) throw error;
   const { data } = supabase.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(path);
   return data.publicUrl;
@@ -151,7 +156,8 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                 ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
             }
             
-            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+            // PNG so the uploaded file genuinely matches the NIP-KL-<code>.png name.
+            const compressedBase64 = canvas.toDataURL('image/png');
             setFormData(prev => ({ ...prev, image: compressedBase64 }));
         };
         img.src = event.target?.result as string;
@@ -191,12 +197,15 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
       const prodId = editingProduct ? editingProduct.id : `NIP-${formData.modelNo || Date.now()}`;
 
       // If a new image was picked it's an in-memory base64 data-URL. Push it to
-      // the bucket and keep only the public URL on the product. Already-uploaded
-      // images (http URL) pass through untouched.
+      // the bucket as NIP-KL-<code>.png (code = ERP model no, else KinLong code)
+      // so the Master / catalogue / prints resolve it by code automatically.
+      // Keep only the public URL on the product. Already-uploaded images (http
+      // URL) pass through untouched.
+      const imgCode = formData.modelNo || formData.internalId || prodId;
       let finalImageUrl = formData.image;
       if (formData.image && formData.image.startsWith('data:')) {
         try {
-          finalImageUrl = await uploadProductImage(prodId, formData.image);
+          finalImageUrl = await uploadProductImage(imgCode, formData.image);
         } catch (err) {
           setIsSaving(false);
           return toast.error(`Image upload failed: ${(err as Error)?.message || 'unknown'}. Product not saved.`);
