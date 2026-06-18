@@ -6,7 +6,8 @@ import { StoreItem } from '@/modules/shared/types';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { AlertTriangle, LayoutGrid, List, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
-import { Search, Box, Image as ImageIcon, Filter } from 'lucide-react';
+import { Search, Box, Image as ImageIcon, Filter, ClipboardCheck } from 'lucide-react';
+import { toast } from 'sonner';
 import Pagination from '@/components/Pagination';
 
 // Material Master v3 — supplier-aligned KinLong taxonomy (8 groups, domain order).
@@ -21,9 +22,10 @@ interface StockOverviewProps {
     items: StoreItem[];
     searchTerm: string;
     setSearchTerm: (val: string) => void;
+    onStockUpdate?: () => void;
 }
 
-const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSearchTerm }) => {
+const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSearchTerm, onStockUpdate }) => {
     const company = useAppStore(state => state.selectedCompany);
     const [mainFilter, setMainFilter] = useState('All');
     const [subFilter, setSubFilter]   = useState('All');
@@ -32,8 +34,29 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
     const [viewMode, setViewMode] = useState<'flat' | 'grouped'>(company === 'Nippon' ? 'grouped' : 'flat');
     const [sortConfig, setSortConfig] = useState<{ key: StockSortKey; dir: 'asc' | 'desc' }>({ key: 'name', dir: 'asc' });
     const [lowStockOnly, setLowStockOnly] = useState(false);
+    const [needsCountOnly, setNeedsCountOnly] = useState(false);
     const itemsPerPage = 20;
     const isNippon = company === 'Nippon';
+
+    // Inventory bootstrap: items at or below zero need a physical stock-take.
+    const needsCountIds = useMemo(
+        () => new Set(items.filter(i => (i.unrestrictedQty ?? i.quantity ?? 0) <= 0).map(i => i.id)),
+        [items]
+    );
+
+    const handleStockTake = (item: StoreItem) => {
+        const entered = window.prompt(`Stock-take — ${item.name}\n\nEnter the physical quantity on the shelf right now:`, '');
+        if (entered === null) return;
+        const count = Number(entered);
+        if (!Number.isFinite(count) || count < 0) { toast.error('Enter a valid quantity (0 or more).'); return; }
+        const { opening, sold } = InventoryService.recordStockCount(item.id, count);
+        toast.success(
+            sold > 0
+                ? `Opening recorded: ${opening} (counted ${count} + ${sold} already sold). On-hand set to ${count}.`
+                : `On-hand set to ${count} for ${item.name}.`
+        );
+        onStockUpdate?.();
+    };
 
     const requestSort = (key: StockSortKey) => {
         setSortConfig(prev => prev.key === key
@@ -84,7 +107,7 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
     // Reset pagination when any filter / sort / view changes
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, mainFilter, subFilter, lowStockOnly, sortConfig, viewMode]);
+    }, [searchTerm, mainFilter, subFilter, lowStockOnly, needsCountOnly, sortConfig, viewMode]);
 
     // Reset subFilter when mainFilter changes — a sub selected under one
     // main should not silently linger when the user switches main.
@@ -105,7 +128,8 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
             const matchesMain = mainFilter === 'All' || product?.mainCategory === mainFilter;
             const matchesSub  = subFilter  === 'All' || product?.subCategory  === subFilter;
             const matchesLow  = !lowStockOnly || !!lowStockMap[i.id];
-            return matchesSearch && matchesMain && matchesSub && matchesLow;
+            const matchesCount = !needsCountOnly || needsCountIds.has(i.id);
+            return matchesSearch && matchesMain && matchesSub && matchesLow && matchesCount;
         });
 
         // Sort
@@ -126,7 +150,7 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
             if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * factor;
             return String(va).localeCompare(String(vb)) * factor;
         });
-    }, [items, searchTerm, mainFilter, subFilter, lowStockOnly, sortConfig, productMap]);
+    }, [items, searchTerm, mainFilter, subFilter, lowStockOnly, needsCountOnly, needsCountIds, sortConfig, productMap]);
 
     // Paginate first — both flat AND grouped views render this same page slice,
     // so grouped no longer dumps the entire (potentially huge) list at once.
@@ -202,6 +226,15 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                     )}
                 </div>
                 <div className="flex items-center space-x-3">
+                   {/* Needs stock-taking toggle (Nippon bootstrap) */}
+                   {isNippon && needsCountIds.size > 0 && (
+                       <button
+                           onClick={() => setNeedsCountOnly(v => !v)}
+                           title="Items at or below zero — do a physical count"
+                           className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border flex items-center gap-1.5 transition-all ${needsCountOnly ? 'bg-amber-500 text-white border-amber-500' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}>
+                           <ClipboardCheck size={13}/> {needsCountOnly ? 'Show all' : `Needs count (${needsCountIds.size})`}
+                       </button>
+                   )}
                    {/* View mode toggle (Nippon) */}
                    {company === 'Nippon' && (
                        <div className="flex items-center bg-slate-100 rounded-xl p-1 border border-slate-200">
@@ -317,14 +350,21 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                          )}
                        </td>
                      )}
-                     <td className="px-6 py-4 text-right font-black text-slate-900 text-base">
+                     <td className="px-6 py-4 text-right text-base">
                        <div className="flex items-center justify-end gap-2">
                          {lowStockMap[item.id] && (
                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${lowStockMap[item.id] === 'red' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}>
                              {lowStockMap[item.id] === 'red' ? '⚠ Critical' : '⚡ Low'}
                            </span>
                          )}
-                         {(item.unrestrictedQty || 0).toLocaleString()} <span className="text-[10px] text-slate-400">{item.unit}</span>
+                         <span className={`font-black ${(item.unrestrictedQty ?? 0) < 0 ? 'text-red-600' : 'text-slate-900'}`}>{(item.unrestrictedQty || 0).toLocaleString()}</span>
+                         <span className="text-[10px] text-slate-400">{item.unit}</span>
+                         {isNippon && (
+                           <button onClick={() => handleStockTake(item)} title="Record physical stock count"
+                             className="ml-1 p-1 rounded border border-amber-200 text-amber-600 hover:bg-amber-50 transition-all">
+                             <ClipboardCheck size={12}/>
+                           </button>
+                         )}
                        </div>
                      </td>
                      <td className="px-6 py-4 text-right">

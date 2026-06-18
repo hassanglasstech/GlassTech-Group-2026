@@ -303,58 +303,34 @@ const NipponQuotationManager: React.FC = () => {
                                  // image) when one exists. Items that have a stock row
                                  // but no master-catalog product still appear.
                                  const q = (item.description || '').toLowerCase();
-                                 const productByKey = new Map<string, Product>();
-                                 products.forEach(p => {
-                                   if (p.id) productByKey.set(p.id, p);
-                                   const code = (p.itemCode || p.profileCode || '').toString();
-                                   if (code) productByKey.set(code, p);
-                                 });
-                                 const matches = storeItems.filter(s => {
-                                   const prod = productByKey.get(s.id);
+                                 // Source from the PRODUCT master (every product searchable by
+                                 // name / ERP code / KinLong code / nick — even with no stock row).
+                                 // Stock qty is joined from store_items just for display.
+                                 const storeById = new Map(storeItems.map(s => [s.id, s]));
+                                 const matches = products.filter(p => {
                                    const haystack = [
-                                     s.name,
-                                     s.id,
-                                     prod?.name,
-                                     prod?.description,
-                                     prod?.modelNo,      // ERP code (the code shown in the column/dropdown)
-                                     prod?.itemCode,
-                                     prod?.profileCode,  // KinLong doc code
-                                     prod?.brand,
-                                     // Nick name = internal local-market alias (searchable only,
-                                     // never written to the quotation line or print output).
-                                     (prod as { nickName?: string } | undefined)?.nickName,
+                                     p.description, p.name, p.modelNo, p.itemCode, p.profileCode, p.brand,
+                                     (p as { nickName?: string }).nickName,
                                    ].filter(Boolean).join(' ').toLowerCase();
                                    return !q || haystack.includes(q);
-                                 });
+                                 }).slice(0, 60);
                                  return (
                                    <div ref={dropdownRef} className="absolute z-50 w-[360px] mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-[420px] overflow-y-auto">
-                                     {matches.map(s => {
-                                       const prod = productByKey.get(s.id);
-                                       const available = s.unrestrictedQty || 0;
-                                       const total = s.quantity || 0;
-                                       const displayName = prod?.name || prod?.description || s.name || s.id;
-                                       const code = prod?.modelNo || prod?.itemCode || prod?.profileCode || s.id;
-                                       const unit = prod?.unit || s.unit || 'PCS';
-                                       const price = prod?.price || prod?.basePrice || s.movingAveragePrice || 0;
-                                       const brand = prod?.brand || '';
-                                       // Build a Product-shaped object so selectProduct works
-                                       // even when there's no master-catalog row.
-                                       const productLike: Product = prod ?? ({
-                                         id: s.id,
-                                         company: s.company,
-                                         name: s.name,
-                                         description: s.name,
-                                         itemCode: s.id,
-                                         unit: s.unit,
-                                         basePrice: s.movingAveragePrice || 0,
-                                         price: s.movingAveragePrice || 0,
-                                       } as unknown as Product);
+                                     {matches.map(p => {
+                                       const s = storeById.get(p.id);
+                                       const available = s?.unrestrictedQty ?? 0;
+                                       const total = s?.quantity ?? 0;
+                                       const displayName = p.description || p.name || p.id;
+                                       const code = p.modelNo || p.itemCode || p.profileCode || p.id;
+                                       const unit = p.unit || s?.unit || 'PCS';
+                                       const price = p.price || p.basePrice || s?.movingAveragePrice || 0;
+                                       const brand = p.brand || '';
                                        return (
                                          <div
-                                           key={s.id}
+                                           key={p.id}
                                            className="px-3 py-1.5 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-0"
                                            onClick={() => {
-                                             selectProduct(idx, productLike);
+                                             selectProduct(idx, p);
                                              setActiveDropdown(null);
                                            }}
                                          >
@@ -366,7 +342,7 @@ const NipponQuotationManager: React.FC = () => {
                                                </span>
                                              )}
                                            </div>
-                                           {prod && <div className="text-[9px] text-slate-400 font-medium mt-0.5 truncate">{getProductSpecs(prod)}</div>}
+                                           <div className="text-[9px] text-slate-400 font-medium mt-0.5 truncate">{getProductSpecs(p)}</div>
                                            <div className="flex justify-between text-[10px] text-slate-500 mt-0.5">
                                              <div className="flex items-center gap-2">
                                                <span className="font-mono font-bold text-blue-600">{code}</span>
@@ -381,7 +357,7 @@ const NipponQuotationManager: React.FC = () => {
                                      })}
                                      {matches.length === 0 && (
                                        <div className="px-3 py-4 text-center text-slate-400 text-xs">
-                                         {storeItems.length === 0 ? 'No stock items loaded — check inventory sync' : 'No matching stock items'}
+                                         {products.length === 0 ? 'No products loaded — check sync' : 'No matching products'}
                                        </div>
                                      )}
                                    </div>

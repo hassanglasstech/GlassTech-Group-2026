@@ -363,19 +363,35 @@ export const useNipponQuotations = () => {
           if (item.isSection) return;
           // productRef holds the real product.id (NIP-KL-...) for inventory lookup.
           // locationCode now holds the visible modelNo — do NOT use it for stock search.
-          const storeIdx = updatedStore.findIndex(s => s.id === (item.productRef || item.locationCode));
+          const refId = item.productRef || item.locationCode;
+          const storeIdx = updatedStore.findIndex(s => s.id === refId);
+          const need = Number(item.qty) || 0;
           if (storeIdx !== -1) {
-            // Clamp at 0 — never write negative stock. Until inventory go-live,
-            // balances are 0, so this keeps them at 0 instead of going negative
-            // and tripping InsufficientStockError in saveStore (which would fail
-            // the whole approval). Once GRN intake is live, real stock decrements
-            // normally and the clamp only bites on genuine over-sell.
-            const need = Number(item.qty) || 0;
+            // Inventory-bootstrap mode: let an uncounted item go NEGATIVE on sale
+            // (e.g. sold 5 of a 0-stock item → -5). That negative is the signal to
+            // go stock-take the item. saveStore + the DB constraints allow negative
+            // for Nippon. When the user records the count, the balance is corrected.
             updatedStore[storeIdx] = {
               ...updatedStore[storeIdx],
-              unrestrictedQty: Math.max(0, (updatedStore[storeIdx].unrestrictedQty || 0) - need),
-              quantity: Math.max(0, (updatedStore[storeIdx].quantity || 0) - need)
+              unrestrictedQty: (updatedStore[storeIdx].unrestrictedQty || 0) - need,
+              quantity: (updatedStore[storeIdx].quantity || 0) - need
             };
+          } else if (refId) {
+            // No stock row yet → create one at negative qty so the item shows up in
+            // "Needs stock-taking" for the user to count.
+            updatedStore.push({
+              id: refId,
+              company,
+              name: item.description || refId,
+              category: 'Hardware',
+              quantity: -need, unrestrictedQty: -need,
+              qiQty: 0, blockedQty: 0, reservedQty: 0, consignmentQty: 0,
+              unit: (item.glassSize || 'PCS') as StoreItem['unit'],
+              minLevel: 10, reorderPoint: 5,
+              movingAveragePrice: Number(item.pricePerUnit) || 0,
+              totalValue: 0, storageBin: 'New',
+              lastMovementDate: new Date().toISOString(),
+            } as StoreItem);
           }
         });
         InventoryService.saveStore(updatedStore);

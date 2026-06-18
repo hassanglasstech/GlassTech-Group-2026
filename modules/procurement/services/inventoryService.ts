@@ -420,6 +420,10 @@ export const InventoryService = {
     // surface a descriptive error here so the user sees a clear message
     // rather than a raw Postgres constraint violation.
     for (const item of data) {
+      // Nippon is in inventory-bootstrap mode: a sale on an uncounted item is
+      // allowed to go negative (the "go count this" signal). Over-sell
+      // protection still applies to every other company.
+      if (item.company === 'Nippon') continue;
       if ((item.quantity ?? 0) < 0) {
         throw new InsufficientStockError(
           item.id,
@@ -464,6 +468,30 @@ export const InventoryService = {
       per_sqft_weight_kg:  (s as any).perSqftWeightKg||0,
     }));
     _inventoryUpsert('store_items', rows, 'store_items');
+  },
+
+  // Stock-taking (Nippon inventory bootstrap): the user enters the physical
+  // shelf count for an item. We treat any negative balance as "already sold but
+  // never counted", so the true opening balance = count + soldWhileUncounted.
+  // On-hand is set to the counted figure; the negative is cleared. Reads the
+  // FULL store, updates one row, saves the whole list (never partial — that
+  // would wipe other companies from local cache). Returns { opening, sold }.
+  recordStockCount: (itemId: string, count: number): { opening: number; sold: number } => {
+    const store = InventoryService.getStore();
+    const idx = store.findIndex(s => s.id === itemId);
+    if (idx === -1) return { opening: count, sold: 0 };
+    const cur = store[idx];
+    const sold = Math.max(0, -((cur as any).unrestrictedQty ?? cur.quantity ?? 0));
+    const opening = count + sold;
+    store[idx] = {
+      ...cur,
+      quantity: count,
+      unrestrictedQty: count,
+      totalValue: count * ((cur as any).movingAveragePrice || 0),
+      lastMovementDate: new Date().toISOString(),
+    } as StoreItem;
+    InventoryService.saveStore(store);
+    return { opening, sold };
   },
 
   // ── Stock Ledger ───────────────────────────────────────────────────

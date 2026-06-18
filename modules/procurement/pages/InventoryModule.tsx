@@ -139,7 +139,7 @@ const InventoryModule: React.FC = () => {
       )}
 
       {activeTab === 'overview' && (
-        <StockOverview items={items} searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
+        <StockOverview items={items} searchTerm={searchTerm} setSearchTerm={setSearchTerm} onStockUpdate={refreshSync} />
       )}
 
       {activeTab === 'master' && (
