@@ -119,10 +119,14 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
         const q = searchTerm.toLowerCase().trim();
         const result = items.filter(i => {
             const product = productMap.get(i.id);
-            // Search across item name + ERP model + KinLong code + nick name + description.
+            // Find by any handle — same coverage as the quotation picker:
+            // name, id, ERP model no, item/KinLong codes, brand, nick, description.
             const haystack = [
-                i.name, product?.modelNo, product?.profileCode,
-                (product as { nickName?: string } | undefined)?.nickName, product?.description,
+                i.name, i.id,
+                product?.name, product?.description,
+                product?.modelNo, product?.itemCode, product?.profileCode,
+                product?.brand,
+                (product as { nickName?: string } | undefined)?.nickName,
             ].filter(Boolean).join(' ').toLowerCase();
             const matchesSearch = !q || haystack.includes(q);
             const matchesMain = mainFilter === 'All' || product?.mainCategory === mainFilter;
