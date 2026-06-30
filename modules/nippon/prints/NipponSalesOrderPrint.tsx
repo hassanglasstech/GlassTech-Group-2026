@@ -350,7 +350,7 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                             </div>
                             {discountAmount > 0 && (
                                 <div className="flex justify-between text-[9px] font-bold text-rose-600 uppercase tracking-tighter">
-                                    <span>Disc {quote.discountPercent ? `${quote.discountPercent}%` : ''}:</span>
+                                    <span>Disc {quote.discountPercent ? `${Number(quote.discountPercent.toFixed(2))}%` : ''}:</span>
                                     <span>- {discountAmount.toLocaleString()}</span>
                                 </div>
                             )}

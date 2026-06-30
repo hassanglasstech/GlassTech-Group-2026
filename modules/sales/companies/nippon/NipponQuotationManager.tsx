@@ -414,7 +414,7 @@ const NipponQuotationManager: React.FC = () => {
                         <label className="text-[10px] font-black uppercase text-slate-400">Discount Rs</label>
                         <input disabled={isLocked} type="number" className="sap-input w-24 text-right font-bold text-rose-600 py-1" value={formData.discountAmount || ''} onChange={e => {
                             const amt = Number(e.target.value);
-                            setFormData({...formData, discountAmount: amt, discountPercent: subTotal > 0 ? (amt/subTotal)*100 : 0});
+                            setFormData({...formData, discountAmount: amt, discountPercent: subTotal > 0 ? Number(((amt/subTotal)*100).toFixed(2)) : 0});
                         }} />
                     </div>
                     <div className="text-right">
