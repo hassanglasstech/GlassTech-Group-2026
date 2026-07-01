@@ -216,17 +216,8 @@ export default function UserAccessManager() {
     setHistoryBusy(false);
   };
 
-  // ── Guard: Super Admin only ────────────────────────────────────────
-  if (me?.role !== 'super_admin') {
-    return (
-      <div className="flex flex-col items-center justify-center h-60 space-y-3">
-        <Shield size={36} className="text-slate-300" />
-        <p className="text-sm font-bold text-slate-400 uppercase">Owner / Super Admin Access Only</p>
-      </div>
-    );
-  }
-
   // ── Load users ─────────────────────────────────────────────────────
+  // (Super-admin guard moved BELOW all hooks — see rules-of-hooks fix.)
   // Strategy: fetch user_profiles + auth.users in parallel, then merge by id.
   // auth.users gives us the real signals for invite-link click and last login:
   //   • email_confirmed_at → link clicked
@@ -362,6 +353,18 @@ export default function UserAccessManager() {
       u.role.toLowerCase().includes(term)
     );
   }, [users, searchTerm]);
+
+  // ── Guard: Super Admin only ────────────────────────────────────────
+  // MUST come after all hooks above (rules-of-hooks): an early return before
+  // the hooks made them run conditionally and could crash on role change.
+  if (me?.role !== 'super_admin') {
+    return (
+      <div className="flex flex-col items-center justify-center h-60 space-y-3">
+        <Shield size={36} className="text-slate-300" />
+        <p className="text-sm font-bold text-slate-400 uppercase">Owner / Super Admin Access Only</p>
+      </div>
+    );
+  }
 
   // ── Grant Access ───────────────────────────────────────────────────
   const handleGrantAccess = async () => {
