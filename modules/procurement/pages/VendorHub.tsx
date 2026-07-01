@@ -1,7 +1,7 @@
 
 import React from 'react';
 import NipponVendorRegistry from '@/modules/procurement/components/vendors/NipponVendorRegistry';
-const GlasscoVendorHub: any = () => null;
+import GlasscoVendorHub from '@/modules/procurement/companies/glassco/components/vendors/GlasscoVendorHub';
 import GTKVendorHub from '@/modules/procurement/components/vendors/GTKVendorHub';
 import { useAppStore } from '@/modules/shared/store/appStore';
 

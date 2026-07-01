@@ -49,6 +49,8 @@ const ProjectsModule   = React.lazy(() => import('./modules/projects/pages/Proje
 const IntercompanyHub  = React.lazy(() => import('./modules/shared/pages/IntercompanyHub'));
 const ProductionModule = React.lazy(() => import('./modules/production/pages/ProductionModule'));
 const ProductionLegacy = React.lazy(() => import('./modules/production/pages/ProductionLegacy'));   // Sprint 19
+const InsightsDashboard = React.lazy(() => import('./modules/shared/pages/InsightsDashboard'));
+const NCRModule        = React.lazy(() => import('./modules/production/companies/glassco/components/ncr/NCRModule'));
 const InventoryModule  = React.lazy(() => import('./modules/procurement/pages/InventoryModule'));
 const LogisticsModule  = React.lazy(() => import('./modules/procurement/pages/LogisticsModule'));
 const VendorHub        = React.lazy(() => import('./modules/procurement/pages/VendorHub'));
@@ -115,6 +117,7 @@ const PublicTrackingMap = React.lazy(() => import('./src/pages/LiveDispatchMap')
 // ── Core nav — always visible (role-filtered) ───────────────────────
 const CORE_NAV = [
   { name: 'Home',              path: '/',                 icon: LayoutDashboard, key: 'dashboard'        },
+  { name: 'Insights',          path: '/insights',         icon: BarChart3,       key: 'dashboard'        },
   { name: 'Sales',             path: '/sales',            icon: Briefcase,       key: 'sales'            },
   { name: 'Material Mgmt',     path: '/inventory',        icon: Warehouse,       key: 'inventory'        },
   { name: 'Procurement',       path: '/requisitions',     icon: Package,         key: 'requisitions'     },
@@ -697,6 +700,7 @@ const App: React.FC = () => {
                   <Route path="/logistics"     element={<ModuleErrorBoundary moduleName="Logistics"><LogisticsModule /></ModuleErrorBoundary>} />
                   <Route path="/vendors"       element={<ModuleErrorBoundary moduleName="Vendors"><VendorHub /></ModuleErrorBoundary>} />
                   <Route path="/projects/*"    element={<ModuleErrorBoundary moduleName="Projects"><ProjectsModule /></ModuleErrorBoundary>} />
+                  <Route path="/insights"      element={<ModuleErrorBoundary moduleName="Business Insights"><InsightsDashboard /></ModuleErrorBoundary>} />
                   {/* Sprint 19: /production now redirects to Workbench. Legacy tabs
                       moved under /production/legacy/* (deprecate after 30 days = 2026-06-10). */}
                   <Route path="/production"             element={<Navigate to="/production/workbench" replace/>} />
@@ -756,6 +760,7 @@ const App: React.FC = () => {
                   {/* Sprint 15 — Production Workbench (single page) */}
                   <Route path="/production/workbench" element={<ModuleErrorBoundary moduleName="Workbench"><Workbench /></ModuleErrorBoundary>} />
                   <Route path="/production/job-orders" element={<ModuleErrorBoundary moduleName="Job Orders"><JobOrders /></ModuleErrorBoundary>} />
+                  <Route path="/production/ncr-claims" element={<ModuleErrorBoundary moduleName="NCR / Claims"><NCRModule /></ModuleErrorBoundary>} />
                   {/* Sprint 18 — Dispatch mini-app for dispatch_staff role */}
                   <Route path="/dispatch"            element={<ModuleErrorBoundary moduleName="Dispatch"><DispatchWorkbench /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />
