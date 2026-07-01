@@ -119,6 +119,7 @@ const CORE_NAV = [
   { name: 'Home',              path: '/',                 icon: LayoutDashboard, key: 'dashboard'        },
   { name: 'Insights',          path: '/insights',         icon: BarChart3,       key: 'dashboard'        },
   { name: 'Sales',             path: '/sales',            icon: Briefcase,       key: 'sales'            },
+  { name: 'Production',        path: '/production/workbench', icon: Factory,     key: 'production'       },
   { name: 'Material Mgmt',     path: '/inventory',        icon: Warehouse,       key: 'inventory'        },
   { name: 'Procurement',       path: '/requisitions',     icon: Package,         key: 'requisitions'     },
   { name: 'Finance (FICO)',     path: '/accounts',         icon: Landmark,        key: 'accounts'         },
@@ -132,9 +133,11 @@ const ROLE_NAV: Record<string, { name: string; path: string; icon: any; key: str
   super_admin:        [{ name: 'MD Dashboard', path: '/md-dashboard',    icon: BarChart3,  key: 'md-dashboard'     }, { name: 'Basis Admin', path: '/admin', icon: ShieldCheck, key: 'admin' }],
   owner:              [{ name: 'MD Dashboard', path: '/md-dashboard',    icon: BarChart3,  key: 'md-dashboard'     }],
   hassan:             [{ name: 'MD Dashboard', path: '/md-dashboard',    icon: BarChart3,  key: 'md-dashboard'     }, { name: 'Basis Admin', path: '/admin', icon: ShieldCheck, key: 'admin' }],
-  // Nippon-only deployment — no glass/aluminium factory, cutter or QC roles.
   nippon_admin:       [],
   admin_officer:      [],
+  // Glass production floor roles — direct links to their mobile-first workbenches.
+  glassco_cutter:     [{ name: 'Cutter Workbench', path: '/cutter', icon: ScanLine,    key: 'cutter' }],
+  dispatch_staff:     [{ name: 'QC Workbench',     path: '/qc',     icon: ShieldCheck, key: 'qc' }],
 };
 
 // Legacy — kept for backward compat
@@ -256,9 +259,11 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
   const { selectedCompany, setSelectedCompany, isSidebarOpen, toggleSidebar } = useAppStore();
   const { user, signOut } = useAuthStore();
 
-  // Compute which companies this user can switch to
-  // Nippon-only deployment — single company, no switcher.
-  const companies: Company[] = ['Nippon'] as Company[];
+  // Compute which companies this user can switch to (multitenant).
+  // Full-access roles see all five; everyone else sees their allowed_companies.
+  const companies: Company[] = (['super_admin', 'owner', 'hassan'].includes(user?.role || '')
+    ? (['GTK', 'GTI', 'Glassco', 'Nippon', 'Factory'] as Company[])
+    : ((user?.allowedCompanies as Company[]) || []));
 
   // Compute which nav items to show.
   // BUG-1 fix: empty allowedModules now means NO ACCESS (was: "all access").
@@ -269,7 +274,8 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
   // Build nav: core items filtered by role permissions + role-specific items
   const coreItems = CORE_NAV.filter(item => {
     if (allowedModuleKeys && !allowedModuleKeys.includes(item.key)) return false;
-    // Nippon-only: production/factory floor not applicable to a trading company.
+    // Trading companies (Nippon) have no glass/aluminium production floor.
+    if (item.key === 'production' && selectedCompany === 'Nippon') return false;
     return true;
   });
 
@@ -545,11 +551,17 @@ const App: React.FC = () => {
   // Set default company based on role on first login
   useEffect(() => {
     if (user) {
+      // Multitenant: default to the user's first allowed company; only override
+      // the current selection if it isn't one this user is allowed to operate as
+      // (e.g. a stale persisted value). Full-access roles may keep any company.
+      const allowed: string[] = ['super_admin', 'owner', 'hassan'].includes(user.role || '')
+        ? ['GTK', 'GTI', 'Glassco', 'Nippon', 'Factory']
+        : (user.allowedCompanies || []);
+      const effective = allowed.includes(selectedCompany) ? selectedCompany : (allowed[0] as Company);
+      if (effective && effective !== selectedCompany) setSelectedCompany(effective as Company);
       // Set logger context
-      setLogContext(user.fullName || user.email, 'Nippon');
+      setLogContext(user.fullName || user.email, effective || selectedCompany);
       Logger.auth('LOGIN', user.email);
-      // Nippon-only deployment — always operate as the Nippon company.
-      if (selectedCompany !== 'Nippon') setSelectedCompany('Nippon' as Company);
 
       // Sprint 18: role-based landing — if user is on root or empty hash,
       // jump to their dedicated mini-app/page (cutter → /cutter,
