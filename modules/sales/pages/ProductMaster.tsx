@@ -3,7 +3,7 @@ import React from 'react';
 import { useAppStore } from '../../shared/store/appStore';
 import { Company } from '../../shared/types';
 import SystemProductMaster from '../../system/pages/SystemProductMaster';
-const GlasscoProductMaster: any = () => null;
+import GlasscoProductMaster from '../companies/glassco/GlasscoProductMaster';
 import NipponProductMaster from '../companies/nippon/NipponProductMaster';
 
 const ProductMaster: React.FC = () => {

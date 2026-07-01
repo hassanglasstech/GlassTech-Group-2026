@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import ClientMaster from './ClientMaster';
+import QuotationManager from './QuotationManager';
 import NipponQuotationManager from '../companies/nippon/NipponQuotationManager';
+import GlasscoQuotationManager from '../companies/glassco/GlasscoQuotationManager';
+import DesignStudio from '../../production/pages/DesignStudio';
+import SalesOrders from '../components/SalesOrders';
 import SalesPipeline from '../components/SalesPipeline';
 import BillingHub from '../../finance/components/BillingHub';
 import CustomerComplaintModule from '../components/CustomerComplaintModule';
-import { Users, FileSignature, BarChart3, Receipt, MessageSquareWarning } from 'lucide-react';
+import { Users, FileSignature, Layout, ShoppingCart, BarChart3, Receipt, MessageSquareWarning } from 'lucide-react';
 import { useAppStore } from '../../shared/store/appStore';
 
-// Nippon-only Sales desk. Trading flow: quote → invoice direct (no separate
-// Sales Order stage, no Design Studio / glass-cutting).
-type ActiveTab = 'quotations' | 'clients' | 'pipeline' | 'invoices' | 'complaints';
+type ActiveTab = 'orders' | 'quotations' | 'clients' | 'design' | 'pipeline' | 'invoices' | 'complaints';
 
 const styles = `
   .sd-wrap {
@@ -63,6 +65,24 @@ const styles = `
     border-bottom-color: #2563eb;
     background: #eff6ff;
   }
+  .sd-tab .sd-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #2563eb;
+    color: white;
+    font-size: 9px;
+    font-weight: 800;
+    border-radius: 10px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    margin-left: 2px;
+  }
+  .sd-tab:not(.active) .sd-badge {
+    background: #e2e8f0;
+    color: #64748b;
+  }
 
   .sd-body {
     flex: 1;
@@ -74,48 +94,114 @@ const styles = `
     max-width: 1600px;
     margin: 0 auto;
   }
-  @media (max-width: 640px) {
-    .sd-body { padding: 12px; }
-    .sd-tab  { padding: 12px 12px; }
-  }
 `;
 
 const SalesCRM: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<ActiveTab>('quotations');
 
-  const tabs: Array<{ id: ActiveTab; label: string; icon: React.ElementType }> = [
-    { id: 'quotations', label: 'Quotations',        icon: FileSignature },
-    { id: 'clients',    label: 'Business Partners',  icon: Users },
-    { id: 'pipeline',   label: 'Pipeline',           icon: BarChart3 },
-    { id: 'invoices',   label: 'Invoices & AR',      icon: Receipt },
-    { id: 'complaints', label: 'Complaints',         icon: MessageSquareWarning },
-  ];
+  // Default to 'orders' for Glassco (most used) — others start at quotations
+  const [activeTab, setActiveTab] = useState<ActiveTab>(
+    company === 'Glassco' ? 'orders' : 'quotations'
+  );
+
+  const showDesign = company !== 'Glassco' && company !== 'Nippon';
 
   return (
     <div className="sd-wrap">
       <style>{styles}</style>
 
+      {/* ── Navigation ── */}
       <nav className="sd-nav">
-        {tabs.map(t => (
+
+        {/* Sales Orders — hidden for Nippon (trading goes quote → invoice
+            direct; no separate "order" stage). Visible everywhere else. */}
+        {company !== 'Nippon' && (
           <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            className={`sd-tab${activeTab === t.id ? ' active' : ''}`}
+            onClick={() => setActiveTab('orders')}
+            className={`sd-tab${activeTab === 'orders' ? ' active' : ''}`}
           >
-            <t.icon size={14}/>
-            {t.label}
+            <ShoppingCart size={14}/>
+            Sales Orders
           </button>
-        ))}
+        )}
+
+        {/* Quotations */}
+        <button
+          onClick={() => setActiveTab('quotations')}
+          className={`sd-tab${activeTab === 'quotations' ? ' active' : ''}`}
+        >
+          <FileSignature size={14}/>
+          Quotations
+        </button>
+
+        {/* Business Partners / Clients */}
+        <button
+          onClick={() => setActiveTab('clients')}
+          className={`sd-tab${activeTab === 'clients' ? ' active' : ''}`}
+        >
+          <Users size={14}/>
+          Business Partners
+        </button>
+
+        {/* Design Studio — GTK/GTI only */}
+        {showDesign && (
+          <button
+            onClick={() => setActiveTab('design')}
+            className={`sd-tab${activeTab === 'design' ? ' active' : ''}`}
+          >
+            <Layout size={14}/>
+            Design Studio
+          </button>
+        )}
+
+        {/* Pipeline */}
+        <button
+          onClick={() => setActiveTab('pipeline')}
+          className={`sd-tab${activeTab === 'pipeline' ? ' active' : ''}`}
+        >
+          <BarChart3 size={14}/>
+          Pipeline
+        </button>
+
+        {/* Invoices */}
+        <button
+          onClick={() => setActiveTab('invoices')}
+          className={`sd-tab${activeTab === 'invoices' ? ' active' : ''}`}
+        >
+          <Receipt size={14}/>
+          Invoices & AR
+        </button>
+          <button
+            onClick={() => setActiveTab('complaints')}
+            className={`sd-tab${activeTab === 'complaints' ? ' active' : ''}`}
+          >
+            <MessageSquareWarning size={14}/>
+            Complaints
+          </button>
+
       </nav>
 
+      {/* ── Content ── */}
       <div className="sd-body">
         <div className="sd-body-inner">
-          {activeTab === 'quotations' && <NipponQuotationManager />}
-          {activeTab === 'clients'    && <ClientMaster />}
-          {activeTab === 'pipeline'   && <SalesPipeline />}
-          {activeTab === 'invoices'   && <BillingHub company={company} />}
+
+          {activeTab === 'orders' && <SalesOrders />}
+
+          {activeTab === 'quotations' && (
+            company === 'Nippon'  ? <NipponQuotationManager /> :
+            company === 'Glassco' ? <GlasscoQuotationManager /> :
+            <QuotationManager />   /* GTK/GTI: default until GTK sales is developed */
+          )}
+
+          {activeTab === 'clients' && <ClientMaster />}
+
+          {activeTab === 'design' && showDesign && <DesignStudio />}
+
+          {activeTab === 'pipeline' && <SalesPipeline />}
+
+          {activeTab === 'invoices' && <BillingHub company={company} />}
           {activeTab === 'complaints' && <CustomerComplaintModule company={company} />}
+
         </div>
       </div>
     </div>

@@ -7,7 +7,8 @@ import GTKProduction from '../../system/pages/GTKProduction';
 import GTIProduction from '../../system/pages/GTIProduction';
 import NipponProduction from '../companies/nippon/NipponProduction';
 import FactoryProduction from '../../factory/pages/FactoryProduction';
-const GlasscoProduction: any = () => null;
+// Glassco production surface = the piece-tracking Workbench board.
+import GlasscoProduction from '../companies/glassco/pages/Workbench';
 
 const ProductionModule: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
