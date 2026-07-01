@@ -80,10 +80,10 @@ const CompanyLogistics: React.FC<{ company: Company }> = ({ company }) => {
 
       {/* Content */}
       {activeTab === 'gate' && (
-        <GateControl gatePasses={gatePasses} pieces={pieces} jobOrders={jobOrders} clients={clients} company={company} refreshData={refreshData} />
+        <GateControl gatePasses={gatePasses} dispatches={dispatches} company={company} refreshData={refreshData} />
       )}
       {activeTab === 'security' && (
-        <SecurityAudit gatePasses={gatePasses} company={company} />
+        <SecurityAudit gatePasses={gatePasses} pieces={pieces} dispatches={dispatches} jobOrders={jobOrders} clients={clients} refreshData={refreshData} />
       )}
       {activeTab === 'dispatches' && (
         <DispatchPlanner dispatches={dispatches} pieces={pieces} jobOrders={jobOrders} clients={clients} vendors={vendors} company={company} refreshData={refreshData} />

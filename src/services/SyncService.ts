@@ -187,7 +187,7 @@ const LOCAL_ONLY_TABLES = new Set(['activity_logs']);
 const TABLE_COLUMNS: Record<string, string[]> = {
   ledger:    ['id', 'company', 'doc_type', 'doc_date', 'date', 'description', 'reference_id', 'status', 'details', 'updated_at'],
   petty_cash: ['id', 'company', 'date', 'type', 'amount', 'description', 'reference_doc', 'updated_at'],
-  employees: ['id', 'company', 'name', 'personal', 'work', 'salary', 'basic', 'house_rent', 'conveyance', 'special_allowance', 'department', 'department_id', 'designation', 'grade', 'join_date', 'employee_code', 'status', 'address', 'phone', 'cnic', 'updated_at'],
+  employees: ['id', 'company', 'personal', 'work', 'salary', 'data', 'updated_at'],   // JSONB-style table — no flat columns exist (push uses TABLE_PUSH.employees)
   assets:    ['id', 'company', 'name', 'category', 'serial_no', 'purchase_date', 'purchase_cost', 'useful_life', 'status', 'location', 'assigned_to', 'depreciation_method', 'maintenance_logs', 'notes', 'updated_at'],
 };
 
@@ -614,29 +614,29 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     updated_at: er._updatedAt||new Date().toISOString(),
   }),
   // ── HR Push Mappers ──
-  employees: (e: any) => ({
-    id: e.id, 
-    company: e.company||'',
-    name: e.personal?.name||e.name||'',
-    cnic: e.personal?.cnic||e.cnic||'',
-    phone: e.personal?.phone||e.phone||'',
-    address: e.personal?.address||e.address||'',
-    designation: e.work?.designation||e.designation||'',
-    department: e.work?.department||e.department||'',
-    department_id: e.work?.departmentId||e.departmentId||'',
-    grade: e.work?.grade||e.grade||'',
-    join_date: e.work?.joinDate||e.joinDate||e.join_date||'',
-    employee_code: e.work?.employeeCode||e.employeeCode||e.employee_code||'',
-    status: e.work?.status||e.status||'confirmed',
-    basic: e.salary?.basic||e.basic||0,
-    house_rent: e.salary?.houseRent||e.houseRent||e.house_rent||0,
-    conveyance: e.salary?.conveyance||e.conveyance||0,
-    special_allowance: e.salary?.specialAllowance||e.specialAllowance||e.special_allowance||0,
-    personal: e.personal||null,
-    work: e.work||null,
-    salary: e.salary||null,
-    updated_at: e._updatedAt||new Date().toISOString(),
-  }),
+  employees: (e: any) => {
+    const d = e.data && typeof e.data === 'object' && Object.keys(e.data).length ? e.data : e;
+    return {
+      id: e.id,
+      company: e.company || '',
+      // Write ONLY the JSONB columns the live table has (confirmed via
+      // information_schema): personal/work/salary (read by legacy rowToEmployee)
+      // AND data (read by current rowToEmployee). All JSONB → no type coercion
+      // and no missing-column 400. The live table has NO department_id / status
+      // flat columns — including those is what 400'd the original flat mapper.
+      personal: d.personal || null,
+      work: d.work || null,
+      salary: d.salary || null,
+      data: {
+        personal: d.personal || null,
+        work: d.work || null,
+        salary: d.salary || null,
+        transferHistory: d.transferHistory || [],
+        salaryHistory: d.salaryHistory || [],
+      },
+      updated_at: e._updatedAt || new Date().toISOString(),
+    };
+  },
   attendance: (a: any) => ({
     id: a.id, employee_id: a.employeeId||a.employee_id||'',
     date: a.date||'', status: a.status||'Present',
@@ -1293,6 +1293,14 @@ const TABLE_PULL: Record<string, (row: any) => any> = {
     assignedBy: r.assigned_by,
   }),
   // ── HR Pull Mappers ──
+  // employees is JSONB-style (id, company, data) — unpack `data` so the domain
+  // shape (personal/work/salary) is restored to the top level on read.
+  employees: (r: any) => ({
+    id: r.id,
+    company: r.company || '',
+    ...(r.data || {}),
+    updated_at: r.updated_at,
+  }),
   attendance: (r: any) => ({
     ...r,
     employeeId: r.employee_id,

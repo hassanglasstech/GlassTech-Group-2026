@@ -63,18 +63,19 @@ const LoanFlowChart    = React.lazy(() => import('./modules/shared/pages/LoanFlo
 const GuidedTestFlows  = React.lazy(() => import('./modules/shared/pages/GuidedTestFlows'));
 const E2EVerifier      = React.lazy(() => import('./modules/shared/pages/E2EVerifier'));
 // Sprint 6 — dedicated mobile-first cutter workbench (route-gated to glassco_cutter)
-const CutterWorkbench: any = () => null;
+const CutterWorkbench  = React.lazy(() => import('./modules/production/companies/glassco/pages/CutterWorkbench'));
+const JobOrders        = React.lazy(() => import('./modules/production/companies/glassco/pages/JobOrders'));
 const ChangePasswordPage = React.lazy(() => import('./modules/auth/ChangePasswordPage'));
 const NipponCataloguePage = React.lazy(() => import('./modules/nippon/pages/NipponCataloguePage'));
 // Sprint 7 — dedicated mobile-first QC workbench (dispatch_staff / supervisor)
-const QCWorkbench: any = () => null;
+const QCWorkbench      = React.lazy(() => import('./modules/production/companies/glassco/pages/QCWorkbench'));
 // Sprint 8 — WIP aging + vendor SLA + cutter performance
-const WIPAging: any = () => null;
-const CutterPerformance: any = () => null;
+const WIPAging         = React.lazy(() => import('./modules/production/companies/glassco/pages/WIPAging'));
+const CutterPerformance= React.lazy(() => import('./modules/production/companies/glassco/pages/CutterPerformance'));
 // Sprint 15 — Production Workbench (single page replacing 19 tabs + 12 sub-tabs)
-const Workbench: any = () => null;
+const Workbench        = React.lazy(() => import('./modules/production/companies/glassco/pages/Workbench'));
 // Sprint 18 — Role-based mini-apps
-const DispatchWorkbench: any = () => null;
+const DispatchWorkbench = React.lazy(() => import('./modules/production/companies/glassco/pages/DispatchWorkbench'));
 // Sprint 21 — Global UX foundations
 const CommandPalette    = React.lazy(() => import('./modules/shared/components/CommandPalette'));
 const Breadcrumbs       = React.lazy(() => import('./modules/shared/components/Breadcrumbs'));
@@ -754,6 +755,7 @@ const App: React.FC = () => {
                   <Route path="/dispatch/live"  element={<ModuleErrorBoundary moduleName="Live Dispatch Map"><LiveDispatchMap /></ModuleErrorBoundary>} />
                   {/* Sprint 15 — Production Workbench (single page) */}
                   <Route path="/production/workbench" element={<ModuleErrorBoundary moduleName="Workbench"><Workbench /></ModuleErrorBoundary>} />
+                  <Route path="/production/job-orders" element={<ModuleErrorBoundary moduleName="Job Orders"><JobOrders /></ModuleErrorBoundary>} />
                   {/* Sprint 18 — Dispatch mini-app for dispatch_staff role */}
                   <Route path="/dispatch"            element={<ModuleErrorBoundary moduleName="Dispatch"><DispatchWorkbench /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />

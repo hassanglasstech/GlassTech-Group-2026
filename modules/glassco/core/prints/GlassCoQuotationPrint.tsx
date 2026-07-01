@@ -1,13 +1,18 @@
 import React, { useMemo } from 'react';
 import { Quotation } from '@/modules/shared/types';
 import { formatGlassDescription, formatGlassSize, formatServices } from '../utils/printUtils';
+import { getGlasscoCompanyInfo } from '../constants/companyInfo';
 
 interface Props {
     quote: Quotation;
     clientName: string;
+    clientAddress?: string;   // P1-12
+    clientPhone?: string;     // P1-12
+    clientNtn?: string;       // P1-12
 }
 
-export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName }) => {
+export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName, clientAddress, clientPhone, clientNtn }) => {
+    const CO = getGlasscoCompanyInfo();   // live: merges Settings → Company Branding over defaults
     const safeItems: any[] = Array.isArray(quote.items)
         ? quote.items
         : (typeof quote.items === 'string' ? (() => { try { return JSON.parse(quote.items as any); } catch { return []; } })() : []);
@@ -57,8 +62,11 @@ export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName }) =>
                                     <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#64748b' }}>Complete Architectural Glass Solutions</div>
                                 </div>
                                 <div style={{ textAlign: 'right' }}>
-                                    <div style={{ fontSize: '20px', fontWeight: 800, letterSpacing: '-0.05em', color: '#0f172a' }}>GlassCo</div>
-                                    <div style={{ fontSize: '7px', fontWeight: 700, color: '#1e293b' }}>Contact: 0303-2428128</div>
+                                    <div style={{ fontSize: '20px', fontWeight: 800, letterSpacing: '-0.05em', color: '#0f172a' }}>{CO.name}</div>
+                                    <div style={{ fontSize: '7px', fontWeight: 700, color: '#1e293b' }}>Contact: {CO.phone}</div>
+                                    {CO.address && <div style={{ fontSize: '7px', fontWeight: 700, color: '#64748b' }}>{CO.address}</div>}
+                                    {CO.ntn && <div style={{ fontSize: '7px', fontWeight: 700, color: '#64748b' }}>NTN: {CO.ntn}</div>}
+                                    {CO.strn && <div style={{ fontSize: '7px', fontWeight: 700, color: '#64748b' }}>STRN: {CO.strn}</div>}
                                 </div>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'center', margin: '6px 0' }}>
@@ -68,6 +76,9 @@ export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName }) =>
                                 <div>
                                     <div style={{ color: '#94a3b8', fontWeight: 700, fontSize: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>INQUIRY FROM:</div>
                                     <div style={{ fontSize: '16px', fontWeight: 900, color: '#0f172a', textTransform: 'uppercase', lineHeight: 1 }}>{clientName}</div>
+                                    {clientAddress && <div style={{ fontSize: '7px', fontWeight: 700, color: '#64748b', marginTop: '2px' }}>{clientAddress}</div>}
+                                    {clientPhone && <div style={{ fontSize: '7px', fontWeight: 700, color: '#64748b' }}>Tel: {clientPhone}</div>}
+                                    {clientNtn && <div style={{ fontSize: '7px', fontWeight: 700, color: '#64748b' }}>NTN: {clientNtn}</div>}
                                     <div style={{ color: '#1d4ed8', fontWeight: 900, textTransform: 'uppercase', fontSize: '7px', marginTop: '2px' }}>{quote.projectName || 'STANDARD ORDER'}</div>
                                 </div>
                                 <div style={{ textAlign: 'right', fontSize: '8px' }}>
@@ -207,7 +218,6 @@ export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName }) =>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                         {attachments.map((src, idx) => (
                             <div key={idx} style={{ border: '1px solid #cbd5e1', borderRadius: '4px', padding: '4px', pageBreakInside: 'avoid' }}>
-                                {/* eslint-disable-next-line jsx-a11y/img-redundant-alt */}
                                 <img src={src} alt={`Attachment ${idx + 1}`} style={{ width: '100%', maxHeight: '140mm', objectFit: 'contain', display: 'block' }} />
                                 <div style={{ fontSize: '7px', fontWeight: 900, textTransform: 'uppercase', color: '#475569', textAlign: 'center', marginTop: '3px' }}>
                                     Attachment #{idx + 1}

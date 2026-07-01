@@ -11,12 +11,17 @@
 import { Employee, AttendanceRecord, LoanAdvance, Payroll } from '../types/hr';
 import { Company } from '@/modules/shared/constants';
 import { supabase } from '@/src/services/supabaseClient';
-// localStorage removed — pure Supabase
+// localStorage is the offline buffer SyncService flushes to Supabase (two-tier).
+// Every write MUST safeSave the table's local key — SyncService.pushTable reads
+// THAT key to push, and reads fall back to it when the cloud is unreachable.
+import { safeParse, safeSave } from '../../shared/services/utils';
 import { SyncService } from '@/src/services/SyncService';
 import { Logger } from '@/modules/shared/services/logger';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/modules/auth/authStore';
+import { useAppStore } from '@/modules/shared/store/appStore';
 import { FinanceService } from '@/modules/finance/services/financeService';
+import { TagService } from './tagService';
 
 // ── Local cache keys (fallback + offline buffer) ────────────────────
 const KEYS = {
@@ -36,38 +41,48 @@ let _cache = {
 };
 
 // ── Mappers: Supabase row → App object ──────────────────────────────
-const rowToEmployee = (r: any): Employee => ({
-  id: r.id,
-  company: r.company || '',
-  personal: r.personal && typeof r.personal === 'object' && r.personal.name
-    ? r.personal
-    : {
-        name: r.name || r.personal?.name || '',
-        cnic: r.cnic || r.personal?.cnic || '',
-        phone: r.phone || r.personal?.phone || '',
-        address: r.address || r.personal?.address || '',
-        photoUrl: r.personal?.photoUrl || '',
-      },
-  work: r.work && typeof r.work === 'object' && r.work.employeeCode
-    ? r.work
-    : {
-        designation: r.designation || r.work?.designation || '',
-        department: r.department || r.work?.department || '',
-        departmentId: r.department_id || r.work?.departmentId || '',
-        grade: r.grade || r.work?.grade || '',
-        joinDate: r.join_date || r.joinDate || r.work?.joinDate || '',
-        employeeCode: r.employee_code || r.employeeCode || r.work?.employeeCode || '',
-        status: r.status || r.work?.status || 'confirmed',
-      },
-  salary: r.salary && typeof r.salary === 'object' && (r.salary.basic !== undefined)
-    ? r.salary
-    : {
-        basic: r.basic || r.salary?.basic || 0,
-        houseRent: r.house_rent || r.houseRent || r.salary?.houseRent || 0,
-        conveyance: r.conveyance || r.salary?.conveyance || 0,
-        specialAllowance: r.special_allowance || r.specialAllowance || r.salary?.specialAllowance || 0,
-      },
-});
+// The `employees` table is JSONB-style: a row is { id, company, data:{personal,
+// work, salary, …}, updated_at }. Unwrap `data` first, then fall back to flat
+// columns so any legacy flat row (or a domain object from the localStorage
+// buffer) still maps cleanly.
+const rowToEmployee = (r: any): Employee => {
+  // Prefer the JSONB `data` payload, but fall back to flat columns when `data`
+  // is absent or an empty {} (legacy flat rows / pre-migration data).
+  const d = (r.data && typeof r.data === 'object' && Object.keys(r.data).length > 0) ? r.data : r;
+  return {
+    id: r.id,
+    company: r.company || d.company || '',
+    personal: d.personal && typeof d.personal === 'object' && d.personal.name
+      ? d.personal
+      : {
+          name: d.name || d.personal?.name || '',
+          cnic: d.cnic || d.personal?.cnic || '',
+          phone: d.phone || d.personal?.phone || '',
+          email: d.email || d.personal?.email || '',
+          address: d.address || d.personal?.address || '',
+          photoUrl: d.personal?.photoUrl || '',
+        },
+    work: d.work && typeof d.work === 'object' && d.work.employeeCode
+      ? d.work
+      : {
+          designation: d.designation || d.work?.designation || '',
+          department: d.department || d.work?.department || '',
+          departmentId: d.department_id || d.work?.departmentId || '',
+          grade: d.grade || d.work?.grade || '',
+          joinDate: d.join_date || d.joinDate || d.work?.joinDate || '',
+          employeeCode: d.employee_code || d.employeeCode || d.work?.employeeCode || '',
+          status: d.status || d.work?.status || 'confirmed',
+        },
+    salary: d.salary && typeof d.salary === 'object' && (d.salary.basic !== undefined)
+      ? d.salary
+      : {
+          basic: d.basic || d.salary?.basic || 0,
+          houseRent: d.house_rent || d.houseRent || d.salary?.houseRent || 0,
+          conveyance: d.conveyance || d.salary?.conveyance || 0,
+          specialAllowance: d.special_allowance || d.specialAllowance || d.salary?.specialAllowance || 0,
+        },
+  };
+};
 
 const rowToAttendance = (r: any): AttendanceRecord => ({
   id: r.id,
@@ -148,27 +163,34 @@ const loanToRow = (l: LoanAdvance & { company?: string }) => ({
   company: (l as any).company || '',
 });
 
+// Coerce values before the Supabase upsert. Legacy payroll rows can store the
+// STRING "false" (or other non-numbers) in numeric fields from an old buggy
+// import — `"false"` reaches Postgres and 400s ("invalid input syntax for type
+// numeric: false"). num() forces a real number; bool() a real boolean. Mirrors
+// the SyncService payroll push mapper.
+const _num = (v: unknown): number => { const n = typeof v === 'number' ? v : Number(v); return Number.isFinite(n) ? n : 0; };
+const _bool = (v: unknown): boolean => v === true || v === 'true' || v === 1 || v === '1';
 const payrollToRow = (p: Payroll & { company?: string }) => ({
   id: p.id,
   employee_id: p.employeeId,
   month: p.month,
-  basic_pay: p.basicPay,
-  allowances: p.allowances,
-  overtime_pay: p.overtimePay,
-  overtime_hours: p.overtimeHours,
-  early_deduction_hours: p.earlyDeductionHours,
-  late_deduction: p.lateDeduction,
-  absent_deduction: p.absentDeduction,
-  loan_deduction: p.loanDeduction,
-  advance_deduction: p.advanceDeduction,
-  net_salary: p.netSalary,
+  basic_pay: _num(p.basicPay),
+  allowances: _num(p.allowances),
+  overtime_pay: _num(p.overtimePay),
+  overtime_hours: _num(p.overtimeHours),
+  early_deduction_hours: _num(p.earlyDeductionHours),
+  late_deduction: _num(p.lateDeduction),
+  absent_deduction: _num(p.absentDeduction),
+  loan_deduction: _num(p.loanDeduction),
+  advance_deduction: _num(p.advanceDeduction),
+  net_salary: _num(p.netSalary),
   absent_dates: p.absentDates || [],
   late_dates: p.lateDates || [],
   loan_repayments: p.loanRepayments || [],
-  is_salary_paid: p.isSalaryPaid || false,
-  is_overtime_paid: p.isOvertimePaid || false,
-  allowed_absent_count: p.allowedAbsentCount || 0,
-  loan_waived: p.loanWaived || false,
+  is_salary_paid: _bool(p.isSalaryPaid),
+  is_overtime_paid: _bool(p.isOvertimePaid),
+  allowed_absent_count: _num(p.allowedAbsentCount),
+  loan_waived: _bool(p.loanWaived),
   company: (p as any).company || '',
 });
 
@@ -177,40 +199,67 @@ const payrollToRow = (p: Payroll & { company?: string }) => ({
 // RLS on the DB enforces the same constraint; this is a defence-in-depth
 // application-layer guard so no cross-tenant rows ever enter the cache.
 const refreshCache = async (): Promise<void> => {
-  const company = useAuthStore.getState().profile?.company ?? '';
+  // BUGFIX: the reliable company for this single-tenant deploy is the
+  // app-selected company, NOT profile.company — user_profiles has NO `company`
+  // column here, so profile.company is always empty and the old guard skipped
+  // EVERY HR load. Result: employees saved to Supabase fine (POST 201) but never
+  // re-appeared after refresh. Mirror the sales module's activeCompany(): prefer
+  // the switcher's selected company (multitenant), then profile.company.
+  const company = useAppStore.getState().selectedCompany
+    || useAuthStore.getState().profile?.company
+    || '';
   if (!company) {
     console.warn('[HRService] refreshCache called with no company — skipping Supabase load');
     _cache.loaded = true;
     return;
   }
 
+  // Two-tier read: Supabase primary → localStorage buffer fallback on failure.
+  // The row mappers handle BOTH shapes (domain objects written by our safeSave
+  // AND raw cloud rows written by SyncService.pullTable), so the fallback is safe.
   try {
     const empRes = await supabase.from('employees').select('*').eq('company', company);
     if (empRes.data) {
       _cache.employees = empRes.data.map(rowToEmployee);
     }
-  } catch (e: any) { console.warn('[HRService] employees pull failed:', e.message); }
+  } catch (e: any) {
+    console.warn('[HRService] employees pull failed — using local buffer:', e.message);
+    const local = safeParse(KEYS.EMPLOYEES);
+    if (local.length) _cache.employees = local.map(rowToEmployee);
+  }
 
   try {
     const attRes = await supabase.from('attendance').select('*').eq('company', company);
     if (attRes.data) {
       _cache.attendance = attRes.data.map(rowToAttendance);
     }
-  } catch (e: any) { console.warn('[HRService] attendance pull failed:', e.message); }
+  } catch (e: any) {
+    console.warn('[HRService] attendance pull failed — using local buffer:', e.message);
+    const local = safeParse(KEYS.ATTENDANCE);
+    if (local.length) _cache.attendance = local.map(rowToAttendance);
+  }
 
   try {
     const loanRes = await supabase.from('loans').select('*').eq('company', company);
     if (loanRes.data) {
       _cache.loans = loanRes.data.map(rowToLoan);
     }
-  } catch (e: any) { console.warn('[HRService] loans pull failed:', e.message); }
+  } catch (e: any) {
+    console.warn('[HRService] loans pull failed — using local buffer:', e.message);
+    const local = safeParse(KEYS.LOANS);
+    if (local.length) _cache.loans = local.map(rowToLoan);
+  }
 
   try {
     const payRes = await supabase.from('payroll').select('*').eq('company', company);
     if (payRes.data) {
       _cache.payroll = payRes.data.map(rowToPayroll);
     }
-  } catch (e: any) { console.warn('[HRService] payroll pull failed:', e.message); }
+  } catch (e: any) {
+    console.warn('[HRService] payroll pull failed — using local buffer:', e.message);
+    const local = safeParse(KEYS.PAYROLL);
+    if (local.length) _cache.payroll = local.map(rowToPayroll);
+  }
 
   _cache.loaded = true;
 };
@@ -233,8 +282,43 @@ export const HRService = {
     return _cache.employees;
   },
 
+  /**
+   * Cutter roster — active employees TAGGED "Cutter" or "Senior Cutter"
+   * (HR job-title tag), with a legacy free-text `designation` fallback for
+   * anyone not yet tagged. Shared by the Production Job Orders "Assign Cutter"
+   * dropdown and the Cutter Workbench "act as cutter" picker so both resolve
+   * the same people. The returned name matches the cutter's login full name
+   * used by the Cut Queue. Reads the in-memory employee cache (call
+   * loadCache() first) + the tag cache (hydrated into localStorage at boot).
+   */
+  getCutters: (company?: string): Employee[] => {
+    return _cache.employees.filter(e => {
+      const st = e.work?.status;
+      const active = st !== 'resigned' && st !== 'terminated' && st !== 'suspended';
+      if (!active) return false;
+      if (company && e.company && e.company !== company) return false;
+      const taggedCutter = TagService.getEmployeeTagsResolved(e.id)
+        .some(t => /cutter/i.test(t.tag?.label || ''));   // matches "Cutter" + "Senior Cutter"
+      const desigCutter = /cutter|cutting/i.test(e.work?.designation || '');
+      return taggedCutter || desigCutter;
+    });
+  },
+
+  getCutterNames: (company?: string): string[] => {
+    const names = HRService.getCutters(company).map(e => e.personal?.name || '').filter(Boolean);
+    return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+  },
+
   saveEmployees: (data: Employee[]) => {
     _cache.employees = data;
+    // BUGFIX: write the offline buffer that SyncService.pushTable('employees')
+    // reads. Previously this only set the in-memory cache and called markDirty,
+    // but pushTable reads localStorage('gtk_erp_employees') — which was empty —
+    // so it pushed nothing, cleared the pending marker, and the new employee
+    // never reached Supabase (no error: the empty push "succeeds"). On refresh,
+    // refreshCache re-pulled from the cloud and the employee was gone. This is
+    // the safeSave-then-markDirty idiom every other service uses.
+    safeSave(KEYS.EMPLOYEES, data);
     SyncService.markDirty('employees');
     Logger.action('HR', 'SAVE_EMPLOYEES', `${data.length} employees saved`);
   },
@@ -246,12 +330,14 @@ export const HRService = {
 
   saveAttendance: async (data: AttendanceRecord[]) => {
     _cache.attendance = data;
+    safeSave(KEYS.ATTENDANCE, data);   // offline buffer for the sync-retry fallback
     try {
       const rows = data.map(attendanceToRow);
       const { error } = await supabase.from('attendance').upsert(rows, { onConflict: 'id' });
       if (error) throw error;
     } catch (err: any) {
       console.warn('[HRService] Attendance push failed:', err.message);
+      SyncService.markDirty('attendance');   // retry on next online sync (buffer now has the data)
     }
   },
 
@@ -262,6 +348,7 @@ export const HRService = {
 
   saveLoans: async (data: LoanAdvance[]) => {
     _cache.loans = data;
+    safeSave(KEYS.LOANS, data);   // offline buffer for the sync-retry fallback
 
     try {
       const rows = data.map(loanToRow);
@@ -280,6 +367,7 @@ export const HRService = {
 
   savePayroll: async (data: Payroll[]) => {
     _cache.payroll = data;
+    safeSave(KEYS.PAYROLL, data);   // offline buffer for the sync-retry fallback
 
     try {
       const rows = data.map(payrollToRow);

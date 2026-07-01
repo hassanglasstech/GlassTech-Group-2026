@@ -15,9 +15,7 @@ export const GLASSCO_COA: COAAccount[] = [
       ]},
       { code:'112', name:'Trade Receivables', level:3, type:'Asset', isControl:true, normalBalance:'Dr', children:[
         { code:'1121', name:'Accounts Receivable', level:4, type:'Asset', children:[
-          leaf('11211','Receivable — GTK (Intercompany)','Asset','Dr'),
-          leaf('11212','Receivable — GTI (Intercompany)','Asset','Dr'),
-          leaf('11213','Receivable — External Clients','Asset','Dr'),
+          leaf('11213','Receivable — Clients','Asset','Dr'),
         ]},
         { code:'1122', name:'Advances & Retention', level:4, type:'Asset', children:[
           leaf('11221','Client Advance Applied','Asset','Dr'),
@@ -25,13 +23,6 @@ export const GLASSCO_COA: COAAccount[] = [
         ]},
         { code:'1123', name:'Doubtful Debts', level:4, type:'Asset', children:[
           leaf('11231','Allowance for Doubtful Debts','Asset','Cr'),
-        ]},
-      ]},
-      { code:'113', name:'Intercompany Receivables', level:3, type:'Asset', isControl:true, normalBalance:'Dr', children:[
-        { code:'1131', name:'Due from Group', level:4, type:'Asset', children:[
-          leaf('11311','Due from GTK','Asset','Dr'),
-          leaf('11312','Due from GTI','Asset','Dr'),
-          leaf('11313','Due from Factory (Shehzore)','Asset','Dr'),
         ]},
       ]},
       { code:'114', name:'Advances & Prepayments', level:3, type:'Asset', isControl:true, normalBalance:'Dr', children:[
@@ -109,13 +100,7 @@ export const GLASSCO_COA: COAAccount[] = [
           leaf('21122','Accrued Processing Costs','Liability','Cr'),
         ]},
         { code:'2113', name:'Advance from Clients', level:4, type:'Liability', children:[
-          leaf('21131','Advance — GTK Orders','Liability','Cr'),
-          leaf('21132','Advance — GTI Orders','Liability','Cr'),
-          leaf('21133','Advance — External Clients','Liability','Cr'),
-        ]},
-        { code:'2114', name:'Intercompany Payables', level:4, type:'Liability', children:[
-          leaf('21141','Due to Factory (Shehzore)','Liability','Cr'),
-          leaf('21142','Due to GTK','Liability','Cr'),
+          leaf('21133','Advance — Clients','Liability','Cr'),
         ]},
         // GR/IR Clearing — SAP-standard suspense account
         // Cr on GRN posting | Dr on vendor invoice registration | Balance = received not yet invoiced
@@ -164,13 +149,9 @@ export const GLASSCO_COA: COAAccount[] = [
   { code:'4', name:'Revenue', level:1, type:'Revenue', normalBalance:'Cr', children:[
     { code:'41', name:'Glass Sales & Processing', level:2, type:'Revenue', children:[
       { code:'411', name:'Sales Revenue', level:3, type:'Revenue', isControl:true, normalBalance:'Cr', children:[
-        { code:'4111', name:'Intercompany Sales', level:4, type:'Revenue', children:[
-          leaf('41111','Sales to GTK — Glass Supply','Revenue','Cr'),
-          leaf('41112','Sales to GTI — Glass Supply','Revenue','Cr'),
-        ]},
-        { code:'4112', name:'External Sales', level:4, type:'Revenue', children:[
-          leaf('41121','Sales — Tempered Glass (External)','Revenue','Cr'),
-          leaf('41122','Sales — Cut Glass (External)','Revenue','Cr'),
+        { code:'4112', name:'Glass Sales', level:4, type:'Revenue', children:[
+          leaf('41121','Sales — Tempered Glass','Revenue','Cr'),
+          leaf('41122','Sales — Cut Glass','Revenue','Cr'),
           leaf('41123','Sales — Specialty Glass','Revenue','Cr'),
         ]},
         { code:'4113', name:'Processing Income', level:4, type:'Revenue', children:[
@@ -226,6 +207,7 @@ export const GLASSCO_COA: COAAccount[] = [
           leaf('51412','Depreciation — Production Machinery','Expense','Dr'),
           leaf('51413','Machine Repair — Cutting','Expense','Dr'),
           leaf('51414','Machine Repair — Processing','Expense','Dr'),
+          leaf('51415','Cutting Tools & Blades','Expense','Dr'),
         ]},
       ]},
     ]},

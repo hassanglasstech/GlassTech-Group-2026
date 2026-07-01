@@ -19,17 +19,6 @@ export const TAG_COLORS: Record<TagCategory, { bg: string; text: string }> = {
 
 // ── Seed Data ───────────────────────────────────────────────────────
 const SEED_DEPARTMENTS: Omit<Department, 'id'>[] = [
-  // GTK
-  { company: 'GTK', name: 'Fabrication', parentDept: null, isActive: true },
-  { company: 'GTK', name: 'Netting', parentDept: null, isActive: true },
-  { company: 'GTK', name: 'Store', parentDept: null, isActive: true },
-  { company: 'GTK', name: 'Administration', parentDept: null, isActive: true },
-  // GTI
-  { company: 'GTI', name: 'Fabrication', parentDept: null, isActive: true },
-  { company: 'GTI', name: 'Netting', parentDept: null, isActive: true },
-  { company: 'GTI', name: 'Store', parentDept: null, isActive: true },
-  { company: 'GTI', name: 'Administration', parentDept: null, isActive: true },
-  // GlassCo
   { company: 'Glassco', name: 'Glass Cutting', parentDept: null, isActive: true },
   { company: 'Glassco', name: 'Processing', parentDept: null, isActive: true },
   { company: 'Glassco', name: 'Quality & Finishing', parentDept: null, isActive: true },
@@ -38,33 +27,7 @@ const SEED_DEPARTMENTS: Omit<Department, 'id'>[] = [
 ];
 
 const SEED_TAGS: Omit<TagMaster, 'id'>[] = [
-  // ── GTK Job Titles ──
-  { company: 'GTK', category: 'job_title', label: 'Senior Fabricator', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
-  { company: 'GTK', category: 'job_title', label: 'Fabricator', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
-  { company: 'GTK', category: 'job_title', label: 'Welder', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
-  { company: 'GTK', category: 'job_title', label: 'Helper', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
-  { company: 'GTK', category: 'job_title', label: 'Netting Operator', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
-  { company: 'GTK', category: 'job_title', label: 'Store Keeper', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
-  { company: 'GTK', category: 'job_title', label: 'Driver', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
-  { company: 'GTK', category: 'job_title', label: 'Guard', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
-  { company: 'GTK', category: 'job_title', label: 'Peon', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
-  // ── GTK Designations ──
-  { company: 'GTK', category: 'designation', label: 'Supervisor', color: '#EEEDFE', textColor: '#3C3489', isActive: true },
-  { company: 'GTK', category: 'designation', label: 'Team Lead', color: '#EEEDFE', textColor: '#3C3489', isActive: true },
-  { company: 'GTK', category: 'designation', label: 'Store Incharge', color: '#EEEDFE', textColor: '#3C3489', isActive: true },
-  { company: 'GTK', category: 'designation', label: 'Admin Officer', color: '#EEEDFE', textColor: '#3C3489', isActive: true },
-  // ── GTI Job Titles (mirrors GTK) ──
-  { company: 'GTI', category: 'job_title', label: 'Senior Fabricator', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
-  { company: 'GTI', category: 'job_title', label: 'Fabricator', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
-  { company: 'GTI', category: 'job_title', label: 'Welder', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
-  { company: 'GTI', category: 'job_title', label: 'Helper', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
-  { company: 'GTI', category: 'job_title', label: 'Netting Operator', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
-  { company: 'GTI', category: 'job_title', label: 'Store Keeper', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
-  // ── GTI Designations ──
-  { company: 'GTI', category: 'designation', label: 'Supervisor', color: '#EEEDFE', textColor: '#3C3489', isActive: true },
-  { company: 'GTI', category: 'designation', label: 'Team Lead', color: '#EEEDFE', textColor: '#3C3489', isActive: true },
-  { company: 'GTI', category: 'designation', label: 'Store Incharge', color: '#EEEDFE', textColor: '#3C3489', isActive: true },
-  // ── GlassCo Job Titles ──
+  // ── Glassco Job Titles ──
   { company: 'Glassco', category: 'job_title', label: 'Senior Cutter', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
   { company: 'Glassco', category: 'job_title', label: 'Cutter', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
   { company: 'Glassco', category: 'job_title', label: 'Helper', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
@@ -75,7 +38,7 @@ const SEED_TAGS: Omit<TagMaster, 'id'>[] = [
   { company: 'Glassco', category: 'job_title', label: 'Tempering Operator', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
   { company: 'Glassco', category: 'job_title', label: 'Packing Operator', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
   { company: 'Glassco', category: 'job_title', label: 'Store Keeper', color: '#E6F1FB', textColor: '#0C447C', isActive: true },
-  // ── GlassCo Designations ──
+  // ── Glassco Designations ──
   { company: 'Glassco', category: 'designation', label: 'Supervisor', color: '#EEEDFE', textColor: '#3C3489', isActive: true },
   { company: 'Glassco', category: 'designation', label: 'Shift Incharge', color: '#EEEDFE', textColor: '#3C3489', isActive: true },
   { company: 'Glassco', category: 'designation', label: 'Team Lead', color: '#EEEDFE', textColor: '#3C3489', isActive: true },
