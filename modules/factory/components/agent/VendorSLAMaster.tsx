@@ -6,7 +6,7 @@ import {
 import { supabase } from '@/src/services/supabaseClient';
 
 // ── Types ─────────────────────────────────────────────────────────────
-type Company    = 'GlassCo' | 'GTK' | 'GTI' | 'Factory' | 'Nippon';
+type Company    = 'Glassco' | 'GTK' | 'GTI' | 'Factory' | 'Nippon';
 type VendorType = 'Glass' | 'Aluminium' | 'Chemical' | 'Service' | 'Other';
 
 interface VendorSLA {
@@ -48,12 +48,12 @@ const SCORE_BG = (score: number) =>
   score >= 90 ? 'bg-green-500/10 border-green-500/20' :
   score >= 70 ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-red-500/10 border-red-500/20';
 
-const COMPANIES: Company[]    = ['GlassCo', 'GTK', 'GTI', 'Factory', 'Nippon'];
+const COMPANIES: Company[]    = ['Glassco', 'GTK', 'GTI', 'Factory', 'Nippon'];
 const VENDOR_TYPES: VendorType[] = ['Glass', 'Aluminium', 'Chemical', 'Service', 'Other'];
 
 const EMPTY_VENDOR = {
   vendor_name: '', vendor_type: 'Glass' as VendorType,
-  company: 'GlassCo' as Company, sla_days: 7, review_days: 15, notes: '',
+  company: 'Glassco' as Company, sla_days: 7, review_days: 15, notes: '',
 };
 
 const EMPTY_LOG = {

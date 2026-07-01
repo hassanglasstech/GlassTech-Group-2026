@@ -18,11 +18,11 @@ import { Truck, Filter, X, Package, DollarSign, Building2, Clock, ChevronDown } 
 // Constants
 // ─────────────────────────────────────────────────────────────────────
 
-const COMPANIES = ['GlassCo', 'GTK', 'GTI', 'Factory', 'Nippon'] as const;
+const COMPANIES = ['Glassco', 'GTK', 'GTI', 'Factory', 'Nippon'] as const;
 const HOURS = Array.from({ length: 17 }, (_, i) => i + 6); // 6am to 10pm
 
 const COMPANY_COLORS: Record<string, { bg: string; text: string; border: string; badge: string }> = {
-  GlassCo: { bg: 'bg-blue-100',   text: 'text-blue-800',   border: 'border-blue-300',   badge: 'bg-blue-600' },
+  Glassco: { bg: 'bg-blue-100',   text: 'text-blue-800',   border: 'border-blue-300',   badge: 'bg-blue-600' },
   GTK:     { bg: 'bg-emerald-100', text: 'text-emerald-800', border: 'border-emerald-300', badge: 'bg-emerald-600' },
   GTI:     { bg: 'bg-violet-100',  text: 'text-violet-800',  border: 'border-violet-300',  badge: 'bg-violet-600' },
   Factory: { bg: 'bg-amber-100',   text: 'text-amber-800',   border: 'border-amber-300',   badge: 'bg-amber-600' },
@@ -69,7 +69,7 @@ interface TripPopupProps {
 }
 
 const TripPopup: React.FC<TripPopupProps> = ({ trip, vehicle, onClose }) => {
-  const cc = COMPANY_COLORS[trip.company] || COMPANY_COLORS.GlassCo;
+  const cc = COMPANY_COLORS[trip.company] || COMPANY_COLORS.Glassco;
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -211,7 +211,7 @@ const GroupFleetBoard: React.FC = () => {
         {Object.entries(companyBreakdown).length > 0 && (
           <div className="flex space-x-2 mt-4 relative z-10">
             {Object.entries(companyBreakdown).map(([co, count]) => {
-              const cc = COMPANY_COLORS[co] || COMPANY_COLORS.GlassCo;
+              const cc = COMPANY_COLORS[co] || COMPANY_COLORS.Glassco;
               return (
                 <span key={co} className={`px-3 py-1 rounded-full text-[10px] font-black text-white ${cc.badge}`}>
                   {co}: {count} trip{count !== 1 ? 's' : ''}
@@ -307,7 +307,7 @@ const GroupFleetBoard: React.FC = () => {
                     // Estimate duration: Completed = 2h avg, Scheduled = 3h
                     const duration = trip.status === 'Completed' ? 2 : 3;
                     const pos = tripPosition(startHour, duration);
-                    const cc = COMPANY_COLORS[trip.company] || COMPANY_COLORS.GlassCo;
+                    const cc = COMPANY_COLORS[trip.company] || COMPANY_COLORS.Glassco;
                     const statusBg = trip.status === 'Completed' ? 'bg-emerald-500' :
                       trip.status === 'Cancelled' ? 'bg-slate-300' : 'bg-blue-500';
 

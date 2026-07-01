@@ -87,7 +87,7 @@ const VendorIntelligence: React.FC = () => {
       const { data: slaData } = await supabase
         .from('vendor_sla')
         .select('*')
-        .eq('company', 'GlassCo');
+        .eq('company', 'Glassco');
 
       const slaMap: Record<string, any> = {};
       (slaData || []).forEach((s: any) => { slaMap[s.vendor_name] = s; });

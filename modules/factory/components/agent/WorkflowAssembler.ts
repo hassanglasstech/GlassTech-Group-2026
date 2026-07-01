@@ -40,7 +40,7 @@ const checkGLPeriodOpen = async (): Promise<boolean> => {
   try {
     const month = new Date().toISOString().slice(0, 7);
     const periods = JSON.parse(localStorage.getItem('gtk_erp_fiscal_periods') || '[]');
-    const current = periods.find((p: any) => p.month === month && p.company === 'GlassCo');
+    const current = periods.find((p: any) => p.month === month && p.company === 'Glassco');
     return !current || current.status === 'Open';
   } catch { return true; }
 };

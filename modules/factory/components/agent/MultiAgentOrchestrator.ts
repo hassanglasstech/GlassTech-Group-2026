@@ -46,8 +46,8 @@ const buildFactoryContext = async (): Promise<string> => {
 };
 
 const buildFinanceContext = (): string => {
-  const accounts = FinanceService.getAccounts().filter((a: any) => a.company === 'GlassCo');
-  const ledger   = FinanceService.getLedger().filter((t: any) => t.company === 'GlassCo');
+  const accounts = FinanceService.getAccounts().filter((a: any) => a.company === 'Glassco');
+  const ledger   = FinanceService.getLedger().filter((t: any) => t.company === 'Glassco');
   const month    = new Date().toISOString().slice(0, 7);
   const balances: Record<string, number> = {};
   accounts.forEach((a: any) => { balances[a.id] = 0; });
@@ -55,7 +55,7 @@ const buildFinanceContext = (): string => {
   const rev = Math.abs(accounts.filter((a: any) => a.type === 'Revenue').reduce((s: number, a: any) => s + (balances[a.id] || 0), 0));
   const exp = Math.abs(accounts.filter((a: any) => a.type === 'Expense').reduce((s: number, a: any) => s + (balances[a.id] || 0), 0));
   const monthLedger = ledger.filter((t: any) => t.date?.startsWith(month));
-  const invoices = SalesService.getInvoices().filter((i: any) => i.company === 'GlassCo');
+  const invoices = SalesService.getInvoices().filter((i: any) => i.company === 'Glassco');
   const overdue  = invoices.filter((i: any) => (i.status === 'Outstanding' || i.status === 'Overdue') && i.dueDate < new Date().toISOString().split('T')[0]);
   return `FINANCE STATUS:
 - Revenue (all time): PKR ${rev.toLocaleString()} | Expenses: PKR ${exp.toLocaleString()}
@@ -76,7 +76,7 @@ const buildVendorContext = async (): Promise<string> => {
 };
 
 const buildHRContext = (): string => {
-  const emps       = HRService.getEmployees().filter((e: any) => e.company === 'GlassCo' && !['resigned', 'terminated'].includes(e.work?.status || ''));
+  const emps       = HRService.getEmployees().filter((e: any) => e.company === 'Glassco' && !['resigned', 'terminated'].includes(e.work?.status || ''));
   const today      = new Date().toISOString().split('T')[0];
   const attendance = HRService.getAttendance().filter((a: any) => a.date === today);
   const absent     = attendance.filter((a: any) => a.status === 'Absent').length;

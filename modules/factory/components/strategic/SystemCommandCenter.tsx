@@ -136,7 +136,7 @@ const SystemCommandCenter: React.FC = () => {
     if (!contractForm.vendor_name.trim()) return;
     await supabase.from('vendor_contracts').insert({
       vendor_name:   contractForm.vendor_name,
-      company:       'GlassCo',
+      company:       'Glassco',
       agreed_rate:   Number(contractForm.agreed_rate) || null,
       payment_terms: contractForm.payment_terms,
       delivery_days: Number(contractForm.delivery_days),

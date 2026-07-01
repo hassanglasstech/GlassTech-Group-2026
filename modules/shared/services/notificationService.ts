@@ -113,7 +113,7 @@ export const NotificationService = {
           createdAt: n.date || nowISO(),
           eventType: 'hr_approval',
           orderRef: '',
-          targetCompany: n.targetCompany || 'GlassCo',
+          targetCompany: n.targetCompany || 'Glassco',
           recipientName: '',
           message: n.message || '',
           isRead: n.isRead || false,

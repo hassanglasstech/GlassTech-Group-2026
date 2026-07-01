@@ -11,9 +11,9 @@ export const OpsAgent = {
     const products = ls('gtk_erp_products');
 
     // Glass stock from products
-    let glassItems = products.filter((p: any) => p.category === 'Glass' && p.company === 'GlassCo');
+    let glassItems = products.filter((p: any) => p.category === 'Glass' && p.company === 'Glassco');
     // Store items
-    let storeItems = store.filter((s: any) => !s.company || s.company === 'GlassCo');
+    let storeItems = store.filter((s: any) => !s.company || s.company === 'Glassco');
 
     // Filter by query
     if (query) {
@@ -85,7 +85,7 @@ export const OpsAgent = {
   // ── Purchase Orders ──────────────────────────────────────────────
   purchaseOrderStatus: (query?: string) => {
     const pos = ls('gtk_erp_purchase_orders');
-    let filtered = pos.filter((p: any) => !p.company || p.company === 'GlassCo');
+    let filtered = pos.filter((p: any) => !p.company || p.company === 'Glassco');
 
     if (query?.toLowerCase().includes('pending') || query?.toLowerCase().includes('open')) {
       filtered = filtered.filter((p: any) => ['Open', 'Pending', 'Partially Received'].includes(p.status));
@@ -129,7 +129,7 @@ export const OpsAgent = {
     const pos      = ls('gtk_erp_purchase_orders');
     const payments = ls('gtk_erp_petty_cash');
 
-    let filteredVendors = vendors.filter((v: any) => v.company === 'GlassCo' || !v.company);
+    let filteredVendors = vendors.filter((v: any) => v.company === 'Glassco' || !v.company);
     if (vendorName) {
       filteredVendors = filteredVendors.filter((v: any) =>
         v.name?.toLowerCase().includes(vendorName.toLowerCase())

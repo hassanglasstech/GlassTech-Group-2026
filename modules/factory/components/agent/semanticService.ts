@@ -61,7 +61,7 @@ export const buildSummary = async (
     return {
       table_name:    tableName,
       record_id:     record.id,
-      company:       record.company || 'GlassCo',
+      company:       record.company || 'Glassco',
       summary,
       semantic_tags: tags,
       entities,
@@ -89,7 +89,7 @@ export const storeSemanticRecord = async (rec: SemanticRecord): Promise<void> =>
 // ── Semantic search (text-based, no vector needed) ────────────────────
 export const semanticSearch = async (
   query: string,
-  company = 'GlassCo',
+  company = 'Glassco',
   limit  = 8
 ): Promise<any[]> => {
   const words   = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);

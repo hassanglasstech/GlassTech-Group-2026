@@ -511,7 +511,7 @@ const executeRecordExpense = async (params: Record<string, any>): Promise<any> =
   // expense (and its GL) to a different company. The model's company arg is ignored.
   const company = (useAppStore.getState().selectedCompany
     || useAuthStore.getState().profile?.company
-    || 'GlassCo') as Company;
+    || 'Glassco') as Company;
   const amount  = Number(params.amount) || 0;
 
   Logger.action('Finance', 'RECORD_EXPENSE', `${params.description} — PKR ${amount.toLocaleString()}`, {
@@ -662,7 +662,7 @@ const getSessionKey = async (): Promise<{ userId: string; company: string; date:
   const { data: { session } } = await supabase.auth.getSession();
   return {
     userId:  session?.user?.id || 'anonymous',
-    company: 'GlassCo',
+    company: 'Glassco',
     date:    new Date().toISOString().split('T')[0],
   };
 };

@@ -21,8 +21,8 @@ const buildSnapshot = async () => {
   const revenue   = invoices.filter((i: any) => i.date?.startsWith(month)).reduce((s: number, i: any) => s + (i.amount || i.totalAmount || 0), 0);
 
   // Finance
-  const accounts = FinanceService.getAccounts().filter((a: any) => a.company === 'GlassCo');
-  const ledger   = FinanceService.getLedger().filter((t: any) => t.company === 'GlassCo');
+  const accounts = FinanceService.getAccounts().filter((a: any) => a.company === 'Glassco');
+  const ledger   = FinanceService.getLedger().filter((t: any) => t.company === 'Glassco');
   const bal: Record<string, number> = {};
   accounts.forEach((a: any) => { bal[a.id] = 0; });
   ledger.forEach((tx: any) => tx.details?.forEach((d: any) => { if (bal[d.accountId] !== undefined) bal[d.accountId] += (d.debit - d.credit); }));
@@ -45,7 +45,7 @@ const buildSnapshot = async () => {
   const highRiskVendors = (vendorSLA || []).filter((v: any) => v.total_orders > 2 && (v.breach_count / v.total_orders) > 0.4);
 
   // HR
-  const employees = HRService.getEmployees().filter((e: any) => e.company === 'GlassCo' && !['resigned','terminated'].includes(e.work?.status || ''));
+  const employees = HRService.getEmployees().filter((e: any) => e.company === 'Glassco' && !['resigned','terminated'].includes(e.work?.status || ''));
   const loans     = HRService.getLoans().filter((l: any) => l.status === 'Active');
 
   return {
@@ -130,7 +130,7 @@ Generate 3 scenarios (optimistic, base, pessimistic) for next 90 days:`,
 
 // ── Detect cross-entity signals ───────────────────────────────────────
 export const detectCrossEntitySignals = async (): Promise<void> => {
-  const companies = ['GlassCo', 'GTK', 'GTI', 'Nippon', 'Factory'];
+  const companies = ['Glassco', 'GTK', 'GTI', 'Nippon', 'Factory'];
 
   // Check vendor overlap
   const vendors = SalesService.getVendors();
@@ -176,7 +176,7 @@ export const detectCrossEntitySignals = async (): Promise<void> => {
     if (overdueVal > totalPayroll * 2) {
       await supabase.from('cross_entity_signals').upsert({
         signal_type:      'cash_flow',
-        entities:         ['GlassCo', 'GTK'],
+        entities:         ['Glassco', 'GTK'],
         title:            'Group receivables risk — payroll coverage',
         description:      `Group-wide overdue receivables (PKR ${overdueVal.toLocaleString()}) are ${Math.round(overdueVal / totalPayroll)}x monthly payroll (PKR ${totalPayroll.toLocaleString()}). Collection urgency high.`,
         severity:         'high',
@@ -224,7 +224,7 @@ export const buildTemporalPredictions = async (): Promise<void> => {
 
   await supabase.from('temporal_predictions').upsert({
     metric:           'revenue',
-    entity:           'GlassCo',
+    entity:           'Glassco',
     current_value:    values[values.length - 1],
     predicted_value:  Math.round(nextVal),
     prediction_date:  nextMonth.toISOString().split('T')[0],

@@ -7,7 +7,7 @@ import { supabase } from '@/src/services/supabaseClient';
 // ── Types ─────────────────────────────────────────────────────────────
 type AssetStatus   = 'Active' | 'Maintenance' | 'Inactive' | 'Disposed';
 type AssetCategory = 'Machine' | 'Table' | 'Tool' | 'Vehicle' | 'Furniture' | 'Other';
-type Company       = 'GlassCo' | 'GTK' | 'GTI' | 'Factory' | 'Nippon';
+type Company       = 'Glassco' | 'GTK' | 'GTI' | 'Factory' | 'Nippon';
 
 interface Asset {
   id: string;
@@ -24,7 +24,7 @@ interface Asset {
   created_at: string;
 }
 
-const COMPANIES: Company[]       = ['GlassCo', 'GTK', 'GTI', 'Factory', 'Nippon'];
+const COMPANIES: Company[]       = ['Glassco', 'GTK', 'GTI', 'Factory', 'Nippon'];
 const CATEGORIES: AssetCategory[] = ['Machine', 'Table', 'Tool', 'Vehicle', 'Furniture', 'Other'];
 const STATUSES: AssetStatus[]    = ['Active', 'Maintenance', 'Inactive', 'Disposed'];
 

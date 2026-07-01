@@ -122,7 +122,7 @@ const StrategicMemoryModule: React.FC = () => {
       title:      form.title.trim(),
       body:       form.body.trim(),
       tags:       form.tags,
-      company:    'GlassCo',
+      company:    'Glassco',
       priority:   form.priority,
       status:     'Active',
       remind_on:  form.remind_on || null,

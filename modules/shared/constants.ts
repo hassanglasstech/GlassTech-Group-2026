@@ -5,7 +5,6 @@ export const Company = {
   GLASSCO: 'Glassco',
   NIPPON: 'Nippon',
   FACTORY: 'Factory',
-  GLASSCO_ALT: 'GlassCo'
 } as const;
 export type Company = typeof Company[keyof typeof Company];
 

@@ -471,11 +471,11 @@ export const executeTool = async (
     // ── SEARCH ─────────────────────────────────────────────────────
     else if (toolName === 'search_client') {
       const clients = ls('gtk_erp_clients');
-      result = { clients: clients.filter((c: any) => c.name?.toLowerCase().includes(params.name.toLowerCase()) && c.company === 'GlassCo').slice(0,5) };
+      result = { clients: clients.filter((c: any) => c.name?.toLowerCase().includes(params.name.toLowerCase()) && c.company === 'Glassco').slice(0,5) };
     }
     else if (toolName === 'get_glass_rate') {
       const products = ls('gtk_erp_products');
-      const match = products.find((p: any) => p.company === 'GlassCo' && p.category === 'Glass' && p.glassType?.toLowerCase() === params.glass_type?.toLowerCase() && p.thickness === params.thickness);
+      const match = products.find((p: any) => p.company === 'Glassco' && p.category === 'Glass' && p.glassType?.toLowerCase() === params.glass_type?.toLowerCase() && p.thickness === params.thickness);
       result = match ? { found: true, rate: match.salePrice || match.price || 0, product: match.name } : { found: false, rate: 0 };
     }
     else if (toolName === 'find_order') {
@@ -495,10 +495,10 @@ export const executeTool = async (
     else if (toolName === 'create_quotation') {
       const products = ls('gtk_erp_products');
       const clients  = ls('gtk_erp_clients');
-      const client   = clients.find((c: any) => c.name?.toLowerCase().includes(params.client_name.toLowerCase()) && c.company === 'GlassCo');
+      const client   = clients.find((c: any) => c.name?.toLowerCase().includes(params.client_name.toLowerCase()) && c.company === 'Glassco');
       const items = (params.items || []).map((item: any, idx: number) => {
         const sqFt = (item.width_inch * item.height_inch * item.qty) / 144;
-        const product = products.find((p: any) => p.company === 'GlassCo' && p.category === 'Glass' && p.glassType?.toLowerCase() === item.glass_type?.toLowerCase() && p.thickness === item.thickness);
+        const product = products.find((p: any) => p.company === 'Glassco' && p.category === 'Glass' && p.glassType?.toLowerCase() === item.glass_type?.toLowerCase() && p.thickness === item.thickness);
         const rate = item.rate > 0 ? item.rate : (product?.salePrice || product?.price || 0);
         return { id: `ITM-${Date.now()}-${idx}`, description: item.description || `${item.glass_type} ${item.thickness}`, glassType: item.glass_type, subCategory: 'Standard', glassSize: item.thickness, glassColor: 'Clear', inchW: item.width_inch, sootW: 0, inchH: item.height_inch, sootH: 0, width: item.width_inch, height: item.height_inch, qty: item.qty, totalSqFt: Math.round(sqFt*100)/100, pricePerUnit: rate, amount: Math.round(sqFt*rate), selectedServices: item.services || [], isSection: false, locationCode: '', glazingSpecs: '', inputUnit: 'Inch' };
       });
@@ -506,9 +506,9 @@ export const executeTool = async (
       const discount = params.discount_pkr || 0;
       const today = new Date().toISOString().split('T')[0];
       const dueDate = new Date(Date.now() + (params.validity_days||3)*86400000).toISOString().split('T')[0];
-      const newQ = { id: `QT-AGENT-${Date.now()}`, company: 'GlassCo', date: today, dueDate, clientId: client?.id||'', clientName: params.client_name, projectName: params.project_name||'AGENT ORDER', items, status: 'Draft', discountAmount: discount, discountPercent: 0, isAlreadyDispatched: false, notes: params.notes||`Created by Agent — approved by ${approvedBy}`, totalAmount: totalAmount-discount, createdBy: `Agent (${approvedBy})`, createdAt: new Date().toISOString() };
+      const newQ = { id: `QT-AGENT-${Date.now()}`, company: 'Glassco', date: today, dueDate, clientId: client?.id||'', clientName: params.client_name, projectName: params.project_name||'AGENT ORDER', items, status: 'Draft', discountAmount: discount, discountPercent: 0, isAlreadyDispatched: false, notes: params.notes||`Created by Agent — approved by ${approvedBy}`, totalAmount: totalAmount-discount, createdBy: `Agent (${approvedBy})`, createdAt: new Date().toISOString() };
       const allQ = ls('gtk_erp_quotations'); allQ.push(newQ); lsSet('gtk_erp_quotations', allQ);
-      await supabase.from('quotations').insert({ id: newQ.id, company: 'GlassCo', date: today, due_date: dueDate, client_id: client?.id||null, client_name: params.client_name, project_name: newQ.projectName, items, status: 'Draft', discount_amount: discount, total_amount: totalAmount-discount, notes: newQ.notes, created_by: newQ.createdBy, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+      await supabase.from('quotations').insert({ id: newQ.id, company: 'Glassco', date: today, due_date: dueDate, client_id: client?.id||null, client_name: params.client_name, project_name: newQ.projectName, items, status: 'Draft', discount_amount: discount, total_amount: totalAmount-discount, notes: newQ.notes, created_by: newQ.createdBy, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
       result = { quotation_id: newQ.id, client: params.client_name, items_count: items.length, total_amount: totalAmount-discount, status: 'Draft — Quotations mein nazar aayegi' };
     }
 
@@ -516,9 +516,9 @@ export const executeTool = async (
     else if (toolName === 'create_requisition') {
       const reqId = `REQ-AGENT-${Date.now()}`;
       const today = new Date().toISOString().split('T')[0];
-      const { data: reqData, error: reqErr } = await supabase.from('requisitions').insert({ id: reqId, company: 'GlassCo', date: today, header_text: `[AGENT] ${params.description}`, requisitioner: approvedBy, priority: params.priority, status: 'Pending', category: params.category, req_type: 'Agent Created', reason: params.reason||'', total_value: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }).select('id').single();
+      const { data: reqData, error: reqErr } = await supabase.from('requisitions').insert({ id: reqId, company: 'Glassco', date: today, header_text: `[AGENT] ${params.description}`, requisitioner: approvedBy, priority: params.priority, status: 'Pending', category: params.category, req_type: 'Agent Created', reason: params.reason||'', total_value: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }).select('id').single();
       if (!reqErr) { await supabase.from('requisition_items').insert({ requisition_id: reqData?.id||reqId, item_category: params.category, material_desc: params.description, qty: params.qty, unit: params.unit, estimated_rate: 0, delivery_date: new Date(Date.now()+86400000).toISOString().split('T')[0], cost_center: params.category.toUpperCase(), created_at: new Date().toISOString() }); }
-      const reqs = ls('gtk_erp_requisitions'); reqs.push({ id: reqId, company: 'GlassCo', date: today, headerText: `[AGENT] ${params.description}`, requisitioner: approvedBy, priority: params.priority, status: 'Pending', category: params.category, items: [{ materialDesc: params.description, qty: params.qty, unit: params.unit }], createdAt: new Date().toISOString() }); lsSet('gtk_erp_requisitions', reqs);
+      const reqs = ls('gtk_erp_requisitions'); reqs.push({ id: reqId, company: 'Glassco', date: today, headerText: `[AGENT] ${params.description}`, requisitioner: approvedBy, priority: params.priority, status: 'Pending', category: params.category, items: [{ materialDesc: params.description, qty: params.qty, unit: params.unit }], createdAt: new Date().toISOString() }); lsSet('gtk_erp_requisitions', reqs);
       result = { req_id: reqData?.id||reqId, saved: reqErr?'localStorage':'Supabase', message: 'Procurement → Requisitions mein nazar aayegi' };
     }
 
@@ -569,14 +569,14 @@ export const executeTool = async (
     else if (toolName === 'get_today_summary') {
       const today = new Date().toISOString().split('T')[0];
       const month = today.slice(0, 7);
-      const quotations = ls('gtk_erp_quotations').filter((q: any) => q.company === 'GlassCo');
+      const quotations = ls('gtk_erp_quotations').filter((q: any) => q.company === 'Glassco');
       const monthQuotes = quotations.filter((q: any) => q.date?.startsWith(month));
       const todayQuotes = quotations.filter((q: any) => q.date === today);
-      const invoices = ls('gtk_erp_invoices').filter((i: any) => i.company === 'Glassco' || i.company === 'GlassCo');
+      const invoices = ls('gtk_erp_invoices').filter((i: any) => i.company === 'Glassco' || i.company === 'Glassco');
       const monthRev = invoices.filter((i: any) => i.date?.startsWith(month)).reduce((s: number, i: any) => s + (i.totalAmount || i.amount || 0), 0);
       const pieces = ls('gtk_erp_production_pieces');
       const active = pieces.filter((p: any) => !['Delivered', 'Broken'].includes(p.status));
-      const employees = ls('gtk_erp_employees').filter((e: any) => e.company === 'GlassCo' || e.company === 'Glassco');
+      const employees = ls('gtk_erp_employees').filter((e: any) => e.company === 'Glassco' || e.company === 'Glassco');
       const attendance = ls('gtk_erp_attendance').filter((a: any) => a.date === today);
       const present = attendance.filter((a: any) => a.status === 'Present').length;
       const absent = attendance.filter((a: any) => a.status === 'Absent').length;
@@ -628,15 +628,15 @@ export const executeTool = async (
       const petty = ls('gtk_erp_petty_cash').filter((e: any) => e.status !== 'Ignored');
       const lastEntry = petty.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
       const pettyCashBal = lastEntry?.balance || 0;
-      const accounts = ls('gtk_erp_accounts').filter((a: any) => a.company === 'GlassCo' && (a.code?.startsWith('111') || a.code?.startsWith('105')));
+      const accounts = ls('gtk_erp_accounts').filter((a: any) => a.company === 'Glassco' && (a.code?.startsWith('111') || a.code?.startsWith('105')));
       result = { petty_cash_balance: pettyCashBal, petty_cash_formatted: `PKR ${pettyCashBal.toLocaleString()}`, cash_accounts: accounts.map((a: any) => ({ code: a.code, name: a.name })) };
     }
 
     // ── MONTHLY P&L ───────────────────────────────────────────────
     else if (toolName === 'get_monthly_pl') {
       const month = params.month || new Date().toISOString().slice(0, 7);
-      const accounts = ls('gtk_erp_accounts').filter((a: any) => a.company === 'GlassCo');
-      const ledger = ls('gtk_erp_ledger').filter((t: any) => t.company === 'GlassCo' && t.date?.startsWith(month) && t.status === 'Posted');
+      const accounts = ls('gtk_erp_accounts').filter((a: any) => a.company === 'Glassco');
+      const ledger = ls('gtk_erp_ledger').filter((t: any) => t.company === 'Glassco' && t.date?.startsWith(month) && t.status === 'Posted');
       const balances: Record<string, number> = {};
       accounts.forEach((a: any) => { balances[a.id] = 0; });
       ledger.forEach((tx: any) => tx.details?.forEach((d: any) => { if (balances[d.accountId] !== undefined) balances[d.accountId] += (d.debit || 0) - (d.credit || 0); }));
@@ -647,8 +647,8 @@ export const executeTool = async (
 
     // ── TRIAL BALANCE ─────────────────────────────────────────────
     else if (toolName === 'get_trial_balance') {
-      const accounts = ls('gtk_erp_accounts').filter((a: any) => a.company === 'GlassCo');
-      const ledger = ls('gtk_erp_ledger').filter((t: any) => t.company === 'GlassCo' && t.status === 'Posted');
+      const accounts = ls('gtk_erp_accounts').filter((a: any) => a.company === 'Glassco');
+      const ledger = ls('gtk_erp_ledger').filter((t: any) => t.company === 'Glassco' && t.status === 'Posted');
       const balances: Record<string, number> = {};
       accounts.forEach((a: any) => { balances[a.id] = 0; });
       ledger.forEach((tx: any) => tx.details?.forEach((d: any) => { if (balances[d.accountId] !== undefined) balances[d.accountId] += (d.debit || 0) - (d.credit || 0); }));
@@ -676,7 +676,7 @@ export const executeTool = async (
       if (!q) { result = { error: `Quotation ${params.quotation_id} nahi mili` }; }
       else {
         const invId = `INV-AGENT-${Date.now()}`;
-        const inv = { id: invId, company: q.company || 'GlassCo', orderId: q.id, orderNo: q.orderNo || q.id, clientId: q.clientId, clientName: q.clientName, date: new Date().toISOString().split('T')[0], dueDate: new Date(Date.now() + 30*86400000).toISOString().split('T')[0], totalAmount: q.totalAmount, receivedAmount: 0, balance: q.totalAmount, status: 'Outstanding', notes: params.notes || `Invoice by Agent — ${approvedBy}`, createdAt: new Date().toISOString() };
+        const inv = { id: invId, company: q.company || 'Glassco', orderId: q.id, orderNo: q.orderNo || q.id, clientId: q.clientId, clientName: q.clientName, date: new Date().toISOString().split('T')[0], dueDate: new Date(Date.now() + 30*86400000).toISOString().split('T')[0], totalAmount: q.totalAmount, receivedAmount: 0, balance: q.totalAmount, status: 'Outstanding', notes: params.notes || `Invoice by Agent — ${approvedBy}`, createdAt: new Date().toISOString() };
         const allInv = ls('gtk_erp_invoices'); allInv.push(inv); lsSet('gtk_erp_invoices', allInv);
         await supabase.from('invoices').insert({ id: invId, company: inv.company, order_id: q.id, client_name: q.clientName, date: inv.date, due_date: inv.dueDate, total_amount: q.totalAmount, status: 'Outstanding', created_by: `Agent (${approvedBy})`, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }).then(() => {}, () => {});
         result = { invoice_id: invId, client: q.clientName, amount: q.totalAmount, status: 'Outstanding' };
@@ -696,7 +696,7 @@ export const executeTool = async (
     // ── EMPLOYEE ATTENDANCE ────────────────────────────────────────
     else if (toolName === 'get_employee_attendance') {
       const date = params.date || new Date().toISOString().split('T')[0];
-      const employees = ls('gtk_erp_employees').filter((e: any) => (e.company === 'GlassCo' || e.company === 'Glassco') && e.work?.status !== 'resigned' && e.work?.status !== 'terminated');
+      const employees = ls('gtk_erp_employees').filter((e: any) => (e.company === 'Glassco' || e.company === 'Glassco') && e.work?.status !== 'resigned' && e.work?.status !== 'terminated');
       const attendance = ls('gtk_erp_attendance').filter((a: any) => a.date === date);
       let filtered = employees;
       if (params.employee_name) { const s = params.employee_name.toLowerCase(); filtered = employees.filter((e: any) => (e.personal?.name || e.name || '').toLowerCase().includes(s)); }
@@ -771,7 +771,7 @@ export const executeTool = async (
     else if (toolName === 'get_intercompany_balance') {
       const ledger = ls('gtk_erp_ledger').filter((t: any) => t.status === 'Posted');
       const icoEntries = ledger.filter((t: any) => t.description?.includes('[ICO]') || t.docType === 'AGT-JV');
-      const companies = ['GlassCo', 'GTK', 'GTI', 'Nippon', 'Factory'];
+      const companies = ['Glassco', 'GTK', 'GTI', 'Nippon', 'Factory'];
       const balances = companies.map(c => {
         const compEntries = ledger.filter((t: any) => t.company === c);
         const icoRecv = compEntries.filter((t: any) => t.details?.some((d: any) => d.accountCode?.startsWith('122'))).reduce((s: number, t: any) => s + (t.details?.filter((d: any) => d.accountCode?.startsWith('122')).reduce((ss: number, d: any) => ss + (d.debit || 0) - (d.credit || 0), 0) || 0), 0);

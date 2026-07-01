@@ -225,7 +225,7 @@ export const saveNewPattern = async (pattern: {
     workflow_steps:   pattern.workflow_steps,
     confidence:       0.50,
     defined_by:       'owner',
-    company:          pattern.company || 'GlassCo',
+    company:          pattern.company || 'Glassco',
     is_global:        false,
     active:           true,
     times_used:       0,

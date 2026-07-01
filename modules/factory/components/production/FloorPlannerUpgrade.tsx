@@ -97,7 +97,7 @@ const FloorPlannerUpgrade: React.FC = () => {
     setLoading(true);
     try {
       const [{ data: assetData }, pieceData] = await Promise.all([
-        supabase.from('factory_assets').select('*').eq('company', 'GlassCo').neq('status', 'Disposed'),
+        supabase.from('factory_assets').select('*').eq('company', 'Glassco').neq('status', 'Disposed'),
         ProductionService.getProductionPiecesAsync('Glassco'),
       ]);
       if (assetData) setAssets(assetData as Asset[]);
