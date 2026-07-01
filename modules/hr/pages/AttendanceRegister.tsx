@@ -8,10 +8,14 @@ import * as XLSX from 'xlsx';
 
 import { useAppStore } from '../../shared/store/appStore';
 import { toast } from 'sonner';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import { AttendanceOverrideService, OverrideMap } from '@/modules/hr/services/attendanceOverrideService';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 import IndividualAttendanceModal from '@/modules/hr/components/IndividualAttendanceModal';
 import AttendanceReconciliation from './AttendanceReconciliation';
+import { formatNumber } from '@/modules/shared/utils/format';
+import { KpiTile, KpiRow } from '@/modules/shared/components/KpiTile';
+import { EmptyState } from '@/modules/shared/components/EmptyState';
 
 const AttendanceRegister: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
@@ -424,8 +428,8 @@ const AttendanceRegister: React.FC = () => {
       refreshAllData();
   };
 
-  const clearSummaryOverrides = () => {
-      if (confirm("Reset all manual overrides to system-calculated values for this month?")) {
+  const clearSummaryOverrides = async () => {
+      if (await confirmModal("Reset all manual overrides to system-calculated values for this month?")) {
           localStorage.removeItem(`gtk_erp_summary_overrides_${selectedMonth}`);
           AttendanceOverrideService.clear(company, selectedMonth).catch(() => {});
           refreshAllData();
@@ -571,72 +575,92 @@ const AttendanceRegister: React.FC = () => {
     reader.readAsArrayBuffer(file);
   };
 
+  // Tab KPIs — derived from the day's records already in state (real values only)
+  const presentToday = records.filter(r => r.status === 'Present' || r.status === 'Late').length;
+  const absentToday  = records.filter(r => r.status === 'Absent').length;
+  const leaveToday   = records.filter(r => r.status === 'Leave').length;
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col lg:flex-row justify-between items-center bg-white p-4 rounded-xl border no-print shadow-sm gap-4">
-        <div className="flex items-center space-x-6 w-full lg:w-auto">
-          <div className="flex items-center space-x-1 bg-slate-50 p-1 rounded-xl">
-            <button onClick={() => { setViewType('daily'); setIsBulkEditing(false); }} className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${viewType === 'daily' ? 'bg-white shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>Daily Mark</button>
-            <button onClick={() => { setViewType('monthly'); setIsBulkEditing(false); }} className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${viewType === 'monthly' ? 'bg-white shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>Monthly View</button>
-            <button onClick={() => { setViewType('summary'); setIsBulkEditing(false); }} className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${viewType === 'summary' ? 'bg-white shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>Summary Input</button>
-            <button onClick={() => { setViewType('reconcile'); setIsBulkEditing(false); }} className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${viewType === 'reconcile' ? 'bg-white shadow text-red-600' : 'text-slate-400 hover:text-slate-600'}`}>Reconcile</button>
+    <div className="space-y-4">
+      {/* ── KPI row ── */}
+      <KpiRow>
+        <KpiTile label="Headcount" value={formatNumber(employees.length)} icon={<Users size={16} />} tone="primary" hint="active employees" />
+        <KpiTile label="Present" value={formatNumber(presentToday)} icon={<Check size={16} />} tone="success" hint="marked today" />
+        <KpiTile label="Absent" value={formatNumber(absentToday)} icon={<Ban size={16} />} tone="danger" hint="marked today" />
+        <KpiTile label="On Leave" value={formatNumber(leaveToday)} icon={<Coffee size={16} />} tone="warning" hint="marked today" />
+      </KpiRow>
+
+      {/* ── Toolbar: view sub-tabs + date/filters left, primary action right ── */}
+      <div className="flex flex-col lg:flex-row justify-between items-center no-print gap-3">
+        <div className="flex items-center gap-3 w-full lg:w-auto">
+          <div className="flex items-center space-x-1 bg-slate-50 p-1 rounded-card">
+            <button onClick={() => { setViewType('daily'); setIsBulkEditing(false); }} className={`px-4 py-2 rounded-control text-2xs font-black uppercase transition-all ${viewType === 'daily' ? 'bg-white shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>Daily Mark</button>
+            <button onClick={() => { setViewType('monthly'); setIsBulkEditing(false); }} className={`px-4 py-2 rounded-control text-2xs font-black uppercase transition-all ${viewType === 'monthly' ? 'bg-white shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>Monthly View</button>
+            <button onClick={() => { setViewType('summary'); setIsBulkEditing(false); }} className={`px-4 py-2 rounded-control text-2xs font-black uppercase transition-all ${viewType === 'summary' ? 'bg-white shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>Summary Input</button>
+            <button onClick={() => { setViewType('reconcile'); setIsBulkEditing(false); }} className={`px-4 py-2 rounded-control text-2xs font-black uppercase transition-all ${viewType === 'reconcile' ? 'bg-white shadow text-red-600' : 'text-slate-400 hover:text-slate-600'}`}>Reconcile</button>
           </div>
-          <div className="flex items-center space-x-4">
-            <Calendar className="text-blue-600" size={20} />
-            <input 
-                type={viewType === 'daily' ? "date" : "month"} 
-                value={viewType === 'daily' ? selectedDate : selectedMonth} 
+          <div className="flex items-center gap-2">
+            <Calendar className="text-slate-400" size={16} />
+            <input
+                type={viewType === 'daily' ? "date" : "month"}
+                value={viewType === 'daily' ? selectedDate : selectedMonth}
                 onChange={(e) => {
                     const val = e.target.value;
                     setSelectedDate(viewType === 'daily' ? val : `${val}-01`);
-                }} 
-                className="border-none font-black text-lg bg-transparent focus:ring-0 outline-none w-40" 
+                }}
+                className="sap-input py-1.5 text-label font-bold w-40"
             />
           </div>
-          <button onClick={refreshAllData} className="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="Sync Data"><RefreshCw size={18}/></button>
+          <button onClick={refreshAllData} className="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="Sync Data"><RefreshCw size={16}/></button>
         </div>
 
-        <div className="flex items-center space-x-2 w-full lg:w-auto overflow-x-auto no-scrollbar pb-1">
+        <div className="flex items-center gap-2 w-full lg:w-auto overflow-x-auto no-scrollbar pb-1 shrink-0">
           {viewType === 'monthly' && (
-            <div className="flex items-center space-x-2 border-r pr-3 mr-1">
+            <div className="flex items-center gap-2 border-r border-slate-200 pr-3 mr-1">
               <input type="file" ref={jsonInputRef} onChange={handleImportJSON} className="hidden" accept=".json" />
               <input type="file" ref={excelImportRef} onChange={handleImportExcel} className="hidden" accept=".xlsx,.xls" />
-              <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl">
-                 <button onClick={handleExportJSON} className="p-2 text-slate-600 hover:bg-white rounded-lg transition-all" title="Backup JSON"><FileJson size={18}/></button>
-                 <button onClick={handleExportExcel} className="p-2 text-emerald-600 hover:bg-white rounded-lg transition-all" title="Export Excel"><FileSpreadsheet size={18}/></button>
+              <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-card">
+                 <button onClick={handleExportJSON} className="p-2 text-slate-600 hover:bg-white rounded-control transition-all" title="Backup JSON"><FileJson size={18}/></button>
+                 <button onClick={handleExportExcel} className="p-2 text-emerald-600 hover:bg-white rounded-control transition-all" title="Export Excel"><FileSpreadsheet size={18}/></button>
                  <div className="w-px h-6 bg-slate-200 mx-1"></div>
-                 <button onClick={() => excelImportRef.current?.click()} className="p-2 text-blue-600 hover:bg-white rounded-lg transition-all" title="Import Excel"><FileUp size={18}/></button>
-                 <button onClick={() => jsonInputRef.current?.click()} className="p-2 text-slate-600 hover:bg-white rounded-lg transition-all" title="Restore JSON"><UploadCloud size={18}/></button>
+                 <button onClick={() => excelImportRef.current?.click()} className="p-2 text-blue-600 hover:bg-white rounded-control transition-all" title="Import Excel"><FileUp size={18}/></button>
+                 <button onClick={() => jsonInputRef.current?.click()} className="p-2 text-slate-600 hover:bg-white rounded-control transition-all" title="Restore JSON"><UploadCloud size={18}/></button>
               </div>
             </div>
           )}
 
           {viewType === 'summary' && (
-              <button onClick={clearSummaryOverrides} className="bg-slate-100 text-slate-600 px-4 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest hover:bg-slate-200 transition-all">Reset Monthly Overrides</button>
+              <button onClick={clearSummaryOverrides} className="sap-btn-ghost whitespace-nowrap">Reset Monthly Overrides</button>
           )}
 
           {viewType === 'daily' ? (
             !isSelectedDateSunday && (
               <div className="flex items-center gap-2">
-                <button onClick={handleSaveAll} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-blue-700 transition-all whitespace-nowrap">Save Register</button>
+                <button onClick={handleSaveAll} className="sap-btn-primary whitespace-nowrap">Save Register</button>
                 {pendingApproval && (
-                  <button onClick={() => setShowSupervisorModal(true)} className="bg-amber-500 text-white px-4 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest hover:bg-amber-600 transition-all whitespace-nowrap animate-pulse">⚠ Supervisor Approve</button>
+                  <button onClick={() => setShowSupervisorModal(true)} className="bg-amber-500 text-white px-4 py-2.5 rounded-control font-black uppercase text-2xs tracking-widest hover:bg-amber-600 transition-all whitespace-nowrap animate-pulse">⚠ Supervisor Approve</button>
                 )}
               </div>
             )
           ) : viewType === 'monthly' ? (
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Click employee row to edit</span>
+            <span className="text-2xs font-black text-slate-400 uppercase tracking-widest">Click employee row to edit</span>
           ) : null}
         </div>
       </div>
 
       {viewType === 'daily' && (
         isSelectedDateSunday ? (
-            <div className="bg-amber-50 p-16 text-center rounded-3xl border border-amber-200 animate-in fade-in"><Coffee size={40} className="mx-auto text-amber-600 mb-4"/><h3 className="text-2xl font-black text-amber-900 uppercase">Sunday Holiday</h3><p className="text-amber-700 font-bold text-xs uppercase mt-2">No operations scheduled for today</p></div>
+            <div className="bg-white rounded-card border border-slate-200 shadow-sm animate-in fade-in">
+              <EmptyState
+                icon={<Coffee size={22} />}
+                title="Sunday Holiday"
+                description="No operations scheduled for today."
+              />
+            </div>
         ) : (
-          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden animate-in slide-in-from-bottom-4">
+          <div className="bg-white rounded-card border shadow-sm overflow-hidden animate-in slide-in-from-bottom-4">
             <table className="w-full text-left">
-              <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-500 tracking-widest">
+              <thead className="bg-slate-50 border-b text-2xs font-black uppercase text-slate-500 tracking-widest">
                 <tr><th className="px-6 py-5">Employee Registry</th><th className="px-6 py-5">Status</th><th className="px-6 py-5">Late (Mins)</th><th className="px-6 py-5">Overtime (Hrs)</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -644,9 +668,9 @@ const AttendanceRegister: React.FC = () => {
                   const record = records.find(r => r.employeeId === emp.id);
                   return (
                     <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-4"><p className="font-black text-slate-900 leading-none">{emp?.personal?.name ?? "—"}</p><p className="text-[9px] text-slate-400 font-bold uppercase mt-1">{emp?.work?.employeeCode ?? "—"}</p></td>
+                      <td className="px-6 py-4"><p className="font-black text-slate-900 leading-none">{emp?.personal?.name ?? "—"}</p><p className="text-2xs text-slate-400 font-bold uppercase mt-1">{emp?.work?.employeeCode ?? "—"}</p></td>
                       <td className="px-6 py-4">
-                        <select value={record?.status || 'Present'} onChange={(e) => handleUpdateRecord(emp.id, e.target.value as any, record?.lateMinutes || 0, record?.earlyMinutes || 0, record?.overtimeHours || 0)} className="text-[10px] font-black uppercase border-2 border-slate-100 rounded-lg px-3 py-1.5 outline-none focus:border-blue-500 transition-all bg-white">
+                        <select value={record?.status || 'Present'} onChange={(e) => handleUpdateRecord(emp.id, e.target.value as any, record?.lateMinutes || 0, record?.earlyMinutes || 0, record?.overtimeHours || 0)} className="text-2xs font-black uppercase border-2 border-slate-100 rounded-lg px-3 py-1.5 outline-none focus:border-blue-500 transition-all bg-white">
                           <option value="Present">Present</option><option value="Absent">Absent</option><option value="Late">Late</option><option value="Leave">Leave</option>
                         </select>
                       </td>
@@ -663,10 +687,10 @@ const AttendanceRegister: React.FC = () => {
 
       {/* ... (Monthly View remains same, omitted for brevity but should be kept if re-rendering) */}
       {viewType === 'monthly' && (
-        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden h-[70vh] animate-in fade-in">
+        <div className="bg-white rounded-card border shadow-sm overflow-hidden h-[70vh] animate-in fade-in">
           <div className="overflow-auto h-full scrollbar-thin">
             <table className="w-full text-left border-collapse min-w-[1800px]">
-              <thead className="bg-slate-900 text-white text-[9px] font-black uppercase sticky top-0 z-30">
+              <thead className="bg-slate-900 text-white text-2xs font-black uppercase sticky top-0 z-30">
                 <tr>
                   <th className="px-4 py-4 sticky left-0 top-0 bg-slate-900 z-40 w-56 border-r border-white/10 shadow-xl">Employee Registry</th>
                   {daysArray.map(day => {
@@ -688,11 +712,11 @@ const AttendanceRegister: React.FC = () => {
                         <div className="flex items-center justify-between gap-2">
                           <div>
                             <p className="font-bold text-xs text-slate-800 leading-none">{emp?.personal?.name ?? "—"}</p>
-                            <p className="text-[8px] text-slate-400 font-black uppercase mt-1 tracking-tighter">{emp?.work?.employeeCode ?? "—"}</p>
+                            <p className="text-2xs text-slate-400 font-black uppercase mt-1 tracking-tighter">{emp?.work?.employeeCode ?? "—"}</p>
                           </div>
                           <button
                             onClick={() => setIndividualEditEmp(emp)}
-                            className="shrink-0 px-2 py-1 text-[8px] font-black uppercase bg-blue-50 border border-blue-100 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all tracking-widest"
+                            className="shrink-0 px-2 py-1 text-2xs font-black uppercase bg-blue-50 border border-blue-100 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all tracking-widest"
                             title="Edit this employee's monthly attendance"
                           >Edit</button>
                         </div>
@@ -709,17 +733,17 @@ const AttendanceRegister: React.FC = () => {
                           <td key={day} className={`px-0.5 py-1 text-center border-r border-slate-50 ${isSun ? 'bg-rose-50/30' : ''}`}>
                              {isBulkEditing ? (
                                isSun ? (
-                                 <span className={`text-[10px] font-black ${status === 'Absent' ? 'text-red-600' : 'text-slate-300'}`}>{status === 'Absent' ? 'A' : 'SUN'}</span>
+                                 <span className={`text-2xs font-black ${status === 'Absent' ? 'text-red-600' : 'text-slate-300'}`}>{status === 'Absent' ? 'A' : 'SUN'}</span>
                                ) : (
                                  <div className="flex flex-col space-y-0.5 scale-90 items-center justify-center">
-                                   <input type="text" maxLength={1} className="w-full text-[10px] p-0.5 text-center font-black border rounded focus:ring-1 focus:ring-blue-500 outline-none bg-white" value={status === 'Present' ? 'P' : status === 'Absent' ? 'A' : status === 'Late' ? 'L' : status === 'Leave' ? 'V' : ''} onChange={e => updateBulkValue(emp.id, dateStr, 'status', getStatusFromInput(e.target.value))} />
-                                   <input type="number" className="w-full text-[8px] p-0.5 text-center font-bold border rounded bg-indigo-50 outline-none" placeholder="OT" value={ot || ''} onChange={e => updateBulkValue(emp.id, dateStr, 'ot', Number(e.target.value))} />
+                                   <input type="text" maxLength={1} className="w-full text-2xs p-0.5 text-center font-black border rounded focus:ring-1 focus:ring-blue-500 outline-none bg-white" value={status === 'Present' ? 'P' : status === 'Absent' ? 'A' : status === 'Late' ? 'L' : status === 'Leave' ? 'V' : ''} onChange={e => updateBulkValue(emp.id, dateStr, 'status', getStatusFromInput(e.target.value))} />
+                                   <input type="number" className="w-full text-2xs p-0.5 text-center font-bold border rounded bg-indigo-50 outline-none" placeholder="OT" value={ot || ''} onChange={e => updateBulkValue(emp.id, dateStr, 'ot', Number(e.target.value))} />
                                  </div>
                                )
                              ) : (
                                <div className="flex flex-col items-center">
-                                 <span className={`text-[10px] font-black ${status === 'Absent' ? 'text-red-600' : status === 'Late' ? 'text-amber-600' : isSun ? 'text-rose-300' : status === 'Present' ? 'text-emerald-600' : 'text-slate-200'}`}>{status ? status.charAt(0) : (isSun ? 'S' : '-')}</span>
-                                 {ot > 0 && <span className="text-[7px] text-blue-600 font-bold">+{ot}</span>}
+                                 <span className={`text-2xs font-black ${status === 'Absent' ? 'text-red-600' : status === 'Late' ? 'text-amber-600' : isSun ? 'text-rose-300' : status === 'Present' ? 'text-emerald-600' : 'text-slate-200'}`}>{status ? status.charAt(0) : (isSun ? 'S' : '-')}</span>
+                                 {(ot || 0) > 0 && <span className="text-2xs text-blue-600 font-bold">+{ot}</span>}
                                </div>
                              )}
                           </td>
@@ -738,21 +762,21 @@ const AttendanceRegister: React.FC = () => {
       )}
 
       {viewType === 'summary' && (
-          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden animate-in fade-in">
+          <div className="bg-white rounded-card border shadow-sm overflow-hidden animate-in fade-in">
               <div className="p-6 border-b bg-slate-50 flex justify-between items-center">
                   <div>
                       <h3 className="text-sm font-black uppercase text-slate-800 tracking-widest">Monthly Attendance Summary</h3>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Calculated Totals for Payroll Engine</p>
+                      <p className="text-2xs font-bold text-slate-400 uppercase mt-1">Calculated Totals for Payroll Engine</p>
                   </div>
                   <div className="flex items-center space-x-2">
                       <div className="flex items-center space-x-1.5 px-3 py-1 bg-blue-50 text-blue-700 rounded-lg border border-blue-100">
                           <AlertCircle size={14}/>
-                          <span className="text-[10px] font-black uppercase">Manual Edits take priority over register</span>
+                          <span className="text-2xs font-black uppercase">Manual Edits take priority over register</span>
                       </div>
                   </div>
               </div>
               <table className="w-full text-left">
-                  <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                  <thead className="bg-slate-50 border-b text-2xs font-black uppercase text-slate-500 tracking-widest">
                       <tr>
                           <th className="px-6 py-5">Associate Profile</th>
                           <th className="px-6 py-5 text-center">Total Absents (Final)</th>
@@ -778,7 +802,7 @@ const AttendanceRegister: React.FC = () => {
                                           </div>
                                           <div>
                                               <p className="font-bold text-slate-900 leading-none">{emp?.personal?.name ?? "—"}</p>
-                                              <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">{emp?.work?.employeeCode ?? "—"}</p>
+                                              <p className="text-2xs text-slate-400 font-bold uppercase mt-1">{emp?.work?.employeeCode ?? "—"}</p>
                                           </div>
                                       </div>
                                   </td>
@@ -790,11 +814,11 @@ const AttendanceRegister: React.FC = () => {
                                   <td className="px-6 py-4 text-center">
                                       {hasOverride ? (
                                           <div className="flex flex-col items-center">
-                                              <span className="text-[10px] font-black text-slate-900">{Number(totals.loanOverride).toLocaleString()}</span>
-                                              <span className="text-[8px] font-bold text-blue-600 uppercase bg-blue-50 px-1 rounded">Manual</span>
+                                              <span className="text-2xs font-black text-slate-900">{formatNumber(Number(totals.loanOverride))}</span>
+                                              <span className="text-2xs font-bold text-blue-600 uppercase bg-blue-50 px-1 rounded">Manual</span>
                                           </div>
                                       ) : (
-                                          <span className="text-[9px] text-slate-300 font-bold uppercase">System Auto</span>
+                                          <span className="text-2xs text-slate-300 font-bold uppercase">System Auto</span>
                                       )}
                                   </td>
                                   <td className="px-6 py-4 text-right">
@@ -818,14 +842,14 @@ const AttendanceRegister: React.FC = () => {
       )}
 
       {isEditSummaryModalOpen && editingSummary && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500] animate-in fade-in duration-300">
-              <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col border border-slate-300">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-modal animate-in fade-in duration-300">
+              <div className="bg-white rounded-card w-full max-w-lg shadow-2xl overflow-hidden flex flex-col border border-slate-300">
                   <div className="px-10 py-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
                       <div className="flex items-center space-x-4">
                           <div className="p-3 bg-blue-600 rounded-2xl shadow-lg"><FileText size={24}/></div>
                           <div>
                               <h3 className="text-xl font-black uppercase tracking-tight">Manual Summary Entry</h3>
-                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Override Calculated Totals</p>
+                              <p className="text-2xs font-bold text-slate-400 uppercase tracking-widest mt-1">Override Calculated Totals</p>
                           </div>
                       </div>
                       <button onClick={() => setIsEditSummaryModalOpen(false)} className="hover:bg-white/10 p-2 rounded-full transition-colors"><X size={24}/></button>
@@ -839,16 +863,16 @@ const AttendanceRegister: React.FC = () => {
                       {/* Phase 2: Authorization Links */}
                       {(authorizedWaiveReqs.length > 0 || authorizedSkipReqs.length > 0) && (
                           <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl">
-                              <label className="text-[10px] font-black uppercase text-emerald-800 mb-2 block flex items-center gap-1"><ShieldCheck size={10}/> Link Authorization (Seth Approved)</label>
+                              <label className="text-2xs font-black uppercase text-emerald-800 mb-2 block flex items-center gap-1"><ShieldCheck size={10}/> Link Authorization (Seth Approved)</label>
                               <div className="grid grid-cols-2 gap-4">
                                   {authorizedWaiveReqs.length > 0 && (
-                                      <select className="bg-white border border-emerald-200 rounded-lg p-2 text-[10px] font-bold text-emerald-700 outline-none" onChange={(e) => applyRequisitionOverride(e.target.value, 'Waive Absent')}>
+                                      <select className="bg-white border border-emerald-200 rounded-lg p-2 text-2xs font-bold text-emerald-700 outline-none" onChange={(e) => applyRequisitionOverride(e.target.value, 'Waive Absent')}>
                                           <option value="">-- Apply Waiver --</option>
                                           {authorizedWaiveReqs.map(r => <option key={r.id} value={r.id}>{r.headerText} ({r.id})</option>)}
                                       </select>
                                   )}
                                   {authorizedSkipReqs.length > 0 && (
-                                      <select className="bg-white border border-emerald-200 rounded-lg p-2 text-[10px] font-bold text-emerald-700 outline-none" onChange={(e) => applyRequisitionOverride(e.target.value, 'Skip Installment')}>
+                                      <select className="bg-white border border-emerald-200 rounded-lg p-2 text-2xs font-bold text-emerald-700 outline-none" onChange={(e) => applyRequisitionOverride(e.target.value, 'Skip Installment')}>
                                           <option value="">-- Skip Loan --</option>
                                           {authorizedSkipReqs.map(r => <option key={r.id} value={r.id}>{r.headerText} ({r.id})</option>)}
                                       </select>
@@ -858,17 +882,17 @@ const AttendanceRegister: React.FC = () => {
                       )}
 
                       <div className="grid grid-cols-2 gap-6">
-                          <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Actual Manual Absents</label><input type="number" className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-lg outline-none focus:border-blue-500 transition-all text-slate-800" value={editingSummary.manualAbsent} onChange={e => setEditingSummary({...editingSummary, manualAbsent: Number(e.target.value)})} /></div>
-                          <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-emerald-600 ml-1">Allowed Absents (Seth)</label><input type="number" className="w-full p-4 bg-white border-2 border-emerald-50 rounded-2xl font-black text-lg outline-none focus:border-emerald-500 transition-all text-emerald-600" value={editingSummary.allowedAbsent} onChange={e => setEditingSummary({...editingSummary, allowedAbsent: Number(e.target.value)})} /></div>
+                          <div className="space-y-1.5"><label className="text-2xs font-black uppercase text-slate-400 ml-1">Actual Manual Absents</label><input type="number" className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-lg outline-none focus:border-blue-500 transition-all text-slate-800" value={editingSummary.manualAbsent} onChange={e => setEditingSummary({...editingSummary, manualAbsent: Number(e.target.value)})} /></div>
+                          <div className="space-y-1.5"><label className="text-2xs font-black uppercase text-emerald-600 ml-1">Allowed Absents (Seth)</label><input type="number" className="w-full p-4 bg-white border-2 border-emerald-50 rounded-2xl font-black text-lg outline-none focus:border-emerald-500 transition-all text-emerald-600" value={editingSummary.allowedAbsent} onChange={e => setEditingSummary({...editingSummary, allowedAbsent: Number(e.target.value)})} /></div>
                           
-                          <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-orange-600 ml-1">Sandwich Sundays (x2 Penalty)</label><input type="number" className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-lg outline-none focus:border-blue-500 transition-all text-orange-600" value={editingSummary.sunday} onChange={e => setEditingSummary({...editingSummary, sunday: Number(e.target.value)})} /></div>
+                          <div className="space-y-1.5"><label className="text-2xs font-black uppercase text-orange-600 ml-1">Sandwich Sundays (x2 Penalty)</label><input type="number" className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-lg outline-none focus:border-blue-500 transition-all text-orange-600" value={editingSummary.sunday} onChange={e => setEditingSummary({...editingSummary, sunday: Number(e.target.value)})} /></div>
                           
-                          <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Total OT Hours</label><input type="number" className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-lg outline-none focus:border-blue-500 transition-all text-indigo-700" value={editingSummary.ot} onChange={e => setEditingSummary({...editingSummary, ot: Number(e.target.value)})} /></div>
+                          <div className="space-y-1.5"><label className="text-2xs font-black uppercase text-slate-400 ml-1">Total OT Hours</label><input type="number" className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-lg outline-none focus:border-blue-500 transition-all text-indigo-700" value={editingSummary.ot} onChange={e => setEditingSummary({...editingSummary, ot: Number(e.target.value)})} /></div>
                           
-                          <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Total Lates</label><input type="number" className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-lg outline-none focus:border-blue-500 transition-all" value={editingSummary.lates} onChange={e => setEditingSummary({...editingSummary, lates: Number(e.target.value)})} /></div>
+                          <div className="space-y-1.5"><label className="text-2xs font-black uppercase text-slate-400 ml-1">Total Lates</label><input type="number" className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-lg outline-none focus:border-blue-500 transition-all" value={editingSummary.lates} onChange={e => setEditingSummary({...editingSummary, lates: Number(e.target.value)})} /></div>
                           
                           <div className="space-y-1.5 opacity-60">
-                              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Calculated Late Penalty</label>
+                              <label className="text-2xs font-black uppercase text-slate-400 ml-1">Calculated Late Penalty</label>
                               <div className="w-full p-4 bg-slate-100 border-2 border-slate-200 rounded-2xl font-black text-lg text-rose-400 flex items-center justify-between">
                                   <span>{Math.floor(editingSummary.lates / 3)} Days</span>
                                   <Calculator size={16} className="opacity-50"/>
@@ -889,18 +913,18 @@ const AttendanceRegister: React.FC = () => {
                                   <Ban size={20} className={editingSummary.hasActiveLoan ? "text-blue-500" : "text-slate-400"}/>
                                   <div>
                                       <p className={`text-xs font-black uppercase ${editingSummary.hasActiveLoan ? "text-slate-800" : "text-slate-500"}`}>Loan Recovery Control</p>
-                                      <p className="text-[9px] font-bold text-slate-400 uppercase">{editingSummary.hasActiveLoan ? "Set 0 to Skip Entire Deduction" : "No Active Loan"}</p>
+                                      <p className="text-2xs font-bold text-slate-400 uppercase">{editingSummary.hasActiveLoan ? "Set 0 to Skip Entire Deduction" : "No Active Loan"}</p>
                                   </div>
                               </div>
                               <div className="text-right">
-                                  <p className="text-[8px] font-black uppercase text-slate-400">System Calculated</p>
-                                  <p className="text-sm font-black text-slate-700">{(Number(editingSummary.systemLoanDeduction) || 0).toLocaleString()}</p>
+                                  <p className="text-2xs font-black uppercase text-slate-400">System Calculated</p>
+                                  <p className="text-sm font-black text-slate-700">{formatNumber(Number(editingSummary.systemLoanDeduction) || 0)}</p>
                               </div>
                           </div>
                           
                           <div className="grid grid-cols-2 gap-4">
                               <div className="space-y-1">
-                                  <label className="text-[9px] font-black uppercase text-blue-600">Authorized Repayment (PKR)</label>
+                                  <label className="text-2xs font-black uppercase text-blue-600">Authorized Repayment (PKR)</label>
                                   <input 
                                       type="number" 
                                       className="w-full p-3 bg-blue-50 border-2 border-blue-100 rounded-xl font-black text-blue-800 outline-none focus:border-blue-500"
@@ -910,7 +934,7 @@ const AttendanceRegister: React.FC = () => {
                                   />
                               </div>
                               <div className="space-y-1">
-                                  <label className="text-[9px] font-black uppercase text-slate-500 flex items-center gap-1"><FileKey size={10}/> Requisition Ref</label>
+                                  <label className="text-2xs font-black uppercase text-slate-500 flex items-center gap-1"><FileKey size={10}/> Requisition Ref</label>
                                   <input 
                                       type="text" 
                                       placeholder="e.g. REQ-102"

@@ -78,24 +78,6 @@ const VirtualPieceGrid = <T,>({
 
   const rowCount = Math.ceil(items.length / columnCount);
 
-  // ── Below threshold: plain render (no virt overhead) ────────────────
-  if (items.length <= threshold) {
-    return (
-      <div ref={containerRef} className={className}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-          {items.map((it, i) => (
-            <React.Fragment key={getKey(it)}>{cellRenderer(it, i)}</React.Fragment>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // ── Virtualised path ────────────────────────────────────────────────
-  // Cap viewport height so very long lists don't push the page footer
-  // off the bottom. Default = 70 vh.
-  const listHeightPx = maxHeightPx ?? Math.round(window.innerHeight * 0.7);
-
   // Row component for react-window v2 List — receives index + style.
   // Declared as a plain function (not React.FC) because the v2 type
   // signature wants `(props) => ReactElement` exactly, not a generic
@@ -129,6 +111,25 @@ const VirtualPieceGrid = <T,>({
     },
     [items, columnCount, cellRenderer, getKey]
   );
+
+  // Guard placed after hooks to keep hook order stable (react-hooks/rules-of-hooks)
+  // ── Below threshold: plain render (no virt overhead) ────────────────
+  if (items.length <= threshold) {
+    return (
+      <div ref={containerRef} className={className}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          {items.map((it, i) => (
+            <React.Fragment key={getKey(it)}>{cellRenderer(it, i)}</React.Fragment>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Virtualised path ────────────────────────────────────────────────
+  // Cap viewport height so very long lists don't push the page footer
+  // off the bottom. Default = 70 vh.
+  const listHeightPx = maxHeightPx ?? Math.round(window.innerHeight * 0.7);
 
   return (
     <div ref={containerRef} className={className} style={{ minHeight: 200 }}>

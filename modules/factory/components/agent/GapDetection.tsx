@@ -100,7 +100,7 @@ const GapDetection: React.FC = () => {
         priority:      form.priority,
         status:        'Backlog',
         module:        form.module,
-        reported_by:   form.reported_by || user?.name || 'Hassan',
+        reported_by:   form.reported_by || user?.fullName || 'Hassan',
         request_count: 1,
         first_seen_at: new Date().toISOString(),
         last_seen_at:  new Date().toISOString(),

@@ -23,6 +23,8 @@ import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { allocateSerial } from '@/modules/sales/services/serialAllocator';
 import { reverseDeliveryCOGS } from '@/modules/procurement/services/glasscoGLService';
 import { errMsg } from '@/modules/shared/services/utils';
+import { Logger } from '@/modules/shared/services/logger';
+import { toast } from 'sonner';
 
 // ── CreditNote record type ────────────────────────────────────────────────────
 // GAP-07: Maker-Checker. A CN starts as 'Pending Approval' (no GL impact) and
@@ -47,6 +49,11 @@ export interface CreditNote {
   rejectedBy?: string;
   rejectedAt?: string;
   rejectionReason?: string;
+  /** P1-08: set when the GL reversal posted but the COGS wind-back failed.
+   *  Finance must manually post the COGS reversal — gross profit is overstated
+   *  until they do. Surfaced as a badge on the finance dashboard. */
+  cogsReversalPending?: boolean;
+  cogsReversalError?:   string;
 }
 
 // ── Sequential CN numbering (Phase-2: atomic via Postgres allocate_serial) ──
@@ -110,12 +117,9 @@ export async function issueCreditNote(params: {
   if (amount <= 0)              throw new Error('Credit note amount must be positive.');
   if (amount > invoice.balance) throw new Error(`Amount (${amount}) exceeds outstanding balance (${invoice.balance}).`);
 
-  const today = new Date().toISOString().split('T')[0];
-
   // Allocate the sequential CN number (atomic via Postgres allocate_serial).
-  // Was previously referenced but never assigned → ReferenceError crashed every
-  // credit-note issuance. P0.
-  const cnId = await getNextCNNumber(company);
+  const cnId  = await getNextCNNumber(company);
+  const today = new Date().toISOString().split('T')[0];
 
   // Persist the pending CN first — GL only posts after approval.
   const pendingCN: CreditNote = {
@@ -188,17 +192,39 @@ export async function approveCreditNote(params: {
     );
   }
 
-  // AR account = the debit side of the original invoice GL
-  const arDetail = origTx.details?.find(d => d.debit > 0);
-  const revDetail = origTx.details?.find(d => d.credit > 0);
+  // ── Derive AR / Revenue / GST lines from the original invoice GL ──────────
+  // Original invoice GL (deliveryInvoiceService) posts:
+  //   Dr AR (grandTotal) / Cr Revenue (net) / Cr GST Payable (gst)
+  // P1-24: the CN must reverse GST Payable too, otherwise it stays overstated
+  // forever after any CN on a GST-inclusive invoice. The CN `amount` is
+  // GST-inclusive (it reduces the GST-inclusive balance), so we split it
+  // proportionally between revenue and GST while keeping AR reduction = amount
+  // exactly — this guarantees the entry balances AND keeps the AR sub-ledger
+  // aligned with the invoice balance reduction posted below.
+  const arDetail  = origTx.details?.find(d => d.debit > 0);
+  const gstDetail = origTx.details?.find(d => d.credit > 0 && /GST/i.test(d.text || ''));
+  const revDetail = origTx.details?.find(d => d.credit > 0 && !/GST/i.test(d.text || ''));
   if (!arDetail || !revDetail) {
     throw new Error(
       `Original invoice GL "${invoice.glTxId}" is malformed — missing debit or ` +
       `credit line. Cannot derive AR/Revenue accounts for credit note.`
     );
   }
-  const arAccId  = arDetail.accountId;
-  const revAccId = revDetail.accountId;
+
+  const invGst   = Number((invoice as any).gstAmount) || 0;
+  const invGrand = Number(invoice.totalAmount) || amount;
+  const gstReversal = (invGst > 0 && invGrand > 0 && gstDetail)
+    ? Math.round(amount * invGst / invGrand)
+    : 0;
+  const revReversal = amount - gstReversal;   // remainder → entry always balances
+
+  const reversalDetails: { accountId: string; debit: number; credit: number; text: string }[] = [
+    { accountId: revDetail.accountId, debit: revReversal, credit: 0, text: `Revenue reversal: ${cnId}` },
+  ];
+  if (gstReversal > 0 && gstDetail) {
+    reversalDetails.push({ accountId: gstDetail.accountId, debit: gstReversal, credit: 0, text: `GST reversal: ${cnId}` });
+  }
+  reversalDetails.push({ accountId: arDetail.accountId, debit: 0, credit: amount, text: `AR reduction: ${invoice.clientName}` });
 
   // ── Post reversing GL ─────────────────────────────────────────────────────
   FinanceService.recordTransaction({
@@ -207,10 +233,7 @@ export async function approveCreditNote(params: {
     description: `CREDIT NOTE ${cnId}: ${invoice.clientName} — ${reason}`,
     referenceId: invoice.id,
     status: 'Posted',
-    details: [
-      { accountId: revAccId, debit: amount,  credit: 0,      text: `Revenue reversal: ${cnId}` },
-      { accountId: arAccId,  debit: 0,       credit: amount, text: `AR reduction: ${invoice.clientName}` },
-    ],
+    details: reversalDetails,
   });
 
   // ── Reduce invoice balance ────────────────────────────────────────────────
@@ -250,8 +273,16 @@ export async function approveCreditNote(params: {
       reason: `CN ${cnId}`,
       reversalSuffix: cnId,
     });
-  } catch (e: unknown) {
-    console.warn(`[approveCreditNote] COGS reversal skipped for ${cnId}: ${errMsg(e)}`);
+  } catch (cogsErr: unknown) {
+    // P1-08: revenue/AR reversal is already committed, but the COGS wind-back
+    // failed. Do NOT swallow — gross profit is overstated until a human posts
+    // the COGS reversal. Flag the CN for the finance dashboard + alert now.
+    const msg = errMsg(cogsErr);
+    Logger.error('CreditNote', `COGS reversal failed for ${cnId}`, cogsErr);
+    toast.error(`Credit note ${cnId} posted, but COGS reversal failed — finance review required.`, { duration: 8000 });
+    approvedCN.cogsReversalPending = true;
+    approvedCN.cogsReversalError   = msg;
+    persistCreditNote(company, approvedCN);
   }
 
   // ── Financial Event ───────────────────────────────────────────────────────
@@ -331,6 +362,22 @@ export async function voidInvoice(params: {
         text:   `VOID ${d.text}`,
       })),
     });
+  } else {
+    // P2-23: origTx not found in the ledger cache. We still proceed with the
+    // void (the invoice must be taken off the books — it likely has bad/missing
+    // GL and leaving it Outstanding overstates AR), but the revenue/AR reversal
+    // could NOT be posted automatically. Surface loudly so Finance posts a
+    // manual reversal JV — without this signal a void could mark the invoice
+    // Voided while revenue stays recognised.
+    Logger.error(
+      'CreditNote',
+      `Void of ${invoice.id}: original GL "${invoice.glTxId}" not found — reversal NOT posted automatically`,
+      undefined
+    );
+    toast.error(
+      `Invoice ${invoice.id} voided, but its GL entry was not found — post the AR/Revenue reversal manually.`,
+      { duration: 8000 }
+    );
   }
 
   // ── Phase-3 (3.6): also reverse the COGS entry (full 100%) ──
@@ -344,8 +391,10 @@ export async function voidInvoice(params: {
       reason: `Void by ${voidedBy}`,
       reversalSuffix: voidId,
     });
-  } catch (e: unknown) {
-    console.warn(`[voidInvoice] COGS reversal skipped for ${invoice.id}: ${errMsg(e)}`);
+  } catch (cogsErr: unknown) {
+    // P1-08: GL reversal committed but COGS wind-back failed — alert, don't swallow.
+    Logger.error('CreditNote', `COGS reversal failed on void of ${invoice.id}`, cogsErr);
+    toast.error(`Invoice ${invoice.id} voided, but COGS reversal failed — finance review required.`, { duration: 8000 });
   }
 
   // ── Mark invoice Voided (preserve prior status for restore) ──────────────

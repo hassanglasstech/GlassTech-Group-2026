@@ -74,7 +74,7 @@ const HSEModule: React.FC = () => {
       .from('hse_incidents')
       .insert({
         ...form,
-        reported_by: user?.name || 'Incharge',
+        reported_by: user?.fullName || 'Incharge',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -97,7 +97,7 @@ const HSEModule: React.FC = () => {
           severity:    form.severity,
           description: form.description,
           location:    form.location,
-          reportedBy:  user?.name || 'Incharge',
+          reportedBy:  user?.fullName || 'Incharge',
         },
       }).catch((err: Error) => {
         // Non-blocking: log but never suppress the incident save

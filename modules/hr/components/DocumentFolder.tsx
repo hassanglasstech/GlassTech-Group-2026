@@ -3,6 +3,7 @@ import { EmployeeDoc, DocType, Employee } from '../types/hr';
 import { EmployeeDocService, DOC_TYPE_META } from '../services/employeeDocService';
 import { Upload, Trash2, Calendar, AlertTriangle, CheckCircle2, Clock, Eye, X, FileText, Camera, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 interface DocumentFolderProps {
   employee: Employee;
@@ -82,7 +83,7 @@ const DocumentFolder: React.FC<DocumentFolderProps> = ({ employee, onPhotoChange
   };
 
   const handleDelete = async (doc: EmployeeDoc) => {
-    if (!confirm(`Delete ${DOC_TYPE_META[doc.docType].label}?`)) return;
+    if (!await confirmModal(`Delete ${DOC_TYPE_META[doc.docType].label}?`)) return;
     try {
       await EmployeeDocService.delete(doc.id);
       await refreshDocs();
@@ -101,7 +102,7 @@ const DocumentFolder: React.FC<DocumentFolderProps> = ({ employee, onPhotoChange
   const getStatusBadge = (doc: EmployeeDoc) => {
     if (doc.status === 'expired') {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-red-50 text-red-700 border border-red-100">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-black uppercase bg-red-50 text-red-700 border border-red-100">
           <AlertTriangle size={10} /> Expired
         </span>
       );
@@ -110,14 +111,14 @@ const DocumentFolder: React.FC<DocumentFolderProps> = ({ employee, onPhotoChange
       const daysLeft = Math.ceil((new Date(doc.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
       if (daysLeft <= 30) {
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-100">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-black uppercase bg-amber-50 text-amber-700 border border-amber-100">
             <Clock size={10} /> {daysLeft}d left
           </span>
         );
       }
     }
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-100">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-100">
         <CheckCircle2 size={10} /> Valid
       </span>
     );
@@ -144,7 +145,7 @@ const DocumentFolder: React.FC<DocumentFolderProps> = ({ employee, onPhotoChange
           <div className="flex items-center space-x-3">
             <FileText size={18} className="text-slate-400" />
             <span className="text-sm font-black text-slate-800 uppercase tracking-tight">Document completeness</span>
-            <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-blue-50 text-blue-700 border border-blue-100">Supabase</span>
+            <span className="px-2 py-0.5 rounded-full text-2xs font-black bg-blue-50 text-blue-700 border border-blue-100">Supabase</span>
           </div>
           <span className={`text-lg font-black ${completeness === 100 ? 'text-emerald-600' : completeness >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
             {completeness}%
@@ -158,10 +159,10 @@ const DocumentFolder: React.FC<DocumentFolderProps> = ({ employee, onPhotoChange
         </div>
         {missingDocs.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
-            <span className="text-[10px] font-bold text-red-600 uppercase mr-1">Missing:</span>
+            <span className="text-2xs font-bold text-red-600 uppercase mr-1">Missing:</span>
             {missingDocs.map(dt => (
               <button key={dt} onClick={() => triggerUpload(dt)}
-                className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-100 hover:bg-red-100 transition-colors cursor-pointer">
+                className="px-2 py-0.5 rounded-full text-2xs font-bold bg-red-50 text-red-700 border border-red-100 hover:bg-red-100 transition-colors cursor-pointer">
                 {DOC_TYPE_META[dt].label}
               </button>
             ))}
@@ -202,7 +203,7 @@ const DocumentFolder: React.FC<DocumentFolderProps> = ({ employee, onPhotoChange
                       </div>
                     )}
                     <div className="flex justify-between items-center">
-                      <span className="text-[10px] font-bold text-slate-400">Uploaded: {doc.uploadedAt}</span>
+                      <span className="text-2xs font-bold text-slate-400">Uploaded: {doc.uploadedAt}</span>
                       <div className="flex items-center gap-1">
                         {isImage(doc.fileUrl) && (
                           <button onClick={() => setPreviewUrl(doc.fileUrl)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Preview"><Eye size={14} /></button>
@@ -215,7 +216,7 @@ const DocumentFolder: React.FC<DocumentFolderProps> = ({ employee, onPhotoChange
                       <div className="flex items-center gap-2">
                         <Calendar size={12} className="text-slate-400" />
                         <input type="date"
-                          className="flex-1 text-[11px] font-bold bg-slate-50 border border-slate-200 px-2 py-1 rounded-lg outline-none focus:ring-1 focus:ring-blue-400"
+                          className="flex-1 text-2xs font-bold bg-slate-50 border border-slate-200 px-2 py-1 rounded-lg outline-none focus:ring-1 focus:ring-blue-400"
                           value={doc.expiryDate || ''}
                           onChange={e => handleExpiryUpdate(doc.id, e.target.value)} />
                       </div>
@@ -231,14 +232,14 @@ const DocumentFolder: React.FC<DocumentFolderProps> = ({ employee, onPhotoChange
                     ) : (
                       <Upload size={24} className="group-hover:scale-110 transition-transform" />
                     )}
-                    <span className="text-[10px] font-black uppercase tracking-widest">
+                    <span className="text-2xs font-black uppercase tracking-widest">
                       {isUploading ? 'Uploading to Supabase...' : `Upload ${meta.label}`}
                     </span>
                     {meta.hasExpiry && !isUploading && (
                       <div className="mt-2 flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                        <span className="text-[9px] font-bold text-slate-400">Expiry:</span>
+                        <span className="text-2xs font-bold text-slate-400">Expiry:</span>
                         <input type="date"
-                          className="text-[10px] font-bold bg-white border border-slate-200 px-2 py-1 rounded-lg outline-none focus:ring-1 focus:ring-blue-400 text-slate-600"
+                          className="text-2xs font-bold bg-white border border-slate-200 px-2 py-1 rounded-lg outline-none focus:ring-1 focus:ring-blue-400 text-slate-600"
                           value={expiryInput[docType] || ''}
                           onChange={e => setExpiryInput(prev => ({ ...prev, [docType]: e.target.value }))}
                           onClick={e => e.stopPropagation()} />
@@ -254,7 +255,7 @@ const DocumentFolder: React.FC<DocumentFolderProps> = ({ employee, onPhotoChange
 
       {/* Image Preview Modal */}
       {previewUrl && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 z-[600]"
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 z-popover"
           onClick={() => setPreviewUrl(null)}>
           <div className="relative max-w-3xl max-h-[85vh]" onClick={e => e.stopPropagation()}>
             <button onClick={() => setPreviewUrl(null)}

@@ -65,18 +65,6 @@ const DRConsole: React.FC = () => {
   const company = useAppStore(s => s.selectedCompany) as string;
 
   const ALLOWED = new Set(['super_admin', 'owner', 'hassan', 'admin', 'glassco_admin']);
-  if (!user) return <Navigate to="/" replace/>;
-  if (!ALLOWED.has(user.role || '')) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
-        <div className="text-center">
-          <AlertTriangle size={36} className="mx-auto text-amber-500 mb-3"/>
-          <p className="text-sm font-bold text-slate-700">DR Console requires admin / owner role.</p>
-          <p className="text-xs text-slate-400 mt-2">Your role: <span className="font-mono">{user.role}</span></p>
-        </div>
-      </div>
-    );
-  }
 
   const [health, setHealth]       = useState<SnapshotHealthRow[]>([]);
   const [snapshots, setSnapshots] = useState<SnapshotIndexRow[]>([]);
@@ -183,6 +171,20 @@ const DRConsole: React.FC = () => {
     const stale      = health.filter(h => h.health === 'stale').length;
     return { totalSnaps, totalBytes, stale };
   }, [health]);
+
+  // Guards placed after hooks to keep hook order stable (react-hooks/rules-of-hooks)
+  if (!user) return <Navigate to="/" replace/>;
+  if (!ALLOWED.has(user.role || '')) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
+        <div className="text-center">
+          <AlertTriangle size={36} className="mx-auto text-amber-500 mb-3"/>
+          <p className="text-sm font-bold text-slate-700">DR Console requires admin / owner role.</p>
+          <p className="text-xs text-slate-400 mt-2">Your role: <span className="font-mono">{user.role}</span></p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 p-5 max-w-7xl mx-auto">

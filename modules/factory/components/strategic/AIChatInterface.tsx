@@ -378,7 +378,7 @@ ${erpCtx}`;
         <div className="flex items-center gap-2">
           {messages.length > 0 && (
             <span className="text-[9px] text-slate-600 font-mono">
-              {getSessionUsage().calls}calls {getSessionUsage().input + getSessionUsage().output}tok ~${getSessionUsage().cost.toFixed(4)}
+              {getSessionUsage().calls}calls {getSessionUsage().input + getSessionUsage().output}tok ~${getSessionUsage().costUsd.toFixed(4)}
             </span>
           )}
           <button onClick={loadCtx} disabled={ctxLoading}

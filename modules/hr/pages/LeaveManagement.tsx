@@ -16,11 +16,14 @@ import { HRService } from '@/modules/hr/services/hrService';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { supabase } from '@/src/services/supabaseClient';
 import { Logger } from '@/modules/shared/services/logger';
+import { formatDate } from '@/modules/shared/utils/format';
 import {
-  CalendarDays, Plus, X, CheckCircle2, XCircle,
-  Clock, User, ChevronDown, Filter
+  CalendarDays, Plus, X, CheckCircle2, XCircle, Layers,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { KpiTile, KpiRow } from '@/modules/shared/components/KpiTile';
+import { StatusBadge } from '@/modules/shared/components/StatusBadge';
+import { EmptyState } from '@/modules/shared/components/EmptyState';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -120,13 +123,6 @@ const daysBetween = (from: string, to: string): number => {
     cur.setDate(cur.getDate() + 1);
   }
   return Math.max(1, count);
-};
-
-const STATUS_STYLES: Record<LeaveStatus, string> = {
-  Pending:   'bg-amber-100 text-amber-700',
-  Approved:  'bg-emerald-100 text-emerald-700',
-  Rejected:  'bg-rose-100 text-rose-700',
-  Cancelled: 'bg-slate-100 text-slate-500',
 };
 
 const TYPE_COLOR: Record<LeaveType, string> = {
@@ -267,62 +263,58 @@ const LeaveManagement: React.FC<{ company: Company }> = ({ company }) => {
     return list.sort((a, b) => b.appliedAt.localeCompare(a.appliedAt));
   }, [applications, filterStatus, selectedEmp]);
 
-  const pending = applications.filter(a => a.status === 'Pending').length;
+  const pending  = applications.filter(a => a.status === 'Pending').length;
+  const approved = applications.filter(a => a.status === 'Approved').length;
+  const rejected = applications.filter(a => a.status === 'Rejected').length;
 
   // Selected employee balance
-  const empBalance = selectedEmp
-    ? useLeaveBalance(applications, selectedEmp)
-    : null;
+  // Hook called unconditionally to keep hook order stable (react-hooks/rules-of-hooks);
+  // result gated on selectedEmp instead of the call itself.
+  const empBalanceAll = useLeaveBalance(applications, selectedEmp || '');
+  const empBalance = selectedEmp ? empBalanceAll : null;
 
   return (
-    <div className="space-y-5 animate-in fade-in duration-300">
+    <div className="space-y-4 animate-in fade-in duration-300">
 
-      {/* Header */}
-      <div className="bg-slate-900 text-white p-8 rounded-[2rem] shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-8 opacity-10"><CalendarDays size={120}/></div>
-        <div className="flex justify-between items-start relative z-10">
-          <div>
-            
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{company} — Apply, Approve, Balance Track</p>
-          </div>
-          <div className="flex gap-8 text-right">
-            <div><p className="text-[9px] font-bold text-amber-400 uppercase">Pending</p><p className="text-3xl font-black text-amber-400">{pending}</p></div>
-            <div><p className="text-[9px] font-bold text-slate-400 uppercase">Total Apps</p><p className="text-3xl font-black">{applications.length}</p></div>
-          </div>
-        </div>
-      </div>
+      {/* ── KPI row ── */}
+      <KpiRow>
+        <KpiTile label="Total Apps" value={applications.length} icon={<Layers size={16} />} tone="primary" />
+        <KpiTile label="Pending" value={pending} icon={<CalendarDays size={16} />} tone="warning" hint="awaiting review" />
+        <KpiTile label="Approved" value={approved} icon={<CheckCircle2 size={16} />} tone="success" />
+        <KpiTile label="Rejected" value={rejected} icon={<XCircle size={16} />} tone="danger" />
+      </KpiRow>
 
-      {/* Controls */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)} className="sap-input font-bold text-xs">
-          <option value="All">All Status</option>
-          {(['Pending','Approved','Rejected','Cancelled'] as LeaveStatus[]).map(s => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-        <select value={selectedEmp || ''} onChange={e => setSelectedEmp(e.target.value || null)} className="sap-input font-bold text-xs">
-          <option value="">All Employees</option>
-          {employees.map(e => <option key={e.id} value={e.id}>{e.personal?.name}</option>)}
-        </select>
-        <div className="ml-auto">
-          <button onClick={() => setShowForm(true)} className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl font-black uppercase text-xs hover:bg-blue-700 shadow-lg">
-            <Plus size={14}/> Apply Leave
-          </button>
+      {/* ── Toolbar: filters + apply ── */}
+      <div className="flex items-center justify-between gap-3 no-print">
+        <div className="flex items-center gap-3">
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)} className="sap-input font-bold text-xs">
+            <option value="All">All Status</option>
+            {(['Pending','Approved','Rejected','Cancelled'] as LeaveStatus[]).map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <select value={selectedEmp || ''} onChange={e => setSelectedEmp(e.target.value || null)} className="sap-input font-bold text-xs">
+            <option value="">All Employees</option>
+            {employees.map(e => <option key={e.id} value={e.id}>{e.personal?.name}</option>)}
+          </select>
         </div>
+        <button onClick={() => setShowForm(true)} className="sap-btn-primary flex items-center gap-2 shrink-0">
+          <Plus size={14}/> <span>Apply Leave</span>
+        </button>
       </div>
 
       {/* Employee balance strip */}
       {selectedEmp && empBalance && (
-        <div className="bg-white rounded-2xl border shadow-sm p-5">
-          <p className="text-[10px] font-black uppercase text-slate-400 mb-3">
+        <div className="bg-white rounded-card border shadow-sm p-5">
+          <p className="text-2xs font-black uppercase text-slate-400 mb-3">
             Leave Balance — {employees.find(e => e.id === selectedEmp)?.personal?.name} ({new Date().getFullYear()})
           </p>
           <div className="flex gap-4 flex-wrap">
             {(Object.entries(empBalance) as [LeaveType, number][]).map(([type, remaining]) => (
               <div key={type} className={`px-4 py-2 rounded-xl text-center min-w-[90px] ${TYPE_COLOR[type]}`}>
                 <p className="text-lg font-black">{remaining}</p>
-                <p className="text-[9px] font-black uppercase">{type}</p>
-                <p className="text-[8px] opacity-60">of {ENTITLEMENTS[type]}</p>
+                <p className="text-2xs font-black uppercase">{type}</p>
+                <p className="text-2xs opacity-60">of {ENTITLEMENTS[type]}</p>
               </div>
             ))}
           </div>
@@ -330,9 +322,9 @@ const LeaveManagement: React.FC<{ company: Company }> = ({ company }) => {
       )}
 
       {/* Applications Table */}
-      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+      <div className="bg-white rounded-card border shadow-sm overflow-hidden">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400 tracking-widest">
+          <thead className="bg-slate-50 border-b text-2xs font-black uppercase text-slate-400 tracking-widest">
             <tr>
               <th className="px-5 py-3 text-left">Application ID</th>
               <th className="px-5 py-3 text-left">Employee</th>
@@ -347,27 +339,40 @@ const LeaveManagement: React.FC<{ company: Company }> = ({ company }) => {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filtered.length === 0 && (
-              <tr><td colSpan={9} className="py-12 text-center text-slate-300 font-bold uppercase text-xs italic">No leave applications found.</td></tr>
+              <tr>
+                <td colSpan={isManager ? 9 : 8} className="p-0">
+                  <EmptyState
+                    icon={<CalendarDays size={22} />}
+                    title={applications.length === 0 ? 'No leave applications yet' : 'No applications match these filters'}
+                    description={applications.length === 0
+                      ? 'Apply for leave to start the approval workflow.'
+                      : 'Try a different status or employee.'}
+                    action={applications.length === 0
+                      ? { label: 'Apply Leave', icon: <Plus size={14} />, onClick: () => setShowForm(true) }
+                      : undefined}
+                  />
+                </td>
+              </tr>
             )}
             {filtered.map(a => (
               <tr key={a.id} className="hover:bg-slate-50">
                 <td className="px-5 py-3 font-black text-blue-600">{a.id}</td>
                 <td className="px-5 py-3 font-bold text-slate-800">{a.employeeName}</td>
                 <td className="px-5 py-3">
-                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${TYPE_COLOR[a.type]}`}>{a.type}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-2xs font-black ${TYPE_COLOR[a.type]}`}>{a.type}</span>
                 </td>
-                <td className="px-5 py-3 text-slate-600">{a.from}</td>
-                <td className="px-5 py-3 text-slate-600">{a.to}</td>
+                <td className="px-5 py-3 text-slate-600">{formatDate(a.from)}</td>
+                <td className="px-5 py-3 text-slate-600">{formatDate(a.to)}</td>
                 <td className="px-5 py-3 text-center font-black text-slate-900">{a.days}</td>
                 <td className="px-5 py-3 text-slate-500 max-w-[160px] truncate">{a.reason}</td>
                 <td className="px-5 py-3 text-center">
-                  <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${STATUS_STYLES[a.status]}`}>{a.status}</span>
+                  <StatusBadge status={a.status} size="sm" />
                 </td>
                 {isManager && (
                   <td className="px-5 py-3 text-center">
                     {a.status === 'Pending' && (
                       <button onClick={() => { setReviewModal(a); setReviewNote(''); }}
-                        className="px-3 py-1.5 bg-slate-900 text-white rounded-lg text-[9px] font-black uppercase hover:bg-slate-700">
+                        className="px-3 py-1.5 bg-slate-900 text-white rounded-lg text-2xs font-black uppercase hover:bg-slate-700">
                         Review
                       </button>
                     )}
@@ -381,15 +386,15 @@ const LeaveManagement: React.FC<{ company: Company }> = ({ company }) => {
 
       {/* Apply Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-[400]">
-          <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-modalLow">
+          <div className="bg-white rounded-card w-full max-w-lg shadow-2xl overflow-hidden">
             <div className="px-8 py-6 bg-blue-700 text-white flex justify-between items-center">
               <h3 className="text-lg font-black uppercase">Apply for Leave</h3>
               <button onClick={() => setShowForm(false)}><X size={20}/></button>
             </div>
             <div className="p-8 space-y-4 bg-slate-50">
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">Employee</label>
+                <label className="text-2xs font-black uppercase text-slate-400 block mb-1">Employee</label>
                 <select value={form.employeeId} onChange={e => setForm(f => ({ ...f, employeeId: e.target.value }))} className="sap-input w-full font-bold">
                   <option value="">Select employee</option>
                   {employees.map(e => <option key={e.id} value={e.id}>{e.personal?.name} — {e.work?.designation}</option>)}
@@ -397,7 +402,7 @@ const LeaveManagement: React.FC<{ company: Company }> = ({ company }) => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">Leave Type</label>
+                  <label className="text-2xs font-black uppercase text-slate-400 block mb-1">Leave Type</label>
                   <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value as LeaveType }))} className="sap-input w-full font-bold">
                     {(Object.keys(ENTITLEMENTS) as LeaveType[]).map(t => (
                       <option key={t} value={t}>{t} ({ENTITLEMENTS[t]} days/year)</option>
@@ -412,16 +417,16 @@ const LeaveManagement: React.FC<{ company: Company }> = ({ company }) => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">From Date</label>
+                  <label className="text-2xs font-black uppercase text-slate-400 block mb-1">From Date</label>
                   <input type="date" value={form.from} onChange={e => setForm(f => ({ ...f, from: e.target.value }))} className="sap-input w-full font-bold"/>
                 </div>
                 <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">To Date</label>
+                  <label className="text-2xs font-black uppercase text-slate-400 block mb-1">To Date</label>
                   <input type="date" value={form.to} onChange={e => setForm(f => ({ ...f, to: e.target.value }))} className="sap-input w-full font-bold"/>
                 </div>
               </div>
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">Reason</label>
+                <label className="text-2xs font-black uppercase text-slate-400 block mb-1">Reason</label>
                 <textarea value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} rows={3}
                   className="sap-input w-full font-bold resize-none" placeholder="Wajah likho..."/>
               </div>
@@ -436,22 +441,22 @@ const LeaveManagement: React.FC<{ company: Company }> = ({ company }) => {
 
       {/* Review Modal */}
       {reviewModal && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-[400]">
-          <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-modalLow">
+          <div className="bg-white rounded-card w-full max-w-md shadow-2xl overflow-hidden">
             <div className="px-8 py-6 bg-slate-900 text-white flex justify-between items-center">
               <div>
                 <h3 className="text-lg font-black uppercase">Review Leave</h3>
-                <p className="text-[10px] text-slate-400 uppercase">{reviewModal.employeeName} — {reviewModal.type} — {reviewModal.days} days</p>
+                <p className="text-2xs text-slate-400 uppercase">{reviewModal.employeeName} — {reviewModal.type} — {reviewModal.days} days</p>
               </div>
               <button onClick={() => setReviewModal(null)}><X size={20}/></button>
             </div>
             <div className="p-8 bg-slate-50 space-y-4">
               <div className="bg-white p-4 rounded-xl border text-sm">
-                <p className="font-black text-slate-700">{reviewModal.from} → {reviewModal.to}</p>
+                <p className="font-black text-slate-700">{formatDate(reviewModal.from)} → {formatDate(reviewModal.to)}</p>
                 <p className="text-slate-500 mt-1">{reviewModal.reason}</p>
               </div>
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">Review Note (optional)</label>
+                <label className="text-2xs font-black uppercase text-slate-400 block mb-1">Review Note (optional)</label>
                 <textarea value={reviewNote} onChange={e => setReviewNote(e.target.value)} rows={2}
                   className="sap-input w-full font-bold resize-none" placeholder="Note add karo..."/>
               </div>

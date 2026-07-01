@@ -367,7 +367,7 @@ const FactoryInchargeModule: React.FC = () => {
           <FactoryEventForm
             sector={activeSector!}
             eventTypes={sConfig.events}
-            loggedBy={user?.name || 'Incharge'}
+            loggedBy={user?.fullName || 'Incharge'}
             onSaved={() => { setShowEventForm(false); loadEvents(); }}
             onCancel={() => setShowEventForm(false)}
           />

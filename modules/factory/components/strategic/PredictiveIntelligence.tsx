@@ -193,7 +193,7 @@ const PredictiveIntelligence: React.FC = () => {
                         </div>
                         <div className="font-bold text-white text-sm">{s.title}</div>
                       </div>
-                      <span className={`text-xs font-bold shrink-0 ${SEVERITY_COLOR[s.severity] || ''}`}>{s.severity}</span>
+                      <span className={`text-xs font-bold shrink-0 ${SEVERITY_COLOR[s.severity as keyof typeof SEVERITY_COLOR] || ''}`}>{s.severity}</span>
                     </div>
                     <p className="text-xs text-slate-400">{s.description}</p>
                     <div className="flex items-center justify-between">

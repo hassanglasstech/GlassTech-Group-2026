@@ -45,7 +45,7 @@ const ConfirmationCard: React.FC<Props> = ({ toolCalls, onAllDone, onReject }) =
 
     for (const tc of toolCalls) {
       const params = editId === tc.id ? editParams : tc.params;
-      const res = await executeTool(tc.name, params, user?.name || 'Hassan');
+      const res = await executeTool(tc.name, params, user?.fullName || 'Hassan');
       if (res.success) newResults[tc.id] = res.result;
       else             newErrors[tc.id]  = res.error || 'Failed';
     }

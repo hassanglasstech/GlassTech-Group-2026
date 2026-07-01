@@ -26,8 +26,8 @@ export default function ChangePasswordPage() {
   const [done,         setDone]         = useState(false);
 
   const handleSubmit = async () => {
-    if (newPw.length < 6) {
-      toast.error('Password kam se kam 6 chars ka hona chahiye');
+    if (newPw.length < 8) {
+      toast.error('Password kam se kam 8 chars ka hona chahiye');
       return;
     }
     if (newPw !== confirmPw) {
@@ -90,7 +90,7 @@ export default function ChangePasswordPage() {
               type={showNew ? 'text' : 'password'}
               value={newPw}
               onChange={e => setNewPw(e.target.value)}
-              placeholder="Naya password (min 6 chars)"
+              placeholder="Naya password (min 8 chars)"
               className="w-full px-3 py-2.5 pr-10 border border-slate-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none"
               autoFocus
             />
@@ -133,7 +133,7 @@ export default function ChangePasswordPage() {
           <p>Admin (Hassan) aap ka password dekh nahi sakte. Agar aap bhul gaye to admin se reset karwana parega.</p>
         </div>
 
-        <button onClick={handleSubmit} disabled={busy || newPw.length < 6 || newPw !== confirmPw}
+        <button onClick={handleSubmit} disabled={busy || newPw.length < 8 || newPw !== confirmPw}
           className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white py-3 rounded-xl text-sm font-black uppercase tracking-widest transition-all shadow-sm">
           {busy ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
           {busy ? 'Updating...' : 'Update Password'}

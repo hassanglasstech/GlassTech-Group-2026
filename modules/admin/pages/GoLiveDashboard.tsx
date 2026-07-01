@@ -233,18 +233,6 @@ const GoLiveDashboard: React.FC = () => {
   const user       = useAuthStore(s => s.user);
   const appCompany = useAppStore(s => s.selectedCompany);
 
-  if (!user) return <Navigate to="/" replace />;
-  if (!ALLOWED.has(user.role || '')) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <div className="text-center">
-          <AlertTriangle size={36} className="mx-auto text-amber-500 mb-3" />
-          <p className="text-sm font-bold text-slate-700">Go-Live Dashboard requires admin / owner role.</p>
-        </div>
-      </div>
-    );
-  }
-
   const [company, setCompany]   = useState<string>(appCompany || 'Glassco');
   const [results, setResults]   = useState<CheckResult[]>([]);
   const [summary, setSummary]   = useState<SummaryRow | null>(null);
@@ -271,6 +259,19 @@ const GoLiveDashboard: React.FC = () => {
   }, [company]);
 
   useEffect(() => { loadLatest(); }, [loadLatest]);
+
+  // Guards placed after hooks to keep hook order stable (react-hooks/rules-of-hooks)
+  if (!user) return <Navigate to="/" replace />;
+  if (!ALLOWED.has(user.role || '')) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+        <div className="text-center">
+          <AlertTriangle size={36} className="mx-auto text-amber-500 mb-3" />
+          <p className="text-sm font-bold text-slate-700">Go-Live Dashboard requires admin / owner role.</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleRunChecks = async () => {
     setRunning(true);

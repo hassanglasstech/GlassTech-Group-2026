@@ -128,7 +128,7 @@ export const generateDevPrompt = async (params: {
     priority:          prompt.priority,
     reported_by:       params.reported_by || 'Owner',
     created_at:        now,
-  }).catch(() => {});
+  }).then(undefined, () => {});
 
   return prompt;
 };

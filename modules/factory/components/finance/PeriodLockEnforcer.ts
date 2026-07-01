@@ -91,5 +91,5 @@ const logPeriodViolation = async (
     action:    'period_violation_attempt',
     details:   { period, detail, timestamp: new Date().toISOString() },
     timestamp: new Date().toISOString(),
-  }).catch(() => {});
+  }).then(undefined, () => {});
 };

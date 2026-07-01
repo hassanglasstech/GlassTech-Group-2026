@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import { Company, CostCenter } from '../../shared/types';
 import { FinanceService } from '../services/financeService';
 import { Plus, Search, Trash2, X, Target, Save, Info, Layers } from 'lucide-react';
@@ -33,8 +34,8 @@ const CostCenterMaster: React.FC<{ company: Company }> = ({ company }) => {
     setFormData(initialForm);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm("Deactivate this Cost Center?")) {
+  const handleDelete = async (id: string) => {
+    if (await confirmModal("Deactivate this Cost Center?")) {
       FinanceService.saveCostCenters(FinanceService.getCostCenters().filter(cc => cc.id !== id));
       refreshData();
     }
@@ -68,7 +69,7 @@ const CostCenterMaster: React.FC<{ company: Company }> = ({ company }) => {
 
       <div className="bg-white rounded border border-slate-200 shadow-sm overflow-hidden">
         <table className="w-full text-left sap-table">
-          <thead>
+          <thead className="text-2xs uppercase">
             <tr>
               <th className="w-24">Code</th>
               <th>Description / Name</th>
@@ -83,7 +84,7 @@ const CostCenterMaster: React.FC<{ company: Company }> = ({ company }) => {
               <tr key={cc.id}>
                 <td className="font-mono font-black text-blue-600">{cc.code}</td>
                 <td className="font-bold text-slate-800 uppercase text-xs">{cc.name}</td>
-                <td><span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold uppercase border border-slate-200">{getCategoryLabel(cc.category)}</span></td>
+                <td><span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-2xs font-bold uppercase border border-slate-200">{getCategoryLabel(cc.category)}</span></td>
                 <td className="text-xs font-bold text-slate-500 uppercase">{cc.hierarchyArea}</td>
                 <td className="text-xs font-medium text-slate-500 uppercase">{cc.manager || '-'}</td>
                 <td className="text-center">
@@ -96,11 +97,11 @@ const CostCenterMaster: React.FC<{ company: Company }> = ({ company }) => {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-modalLow">
           <div className="bg-white rounded w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-300 animate-in zoom-in duration-200">
             <div className="sap-object-header flex justify-between items-start shrink-0">
                <div>
-                  <div className="flex items-center space-x-3 text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-2">
+                  <div className="flex items-center space-x-3 text-2xs font-bold text-blue-200 uppercase tracking-widest mb-2">
                     <Target size={14}/> <span>Transaction: KS01 Control Node</span>
                   </div>
                   <h3 className="text-2xl font-bold uppercase tracking-tight">Maintain Cost Center</h3>
@@ -111,18 +112,18 @@ const CostCenterMaster: React.FC<{ company: Company }> = ({ company }) => {
             <div className="p-8 space-y-6 bg-slate-50">
                <div className="bg-white p-4 border rounded-xl flex items-start space-x-3">
                   <Info size={20} className="text-blue-600 shrink-0"/>
-                  <p className="text-[10px] text-slate-500 leading-tight">
+                  <p className="text-2xs text-slate-500 leading-tight">
                      <strong>SAP Controlling Logic:</strong> Cost Centers accumulate costs incurred. The <strong>Category</strong> determines the functional area (e.g. Production vs Admin) for profit center analysis.
                   </p>
                </div>
 
                <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-1">
-                     <label className="text-[10px] font-bold uppercase text-slate-400">Cost Center Code</label>
+                     <label className="text-2xs font-bold uppercase text-slate-400">Cost Center Code</label>
                      <input type="text" placeholder="e.g. 1001" value={formData.code} onChange={e => setFormData({...formData, code: e.target.value})} className="sap-input w-full font-black uppercase"/>
                   </div>
                   <div className="space-y-1">
-                     <label className="text-[10px] font-bold uppercase text-slate-400">CC Category</label>
+                     <label className="text-2xs font-bold uppercase text-slate-400">CC Category</label>
                      <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value as any})} className="sap-input w-full font-bold">
                         <option value="F">F - Production</option>
                         <option value="W">W - Administration</option>
@@ -134,41 +135,41 @@ const CostCenterMaster: React.FC<{ company: Company }> = ({ company }) => {
                </div>
 
                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase text-slate-400">Name / Description</label>
+                  <label className="text-2xs font-bold uppercase text-slate-400">Name / Description</label>
                   <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="sap-input w-full font-bold uppercase"/>
                </div>
 
                <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-1">
-                     <label className="text-[10px] font-bold uppercase text-slate-400">Hierarchy Area</label>
+                     <label className="text-2xs font-bold uppercase text-slate-400">Hierarchy Area</label>
                      <input type="text" value={formData.hierarchyArea} onChange={e => setFormData({...formData, hierarchyArea: e.target.value})} className="sap-input w-full font-bold uppercase"/>
                   </div>
                   <div className="space-y-1">
-                     <label className="text-[10px] font-bold uppercase text-slate-400">Person Responsible</label>
+                     <label className="text-2xs font-bold uppercase text-slate-400">Person Responsible</label>
                      <input type="text" value={formData.manager} onChange={e => setFormData({...formData, manager: e.target.value})} className="sap-input w-full font-bold uppercase"/>
                   </div>
                </div>
 
                {/* ── Budget Controls (Phase 1 CMA) ── */}
                <div className="border-t border-slate-100 pt-4">
-                  <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest mb-3">Budget Controls (CMA)</p>
+                  <p className="text-2xs font-black uppercase text-blue-600 tracking-widest mb-3">Budget Controls (CMA)</p>
                   <div className="grid grid-cols-3 gap-4">
                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-slate-400">Monthly Budget (PKR)</label>
+                        <label className="text-2xs font-bold uppercase text-slate-400">Monthly Budget (PKR)</label>
                         <input type="number" min="0" placeholder="0"
                            value={formData.budgetMonthly || ''}
                            onChange={e => setFormData({...formData, budgetMonthly: Number(e.target.value)})}
                            className="sap-input w-full font-bold"/>
                      </div>
                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-slate-400">Annual Budget (PKR)</label>
+                        <label className="text-2xs font-bold uppercase text-slate-400">Annual Budget (PKR)</label>
                         <input type="number" min="0" placeholder="0"
                            value={formData.budgetYearly || ''}
                            onChange={e => setFormData({...formData, budgetYearly: Number(e.target.value)})}
                            className="sap-input w-full font-bold"/>
                      </div>
                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-slate-400">Alert at % Used</label>
+                        <label className="text-2xs font-bold uppercase text-slate-400">Alert at % Used</label>
                         <input type="number" min="1" max="100" placeholder="80"
                            value={formData.alertThreshold || 80}
                            onChange={e => setFormData({...formData, alertThreshold: Number(e.target.value)})}
@@ -179,23 +180,23 @@ const CostCenterMaster: React.FC<{ company: Company }> = ({ company }) => {
 
                {/* ── Petty Cash Controls (Phase 1 CMA) ── */}
                <div className="border-t border-slate-100 pt-4">
-                  <p className="text-[10px] font-black uppercase text-orange-600 tracking-widest mb-3">Petty Cash Controls (CMA)</p>
+                  <p className="text-2xs font-black uppercase text-orange-600 tracking-widest mb-3">Petty Cash Controls (CMA)</p>
                   <div className="grid grid-cols-2 gap-4">
                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-slate-400">Cash Float Limit (PKR)</label>
+                        <label className="text-2xs font-bold uppercase text-slate-400">Cash Float Limit (PKR)</label>
                         <input type="number" min="0" placeholder="e.g. 15000"
                            value={formData.pettyCashFloat || ''}
                            onChange={e => setFormData({...formData, pettyCashFloat: Number(e.target.value)})}
                            className="sap-input w-full font-bold"/>
-                        <p className="text-[9px] text-slate-400">Max cash held at any time by this cost center</p>
+                        <p className="text-2xs text-slate-400">Max cash held at any time by this cost center</p>
                      </div>
                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-slate-400">Monthly Petty Cash Budget (PKR)</label>
+                        <label className="text-2xs font-bold uppercase text-slate-400">Monthly Petty Cash Budget (PKR)</label>
                         <input type="number" min="0" placeholder="e.g. 60000"
                            value={formData.pettyCashMonthlyBudget || ''}
                            onChange={e => setFormData({...formData, pettyCashMonthlyBudget: Number(e.target.value)})}
                            className="sap-input w-full font-bold"/>
-                        <p className="text-[9px] text-slate-400">Max petty cash spend allowed per month</p>
+                        <p className="text-2xs text-slate-400">Max petty cash spend allowed per month</p>
                      </div>
                   </div>
                </div>

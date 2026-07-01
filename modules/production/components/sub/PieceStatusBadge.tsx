@@ -46,6 +46,25 @@ const STATUS_STYLES: Record<string, StatusStyle> = {
 
 const FALLBACK: StatusStyle = { bg: 'bg-slate-100', text: 'text-slate-500', dot: 'bg-slate-400' };
 
+// P5-style plain-language hint per status (shown as a tooltip) so the
+// state-machine codes aren't cryptic to a new floor user. Order follows the
+// Glassco flow: Cut → Service-Pending → QC → Ready → Dispatched → Received → Delivered.
+const STATUS_HINT: Record<string, string> = {
+  [PieceStatus.CUT]:                     'Cut — sheet cut into this piece',
+  [PieceStatus.SERVICE_PENDING]:         'Service-Pending — awaiting edgework / drilling / services',
+  [PieceStatus.QC_PENDING]:              'QC-Pending — awaiting quality inspection',
+  [PieceStatus.QC_FAILED]:               'QC-Failed — failed inspection; NCR / recut needed',
+  [PieceStatus.QC_PASSED]:               'QC-Passed — cleared inspection',
+  [PieceStatus.READY_TO_DISPATCH]:       'Ready to Dispatch — awaiting tempering / site dispatch',
+  [PieceStatus.DISPATCHED]:              'Dispatched — sent out (tempering vendor or site)',
+  [PieceStatus.TEMPERED]:                'Tempered — heat treatment done',
+  [PieceStatus.RECEIVED_FROM_TEMPERING]: 'Received-From-Tempering — back from the tempering vendor',
+  [PieceStatus.DELIVERED]:               'Delivered — handed to the customer (COGS recognised)',
+  [PieceStatus.RETURNED]:                'Returned — sent back',
+  [PieceStatus.BROKEN]:                  'Broken — damaged / scrapped',
+  [PieceStatus.HOLD]:                    'Hold — paused / on hold',
+};
+
 // ── Size tokens ───────────────────────────────────────────────────────
 
 const SIZE_PILL: Record<string, string> = {
@@ -83,8 +102,9 @@ const PieceStatusBadge: React.FC<PieceStatusBadgeProps> = ({
 
   return (
     <span
+      title={STATUS_HINT[status] ?? status}
       className={[
-        'inline-flex items-center rounded-full font-black uppercase tracking-wide',
+        'inline-flex items-center rounded-full font-black uppercase tracking-wide cursor-help',
         'transition-all duration-200',
         styles.bg,
         styles.text,

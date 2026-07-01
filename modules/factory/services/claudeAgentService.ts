@@ -5,6 +5,12 @@
 // ═══════════════════════════════════════════════════════════════════════
 
 import { supabase } from '@/src/services/supabaseClient';
+import { Logger } from '@/modules/shared/services/logger';
+import { FinanceService } from '@/modules/finance/services/financeService';
+import type { Company } from '@/modules/shared/types/core';
+import { sanitizeUserInput } from '@/modules/factory/services/promptSanitizer';
+import { useAppStore } from '@/modules/shared/store/appStore';
+import { useAuthStore } from '@/modules/auth/authStore';
 
 // ── Types ────────────────────────────────────────────────────────────────
 export interface ClaudeMessage {
@@ -104,18 +110,28 @@ const trackUsage = (agentId: string, model: string, input: number, output: numbe
     cost_usd:       Math.round(costUsd * 1_000_000) / 1_000_000,
     cost_pkr:       Math.round(costPkr * 100) / 100,
     created_at:     entry.timestamp,
-  }).then(() => {}).catch(() => {});
+  }).then(() => {}, () => {});
 };
 
 // ── Retry with exponential backoff ───────────────────────────────────────
+// P2-28: each attempt is wrapped in an AbortController so a hung request can't
+// block the UI indefinitely. `timeoutMs` (default 60s) aborts the in-flight
+// fetch; an AbortError is treated like any other network error so the normal
+// retry/back-off logic applies. Pass 0 to disable the timeout (used by
+// streaming, where the connection is intentionally long-lived).
 const fetchWithRetry = async (
   url: string,
   opts: RequestInit,
-  maxRetries = 3
+  maxRetries = 3,
+  timeoutMs = 60_000
 ): Promise<Response> => {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const controller = timeoutMs > 0 ? new AbortController() : null;
+    const timer = controller
+      ? setTimeout(() => controller.abort(), timeoutMs)
+      : null;
     try {
-      const response = await fetch(url, opts);
+      const response = await fetch(url, controller ? { ...opts, signal: controller.signal } : opts);
       if ((response.status === 429 || response.status === 529) && attempt < maxRetries) {
         const retryAfter = response.headers.get('retry-after');
         const delay = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 1000;
@@ -126,6 +142,8 @@ const fetchWithRetry = async (
     } catch (netErr) {
       if (attempt === maxRetries) throw netErr;
       await new Promise(r => setTimeout(r, attempt * 1500));
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
   throw new Error('Max retries reached');
@@ -142,18 +160,47 @@ const getAuthHeader = async (): Promise<string> => {
 // ── Core: Send message to Claude via proxy ───────────────────────────────
 // ── Direct Anthropic API call (fallback when proxy not deployed) ─────────
 const callClaudeDirect = async (
-  _body: Record<string, any>,
-  _agentId: string,
-  _model: string,
+  body: Record<string, any>,
+  agentId: string,
+  model: string,
 ): Promise<ClaudeResponse> => {
-  // SECURITY (go-live fix): direct browser -> Anthropic calls are DISABLED.
-  // A VITE_* API key is inlined into the public JS bundle and is readable by
-  // anyone, leading to key theft and unbounded billing. All Claude traffic
-  // MUST flow through the claude-proxy Edge Function (server-side key only).
-  throw new Error(
-    'Claude proxy unavailable. Direct browser API calls are disabled for security. ' +
-    'Deploy or repair the claude-proxy Edge Function in Supabase.'
-  );
+  // P1-19: NEVER call Anthropic directly from a production browser bundle — it
+  // would compile VITE_ANTHROPIC_API_KEY (a secret sk-ant-… key) into the public
+  // JS, readable in DevTools. This direct path is a DEV-ONLY escape hatch for
+  // local testing when the claude-proxy Edge Function isn't running.
+  // `import.meta.env.DEV` is statically `false` in production builds, so Vite +
+  // Terser tree-shake this entire branch (and the key reference) out of the
+  // shipped bundle. Production AI must always go through the claude-proxy.
+  if (!import.meta.env.DEV) {
+    throw new Error(
+      'AI features require the claude-proxy Edge Function (cloud connectivity). ' +
+      'Direct browser-to-Anthropic calls are disabled in production for security.'
+    );
+  }
+  const directKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+  if (!directKey) {
+    throw new Error(
+      'Claude proxy not reachable and VITE_ANTHROPIC_API_KEY is not set. ' +
+      'Either deploy the claude-proxy Edge Function in Supabase, or add ' +
+      'VITE_ANTHROPIC_API_KEY=sk-ant-... to your .env file.'
+    );
+  }
+  const res = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type':      'application/json',
+      'x-api-key':         directKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`Claude direct API error (${res.status}): ${errBody}`);
+  }
+  const data = await res.json();
+  if (data.usage) trackUsage(agentId, model, data.usage.input_tokens || 0, data.usage.output_tokens || 0);
+  return data as ClaudeResponse;
 };
 
 export const callClaude = async (opts: ClaudeRequestOptions): Promise<ClaudeResponse> => {
@@ -266,6 +313,9 @@ export const streamClaude = async (
   };
   if (opts.system) body.system = opts.system;
 
+  // P2-28: streaming connections are intentionally long-lived — disable the
+  // per-request abort timeout (timeoutMs = 0) so a slow token stream isn't
+  // killed mid-response.
   const res = await fetchWithRetry(proxyUrl, {
     method: 'POST',
     headers: {
@@ -273,7 +323,7 @@ export const streamClaude = async (
       'Authorization': auth,
     },
     body: JSON.stringify(body),
-  });
+  }, 3, 0);
 
   if (!res.ok) {
     const errBody = await res.text();
@@ -450,20 +500,57 @@ const EXPENSE_TOOL: ClaudeToolDef = {
 };
 
 const executeRecordExpense = async (params: Record<string, any>): Promise<any> => {
-  console.log('[record_expense] Recording:', params);
-  const { data, error } = await supabase.from('expenses').insert({
-    description: params.description,
-    amount:      params.amount,
-    category:    params.category,
-    company:     params.company || 'GlassCo',
-    paid_by:     params.paid_by || null,
-    notes:       params.notes || null,
-    recorded_by: 'EventOS Agent',
-    created_at:  new Date().toISOString(),
-  }).select('id').single();
+  // P2-24: route the expense through FinanceService.createParkedPV() instead of
+  // a raw `expenses` insert. createParkedPV builds a balanced double-entry PV
+  // (Dr expense / Cr Cash|Petty Cash), resolves the subcategory→GL mapping,
+  // ensures the accounts exist, runs the period-open check, and asserts
+  // debit === credit (_assertGLBalance) before persisting. Never post expense
+  // GL by bypassing the finance service. console.log replaced with Logger.
+  // Security: resolve the company from the active session/store, NOT from the
+  // LLM tool input. Trusting params.company would let a crafted prompt post an
+  // expense (and its GL) to a different company. The model's company arg is ignored.
+  const company = (useAppStore.getState().selectedCompany
+    || useAuthStore.getState().profile?.company
+    || 'GlassCo') as Company;
+  const amount  = Number(params.amount) || 0;
 
-  if (error) return { success: false, error: error.message };
-  return { success: true, id: data?.id, message: `${params.description} — PKR ${(params.amount || 0).toLocaleString()} recorded for ${params.company || 'GlassCo'}` };
+  Logger.action('Finance', 'RECORD_EXPENSE', `${params.description} — PKR ${amount.toLocaleString()}`, {
+    amount,
+    extra: { category: params.category, company, paidBy: params.paid_by, source: 'EventOS Agent' },
+  });
+
+  try {
+    const pv = FinanceService.createParkedPV({
+      company,
+      subCategory: params.category,
+      paymentMode: 'Cash',
+      amount,
+      headerText:  params.description,
+      date:        new Date().toISOString().split('T')[0],
+    });
+
+    // Keep an operational expense row for the agent's quick-lookup ledger.
+    const { error } = await supabase.from('expenses').insert({
+      description: params.description,
+      amount:      params.amount,
+      category:    params.category,
+      company:     company,
+      paid_by:     params.paid_by || null,
+      notes:       params.notes ? `${params.notes} | GL: ${pv.id}` : `GL: ${pv.id}`,
+      recorded_by: 'EventOS Agent',
+      created_at:  new Date().toISOString(),
+    });
+    if (error) Logger.warn('Finance', `Expense GL posted (${pv.id}) but operational expense row failed: ${error.message}`);
+
+    return {
+      success: true,
+      id:      pv.id,
+      message: `${params.description} — PKR ${amount.toLocaleString()} recorded for ${company} as Parked PV ${pv.id}`,
+    };
+  } catch (err) {
+    Logger.error('Finance', 'record_expense failed to post GL', err);
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 };
 
 // ── Full query-with-tools loop (handles tool_use → execute → tool_result → answer) ──
@@ -472,6 +559,10 @@ export const queryWithTools = async (
   systemPrompt: string,
   agentId = 'query-agent'
 ): Promise<{ answer: string; toolsUsed: string[] }> => {
+  // P2-26: sanitize the raw user message before it reaches Claude (prompt-
+  // injection defence) — mirrors QuotationAgent / the other ERP agents. The
+  // model sees the sanitized text; the original is only used for display.
+  const safeMessage = sanitizeUserInput(message);
   // Merge: built-in tools + schema-generated tools + write tools
   let schemaTools: ClaudeToolDef[] = [];
   try {
@@ -488,7 +579,7 @@ export const queryWithTools = async (
     maxTokens: 800,
     system:    systemPrompt,
     tools:     allTools,
-    messages:  [{ role: 'user', content: message }],
+    messages:  [{ role: 'user', content: safeMessage }],
     agentId,
   });
 
@@ -507,8 +598,6 @@ export const queryWithTools = async (
       let result: any;
       const name = tb.name!;
       const input = tb.input || {};
-
-      console.log(`[queryWithTools] Executing tool: ${name}`, input);
 
       if (name === 'record_expense') {
         result = await executeRecordExpense(input);
@@ -542,7 +631,7 @@ export const queryWithTools = async (
     system:    systemPrompt,
     tools:     allTools,
     messages:  [
-      { role: 'user', content: message },
+      { role: 'user', content: safeMessage },
       { role: 'assistant', content: firstResponse.content as any },
       { role: 'user', content: toolResultBlocks as any },
     ],

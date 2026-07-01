@@ -6,6 +6,8 @@ import { InventoryService } from '@/modules/procurement/services/inventoryServic
 import { ProductionService } from '@/modules/production/services/productionService';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { postDefectAdjustmentGL } from '@/modules/procurement/services/grnGLService';
+import { withinMatchTolerance } from '@/modules/finance/services/threeWayMatch';
+import { formatNumber, formatPKR } from '@/modules/shared/utils/format';
 import {
   CheckCircle2, AlertTriangle, Clock, X, Save, Search, Filter,
   FileText, Package, Receipt, CreditCard, Link2, ChevronRight,
@@ -75,10 +77,8 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
     if (po.grnRef && !po.vendorInvoiceNo)          return '2-Way';   // PO + GRN
     if (!po.grnRef && po.vendorInvoiceNo)          return '2-Way';   // PO + Invoice
     if (po.grnRef && po.vendorInvoiceNo) {
-      const tolerance = 0.02; // 2% variance allowed
-      const diff = Math.abs((po.vendorInvoiceAmount || 0) - po.totalAmount);
-      if (diff / Math.max(po.totalAmount, 1) > tolerance) return 'Mismatch';
-      return '3-Way'; // PO + GRN + Invoice all match
+      // P2-5: shared, tested tolerance helper (was inline 2% check).
+      return withinMatchTolerance(po.totalAmount, po.vendorInvoiceAmount || 0) ? '3-Way' : 'Mismatch';
     }
     return 'Pending';
   };
@@ -139,9 +139,7 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
   const handleRegisterInvoice = () => {
     if (!invForm.vendorInvoiceNo || !invForm.vendorInvoiceAmount) return toast.error('Invoice number and amount required.', { duration: 4000 });
     if (!selectedPO) return;
-    const tolerance = 0.02;
-    const diff = Math.abs(invForm.vendorInvoiceAmount - selectedPO.totalAmount);
-    const matchSt = diff / Math.max(selectedPO.totalAmount, 1) > tolerance ? 'Mismatch' : '3-Way';
+    const matchSt = withinMatchTolerance(selectedPO.totalAmount, invForm.vendorInvoiceAmount) ? '3-Way' : 'Mismatch';
     const newStatus = matchSt === 'Mismatch' ? 'On Hold' : 'Matched';
 
     // ── GL Entry: Dr GR/IR / Cr Accounts Payable (only on clean match) ─────
@@ -208,7 +206,7 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
     setSelectedPO(fresh);
     refreshData();
     if (matchSt === 'Mismatch') {
-      toast.error(`⚠ MISMATCH: Invoice PKR ${invForm.vendorInvoiceAmount.toLocaleString()} vs PO PKR ${selectedPO.totalAmount.toLocaleString()}. PO On Hold.`, { duration: 5000 });
+      toast.error(`⚠ MISMATCH: Invoice ${formatPKR(invForm.vendorInvoiceAmount)} vs PO ${formatPKR(selectedPO.totalAmount)}. PO On Hold.`, { duration: 5000 });
       setActiveStep('match');
     } else {
       toast.success(`✓ Invoice matched. GL posted: Dr GR/IR / Cr Payable. PO → Matched.`, { duration: 5000 });
@@ -383,7 +381,7 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
           { label: 'Awaiting Pmt',   val: stats.awaitingPayment, color: 'text-purple-600' },
         ].map(s => (
           <div key={s.label} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{s.label}</p>
+            <p className="text-2xs font-black uppercase text-slate-400 tracking-widest">{s.label}</p>
             <p className={`text-3xl font-black mt-1 ${s.color}`}>{s.val}</p>
           </div>
         ))}
@@ -406,16 +404,16 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
             ))}
           </select>
         </div>
-        <div className="flex items-center space-x-2 text-[10px] font-bold text-slate-500 uppercase">
+        <div className="flex items-center space-x-2 text-2xs font-bold text-slate-500 uppercase">
           <Zap size={12} className="text-amber-500"/>
-          <span>PKR {stats.totalValue.toLocaleString()} awaiting payment</span>
+          <span>{formatPKR(stats.totalValue)} awaiting payment</span>
         </div>
       </div>
 
       {/* PO Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <table className="w-full text-left sap-table">
-          <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-500 tracking-widest">
+          <thead className="bg-slate-50 border-b text-2xs font-black uppercase text-slate-500 tracking-widest">
             <tr>
               <th className="px-5 py-3">PO No</th>
               <th className="px-5 py-3">Vendor</th>
@@ -446,35 +444,35 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
                   <td className="px-5 py-3 text-xs font-bold text-slate-800 max-w-[150px] truncate">{po.toVendor}</td>
                   <td className="px-5 py-3 text-xs text-slate-500">{po.date}</td>
                   <td className="px-5 py-3">
-                    <span className="bg-slate-100 text-slate-600 text-[9px] font-black px-2 py-0.5 rounded uppercase">{po.category || '—'}</span>
+                    <span className="bg-slate-100 text-slate-600 text-2xs font-black px-2 py-0.5 rounded uppercase">{po.category || '—'}</span>
                   </td>
-                  <td className="px-5 py-3 text-[10px] font-mono text-slate-500">{req?.id || po.reqId || '—'}</td>
-                  <td className="px-5 py-3 text-right font-black text-slate-900 text-sm">{po.totalAmount.toLocaleString()}</td>
+                  <td className="px-5 py-3 text-2xs font-mono text-slate-500">{req?.id || po.reqId || '—'}</td>
+                  <td className="px-5 py-3 text-right font-black text-slate-900 text-sm">{formatNumber(po.totalAmount)}</td>
                   <td className="px-5 py-3 text-center">
                     {po.grnRef
-                      ? <CheckCircle2 size={16} className="text-emerald-500 mx-auto" title={po.grnRef}/>
+                      ? <span title={po.grnRef} className="block"><CheckCircle2 size={16} className="text-emerald-500 mx-auto"/></span>
                       : <Clock size={16} className="text-slate-300 mx-auto"/>
                     }
                   </td>
                   <td className="px-5 py-3 text-center">
                     {po.vendorInvoiceNo
-                      ? <CheckCircle2 size={16} className="text-emerald-500 mx-auto" title={po.vendorInvoiceNo}/>
+                      ? <span title={po.vendorInvoiceNo} className="block"><CheckCircle2 size={16} className="text-emerald-500 mx-auto"/></span>
                       : <Clock size={16} className="text-slate-300 mx-auto"/>
                     }
                   </td>
                   <td className="px-5 py-3 text-center">
-                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${MATCH_STATUS_STYLES[match] || 'bg-slate-100 text-slate-600'}`}>
+                    <span className={`text-2xs font-black px-2 py-0.5 rounded-full uppercase ${MATCH_STATUS_STYLES[match] || 'bg-slate-100 text-slate-600'}`}>
                       {match}
                     </span>
                   </td>
                   <td className="px-5 py-3 text-center">
                     {lastAppr
-                      ? <span className="text-[9px] font-bold text-slate-500">{lastAppr.level} {lastAppr.action === 'Approved' ? '✓' : '✗'}</span>
-                      : <span className="text-[9px] text-slate-400">{lvl.level} req.</span>
+                      ? <span className="text-2xs font-bold text-slate-500">{lastAppr.level} {lastAppr.action === 'Approved' ? '✓' : '✗'}</span>
+                      : <span className="text-2xs text-slate-400">{lvl.level} req.</span>
                     }
                   </td>
                   <td className="px-5 py-3 text-center">
-                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${PO_STATUS_STYLES[po.status] || 'bg-slate-100 text-slate-600'}`}>
+                    <span className={`text-2xs font-black px-2 py-0.5 rounded-full uppercase ${PO_STATUS_STYLES[po.status] || 'bg-slate-100 text-slate-600'}`}>
                       {po.status}
                     </span>
                   </td>
@@ -492,15 +490,15 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
 
       {/* ── PO DETAIL / WORKFLOW MODAL ─────────────────────────────────────── */}
       {isModalOpen && selectedPO && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-start justify-center p-4 z-[300] overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-start justify-center p-4 z-sheet overflow-y-auto">
           <div className="bg-white w-full max-w-3xl my-4 rounded-2xl shadow-2xl border border-slate-200 flex flex-col">
 
             {/* Header */}
             <div className="bg-slate-900 text-white px-8 py-5 rounded-t-2xl flex justify-between items-start">
               <div>
                 <h3 className="text-lg font-black uppercase tracking-tight">{selectedPO.id}</h3>
-                <p className="text-[10px] text-slate-400 mt-0.5 font-bold uppercase">
-                  {selectedPO.toVendor} • PKR {selectedPO.totalAmount.toLocaleString()} • {selectedPO.category}
+                <p className="text-2xs text-slate-400 mt-0.5 font-bold uppercase">
+                  {selectedPO.toVendor} • {formatPKR(selectedPO.totalAmount)} • {selectedPO.category}
                   {selectedPO.reqId && <span className="ml-2 text-blue-400">🔗 {selectedPO.reqId}</span>}
                 </p>
               </div>
@@ -523,7 +521,7 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
                     <React.Fragment key={step.key}>
                       <button
                         onClick={() => setActiveStep(step.key as any)}
-                        className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                        className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-2xs font-bold uppercase transition-all ${
                           isActive  ? 'bg-slate-900 text-white shadow' :
                           isDone    ? 'bg-emerald-100 text-emerald-700' :
                           'text-slate-400 hover:bg-slate-100'
@@ -551,17 +549,17 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
                     <div className="w-8 h-8 bg-blue-100 rounded-xl flex items-center justify-center"><Package size={16} className="text-blue-600"/></div>
                     <div>
                       <h4 className="font-black text-slate-800 text-sm uppercase">Goods Receipt Note (MIGO)</h4>
-                      <p className="text-[10px] text-slate-400">Confirm physical goods received against this PO</p>
+                      <p className="text-2xs text-slate-400">Confirm physical goods received against this PO</p>
                     </div>
                   </div>
 
                   {/* PO Items preview */}
                   <div className="bg-slate-50 rounded-xl p-4 text-xs space-y-2">
-                    <p className="font-black uppercase text-slate-500 text-[10px]">PO Line Items</p>
+                    <p className="font-black uppercase text-slate-500 text-2xs">PO Line Items</p>
                     {selectedPO.items.map((item, i) => (
                       <div key={i} className="flex justify-between">
                         <span className="text-slate-700 font-medium">{item.description || `Item ${i+1}`}</span>
-                        <span className="font-bold">{item.qty || '—'} × PKR {(item.rate || 0).toLocaleString()}</span>
+                        <span className="font-bold">{item.qty || '—'} × {formatPKR(item.rate || 0)}</span>
                       </div>
                     ))}
                   </div>
@@ -571,30 +569,30 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
                       <CheckCircle2 size={20} className="text-emerald-600"/>
                       <div>
                         <p className="font-black text-emerald-800 text-sm">GRN Recorded: {selectedPO.grnRef}</p>
-                        <p className="text-[10px] text-emerald-600">Received: {selectedPO.grnDate}</p>
+                        <p className="text-2xs text-emerald-600">Received: {selectedPO.grnDate}</p>
                       </div>
                     </div>
                   ) : (
                     <div className="space-y-4">
                       <div className="grid grid-cols-3 gap-4">
                         <div className="space-y-1">
-                          <label className="text-[10px] font-bold uppercase text-slate-500">GRN Reference*</label>
+                          <label className="text-2xs font-bold uppercase text-slate-500">GRN Reference*</label>
                           <input type="text" value={grnForm.grnRef} onChange={e => setGrnForm({...grnForm, grnRef: e.target.value})}
                             placeholder="e.g. GRN-2024-001" className="sap-input w-full text-xs font-bold uppercase"/>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[10px] font-bold uppercase text-slate-500">Date Received*</label>
+                          <label className="text-2xs font-bold uppercase text-slate-500">Date Received*</label>
                           <input type="date" value={grnForm.grnDate} onChange={e => setGrnForm({...grnForm, grnDate: e.target.value})}
                             className="sap-input w-full text-xs"/>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[10px] font-bold uppercase text-slate-500">Qty / Units Received</label>
+                          <label className="text-2xs font-bold uppercase text-slate-500">Qty / Units Received</label>
                           <input type="number" value={grnForm.grnQty || ''} onChange={e => setGrnForm({...grnForm, grnQty: Number(e.target.value)})}
                             className="sap-input w-full text-xs font-bold"/>
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-slate-500">Remarks</label>
+                        <label className="text-2xs font-bold uppercase text-slate-500">Remarks</label>
                         <input type="text" value={grnForm.remarks} onChange={e => setGrnForm({...grnForm, remarks: e.target.value})}
                           placeholder="Condition of goods, shortages, etc." className="sap-input w-full text-xs uppercase"/>
                       </div>
@@ -614,13 +612,13 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
                     <div className="w-8 h-8 bg-purple-100 rounded-xl flex items-center justify-center"><Receipt size={16} className="text-purple-600"/></div>
                     <div>
                       <h4 className="font-black text-slate-800 text-sm uppercase">Register Vendor Invoice</h4>
-                      <p className="text-[10px] text-slate-400">Enter the invoice received from vendor — must match PO within 2% tolerance</p>
+                      <p className="text-2xs text-slate-400">Enter the invoice received from vendor — must match PO within 2% tolerance</p>
                     </div>
                   </div>
 
                   <div className="bg-slate-50 rounded-xl p-4 flex justify-between items-center">
                     <span className="text-xs font-bold text-slate-600 uppercase">PO Amount</span>
-                    <span className="text-lg font-black text-slate-900">PKR {selectedPO.totalAmount.toLocaleString()}</span>
+                    <span className="text-lg font-black text-slate-900">{formatPKR(selectedPO.totalAmount)}</span>
                   </div>
 
                   {selectedPO.vendorInvoiceNo ? (
@@ -631,26 +629,26 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
                       }
                       <div>
                         <p className={`font-black text-sm ${computeMatch(selectedPO) === 'Mismatch' ? 'text-rose-800' : 'text-emerald-800'}`}>
-                          Invoice: {selectedPO.vendorInvoiceNo} — PKR {(selectedPO.vendorInvoiceAmount || 0).toLocaleString()}
+                          Invoice: {selectedPO.vendorInvoiceNo} — {formatPKR(selectedPO.vendorInvoiceAmount || 0)}
                         </p>
-                        <p className="text-[10px] text-slate-500">Date: {selectedPO.vendorInvoiceDate}</p>
+                        <p className="text-2xs text-slate-500">Date: {selectedPO.vendorInvoiceDate}</p>
                       </div>
                     </div>
                   ) : (
                     <div className="space-y-4">
                       <div className="grid grid-cols-3 gap-4">
                         <div className="space-y-1">
-                          <label className="text-[10px] font-bold uppercase text-slate-500">Invoice No*</label>
+                          <label className="text-2xs font-bold uppercase text-slate-500">Invoice No*</label>
                           <input type="text" value={invForm.vendorInvoiceNo} onChange={e => setInvForm({...invForm, vendorInvoiceNo: e.target.value})}
                             placeholder="Vendor's invoice #" className="sap-input w-full text-xs font-bold uppercase"/>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[10px] font-bold uppercase text-slate-500">Invoice Date</label>
+                          <label className="text-2xs font-bold uppercase text-slate-500">Invoice Date</label>
                           <input type="date" value={invForm.vendorInvoiceDate} onChange={e => setInvForm({...invForm, vendorInvoiceDate: e.target.value})}
                             className="sap-input w-full text-xs"/>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[10px] font-bold uppercase text-slate-500">Invoice Amount (PKR)*</label>
+                          <label className="text-2xs font-bold uppercase text-slate-500">Invoice Amount (PKR)*</label>
                           <input type="number" value={invForm.vendorInvoiceAmount || ''} onChange={e => setInvForm({...invForm, vendorInvoiceAmount: Number(e.target.value)})}
                             className="sap-input w-full text-xs font-black"/>
                         </div>
@@ -661,7 +659,7 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                             : 'bg-rose-50 text-rose-700 border-rose-200'
                         }`}>
-                          Variance: PKR {Math.abs(invForm.vendorInvoiceAmount - selectedPO.totalAmount).toLocaleString()}
+                          Variance: {formatPKR(Math.abs(invForm.vendorInvoiceAmount - selectedPO.totalAmount))}
                           {' '}({((Math.abs(invForm.vendorInvoiceAmount - selectedPO.totalAmount) / selectedPO.totalAmount) * 100).toFixed(1)}%)
                           {' — '}{Math.abs(invForm.vendorInvoiceAmount - selectedPO.totalAmount) / selectedPO.totalAmount <= 0.02 ? '✓ Within tolerance' : '⚠ Exceeds 2% — will flag mismatch'}
                         </div>
@@ -682,7 +680,7 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
                     <div className="w-8 h-8 bg-rose-100 rounded-xl flex items-center justify-center"><Link2 size={16} className="text-rose-600"/></div>
                     <div>
                       <h4 className="font-black text-slate-800 text-sm uppercase">Matching Review — Mismatch Detected</h4>
-                      <p className="text-[10px] text-slate-400">Invoice amount does not match PO within 2% tolerance</p>
+                      <p className="text-2xs text-slate-400">Invoice amount does not match PO within 2% tolerance</p>
                     </div>
                   </div>
 
@@ -693,14 +691,14 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
                       { label: 'Variance',       val: Math.abs((selectedPO.vendorInvoiceAmount || 0) - selectedPO.totalAmount), color: 'text-amber-700' },
                     ].map(c => (
                       <div key={c.label} className="bg-slate-50 rounded-xl p-4">
-                        <p className="text-[10px] font-black uppercase text-slate-400">{c.label}</p>
-                        <p className={`text-xl font-black mt-1 ${c.color}`}>PKR {c.val.toLocaleString()}</p>
+                        <p className="text-2xs font-black uppercase text-slate-400">{c.label}</p>
+                        <p className={`text-xl font-black mt-1 ${c.color}`}>{formatPKR(c.val)}</p>
                       </div>
                     ))}
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase text-slate-500">Override Justification / Note</label>
+                    <label className="text-2xs font-bold uppercase text-slate-500">Override Justification / Note</label>
                     <input type="text" value={approvalNote} onChange={e => setApprovalNote(e.target.value)}
                       placeholder="Reason for override or rejection..." className="sap-input w-full text-xs uppercase"/>
                   </div>
@@ -728,20 +726,20 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
                       <div className="w-8 h-8 bg-indigo-100 rounded-xl flex items-center justify-center"><ShieldCheck size={16} className="text-indigo-600"/></div>
                       <div>
                         <h4 className="font-black text-slate-800 text-sm uppercase">Payment Approval — {lvl.label}</h4>
-                        <p className="text-[10px] text-slate-400">{lvl.limit} requires {lvl.label} approval before payment</p>
+                        <p className="text-2xs text-slate-400">{lvl.limit} requires {lvl.label} approval before payment</p>
                       </div>
                     </div>
 
                     <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 grid grid-cols-3 gap-4 text-xs">
-                      <div><p className="text-[10px] font-black uppercase text-indigo-400">Required Approver</p><p className="font-black text-indigo-800 text-sm">{lvl.label}</p></div>
-                      <div><p className="text-[10px] font-black uppercase text-indigo-400">Level</p><p className="font-black text-indigo-800 text-sm">{lvl.level}</p></div>
-                      <div><p className="text-[10px] font-black uppercase text-indigo-400">Amount</p><p className="font-black text-indigo-800 text-sm">PKR {selectedPO.totalAmount.toLocaleString()}</p></div>
+                      <div><p className="text-2xs font-black uppercase text-indigo-400">Required Approver</p><p className="font-black text-indigo-800 text-sm">{lvl.label}</p></div>
+                      <div><p className="text-2xs font-black uppercase text-indigo-400">Level</p><p className="font-black text-indigo-800 text-sm">{lvl.level}</p></div>
+                      <div><p className="text-2xs font-black uppercase text-indigo-400">Amount</p><p className="font-black text-indigo-800 text-sm">{formatPKR(selectedPO.totalAmount)}</p></div>
                     </div>
 
                     {/* Approval history */}
                     {selectedPO.approvalHistory?.length ? (
                       <div className="space-y-2">
-                        <p className="text-[10px] font-black uppercase text-slate-500">Approval History</p>
+                        <p className="text-2xs font-black uppercase text-slate-500">Approval History</p>
                         {selectedPO.approvalHistory.map((h, i) => (
                           <div key={i} className={`flex justify-between items-center p-3 rounded-xl text-xs font-bold border ${h.action === 'Approved' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`}>
                             <span>{h.level} — {h.by}</span>
@@ -754,7 +752,7 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
                     {!lastAppr || lastAppr.action !== 'Approved' ? (
                       <>
                         <div className="space-y-1">
-                          <label className="text-[10px] font-bold uppercase text-slate-500">Approval Note (Optional)</label>
+                          <label className="text-2xs font-bold uppercase text-slate-500">Approval Note (Optional)</label>
                           <input type="text" value={approvalNote} onChange={e => setApprovalNote(e.target.value)}
                             className="sap-input w-full text-xs uppercase" placeholder="Remarks..."/>
                         </div>
@@ -790,7 +788,7 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
                     <div className="w-8 h-8 bg-emerald-100 rounded-xl flex items-center justify-center"><CreditCard size={16} className="text-emerald-600"/></div>
                     <div>
                       <h4 className="font-black text-slate-800 text-sm uppercase">Payment Voucher — AP Clearing</h4>
-                      <p className="text-[10px] text-slate-400">Create a parked AP payment entry — Finance posts after final review</p>
+                      <p className="text-2xs text-slate-400">Create a parked AP payment entry — Finance posts after final review</p>
                     </div>
                   </div>
 
@@ -799,20 +797,20 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
                       <CheckCircle2 size={28} className="text-emerald-600"/>
                       <div>
                         <p className="font-black text-emerald-800 text-base">Payment Complete</p>
-                        <p className="text-[10px] text-emerald-600 mt-0.5">AP Doc: {selectedPO.apInvoiceId}</p>
+                        <p className="text-2xs text-emerald-600 mt-0.5">AP Doc: {selectedPO.apInvoiceId}</p>
                       </div>
                     </div>
                   ) : (
                     <>
                       <div className="bg-slate-50 rounded-xl p-4 grid grid-cols-2 gap-4 text-xs">
-                        <div><p className="text-[10px] font-black uppercase text-slate-400">Vendor</p><p className="font-black text-slate-800">{selectedPO.toVendor}</p></div>
-                        <div><p className="text-[10px] font-black uppercase text-slate-400">Invoice No</p><p className="font-black text-slate-800">{selectedPO.vendorInvoiceNo || '—'}</p></div>
-                        <div><p className="text-[10px] font-black uppercase text-slate-400">Amount</p><p className="font-black text-slate-900 text-base">PKR {selectedPO.totalAmount.toLocaleString()}</p></div>
-                        <div><p className="text-[10px] font-black uppercase text-slate-400">PO Ref</p><p className="font-black text-slate-800">{selectedPO.id}</p></div>
+                        <div><p className="text-2xs font-black uppercase text-slate-400">Vendor</p><p className="font-black text-slate-800">{selectedPO.toVendor}</p></div>
+                        <div><p className="text-2xs font-black uppercase text-slate-400">Invoice No</p><p className="font-black text-slate-800">{selectedPO.vendorInvoiceNo || '—'}</p></div>
+                        <div><p className="text-2xs font-black uppercase text-slate-400">Amount</p><p className="font-black text-slate-900 text-base">{formatPKR(selectedPO.totalAmount)}</p></div>
+                        <div><p className="text-2xs font-black uppercase text-slate-400">PO Ref</p><p className="font-black text-slate-800">{selectedPO.id}</p></div>
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-slate-500">Pay From (Bank / Cash GL)*</label>
+                        <label className="text-2xs font-bold uppercase text-slate-500">Pay From (Bank / Cash GL)*</label>
                         <select value={payGLId} onChange={e => setPayGLId(e.target.value)}
                           className="sap-input w-full text-xs font-bold">
                           <option value="">— Select Bank / Cash Account —</option>

@@ -46,21 +46,6 @@ const AuditorView: React.FC = () => {
   const user    = useAuthStore(s => s.user);
   const company = useAppStore(s => s.selectedCompany) as string;
 
-  // Anyone with admin / owner / super_admin / hassan / glassco_admin can audit.
-  const ALLOWED = new Set(['super_admin', 'owner', 'hassan', 'admin', 'glassco_admin']);
-  if (!user) return <Navigate to="/" replace/>;
-  if (!ALLOWED.has(user.role || '')) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
-        <div className="text-center">
-          <AlertTriangle size={36} className="mx-auto text-amber-500 mb-3"/>
-          <p className="text-sm font-bold text-slate-700">Auditor view requires admin / owner role.</p>
-          <p className="text-xs text-slate-400 mt-2">Your role: <span className="font-mono">{user.role}</span></p>
-        </div>
-      </div>
-    );
-  }
-
   // ── Filters ──────────────────────────────────────────────────────────
   const [filterCompany, setFilterCompany] = useState<string>(company || '');
   const [filterTable,   setFilterTable]   = useState<string>('');
@@ -110,6 +95,22 @@ const AuditorView: React.FC = () => {
     const deletes = entries.filter(e => e.operation === 'DELETE').length;
     return { inserts, updates, deletes };
   }, [entries]);
+
+  // Guards placed after hooks to keep hook order stable (react-hooks/rules-of-hooks)
+  // Anyone with admin / owner / super_admin / hassan / glassco_admin can audit.
+  const ALLOWED = new Set(['super_admin', 'owner', 'hassan', 'admin', 'glassco_admin']);
+  if (!user) return <Navigate to="/" replace/>;
+  if (!ALLOWED.has(user.role || '')) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
+        <div className="text-center">
+          <AlertTriangle size={36} className="mx-auto text-amber-500 mb-3"/>
+          <p className="text-sm font-bold text-slate-700">Auditor view requires admin / owner role.</p>
+          <p className="text-xs text-slate-400 mt-2">Your role: <span className="font-mono">{user.role}</span></p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 p-5 max-w-7xl mx-auto">

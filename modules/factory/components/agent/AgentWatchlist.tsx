@@ -116,7 +116,7 @@ const AgentWatchlist: React.FC = () => {
       threshold:    form.threshold ? parseFloat(form.threshold) : null,
       active:       true,
       triggered_count: 0,
-      created_by:   user?.name || 'Hassan',
+      created_by:   user?.fullName || 'Hassan',
       created_at:   new Date().toISOString(),
       updated_at:   new Date().toISOString(),
     });

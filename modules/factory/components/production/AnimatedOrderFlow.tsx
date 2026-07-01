@@ -81,7 +81,7 @@ const OrderProgressBar: React.FC<{ summary: OrderSummary; animate: boolean }> = 
                   ${isPast    ? 'bg-green-500 text-white' :
                     isCurrent ? 'text-white' :
                     'bg-slate-700 text-slate-500'}`}
-                style={isCurrent ? { backgroundColor: stage.color, ringColor: stage.color } : {}}
+                style={isCurrent ? { backgroundColor: stage.color } : {}}
               >
                 {isPast ? '✓' : count > 0 ? count : '·'}
               </div>

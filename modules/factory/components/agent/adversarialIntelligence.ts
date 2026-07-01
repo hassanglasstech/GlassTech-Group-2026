@@ -60,7 +60,7 @@ If original was correct despite challenges — defend it clearly.
 Be direct. Urdu/English mix ok. Max 4 sentences.`,
       messages: [{
         role:    'user',
-        content: `Original query: "${query}"\nMy initial answer: "${initialAnswer}"\nChallenges raised:\n${challenges.map(c => `- ${c}`).join('\n')}\n\nRevised recommendation:`,
+        content: `Original query: "${query}"\nMy initial answer: "${initialAnswer}"\nChallenges raised:\n${challenges.map((c: string) => `- ${c}`).join('\n')}\n\nRevised recommendation:`,
       }],
     }),
   });
@@ -78,7 +78,7 @@ Be direct. Urdu/English mix ok. Max 4 sentences.`,
     was_revised:     wasRevised,
     revision_reason: wasRevised ? challenges[0] : '',
     created_at:      new Date().toISOString(),
-  }).catch(() => {});
+  }).then(undefined, () => {});
 
   return { initialAnswer, challenges, revisedAnswer, wasRevised, revisionReason: wasRevised ? challenges[0] : '' };
 };
@@ -130,7 +130,7 @@ Max 3 truths. Be specific with numbers. No preamble, no markdown, pure JSON only
         severity:      t.severity || 'medium',
         acknowledged:  false,
         created_at:    new Date().toISOString(),
-      }, { onConflict: 'title' }).catch(() => {});
+      }, { onConflict: 'title' }).then(undefined, () => {});
     }
     return truths.map((t: any) => `**${t.title}**: ${t.finding}`);
   } catch {

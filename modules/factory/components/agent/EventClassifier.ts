@@ -70,7 +70,7 @@ const incrementUsage = (eventId: string) => {
     .then(() => {}, () => {
       // Fallback: direct update if RPC doesn't exist
       supabase.from('pattern_library')
-        .update({ times_used: supabase.rpc ? undefined : 1, updated_at: new Date().toISOString() })
+        .update({ updated_at: new Date().toISOString() })
         .eq('event_id', eventId)
         .then(() => {}, () => {});
     });

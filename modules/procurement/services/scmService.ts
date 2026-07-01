@@ -132,7 +132,7 @@ export const SCMService = {
         overallScore,
         rating:           scoreToRating(overallScore),
       };
-    }).filter(v => v.totalPOs > 0 || (vendor => vendor))
+    }).filter(v => v.totalPOs > 0)
       .sort((a, b) => b.overallScore - a.overallScore);
   },
 
@@ -148,7 +148,7 @@ export const SCMService = {
       ? InventoryService.getPurchaseOrders()
       : [];
 
-    return items.map((item: any) => {
+    return items.map((item: any): ReorderAlert => {
       // Find last vendor who supplied this item
       const lastPO = pos
         .filter((po: any) =>

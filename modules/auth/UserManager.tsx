@@ -87,16 +87,6 @@ export default function UserManager() {
   const [form,     setForm]     = useState<Profile>(blank());
   const [copiedId, setCopiedId] = useState('');
 
-  // ── Guard ──────────────────────────────────────────────────────────
-  if (me?.role !== 'super_admin') {
-    return (
-      <div className="flex flex-col items-center justify-center h-60 space-y-3">
-        <Shield size={36} className="text-slate-300"/>
-        <p className="text-sm font-bold text-slate-400 uppercase">Super Admin Access Only</p>
-      </div>
-    );
-  }
-
   // ── Load ───────────────────────────────────────────────────────────
   const load = useCallback(async () => {
     setBusy(true);
@@ -113,6 +103,17 @@ export default function UserManager() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // ── Guard ──────────────────────────────────────────────────────────
+  // Guard placed after hooks to keep hook order stable (react-hooks/rules-of-hooks)
+  if (me?.role !== 'super_admin') {
+    return (
+      <div className="flex flex-col items-center justify-center h-60 space-y-3">
+        <Shield size={36} className="text-slate-300"/>
+        <p className="text-sm font-bold text-slate-400 uppercase">Super Admin Access Only</p>
+      </div>
+    );
+  }
 
   const flash = (type: 'ok' | 'err', text: string) => {
     setMsg({ type, text });
@@ -231,7 +232,7 @@ export default function UserManager() {
       flash('ok', `✓ ${form.full_name} ${existing ? 'updated' : 'added'} successfully!`);
       toast.success(`✓ ${form.full_name} ${existing ? 'updated' : 'added'} successfully!`, { duration: 4000 });
       setModal(null);
-      setForm({ id:'', email:'', full_name:'', role:'glassco_admin', allowed_companies:['Glassco'], allowed_modules:[], time_restricted:false, is_active:true });
+      setForm(blank());
       await load();
     }
     setBusy(false);

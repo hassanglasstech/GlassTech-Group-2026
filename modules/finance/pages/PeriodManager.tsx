@@ -4,12 +4,14 @@ import { PeriodService, FiscalPeriod } from '@/modules/finance/services/periodSe
 import { useAuthStore } from '@/modules/auth/authStore';
 import { Lock, Unlock, Plus, AlertTriangle, CheckCircle2, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatDateTime } from '@/modules/shared/utils/format';
 
 const PeriodManager: React.FC<{ company: Company }> = ({ company }) => {
   const { user } = useAuthStore();
   const actor = user?.fullName || user?.email || 'System';
   const [periods, setPeriods] = useState<FiscalPeriod[]>([]);
   const [newMonth, setNewMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [busy, setBusy] = useState(false);   // guards async period actions against double-submit
 
   const refresh = () => setPeriods(PeriodService.listPeriods(company));
 
@@ -19,38 +21,57 @@ const PeriodManager: React.FC<{ company: Company }> = ({ company }) => {
   }, [company]);
 
   const handleOpen = async (month: string) => {
+    if (busy) return;
     const existing = periods.find(p => p.month === month);
+    let reason: string | undefined;
     if (existing && existing.status === 'Closed') {
-      const reason = window.prompt(
+      const r = window.prompt(
         `Re-open closed period ${month}?\n\n` +
         `Enter a reason (mandatory — logged to Control Exception Register):`
       );
-      if (!reason || !reason.trim()) {
+      if (!r || !r.trim()) {
         toast.error('Re-open cancelled — reason is mandatory.');
         return;
       }
-      try {
-        await PeriodService.openPeriod(company, month, actor, reason.trim());
-      } catch (e: any) {
-        toast.error(e?.message || 'Re-open failed.');
-        return;
-      }
-    } else {
-      await PeriodService.openPeriod(company, month, actor);
+      reason = r.trim();
     }
-    refresh();
+    setBusy(true);
+    try {
+      await PeriodService.openPeriod(company, month, actor, reason);
+      refresh();
+    } catch (e: any) {
+      toast.error(e?.message || 'Re-open failed.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleClose = async (month: string) => {
-    await PeriodService.closePeriod(company, month, actor);
-    refresh();
+    if (busy) return;
+    setBusy(true);
+    try {
+      await PeriodService.closePeriod(company, month, actor);
+      refresh();
+    } catch (e: any) {
+      toast.error(e?.message || 'Close failed.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleAdd = async () => {
+    if (busy) return;
     const exists = periods.find(p => p.month === newMonth);
     if (exists) { toast.error('Period already exists.'); return; }
-    await PeriodService.openPeriod(company, newMonth, actor);
-    refresh();
+    setBusy(true);
+    try {
+      await PeriodService.openPeriod(company, newMonth, actor);
+      refresh();
+    } catch (e: any) {
+      toast.error(e?.message || 'Open failed.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const openCount  = periods.filter(p => p.status === 'Open').length;
@@ -69,17 +90,17 @@ const PeriodManager: React.FC<{ company: Company }> = ({ company }) => {
         <div className="relative z-10 flex justify-between items-start">
           <div>
             
-            <p className="text-[10px] font-bold opacity-70 uppercase tracking-widest mt-1">
+            <p className="text-2xs font-bold opacity-70 uppercase tracking-widest mt-1">
               {company} — Period Locking & Month-End Close
             </p>
           </div>
           <div className="flex gap-8 text-right">
             <div>
-              <p className="text-[9px] font-bold opacity-60 uppercase">Open Periods</p>
+              <p className="text-2xs font-bold opacity-60 uppercase">Open Periods</p>
               <p className="text-3xl font-black">{openCount}</p>
             </div>
             <div>
-              <p className="text-[9px] font-bold opacity-60 uppercase">Closed</p>
+              <p className="text-2xs font-bold opacity-60 uppercase">Closed</p>
               <p className="text-3xl font-black">{closedCount}</p>
             </div>
           </div>
@@ -95,7 +116,7 @@ const PeriodManager: React.FC<{ company: Company }> = ({ company }) => {
       {/* Add Period */}
       <div className="bg-white rounded-2xl border shadow-sm p-6 flex items-end gap-4">
         <div className="flex-1">
-          <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">Add / Open a Period</label>
+          <label className="text-2xs font-black uppercase text-slate-400 block mb-1">Add / Open a Period</label>
           <input
             type="month"
             value={newMonth}
@@ -105,7 +126,8 @@ const PeriodManager: React.FC<{ company: Company }> = ({ company }) => {
         </div>
         <button
           onClick={handleAdd}
-          className="bg-emerald-600 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest hover:bg-emerald-700 flex items-center gap-2 shadow-lg"
+          disabled={busy}
+          className="bg-emerald-600 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest hover:bg-emerald-700 flex items-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Plus size={16}/> Open Period
         </button>
@@ -117,7 +139,7 @@ const PeriodManager: React.FC<{ company: Company }> = ({ company }) => {
           <h3 className="font-black uppercase text-slate-700 text-sm tracking-widest">Fiscal Period Register</h3>
         </div>
         <table className="w-full text-left">
-          <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400 tracking-widest">
+          <thead className="bg-slate-50 border-b text-2xs font-black uppercase text-slate-400 tracking-widest">
             <tr>
               <th className="px-6 py-3">Period</th>
               <th className="px-6 py-3">Status</th>
@@ -144,12 +166,12 @@ const PeriodManager: React.FC<{ company: Company }> = ({ company }) => {
                       <Calendar size={14} className="text-slate-400"/>
                       <span className="font-black text-slate-900">{p.month}</span>
                       {isCurrent && (
-                        <span className="text-[9px] font-black bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full uppercase">Current</span>
+                        <span className="text-2xs font-black bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full uppercase">Current</span>
                       )}
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`flex items-center gap-1 w-fit px-3 py-1 rounded-full text-[10px] font-black uppercase ${
+                    <span className={`flex items-center gap-1 w-fit px-3 py-1 rounded-full text-2xs font-black uppercase ${
                       p.status === 'Open'
                         ? 'bg-emerald-100 text-emerald-700'
                         : 'bg-rose-100 text-rose-700'
@@ -161,20 +183,22 @@ const PeriodManager: React.FC<{ company: Company }> = ({ company }) => {
                   <td className="px-6 py-4 text-xs text-slate-500 font-bold">{p.openedBy || '—'}</td>
                   <td className="px-6 py-4 text-xs text-slate-500 font-bold">{p.closedBy || '—'}</td>
                   <td className="px-6 py-4 text-xs text-slate-400">
-                    {p.closedAt ? new Date(p.closedAt).toLocaleString('en-PK') : '—'}
+                    {p.closedAt ? formatDateTime(p.closedAt) : '—'}
                   </td>
                   <td className="px-6 py-4 text-center">
                     {p.status === 'Open' ? (
                       <button
                         onClick={() => handleClose(p.month)}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 text-white text-[10px] font-black uppercase hover:bg-rose-700 mx-auto"
+                        disabled={busy}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 text-white text-2xs font-black uppercase hover:bg-rose-700 mx-auto disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Lock size={12}/> Close Period
                       </button>
                     ) : (
                       <button
                         onClick={() => handleOpen(p.month)}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white text-[10px] font-black uppercase hover:bg-emerald-700 mx-auto"
+                        disabled={busy}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white text-2xs font-black uppercase hover:bg-emerald-700 mx-auto disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Unlock size={12}/> Re-Open
                       </button>

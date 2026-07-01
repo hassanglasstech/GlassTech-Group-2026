@@ -116,7 +116,7 @@ const TaskManager: React.FC = () => {
       priority:    form.priority,
       due_date:    form.due_date || null,
       status:      'Open',
-      created_by:  user?.name || 'Hassan',
+      created_by:  user?.fullName || 'Hassan',
       created_at:  new Date().toISOString(),
       updated_at:  new Date().toISOString(),
     });

@@ -133,7 +133,7 @@ export const detectCrossEntitySignals = async (): Promise<void> => {
   const companies = ['GlassCo', 'GTK', 'GTI', 'Nippon', 'Factory'];
 
   // Check vendor overlap
-  const vendors = InventoryService.getVendors();
+  const vendors = SalesService.getVendors();
   const vendorCompanies: Record<string, string[]> = {};
   vendors.forEach((v: any) => {
     if (!vendorCompanies[v.name]) vendorCompanies[v.name] = [];
@@ -158,7 +158,7 @@ export const detectCrossEntitySignals = async (): Promise<void> => {
         days_to_impact:   14,
         resolved:         false,
         created_at:       new Date().toISOString(),
-      }, { onConflict: 'title' }).catch(() => {});
+      }, { onConflict: 'title' }).then(undefined, () => {});
     }
   }
 
@@ -184,7 +184,7 @@ export const detectCrossEntitySignals = async (): Promise<void> => {
         days_to_impact:   30,
         resolved:         false,
         created_at:       new Date().toISOString(),
-      }, { onConflict: 'title' }).catch(() => {});
+      }, { onConflict: 'title' }).then(undefined, () => {});
     }
   }
 };
@@ -232,5 +232,5 @@ export const buildTemporalPredictions = async (): Promise<void> => {
     trend_direction:  trend,
     basis:            `Linear trend from ${values.length} months data`,
     created_at:       new Date().toISOString(),
-  }, { onConflict: 'metric,entity' }).catch(() => {});
+  }, { onConflict: 'metric,entity' }).then(undefined, () => {});
 };

@@ -128,7 +128,7 @@ const StrategicMemoryModule: React.FC = () => {
       remind_on:  form.remind_on || null,
       reminded:   false,
       linked_entity_label: form.linked_entity_label || null,
-      created_by: user?.name || 'Hassan',
+      created_by: user?.fullName || 'Hassan',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });

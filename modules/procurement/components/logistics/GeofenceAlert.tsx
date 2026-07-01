@@ -83,13 +83,11 @@ const GeofenceAlert: React.FC<GeofenceAlertProps> = ({
 }) => {
   const [hasFired, setHasFired] = useState(false);
 
-  if (!origin || !destination || !truckPosition) {
-    return null;
-  }
-
-  const deviationKm = crossTrackKm(origin, destination, truckPosition);
-  const distToDestKm = haversineKm(truckPosition, destination);
-  const breached = deviationKm > thresholdKm;
+  // Null-safe derefs: computed before the guard so they can feed the hook below.
+  const ready = !!origin && !!destination && !!truckPosition;
+  const deviationKm = ready ? crossTrackKm(origin!, destination!, truckPosition!) : 0;
+  const distToDestKm = ready ? haversineKm(truckPosition!, destination!) : 0;
+  const breached = ready && deviationKm > thresholdKm;
 
   useEffect(() => {
     if (breached && !hasFired) {
@@ -102,9 +100,14 @@ const GeofenceAlert: React.FC<GeofenceAlertProps> = ({
     }
   }, [breached, deviationKm, hasFired, onBreach]);
 
+  // Guard placed after hooks to keep hook order stable (react-hooks/rules-of-hooks)
+  if (!origin || !destination || !truckPosition) {
+    return null;
+  }
+
   if (compact) {
     return (
-      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-black uppercase ${
         breached ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
       }`}>
         {breached ? <AlertTriangle size={10}/> : <CheckCircle2 size={10}/>}

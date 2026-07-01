@@ -61,7 +61,7 @@ export const saveDecision = async (memory: EpisodicMemory): Promise<void> => {
     conditions:       memory.conditions,
     confidence_score: memory.confidence_score,
     created_at:       new Date().toISOString(),
-  }).catch(() => {});
+  }).then(undefined, () => {});
 };
 
 export const recordOutcome = async (
@@ -73,7 +73,7 @@ export const recordOutcome = async (
     outcome,
     outcome_value: outcomeValue ?? null,
     outcome_date:  new Date().toISOString(),
-  }).eq('decision_id', decisionId).catch(() => {});
+  }).eq('decision_id', decisionId).then(undefined, () => {});
 };
 
 export const recordFeedback = async (
@@ -84,7 +84,7 @@ export const recordFeedback = async (
   await supabase.from('agent_episodic_memory').update({
     owner_feedback:  feedback,
     override_reason: overrideReason ?? null,
-  }).eq('decision_id', decisionId).catch(() => {});
+  }).eq('decision_id', decisionId).then(undefined, () => {});
 };
 
 export const getSimilarDecisions = async (
@@ -130,7 +130,7 @@ export const saveFact = async (fact: Omit<SemanticFact, 'invalidated'>): Promise
     evidence_count:       fact.evidence_count,
     invalidated:          false,
     updated_at:           new Date().toISOString(),
-  }, { onConflict: 'fact_id' }).catch(() => {});
+  }, { onConflict: 'fact_id' }).then(undefined, () => {});
 };
 
 export const getRelevantFacts = async (
@@ -254,5 +254,5 @@ export const recordRuleOutcome = async (
     override_count: newOverride,
     success_rate:   Math.round(newRate * 1000) / 1000,
     updated_at:     new Date().toISOString(),
-  }).eq('rule_id', ruleId).catch(() => {});
+  }).eq('rule_id', ruleId).then(undefined, () => {});
 };

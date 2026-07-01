@@ -21,6 +21,9 @@ import {
   parseCSV, downloadTemplate, ColumnSpec, ParseError,
 } from '@/modules/shared/services/csvImportService';
 import { logImport, markChecklistItem } from '@/modules/finance/services/cutoverService';
+import { formatNumber } from '@/modules/shared/utils/format';
+import { FinanceService } from '@/modules/finance/services/financeService';
+import { LedgerTransaction } from '@/modules/shared/types';
 
 // AR Opening Balance row schema
 const AR_OB_SCHEMA: ColumnSpec[] = [
@@ -43,8 +46,6 @@ const SAMPLE_ROW = {
   project_name:    'Opening Balance',
 };
 
-const AR_CONTROL_ACCOUNT  = '11201';  // Accounts Receivable
-const OB_EQUITY_ACCOUNT   = '31901';  // Opening Balance Equity
 
 interface AROBRow extends Record<string, unknown> {
   invoice_number:  string;
@@ -120,30 +121,40 @@ const AROpeningBalance: React.FC = () => {
     let failed    = invErr ? invoiceRows.length : 0;
     const localErrors: ParseError[] = invErr ? [{ row: 0, error: invErr.message }] : [];
 
-    // 2. Post single consolidated GL JV (Dr AR / Cr OB Equity) — optional
+    // 2. Post single consolidated GL JV (Dr Customers Control / Cr Opening Balance
+    //    Equity) via FinanceService. Routed through ensureAccount + recordTransaction
+    //    so it hits the SAME AR control account (1221 tree) that live delivery
+    //    invoices use — day-1 AR aging reconciles — and gets the period-lock +
+    //    debit==credit assert + two-tier sync. (Was: direct insert to phantom codes
+    //    11201/31901 → orphaned ledger lines, unreconcilable AR.)
     let glPosted = false;
     if (postGL && !invErr && totalsByCount.balance > 0) {
-      const jv = {
-        id:           `JV-AR-OB-${Date.now()}`,
-        company,
-        doc_type:     'JV',
-        doc_date:     new Date().toISOString().slice(0, 10),
-        date:         new Date().toISOString().slice(0, 10),
-        description:  `AR Opening Balance — ${rows.length} invoices`,
-        reference_id: 'AR-OPENING-BALANCE',
-        status:       'Posted',
-        details: [
-          { accountId: AR_CONTROL_ACCOUNT, accountName: 'Accounts Receivable',
-            debit: totalsByCount.balance, credit: 0 },
-          { accountId: OB_EQUITY_ACCOUNT,  accountName: 'Opening Balance Equity',
-            debit: 0, credit: totalsByCount.balance },
-        ],
-        created_by:   user?.email ?? 'unknown',
-        posted_at:    new Date().toISOString(),
-      };
-      const { error: glErr } = await supabase.from('ledger').insert(jv);
-      if (glErr) localErrors.push({ row: 0, error: `GL JV failed: ${glErr.message}` });
-      else glPosted = true;
+      try {
+        const arParent  = FinanceService.ensureAccount(company, 'ASSETS',            1, null,         'Asset',  '10');
+        const arCurrent = FinanceService.ensureAccount(company, 'CURRENT ASSETS',    2, arParent.id,  'Asset',  '11');
+        const arTrade   = FinanceService.ensureAccount(company, 'TRADE RECEIVABLES', 3, arCurrent.id, 'Asset',  '122');
+        const arControl = FinanceService.ensureAccount(company, 'CUSTOMERS CONTROL', 4, arTrade.id,   'Asset',  '1221');
+        const eqParent  = FinanceService.ensureAccount(company, 'EQUITY',                 1, null,        'Equity', '30');
+        const obEquity  = FinanceService.ensureAccount(company, 'OPENING BALANCE EQUITY', 2, eqParent.id, 'Equity', '3090');
+        const jv: LedgerTransaction = {
+          id:          `JV-AR-OB-${Date.now()}`,
+          company,
+          docType:     'JV',
+          docDate:     new Date().toISOString().slice(0, 10),
+          date:        new Date().toISOString().slice(0, 10),
+          description: `AR Opening Balance — ${rows.length} invoices`,
+          referenceId: 'AR-OPENING-BALANCE',
+          status:      'Posted',
+          details: [
+            { accountId: arControl.id, debit: totalsByCount.balance, credit: 0, text: 'AR opening balance' },
+            { accountId: obEquity.id,  debit: 0, credit: totalsByCount.balance, text: 'AR opening balance' },
+          ],
+        };
+        FinanceService.recordTransaction(jv);
+        glPosted = true;
+      } catch (e) {
+        localErrors.push({ row: 0, error: `GL JV failed: ${e instanceof Error ? e.message : String(e)}` });
+      }
     }
 
     setLoading(false);
@@ -179,7 +190,7 @@ const AROpeningBalance: React.FC = () => {
     setResult(null);
   };
 
-  const fmt = (n: number) => Math.round(n).toLocaleString('en-PK');
+  const fmt = (n: number) => formatNumber(Math.round(n));
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
@@ -190,7 +201,7 @@ const AROpeningBalance: React.FC = () => {
             <h2 className="text-xl font-black uppercase tracking-tight flex items-center gap-2">
               <FileText size={20}/> AR Opening Balance · Bulk Import
             </h2>
-            <p className="text-[10px] text-emerald-300 font-bold uppercase tracking-widest mt-0.5">
+            <p className="text-2xs text-emerald-300 font-bold uppercase tracking-widest mt-0.5">
               {company} · Outstanding customer invoices · Sprint 30 cutover
             </p>
           </div>
@@ -204,7 +215,7 @@ const AROpeningBalance: React.FC = () => {
       <div className="flex items-center gap-2">
         {['upload', 'preview', 'done'].map((s, i) => (
           <React.Fragment key={s}>
-            <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest ${step === s ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400'}`}>
+            <div className={`px-3 py-1.5 rounded-lg text-2xs font-black uppercase tracking-widest ${step === s ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400'}`}>
               {i + 1}. {s}
             </div>
             {i < 2 && <ArrowRight size={14} className="text-slate-300"/>}
@@ -216,7 +227,7 @@ const AROpeningBalance: React.FC = () => {
         <div className="bg-white border-2 border-dashed border-slate-300 rounded-2xl p-12 text-center">
           <Upload className="mx-auto text-slate-300 mb-3" size={48}/>
           <p className="text-sm font-bold text-slate-600 mb-1">Drop CSV / Excel file here</p>
-          <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-4">
+          <p className="text-2xs text-slate-400 uppercase font-bold tracking-wider mb-4">
             Required: Invoice Number, Client Code, Invoice Date, Total Amount
           </p>
           <input type="file" accept=".csv,.xlsx,.xls"
@@ -229,19 +240,19 @@ const AROpeningBalance: React.FC = () => {
         <>
           <div className="grid grid-cols-4 gap-3">
             <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
-              <p className="text-[9px] font-black text-blue-600 uppercase">Invoices</p>
+              <p className="text-2xs font-black text-blue-600 uppercase">Invoices</p>
               <p className="text-2xl font-black text-blue-700">{totalsByCount.invoices}</p>
             </div>
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-              <p className="text-[9px] font-black text-slate-600 uppercase">Gross Total</p>
+              <p className="text-2xs font-black text-slate-600 uppercase">Gross Total</p>
               <p className="text-xl font-black text-slate-800">₨ {fmt(totalsByCount.grand)}</p>
             </div>
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-              <p className="text-[9px] font-black text-amber-600 uppercase">Received</p>
+              <p className="text-2xs font-black text-amber-600 uppercase">Received</p>
               <p className="text-xl font-black text-amber-700">₨ {fmt(totalsByCount.received)}</p>
             </div>
             <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
-              <p className="text-[9px] font-black text-emerald-600 uppercase">Outstanding Balance</p>
+              <p className="text-2xs font-black text-emerald-600 uppercase">Outstanding Balance</p>
               <p className="text-xl font-black text-emerald-700">₨ {fmt(totalsByCount.balance)}</p>
             </div>
           </div>
@@ -251,7 +262,7 @@ const AROpeningBalance: React.FC = () => {
               <p className="text-xs font-black text-rose-700 mb-2 flex items-center gap-1">
                 <AlertTriangle size={14}/> Row-level errors ({errors.length}):
               </p>
-              <ul className="text-[11px] text-rose-700 space-y-0.5 font-mono">
+              <ul className="text-2xs text-rose-700 space-y-0.5 font-mono">
                 {errors.slice(0, 50).map((e, i) => <li key={i}>Row {e.row}: {e.error}</li>)}
               </ul>
             </div>
@@ -263,7 +274,7 @@ const AROpeningBalance: React.FC = () => {
                 <thead className="bg-slate-900 text-white">
                   <tr>
                     {AR_OB_SCHEMA.map(s => (
-                      <th key={s.field} className="px-3 py-2.5 text-left font-black text-[10px] uppercase">{s.csvHeader}</th>
+                      <th key={s.field} className="px-3 py-2.5 text-left font-black text-2xs uppercase">{s.csvHeader}</th>
                     ))}
                   </tr>
                 </thead>
@@ -287,7 +298,7 @@ const AROpeningBalance: React.FC = () => {
             <input type="checkbox" checked={postGL} onChange={e => setPostGL(e.target.checked)} className="w-4 h-4"/>
             <Calculator size={14} className="text-blue-700"/>
             <span className="text-xs font-bold text-blue-700">
-              Auto-post consolidated GL JV: Dr {AR_CONTROL_ACCOUNT} AR ₨ {fmt(totalsByCount.balance)} / Cr {OB_EQUITY_ACCOUNT} OB Equity ₨ {fmt(totalsByCount.balance)}
+              Auto-post consolidated GL JV: Dr Customers Control (1221) ₨ {fmt(totalsByCount.balance)} / Cr Opening Balance Equity ₨ {fmt(totalsByCount.balance)}
             </span>
           </label>
 

@@ -49,7 +49,7 @@ const EventOSChatWidget: React.FC = () => {
   const [alerts, setAlerts] = useState<Anomaly[]>([]);
   const [alertsDismissed, setAlertsDismissed] = useState(false);
   const [pendingOutcomes, setPendingOutcomes] = useState<any[]>([]);
-  const [accuracyTrend, setAccuracyTrend] = useState<{ accuracy: number; trend: string } | null>(null);
+  const [accuracyTrend, setAccuracyTrend] = useState<Awaited<ReturnType<typeof getAgentAccuracyTrend>> | null>(null);
   const [briefing, setBriefing] = useState<string | null>(null);
   const [predictions, setPredictions] = useState<PredictiveAlert[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -67,7 +67,7 @@ const EventOSChatWidget: React.FC = () => {
         const today = new Date().toISOString().split('T')[0];
         supabase.from('morning_briefings').select('briefing_text').eq('briefing_date', today).single()
           .then(({ data }) => { if (data?.briefing_text) setBriefing(data.briefing_text); })
-          .catch(() => {});
+          .then(undefined, () => {});
       }
     }
   }, [open]);
@@ -129,7 +129,7 @@ const EventOSChatWidget: React.FC = () => {
     if (decision?.id) await recordDecisionFeedback(decision.id, 'followed');
     setState('executing');
     try {
-      const exec = await executeWorkflow(result.workflow, user?.name || 'Owner');
+      const exec = await executeWorkflow(result.workflow, user?.fullName || 'Owner');
       setExecutionResult(exec);
       setExecutionLogId(exec.executionLogId || null);
       setState('done');
@@ -139,7 +139,7 @@ const EventOSChatWidget: React.FC = () => {
   const handleReverse = async () => {
     if (!executionLogId) return;
     setReversing(true);
-    const res = await reverseExecution(executionLogId, user?.name || 'Owner');
+    const res = await reverseExecution(executionLogId, user?.fullName || 'Owner');
     setReversing(false);
     setExecutionResult({
       success: res.success,

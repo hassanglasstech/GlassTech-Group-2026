@@ -129,18 +129,6 @@ const NotificationSettings: React.FC = () => {
   const user       = useAuthStore(s => s.user);
   const appCompany = useAppStore(s => s.selectedCompany);
 
-  if (!user) return <Navigate to="/" replace />;
-  if (!ALLOWED.has(user.role || '')) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <div className="text-center">
-          <AlertTriangle size={36} className="mx-auto text-amber-500 mb-3" />
-          <p className="text-sm font-bold text-slate-700">Alert Settings requires admin / owner role.</p>
-        </div>
-      </div>
-    );
-  }
-
   const [company, setCompany]       = useState<string>(appCompany || 'Glassco');
   const [cfg, setCfg]               = useState<AlertThresholds>({ ...DEFAULT, company });
   const [loading, setLoading]       = useState(false);
@@ -165,6 +153,19 @@ const NotificationSettings: React.FC = () => {
   }, [company]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Guards placed after hooks to keep hook order stable (react-hooks/rules-of-hooks)
+  if (!user) return <Navigate to="/" replace />;
+  if (!ALLOWED.has(user.role || '')) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+        <div className="text-center">
+          <AlertTriangle size={36} className="mx-auto text-amber-500 mb-3" />
+          <p className="text-sm font-bold text-slate-700">Alert Settings requires admin / owner role.</p>
+        </div>
+      </div>
+    );
+  }
 
   const patch = <K extends keyof AlertThresholds>(key: K, val: AlertThresholds[K]) => {
     setCfg(prev => ({ ...prev, [key]: val }));

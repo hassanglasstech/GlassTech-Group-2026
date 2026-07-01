@@ -21,6 +21,8 @@ import {
   loadCutoverSnapshot, saveCutoverSnapshot, markChecklistItem, lockCutover,
   recentImports, CutoverSnapshot, ImportLogRow,
 } from '@/modules/finance/services/cutoverService';
+import { formatDateTime } from '@/modules/shared/utils/format';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 interface ChecklistItem {
   key:         keyof Pick<CutoverSnapshot, 'masters_loaded' | 'stock_ob_done' | 'gl_ob_done' | 'ar_ob_done' | 'ap_ob_done'>;
@@ -124,7 +126,7 @@ const CutoverWizard: React.FC = () => {
 
   const handleLock = async () => {
     if (!snapshot) return;
-    if (!confirm('Lock the cutover? After locking, you cannot back-date entries before the cutover date. Continue?')) return;
+    if (!await confirmModal('Lock the cutover? After locking, you cannot back-date entries before the cutover date. Continue?')) return;
     const { data, error } = await lockCutover(company, user?.email ?? 'unknown');
     if (error) {
       toast.error(error);
@@ -152,7 +154,7 @@ const CutoverWizard: React.FC = () => {
             <h2 className="text-xl font-black uppercase tracking-tight flex items-center gap-2">
               {isLocked ? <ShieldCheck size={20}/> : <Calendar size={20}/>} Go-Live Cutover Wizard
             </h2>
-            <p className="text-[10px] text-white/70 font-bold uppercase tracking-widest mt-0.5">
+            <p className="text-2xs text-white/70 font-bold uppercase tracking-widest mt-0.5">
               {company} · Sprint 30 · {isLocked ? 'LOCKED' : 'In Progress'} · {completedCount}/{CHECKLIST.length} steps complete
             </p>
           </div>
@@ -167,7 +169,7 @@ const CutoverWizard: React.FC = () => {
       <div className="bg-white border border-slate-200 rounded-2xl p-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cutover Date</p>
+            <p className="text-2xs font-black text-slate-400 uppercase tracking-widest">Cutover Date</p>
             <p className="text-sm text-slate-500 mt-0.5">First day live entries should be posted. Earlier dates will be blocked once locked.</p>
           </div>
           <div className="flex items-center gap-2">
@@ -191,7 +193,7 @@ const CutoverWizard: React.FC = () => {
               </button>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${done ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>STEP {i + 1}</span>
+                  <span className={`text-2xs font-black px-1.5 py-0.5 rounded ${done ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>STEP {i + 1}</span>
                   <p className="text-sm font-black text-slate-900 flex items-center gap-1.5">{item.icon} {item.title}</p>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">{item.description}</p>
@@ -212,7 +214,7 @@ const CutoverWizard: React.FC = () => {
             <ShieldCheck className="text-emerald-700" size={24}/>
             <div>
               <p className="text-sm font-black text-emerald-900">Cutover Locked</p>
-              <p className="text-[11px] text-emerald-700 mt-0.5">
+              <p className="text-2xs text-emerald-700 mt-0.5">
                 Locked on {fmt(snapshot.locked_at)} by {snapshot.locked_by ?? '—'} · cutover date {fmt(snapshot.cutover_date)}
               </p>
             </div>
@@ -223,7 +225,7 @@ const CutoverWizard: React.FC = () => {
               <CheckCircle2 className="text-blue-700" size={24}/>
               <div>
                 <p className="text-sm font-black text-blue-900">All steps complete. Ready to lock cutover.</p>
-                <p className="text-[11px] text-blue-700 mt-0.5">Locking is irreversible. Entries on/before {fmt(snapshot.cutover_date)} will be blocked.</p>
+                <p className="text-2xs text-blue-700 mt-0.5">Locking is irreversible. Entries on/before {fmt(snapshot.cutover_date)} will be blocked.</p>
               </div>
             </div>
             <button onClick={handleLock}
@@ -236,7 +238,7 @@ const CutoverWizard: React.FC = () => {
             <AlertCircle className="text-amber-700" size={24}/>
             <div>
               <p className="text-sm font-black text-amber-900">{CHECKLIST.length - completedCount} step(s) remaining</p>
-              <p className="text-[11px] text-amber-700 mt-0.5">Complete the checklist above before locking the cutover.</p>
+              <p className="text-2xs text-amber-700 mt-0.5">Complete the checklist above before locking the cutover.</p>
             </div>
           </div>
         )}
@@ -253,14 +255,14 @@ const CutoverWizard: React.FC = () => {
             <thead className="bg-slate-100">
               <tr>
                 {['When', 'Type', 'File', 'Attempted', 'Success', 'Failed', 'By'].map(h => (
-                  <th key={h} className="px-3 py-2 text-left font-black text-[10px] text-slate-500 uppercase">{h}</th>
+                  <th key={h} className="px-3 py-2 text-left font-black text-2xs text-slate-500 uppercase">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {imports.map((r, i) => (
                 <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
-                  <td className="px-3 py-2 text-slate-500">{r.imported_at ? new Date(r.imported_at).toLocaleString('en-PK') : '—'}</td>
+                  <td className="px-3 py-2 text-slate-500">{r.imported_at ? formatDateTime(r.imported_at) : '—'}</td>
                   <td className="px-3 py-2 font-mono font-bold text-slate-700">{r.import_type}</td>
                   <td className="px-3 py-2 text-slate-600">{r.file_name}</td>
                   <td className="px-3 py-2 text-right font-medium text-slate-700">{r.rows_attempted}</td>

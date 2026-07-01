@@ -10,6 +10,8 @@ import {
 import * as XLSX from 'xlsx';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
+import { toast } from 'sonner';
+import { formatNumber } from '@/modules/shared/utils/format';
 
 const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -52,19 +54,19 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
     setExpandedIds(new Set(topLevels));
   };
 
-  const handleRestoreDefaults = () => {
-    if (!confirm("This will merge missing 5-Level COA accounts into your current list. Continue?")) return;
+  const handleRestoreDefaults = async () => {
+    if (!await confirmModal("This will merge missing 5-Level COA accounts into your current list. Continue?")) return;
     FinanceService.seedDefaultCOA();
     refreshData();
-    alert("5-Level COA accounts have been merged.");
+    toast.success("5-Level COA accounts merged.");
   };
 
-  const handleClearAndReseed = () => {
-    if (!confirm("CRITICAL: This will DELETE ALL existing accounts and re-seed the default 5-Level COA. This cannot be undone. Continue?")) return;
+  const handleClearAndReseed = async () => {
+    if (!await confirmModal("CRITICAL: This will DELETE ALL existing accounts and re-seed the default 5-Level COA. This cannot be undone. Continue?")) return;
     FinanceService.saveAccounts([]); // Clear
     FinanceService.seedDefaultCOA(); // Seed
     refreshData();
-    alert("Chart of Accounts has been completely reset to 5-Level defaults.");
+    toast.success("Chart of Accounts reset to 5-Level defaults.");
   };
 
   const loadOpeningBalances = () => {
@@ -107,7 +109,8 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
     });
 
     if (Math.abs(totalDebit - totalCredit) > 0.01) {
-        return alert(`Imbalance Error!\nTotal Debit: ${totalDebit}\nTotal Credit: ${totalCredit}\nDifference: ${totalDebit - totalCredit}`);
+        toast.error(`Imbalance Error — Debit ${totalDebit} vs Credit ${totalCredit} (diff ${totalDebit - totalCredit})`);
+        return;
     }
 
     // 1. Remove ANY existing OB for this company (to overwrite)
@@ -131,7 +134,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
 
     FinanceService.saveLedger(cleanedLedger);
     setIsOBModalOpen(false);
-    alert("Opening Balances Posted Successfully.");
+    toast.success("Opening Balances Posted Successfully.");
   };
 
   const updateOBEntry = (accId: string, field: 'debit' | 'credit', value: string) => {
@@ -182,12 +185,12 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
   };
 
   const handleSaveAccount = () => {
-    if (!newAccName) return alert("Account name is required.");
+    if (!newAccName) { toast.error("Account name is required."); return; }
     let finalParentId = addSelections.l4 || addSelections.l3 || addSelections.l2 || addSelections.l1;
     let finalLevel = addSelections.l4 ? 5 : addSelections.l3 ? 4 : addSelections.l2 ? 3 : 2;
 
     const parent = accounts.find(a => a.id === finalParentId);
-    if (!parent) return alert("Select a valid parent category.");
+    if (!parent) { toast.error("Select a valid parent category."); return; }
 
     const newAcc: Account = {
       id: `${company}-ACC-${Date.now()}`,
@@ -211,11 +214,12 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
     // Allows deletion at ANY level selected (L5 down to L1)
     let targetId = delSelections.l5 || delSelections.l4 || delSelections.l3 || delSelections.l2 || delSelections.l1;
     
-    if (!targetId) return alert("Select a node to delete.");
-    
+    if (!targetId) { toast.error("Select a node to delete."); return; }
+
     // Safety check: Cannot delete if it has children
     if (accounts.some(a => a.parentId === targetId)) {
-        return alert("Constraint Error: This node has sub-accounts. Please delete all children first.");
+        toast.error("Constraint Error: This node has sub-accounts. Please delete all children first.");
+        return;
     }
     
     if (!await confirmModal(`CRITICAL: Confirm permanent deletion of this account?`)) return;
@@ -280,7 +284,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
           const existingAccounts = FinanceService.getAccounts().filter(a => a.company !== company);
           FinanceService.saveAccounts([...existingAccounts, ...currentCompanyAccounts]);
           refreshData();
-          alert('Accounts imported successfully from JSON!');
+          toast.success('Accounts imported successfully from JSON!');
         } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
           const workbook = XLSX.read(content, { type: 'binary' });
           const sheetName = workbook.SheetNames[0];
@@ -303,12 +307,12 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
           const existingAccounts = FinanceService.getAccounts().filter(a => a.company !== company);
           FinanceService.saveAccounts([...existingAccounts, ...currentCompanyAccounts]);
           refreshData();
-          alert('Accounts imported successfully from Excel!');
+          toast.success('Accounts imported successfully from Excel!');
         } else {
-          alert('Unsupported file type. Please upload a JSON or Excel file.');
+          toast.error('Unsupported file type. Please upload a JSON or Excel file.');
         }
       } catch (error: any) {
-        alert(`Error importing file: ${error.message}`);
+        toast.error(`Error importing file: ${error.message}`);
         console.error("Import error:", error);
       }
     };
@@ -318,7 +322,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
     } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
       reader.readAsBinaryString(file);
     } else {
-      alert('Unsupported file type. Please upload a JSON or Excel file.');
+      toast.error('Unsupported file type. Please upload a JSON or Excel file.');
     }
   };
 
@@ -331,7 +335,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
   };
 
   const handleUpdateAccount = () => {
-    if (!editingAccount || !editName) return alert("Account Name is required.");
+    if (!editingAccount || !editName) { toast.error("Account Name is required."); return; }
     
     const updated = { ...editingAccount, name: editName, code: editCode };
     const all = FinanceService.getAccounts();
@@ -361,7 +365,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
                   ) : <div className={`w-1.5 h-1.5 rounded-full ${acc.level === 5 ? 'bg-blue-600' : 'bg-slate-300'}`}></div>}
                 </div>
                 <div className="flex items-center space-x-3 flex-1 overflow-hidden">
-                  <span className="text-[10px] font-mono font-bold text-slate-400 w-20 shrink-0">{acc.code}</span>
+                  <span className="text-2xs font-mono font-bold text-slate-400 w-20 shrink-0">{acc.code}</span>
                   <span className={`text-sm truncate ${acc.level === 1 ? 'font-bold uppercase text-slate-900' : acc.level === 5 ? 'font-medium text-blue-700' : 'text-slate-700'}`}>
                     {acc.name}
                   </span>
@@ -375,7 +379,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
                     <Edit2 size={12} />
                   </button>
 
-                  <span className="ml-auto text-[9px] font-bold text-slate-400 opacity-0 group-hover:opacity-100 uppercase bg-slate-200 px-2 py-0.5 rounded">Level {acc.level}</span>
+                  <span className="ml-auto text-2xs font-bold text-slate-400 opacity-0 group-hover:opacity-100 uppercase bg-slate-200 px-2 py-0.5 rounded">Level {acc.level}</span>
                 </div>
               </div>
               {expandedIds.has(acc.id) && renderNode(acc.id, level + 1)}
@@ -394,7 +398,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
   return (
     <div className="flex bg-white border border-slate-200 shadow-sm min-h-[700px] animate-in fade-in duration-300">
       <div className="w-64 border-r bg-[#f7f9fa] p-4 shrink-0 no-print">
-        <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 px-2">Account Types</h4>
+        <h4 className="text-2xs font-bold text-slate-500 uppercase tracking-widest mb-4 px-2">Account Types</h4>
         <div className="space-y-1">
           {categories.map(cat => (
             <button
@@ -436,10 +440,10 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
       </div>
 
       {/* OPENING BALANCES MODAL */}
-      {isOBModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">
+      {isOBModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-modal"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">
         <div className="flex-1 overflow-y-auto bg-slate-50 p-8">
           <table className="w-full bg-white shadow-sm border text-left">
-            <thead className="bg-slate-100 text-[10px] font-black uppercase text-slate-500 sticky top-0 z-10">
+            <thead className="bg-slate-100 text-2xs font-black uppercase text-slate-500 sticky top-0 z-10">
               <tr>
                 <th className="p-3 border-b">Account Code</th>
                 <th className="p-3 border-b">Account Title</th>
@@ -465,11 +469,11 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
         </div>
         <div className="px-10 py-6 bg-white border-t flex justify-between items-center">
           <div className="flex items-center space-x-8 text-sm">
-            <div><span className="text-[10px] font-black uppercase text-slate-400 block">Total Debit</span><span className="font-black text-slate-900">{obTotalDr.toLocaleString()}</span></div>
-            <div><span className="text-[10px] font-black uppercase text-slate-400 block">Total Credit</span><span className="font-black text-slate-900">{obTotalCr.toLocaleString()}</span></div>
+            <div><span className="text-2xs font-black uppercase text-slate-400 block">Total Debit</span><span className="font-black text-slate-900">{formatNumber(obTotalDr)}</span></div>
+            <div><span className="text-2xs font-black uppercase text-slate-400 block">Total Credit</span><span className="font-black text-slate-900">{formatNumber(obTotalCr)}</span></div>
             <div className={`px-4 py-2 rounded border ${obDiff === 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
-              <span className="text-[10px] font-black uppercase block">Difference</span>
-              <span className="font-black">{obDiff.toLocaleString()}</span>
+              <span className="text-2xs font-black uppercase block">Difference</span>
+              <span className="font-black">{formatNumber(obDiff)}</span>
             </div>
           </div>
           <div className="flex space-x-3">
@@ -480,32 +484,32 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
       </div></div>)}
 
       {/* ADD MODAL */}
-      {isAddModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">
+      {isAddModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-modal"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">
         <div className="p-8 space-y-6 bg-slate-50">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-500">Level 1: Account Class</label>
+              <label className="text-2xs font-bold uppercase text-slate-500">Level 1: Account Class</label>
               <select value={addSelections.l1} onChange={e => setAddSelections({ l1: e.target.value, l2: '', l3: '', l4: '' })} className="sap-input w-full font-bold">
                 <option value="">Select Class...</option>
                 {add_l1List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-500">Level 2: IFRS Group</label>
+              <label className="text-2xs font-bold uppercase text-slate-500">Level 2: IFRS Group</label>
               <select disabled={!addSelections.l1} value={addSelections.l2} onChange={e => setAddSelections({ ...addSelections, l2: e.target.value, l3: '', l4: '' })} className="sap-input w-full font-bold">
                 <option value="">Select Group...</option>
                 {add_l2List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-500">Level 3: Control Account</label>
+              <label className="text-2xs font-bold uppercase text-slate-500">Level 3: Control Account</label>
               <select disabled={!addSelections.l2} value={addSelections.l3} onChange={e => setAddSelections({ ...addSelections, l3: e.target.value, l4: '' })} className="sap-input w-full font-bold">
                 <option value="">Select Control...</option>
                 {add_l3List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-500">Level 4: Sub-Ledger</label>
+              <label className="text-2xs font-bold uppercase text-slate-500">Level 4: Sub-Ledger</label>
               <select disabled={!addSelections.l3} value={addSelections.l4} onChange={e => setAddSelections({ ...addSelections, l4: e.target.value })} className="sap-input w-full font-bold">
                 <option value="">Select Sub-Ledger (Optional)...</option>
                 {add_l4List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
@@ -519,11 +523,11 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
           <div className="space-y-4 pt-4 border-t border-slate-200">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-500">New Account Description</label>
+                <label className="text-2xs font-bold uppercase text-slate-500">New Account Description</label>
                 <input type="text" placeholder="e.g. Furnace A" value={newAccName} onChange={e => setNewAccName(e.target.value)} className="sap-input w-full font-bold" />
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-500">Manual G/L Code</label>
+                <label className="text-2xs font-bold uppercase text-slate-500">Manual G/L Code</label>
                 <input type="text" placeholder="Auto if blank" value={newAccCode} onChange={e => setNewAccCode(e.target.value)} className="sap-input w-full font-mono font-bold text-blue-600" />
               </div>
             </div>
@@ -536,18 +540,18 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
       </div></div>)}
 
       {/* EDIT MODAL */}
-      {isEditModalOpen && !!editingAccount && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">
+      {isEditModalOpen && !!editingAccount && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-modal"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">
         <div className="p-8 space-y-6 bg-slate-50">
           <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl">
-            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">Hierarchy Context</p>
+            <p className="text-2xs font-bold text-blue-500 uppercase tracking-widest mb-1">Hierarchy Context</p>
             <p className="text-sm font-bold text-slate-800">Level {editingAccount?.level} Node</p>
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] font-bold uppercase text-slate-500">Account Description</label>
+            <label className="text-2xs font-bold uppercase text-slate-500">Account Description</label>
             <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="sap-input w-full font-bold" />
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] font-bold uppercase text-slate-500">G/L Code</label>
+            <label className="text-2xs font-bold uppercase text-slate-500">G/L Code</label>
             <input type="text" value={editCode} onChange={e => setEditCode(e.target.value)} className="sap-input w-full font-mono font-bold text-blue-600" />
           </div>
         </div>
@@ -558,7 +562,7 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
       </div></div>)}
 
       {/* DELETE MODAL */}
-      {isDeleteModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">
+      {isDeleteModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-modal"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">
         <div className="p-8 space-y-6 bg-slate-50">
           <div className="bg-rose-50 p-4 border border-rose-100 rounded-xl flex items-start space-x-3">
             <ShieldAlert size={20} className="text-rose-600 shrink-0"/>
@@ -566,35 +570,35 @@ const ChartOfAccounts: React.FC<{ company: Company }> = ({ company }) => {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-500">Level 1: Account Class</label>
+              <label className="text-2xs font-bold uppercase text-slate-500">Level 1: Account Class</label>
               <select value={delSelections.l1} onChange={e => setDelSelections({ l1: e.target.value, l2: '', l3: '', l4: '', l5: '' })} className="sap-input w-full font-bold">
                 <option value="">Select Class...</option>
                 {del_l1List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-500">Level 2: Group</label>
+              <label className="text-2xs font-bold uppercase text-slate-500">Level 2: Group</label>
               <select disabled={!delSelections.l1} value={delSelections.l2} onChange={e => setDelSelections({ ...delSelections, l2: e.target.value, l3: '', l4: '', l5: '' })} className="sap-input w-full font-bold">
                 <option value="">Select Group (Target?)...</option>
                 {del_l2List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-500">Level 3: Control</label>
+              <label className="text-2xs font-bold uppercase text-slate-500">Level 3: Control</label>
               <select disabled={!delSelections.l2} value={delSelections.l3} onChange={e => setDelSelections({ ...delSelections, l3: e.target.value, l4: '', l5: '' })} className="sap-input w-full font-bold">
                 <option value="">Select Control (Target?)...</option>
                 {del_l3List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-500">Level 4: Sub-Ledger</label>
+              <label className="text-2xs font-bold uppercase text-slate-500">Level 4: Sub-Ledger</label>
               <select disabled={!delSelections.l3} value={delSelections.l4} onChange={e => setDelSelections({ ...delSelections, l4: e.target.value, l5: '' })} className="sap-input w-full font-bold">
                 <option value="">Select Sub-Ledger (Target?)...</option>
                 {del_l4List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}
               </select>
             </div>
             <div className="space-y-1 col-span-2">
-              <label className="text-[10px] font-bold uppercase text-slate-500">Level 5: Transaction</label>
+              <label className="text-2xs font-bold uppercase text-slate-500">Level 5: Transaction</label>
               <select disabled={!delSelections.l4} value={delSelections.l5} onChange={e => setDelSelections({ ...delSelections, l5: e.target.value })} className="sap-input w-full font-bold">
                 <option value="">Select Transaction Acc (Target?)...</option>
                 {del_l5List.map(a => <option key={a.id} value={a.id}>[{a.code}] {a.name}</option>)}

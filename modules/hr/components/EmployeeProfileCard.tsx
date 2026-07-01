@@ -48,7 +48,7 @@ const getCurrentMonth = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
-const formatPKR = (n: number) => `PKR ${n.toLocaleString()}`;
+import { formatPKR, formatMonthYear } from '@/modules/shared/utils/format';
 
 // ── Stat Card Component ─────────────────────────────────────────────
 const StatCard: React.FC<{
@@ -61,10 +61,10 @@ const StatCard: React.FC<{
   <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
     <div className="flex items-center gap-2 mb-2">
       {icon}
-      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</span>
+      <span className="text-2xs font-bold text-slate-500 uppercase tracking-widest">{label}</span>
     </div>
     <p className={`text-xl font-black ${color}`}>{value}</p>
-    {sub && <p className="text-[10px] text-slate-400 mt-0.5">{sub}</p>}
+    {sub && <p className="text-2xs text-slate-400 mt-0.5">{sub}</p>}
   </div>
 );
 
@@ -145,7 +145,7 @@ const EmployeeProfileCard: React.FC<Props> = ({ employee, onClose }) => {
 
   // ── Render ─────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[500] flex items-start justify-center overflow-y-auto">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-modal flex items-start justify-center overflow-y-auto">
       <div className="w-full max-w-4xl my-6 mx-4">
 
         {/* Back button */}
@@ -170,7 +170,7 @@ const EmployeeProfileCard: React.FC<Props> = ({ employee, onClose }) => {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 flex-wrap">
                 <h1 className="text-xl font-black text-white">{emp.personal.name}</h1>
-                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${statusConfig.bg} ${statusConfig.color}`}>
+                <span className={`text-2xs font-bold px-2.5 py-1 rounded-full border ${statusConfig.bg} ${statusConfig.color}`}>
                   {statusConfig.label}
                 </span>
               </div>
@@ -193,11 +193,11 @@ const EmployeeProfileCard: React.FC<Props> = ({ employee, onClose }) => {
             {/* Tenure badge */}
             <div className="text-right shrink-0 hidden md:block">
               <div className="bg-white/10 rounded-xl px-4 py-3 border border-white/10">
-                <p className="text-[10px] text-slate-400 font-bold uppercase">Tenure</p>
+                <p className="text-2xs text-slate-400 font-bold uppercase">Tenure</p>
                 <p className="text-lg font-black text-white">
                   {tenure.years > 0 ? `${tenure.years}y ` : ''}{tenure.months}m
                 </p>
-                <p className="text-[10px] text-slate-500">{tenure.totalDays} days</p>
+                <p className="text-2xs text-slate-500">{tenure.totalDays} days</p>
               </div>
             </div>
           </div>
@@ -255,7 +255,7 @@ const EmployeeProfileCard: React.FC<Props> = ({ employee, onClose }) => {
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
             <div className="flex items-center gap-2 mb-4">
               <Clock size={18} className="text-emerald-600" />
-              <h3 className="text-sm font-bold text-slate-800">Attendance — {new Date().toLocaleString('en-PK', { month: 'long', year: 'numeric' })}</h3>
+              <h3 className="text-sm font-bold text-slate-800">Attendance — {formatMonthYear(new Date())}</h3>
             </div>
 
             {monthAttendance.totalWorking === 0 ? (
@@ -281,19 +281,19 @@ const EmployeeProfileCard: React.FC<Props> = ({ employee, onClose }) => {
                 <div className="grid grid-cols-4 gap-2 text-center">
                   <div className="bg-emerald-50 rounded-lg py-2">
                     <p className="text-lg font-black text-emerald-700">{monthAttendance.present}</p>
-                    <p className="text-[9px] font-bold text-emerald-600 uppercase">Present</p>
+                    <p className="text-2xs font-bold text-emerald-600 uppercase">Present</p>
                   </div>
                   <div className="bg-amber-50 rounded-lg py-2">
                     <p className="text-lg font-black text-amber-700">{monthAttendance.late}</p>
-                    <p className="text-[9px] font-bold text-amber-600 uppercase">Late</p>
+                    <p className="text-2xs font-bold text-amber-600 uppercase">Late</p>
                   </div>
                   <div className="bg-red-50 rounded-lg py-2">
                     <p className="text-lg font-black text-red-700">{monthAttendance.absent}</p>
-                    <p className="text-[9px] font-bold text-red-600 uppercase">Absent</p>
+                    <p className="text-2xs font-bold text-red-600 uppercase">Absent</p>
                   </div>
                   <div className="bg-blue-50 rounded-lg py-2">
                     <p className="text-lg font-black text-blue-700">{monthAttendance.leave}</p>
-                    <p className="text-[9px] font-bold text-blue-600 uppercase">Leave</p>
+                    <p className="text-2xs font-bold text-blue-600 uppercase">Leave</p>
                   </div>
                 </div>
 
@@ -341,12 +341,12 @@ const EmployeeProfileCard: React.FC<Props> = ({ employee, onClose }) => {
             {/* Active loans */}
             {activeLoanData.active.length > 0 ? (
               <div className="bg-violet-50 rounded-xl p-3 border border-violet-100">
-                <p className="text-[10px] font-bold text-violet-700 uppercase mb-2">Active Loans / Advances</p>
+                <p className="text-2xs font-bold text-violet-700 uppercase mb-2">Active Loans / Advances</p>
                 <div className="space-y-2">
                   {activeLoanData.active.map(loan => (
                     <div key={loan.id} className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${loan.type === 'Loan' ? 'bg-violet-200 text-violet-800' : 'bg-sky-200 text-sky-800'}`}>
+                        <span className={`text-2xs font-bold px-1.5 py-0.5 rounded ${loan.type === 'Loan' ? 'bg-violet-200 text-violet-800' : 'bg-sky-200 text-sky-800'}`}>
                           {loan.type}
                         </span>
                         <span className="text-slate-600">{loan.date}</span>
@@ -373,7 +373,7 @@ const EmployeeProfileCard: React.FC<Props> = ({ employee, onClose }) => {
             {/* Last payroll */}
             {lastPayroll && (
               <div className="mt-3 bg-slate-50 rounded-xl p-3 border border-slate-100">
-                <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Last Payroll — {lastPayroll.month}</p>
+                <p className="text-2xs font-bold text-slate-500 uppercase mb-1">Last Payroll — {lastPayroll.month}</p>
                 <div className="flex justify-between text-xs">
                   <span className="text-slate-600">Net Salary Paid</span>
                   <span className="font-black text-emerald-700">{formatPKR(lastPayroll.netSalary)}</span>
@@ -413,7 +413,7 @@ const EmployeeProfileCard: React.FC<Props> = ({ employee, onClose }) => {
             />
           </div>
           {docCompleteness < 100 && (
-            <p className="text-[10px] text-slate-400 mt-2">Open employee edit → Documents tab to upload missing files</p>
+            <p className="text-2xs text-slate-400 mt-2">Open employee edit → Documents tab to upload missing files</p>
           )}
         </div>
 

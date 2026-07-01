@@ -4,10 +4,15 @@ import { Employee, LoanAdvance, Requisition, Company } from '@/modules/shared/ty
 import { HRService } from '@/modules/hr/services/hrService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { FinanceService } from '@/modules/finance/services/financeService';
-import { Plus, Search, CheckCircle, Clock, Banknote, HandCoins, X, AlertCircle, FileUp, Download, Calendar, Edit2, Trash2, Fingerprint } from 'lucide-react';
+import { Banknote, HandCoins, X, AlertCircle, FileUp, Download, Calendar, Edit2, Trash2, Fingerprint, FileText, Wallet, Layers } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
+import { formatPKR, formatNumber, formatDate, formatMonthYear } from '@/modules/shared/utils/format';
+import { KpiTile, KpiRow } from '@/modules/shared/components/KpiTile';
+import { StatusBadge } from '@/modules/shared/components/StatusBadge';
+import { EmptyState } from '@/modules/shared/components/EmptyState';
 
 const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -124,14 +129,18 @@ const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
           const cashAcc     = FinanceService.ensureAccount(company as any, 'Cash in Hand', 3, assetParent.id, 'Asset', '1111');
           FinanceService.recordTransaction({
             id: `LOAN-DISB-${Date.now()}`,
+            docType: 'JV',
+            docDate: loanData.date,
             date: loanData.date,
-            description: `${modalType} Disbursed — ${emp?.personal?.name || ''} — PKR ${loanData.amount?.toLocaleString()}`,
+            description: `${modalType} Disbursed — ${emp?.personal?.name || ''} — ${formatPKR(loanData.amount)}`,
             company,
+            referenceId: loan.id,
+            status: 'Parked',
             details: [
               { accountId: loanAcc.id, debit: Number(loanData.amount), credit: 0, text: `${modalType} issued` },
               { accountId: cashAcc.id, debit: 0, credit: Number(loanData.amount), text: 'Cash paid out' },
             ],
-            postedBy: 'HR',
+            createdBy: 'HR',
           });
         } catch(e) { console.warn('Loan GL entry failed', e); }
     }
@@ -148,8 +157,8 @@ const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
       setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-      if (confirm("Permanently delete this entry?")) {
+  const handleDelete = async (id: string) => {
+      if (await confirmModal("Permanently delete this entry?")) {
           const updated = HRService.getLoans().filter(l => l.id !== id);
           HRService.saveLoans(updated);
           refreshData(employees);
@@ -212,50 +221,60 @@ const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
       setIsModalOpen(true);
   };
 
+  // Tab KPIs — derived from the month-filtered loans already in state (real values only)
+  const activeCount    = loans.filter(l => l.status === 'Active').length;
+  const totalDisbursed = loans.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+  const monthlyRepay   = loans.reduce((s, l) => s + (Number(l.repaymentAmount) || 0), 0);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {statementEmpId && (() => {
         const emp = employees.find(e => e.id === statementEmpId);
         return emp ? <LoanStatementModal empId={statementEmpId} empName={emp.personal.name} onClose={() => setStatementEmpId(null)} /> : null;
       })()}
-      <div className="flex justify-between items-center bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-        <div className="flex items-center space-x-6">
-           <div><h3 className="text-xl font-black text-slate-800 tracking-tight leading-none">Financial Ledger</h3><p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-1.5">Employee Loans & Advances</p></div>
-           <div className="h-8 w-px bg-slate-100"></div>
-           <div className="flex items-center space-x-4"><Calendar className="text-blue-600" size={20} /><input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="border-none font-black text-lg p-0 focus:ring-0 text-slate-800 bg-transparent outline-none" /></div>
+      {/* ── KPI row ── */}
+      <KpiRow>
+        <KpiTile label="Records" value={formatNumber(loans.length)} icon={<Layers size={16} />} tone="primary" hint={formatMonthYear(selectedMonth)} />
+        <KpiTile label="Active" value={formatNumber(activeCount)} icon={<HandCoins size={16} />} tone="warning" hint={`${loans.length - activeCount} settled`} />
+        <KpiTile label="Disbursed" value={`PKR ${formatNumber(totalDisbursed)}`} icon={<Banknote size={16} />} tone="info" hint="this month" />
+        <KpiTile label="Repay / Mo" value={`PKR ${formatNumber(monthlyRepay)}`} icon={<Wallet size={16} />} tone="success" hint="monthly deduction" />
+      </KpiRow>
+
+      {/* ── Toolbar: month filter + actions ── */}
+      <div className="flex items-center justify-between gap-3 no-print">
+        <div className="flex items-center gap-2">
+          <Calendar className="text-slate-400" size={16} />
+          <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="sap-input py-1.5 text-label font-bold" />
         </div>
-        <div className="flex space-x-3">
+        <div className="flex items-center gap-2 shrink-0">
           <input type="file" ref={fileInputRef} onChange={handleImportExcel} className="hidden" accept=".xlsx, .xls" />
-          <button onClick={() => fileInputRef.current?.click()} className="bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl flex items-center space-x-2 hover:bg-slate-100 transition-all font-bold text-sm border border-slate-200"><FileUp size={18} /><span>Import</span></button>
-          <button onClick={handleExportExcel} className="bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl flex items-center space-x-2 hover:bg-slate-100 transition-all font-bold text-sm border border-slate-200"><Download size={18} /><span>Export</span></button>
-          <button onClick={() => openNewEntryModal('Advance')} className="bg-blue-50 text-blue-700 px-5 py-2.5 rounded-xl flex items-center space-x-2 hover:bg-blue-100 font-bold text-sm border border-blue-100 transition-all"><HandCoins size={18} /><span>Advance</span></button>
-          <button onClick={() => openNewEntryModal('Loan')} className="bg-slate-900 text-white px-5 py-2.5 rounded-xl flex items-center space-x-2 hover:bg-slate-800 font-bold text-sm shadow-lg shadow-slate-200 transition-all"><Banknote size={18} /><span>Loan</span></button>
+          <button onClick={() => fileInputRef.current?.click()} className="sap-btn-ghost flex items-center gap-2"><FileUp size={14} /><span>Import</span></button>
+          <button onClick={handleExportExcel} className="sap-btn-ghost flex items-center gap-2"><Download size={14} /><span>Export</span></button>
+          <button onClick={() => openNewEntryModal('Advance')} className="sap-btn-ghost flex items-center gap-2"><HandCoins size={14} /><span>Advance</span></button>
+          <button onClick={() => openNewEntryModal('Loan')} className="sap-btn-primary flex items-center gap-2"><Banknote size={14} /><span>New Loan</span></button>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-card border border-slate-200 shadow-sm overflow-hidden">
         <table className="w-full text-left">
           <thead className="bg-slate-50 border-b border-slate-200">
-            <tr className="text-[10px] font-black uppercase text-slate-500 tracking-widest"><th className="px-8 py-5">Employee Profile</th><th className="px-6 py-5">Issuance Date</th><th className="px-6 py-5">Category</th><th className="px-6 py-5">Original Amt.</th><th className="px-6 py-5">Repay/Mo</th><th className="px-6 py-5">Status</th><th className="px-6 py-5 text-right">Actions</th></tr>
+            <tr className="text-2xs font-black uppercase text-slate-500 tracking-widest"><th className="px-8 py-5">Employee Profile</th><th className="px-6 py-5">Issuance Date</th><th className="px-6 py-5">Category</th><th className="px-6 py-5">Original Amt.</th><th className="px-6 py-5">Repay/Mo</th><th className="px-6 py-5">Status</th><th className="px-6 py-5 text-right">Actions</th></tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
             {loans.length > 0 ? loans.map(loan => {
               const emp = employees.find(e => e.id === loan.employeeId);
               return (
                 <tr key={loan.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-8 py-4"><div className="flex items-center gap-2"><div><p className="font-bold text-slate-900 leading-tight">{emp?.personal.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{emp?.work.employeeCode}</p></div><button onClick={() => setStatementEmpId(loan.employeeId)} title="View full statement" className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><FileText size={13}/></button></div></td>
-                  <td className="px-6 py-4 font-black text-slate-500 text-xs uppercase tracking-tighter">{loan.date}</td>
+                  <td className="px-8 py-4"><div className="flex items-center gap-2"><div><p className="font-bold text-slate-900 leading-tight">{emp?.personal.name}</p><p className="text-2xs text-slate-400 font-bold uppercase tracking-tight">{emp?.work.employeeCode}</p></div><button onClick={() => setStatementEmpId(loan.employeeId)} title="View full statement" className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><FileText size={13}/></button></div></td>
+                  <td className="px-6 py-4 font-black text-slate-500 text-xs uppercase tracking-tighter">{formatDate(loan.date)}</td>
                   <td className="px-6 py-4">
-                      <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${loan.type === 'Loan' ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{loan.type}</span>
-                      {loan.requisitionId && <span className="ml-2 inline-flex items-center text-[8px] font-bold text-emerald-600 bg-emerald-50 px-1 rounded border border-emerald-100"><Fingerprint size={8}/> PR LINKED</span>}
+                      <span className={`px-2.5 py-1 rounded-lg text-2xs font-black uppercase tracking-widest border ${loan.type === 'Loan' ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{loan.type}</span>
+                      {loan.requisitionId && <span className="ml-2 inline-flex items-center text-2xs font-bold text-emerald-600 bg-emerald-50 px-1 rounded border border-emerald-100"><Fingerprint size={8}/> PR LINKED</span>}
                   </td>
-                  <td className="px-6 py-4 font-black text-slate-900">PKR {loan.amount.toLocaleString()}</td>
-                  <td className="px-6 py-4 font-bold text-slate-600">PKR {loan.repaymentAmount.toLocaleString()}</td>
+                  <td className="px-6 py-4 font-black text-slate-900">{formatPKR(loan.amount)}</td>
+                  <td className="px-6 py-4 font-bold text-slate-600">{formatPKR(loan.repaymentAmount)}</td>
                   <td className="px-6 py-4">
-                    {loan.status === 'Active' ? 
-                      <div className="flex items-center space-x-1.5 text-amber-600 font-black uppercase text-[10px] bg-amber-50 px-2 py-1 rounded-lg border border-amber-100 w-fit"><Clock size={12} /><span>Deduction Active</span></div> : 
-                      <div className="flex items-center space-x-1.5 text-emerald-600 font-black uppercase text--[10px] bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 w-fit"><CheckCircle size={12} /><span>Settled</span></div>
-                    }
+                    <StatusBadge status={loan.status} size="sm" />
                   </td>
                   <td className="px-6 py-4 text-right">
                       <div className="flex justify-end space-x-2">
@@ -266,35 +285,43 @@ const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
                 </tr>
               );
             }) : (
-              <tr><td colSpan={7} className="px-8 py-20 text-center"><div className="opacity-20 flex flex-col items-center"><HandCoins size={48} className="mb-4" /><p className="font-black uppercase tracking-[0.3em] text-xs">No records found for {new Date(selectedMonth).toLocaleString('default', { month: 'long', year: 'numeric' })}</p></div></td></tr>
+              <tr><td colSpan={7} className="p-0">
+                <EmptyState
+                  icon={<HandCoins size={22} />}
+                  title={`No records for ${formatMonthYear(selectedMonth)}`}
+                  description="No loans or advances were issued this month. Disburse an advance or a new loan to start the ledger."
+                  action={{ label: 'New Loan', icon: <Banknote size={14} />, onClick: () => openNewEntryModal('Loan') }}
+                  secondaryAction={{ label: 'Advance', icon: <HandCoins size={14} />, onClick: () => openNewEntryModal('Advance') }}
+                />
+              </td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      {isModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[500]"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">
+      {isModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-modal"><div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200">
         <div className="p-10 space-y-8 bg-slate-50">
           {!editingId && authorizedReqs.length > 0 && (
-            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl animate-in fade-in">
-              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 ml-1 mb-2 block">Link Approved Request (Optional)</label>
+            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-card animate-in fade-in">
+              <label className="text-2xs font-black uppercase tracking-[0.2em] text-emerald-700 ml-1 mb-2 block">Link Approved Request (Optional)</label>
               <select className="w-full bg-white border border-emerald-200 p-3 rounded-xl text-xs font-bold outline-none text-emerald-900" onChange={(e) => handleLinkRequisition(e.target.value)} value={newLoan.requisitionId || ''}>
                 <option value="">-- Direct Issuance (No Link) --</option>
                 {authorizedReqs.map(req => (
-                  <option key={req.id} value={req.id}>{req.id} | {req.requisitioner} | {req.reqType?.toUpperCase() || 'N/A'} | PKR {req.totalValue?.toLocaleString() || '0'}</option>
+                  <option key={req.id} value={req.id}>{req.id} | {req.requisitioner} | {req.reqType?.toUpperCase() || 'N/A'} | {formatPKR(req.totalValue || 0)}</option>
                 ))}
               </select>
             </div>
           )}
           <div className="grid grid-cols-2 gap-8">
-            <div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Employee Profile</label><select className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl outline-none font-bold text-slate-900 shadow-sm focus:border-blue-500 transition-all" onChange={e => setNewLoan({...newLoan, employeeId: e.target.value})} value={newLoan.employeeId} disabled={!!editingId}><option value="">Select Associate...</option>{employees.map(e => <option key={e.id} value={e.id}>{e.personal.name} ({e.work.employeeCode})</option>)}</select></div>
-            <div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Ledger Date</label><input type="date" className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold outline-none shadow-sm focus:border-blue-500 transition-all" value={newLoan.date} onChange={e => setNewLoan({...newLoan, date: e.target.value})} /></div>
+            <div className="space-y-2"><label className="text-2xs font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Employee Profile</label><select className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl outline-none font-bold text-slate-900 shadow-sm focus:border-blue-500 transition-all" onChange={e => setNewLoan({...newLoan, employeeId: e.target.value})} value={newLoan.employeeId} disabled={!!editingId}><option value="">Select Associate...</option>{employees.map(e => <option key={e.id} value={e.id}>{e.personal.name} ({e.work.employeeCode})</option>)}</select></div>
+            <div className="space-y-2"><label className="text-2xs font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Ledger Date</label><input type="date" className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold outline-none shadow-sm focus:border-blue-500 transition-all" value={newLoan.date} onChange={e => setNewLoan({...newLoan, date: e.target.value})} /></div>
           </div>
           <div className="grid grid-cols-2 gap-8">
-            <div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Total Principal (PKR)</label><input type="number" className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-black text-slate-900 outline-none shadow-sm focus:border-blue-500 transition-all" value={newLoan.amount || ''} onChange={e => setNewLoan({...newLoan, amount: Number(e.target.value)})} /></div>
-            {modalType === 'Loan' && (<div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Repayment/Mo (PKR)</label><input type="number" className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-black text-blue-600 outline-none shadow-sm focus:border-blue-500 transition-all" value={newLoan.repaymentAmount || ''} onChange={e => setNewLoan({...newLoan, repaymentAmount: Number(e.target.value)})} /></div>)}
-            {modalType === 'Advance' && (<div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex items-center justify-center"><p className="text-[10px] font-black text-blue-700 uppercase">Auto-Deduct Full Amount</p></div>)}
+            <div className="space-y-2"><label className="text-2xs font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Total Principal (PKR)</label><input type="number" className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-black text-slate-900 outline-none shadow-sm focus:border-blue-500 transition-all" value={newLoan.amount || ''} onChange={e => setNewLoan({...newLoan, amount: Number(e.target.value)})} /></div>
+            {modalType === 'Loan' && (<div className="space-y-2"><label className="text-2xs font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Repayment/Mo (PKR)</label><input type="number" className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-black text-blue-600 outline-none shadow-sm focus:border-blue-500 transition-all" value={newLoan.repaymentAmount || ''} onChange={e => setNewLoan({...newLoan, repaymentAmount: Number(e.target.value)})} /></div>)}
+            {modalType === 'Advance' && (<div className="bg-blue-50 p-4 rounded-card border border-blue-100 flex items-center justify-center"><p className="text-2xs font-black text-blue-700 uppercase">Auto-Deduct Full Amount</p></div>)}
           </div>
-          <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 flex items-start space-x-4"><AlertCircle className="text-amber-500 shrink-0 mt-1" size={20} /><p className="text-[10px] font-bold text-amber-700 uppercase leading-relaxed tracking-tight">{modalType === 'Advance' ? 'Note: This advance will be deducted in full from the upcoming salary cycle.' : 'Note: Monthly repayments will be automatically deducted during the payroll generation process.'}</p></div>
+          <div className="bg-amber-50 p-6 rounded-card border border-amber-100 flex items-start space-x-4"><AlertCircle className="text-amber-500 shrink-0 mt-1" size={20} /><p className="text-2xs font-bold text-amber-700 uppercase leading-relaxed tracking-tight">{modalType === 'Advance' ? 'Note: This advance will be deducted in full from the upcoming salary cycle.' : 'Note: Monthly repayments will be automatically deducted during the payroll generation process.'}</p></div>
         </div>
         <div className="px-10 py-8 bg-white border-t flex justify-end space-x-4">
           <button onClick={() => { setIsModalOpen(false); setEditingId(null); }} className="px-8 py-3 text-slate-400 font-black uppercase text-xs tracking-widest hover:text-slate-600">Discard</button>
@@ -313,8 +340,8 @@ const LoanStatementModal: React.FC<{ empId: string; empName: string; onClose: ()
   const recovered = allLoans.reduce((s, l) => s + (l.repaymentAmount || 0), 0);
   const outstanding = total - recovered;
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[500] p-4">
-      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-modal p-4">
+      <div className="bg-white rounded-card w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
         <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-900 rounded-t-2xl">
           <div>
             <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Loan Statement</p>
@@ -323,14 +350,14 @@ const LoanStatementModal: React.FC<{ empId: string; empName: string; onClose: ()
           <button onClick={onClose} className="text-slate-400 hover:text-white p-2"><X size={20}/></button>
         </div>
         <div className="grid grid-cols-3 gap-4 p-4 border-b bg-slate-50">
-          <div className="text-center"><p className="text-[10px] font-black text-slate-400 uppercase">Total Disbursed</p><p className="text-xl font-black text-slate-800">PKR {total.toLocaleString()}</p></div>
-          <div className="text-center"><p className="text-[10px] font-black text-slate-400 uppercase">Recovered</p><p className="text-xl font-black text-emerald-600">PKR {recovered.toLocaleString()}</p></div>
-          <div className="text-center"><p className="text-[10px] font-black text-slate-400 uppercase">Outstanding</p><p className="text-xl font-black text-rose-600">PKR {outstanding.toLocaleString()}</p></div>
+          <div className="text-center"><p className="text-2xs font-black text-slate-400 uppercase">Total Disbursed</p><p className="text-xl font-black text-slate-800">{formatPKR(total)}</p></div>
+          <div className="text-center"><p className="text-2xs font-black text-slate-400 uppercase">Recovered</p><p className="text-xl font-black text-emerald-600">{formatPKR(recovered)}</p></div>
+          <div className="text-center"><p className="text-2xs font-black text-slate-400 uppercase">Outstanding</p><p className="text-xl font-black text-rose-600">{formatPKR(outstanding)}</p></div>
         </div>
         <div className="flex-1 overflow-y-auto p-4">
           {allLoans.length === 0 ? <p className="text-sm text-slate-400 italic text-center py-8">No loans/advances on record</p> : (
             <table className="w-full text-xs border-collapse">
-              <thead><tr className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase">
+              <thead><tr className="bg-slate-50 text-2xs font-black text-slate-500 uppercase">
                 <th className="p-2 text-left">Date</th><th className="p-2 text-left">Type</th>
                 <th className="p-2 text-right">Amount</th><th className="p-2 text-right">Recovered</th>
                 <th className="p-2 text-right">Outstanding</th><th className="p-2 text-center">Status</th>
@@ -338,12 +365,12 @@ const LoanStatementModal: React.FC<{ empId: string; empName: string; onClose: ()
               <tbody>
                 {allLoans.map(l => (
                   <tr key={l.id} className="border-t border-slate-100 hover:bg-slate-50">
-                    <td className="p-2 font-bold">{l.date}</td>
-                    <td className="p-2"><span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${l.type === 'Loan' ? 'bg-slate-100 text-slate-600' : 'bg-blue-50 text-blue-600'}`}>{l.type}</span></td>
-                    <td className="p-2 text-right font-bold">{l.amount.toLocaleString()}</td>
-                    <td className="p-2 text-right text-emerald-600 font-bold">{(l.repaymentAmount||0).toLocaleString()}</td>
-                    <td className="p-2 text-right text-rose-600 font-black">{(l.amount - (l.repaymentAmount||0)).toLocaleString()}</td>
-                    <td className="p-2 text-center"><span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${l.status === 'Completed' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>{l.status}</span></td>
+                    <td className="p-2 font-bold">{formatDate(l.date)}</td>
+                    <td className="p-2"><span className={`px-2 py-0.5 rounded-full text-2xs font-black ${l.type === 'Loan' ? 'bg-slate-100 text-slate-600' : 'bg-blue-50 text-blue-600'}`}>{l.type}</span></td>
+                    <td className="p-2 text-right font-bold">{formatNumber(l.amount)}</td>
+                    <td className="p-2 text-right text-emerald-600 font-bold">{formatNumber(l.repaymentAmount||0)}</td>
+                    <td className="p-2 text-right text-rose-600 font-black">{formatNumber(l.amount - (l.repaymentAmount||0))}</td>
+                    <td className="p-2 text-center"><span className={`px-2 py-0.5 rounded-full text-2xs font-black ${l.status === 'Paid' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>{l.status}</span></td>
                   </tr>
                 ))}
               </tbody>

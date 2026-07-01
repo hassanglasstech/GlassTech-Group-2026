@@ -51,17 +51,6 @@ const BrandingSettings: React.FC = () => {
   const appCompany = useAppStore(s => s.selectedCompany) as string;
 
   const ALLOWED = new Set(['super_admin', 'owner', 'hassan', 'admin', 'glassco_admin']);
-  if (!user) return <Navigate to="/" replace/>;
-  if (!ALLOWED.has(user.role || '')) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
-        <div className="text-center">
-          <AlertTriangle size={36} className="mx-auto text-amber-500 mb-3"/>
-          <p className="text-sm font-bold text-slate-700">Branding Settings requires admin / owner role.</p>
-        </div>
-      </div>
-    );
-  }
 
   const [company, setCompany] = useState<string>(appCompany || 'Glassco');
   const [data, setData] = useState<CompanyBranding | null>(null);
@@ -75,6 +64,19 @@ const BrandingSettings: React.FC = () => {
   }, [company]);
 
   useEffect(() => { reload(); }, [reload]);
+
+  // Guards placed after hooks to keep hook order stable (react-hooks/rules-of-hooks)
+  if (!user) return <Navigate to="/" replace/>;
+  if (!ALLOWED.has(user.role || '')) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
+        <div className="text-center">
+          <AlertTriangle size={36} className="mx-auto text-amber-500 mb-3"/>
+          <p className="text-sm font-bold text-slate-700">Branding Settings requires admin / owner role.</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleField = (k: keyof CompanyBranding, v: any) => {
     if (!data) return;

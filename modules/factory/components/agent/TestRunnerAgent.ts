@@ -32,7 +32,7 @@ function getWorkflows(): any[] {
   } catch {
     _workflows = [];
   }
-  return _workflows;
+  return _workflows ?? [];
 }
 
 // Allow external injection of workflows (used by TestSuite UI)
