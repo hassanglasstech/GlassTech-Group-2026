@@ -13,11 +13,11 @@ import {
     Printer, ArrowLeft, CheckCircle2, Package, Clock, DollarSign, Filter, Receipt, Flame, Search, Trash2
 } from 'lucide-react';
 import Pagination from '@/components/Pagination';
-const GlasscoPrintTemplate: any = () => null;
+import { GlasscoPrintTemplate } from '../../glassco/core/GlasscoPrintTemplate';
 import { NipponPrintTemplate } from '../../nippon/prints/NipponPrintTemplate';
 import UniversalSalesOrderPrint from './prints/UniversalSalesOrderPrint';
 import { UnifiedPaymentPrint } from '../../finance/components/prints/UnifiedPaymentPrint';
-const GlasscoServiceOrderPrint: any = () => null;
+import { GlasscoServiceOrderPrint } from '../../glassco/core/prints/GlasscoServiceOrderPrint';
 import { useLocation } from 'react-router-dom';
 
 import { useAppStore } from '../../shared/store/appStore';
