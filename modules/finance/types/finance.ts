@@ -60,6 +60,13 @@ export interface LedgerTransaction {
   createdBy?:  string;
   updatedBy?:  string;
   postedAt?:   string;
+  /**
+   * Soft-delete tombstone (audit #5). ISO timestamp when this entry was voided
+   * out of the books. When set, FinanceService.getLedger() hides it and
+   * SyncService.pullTable will not re-hydrate it — but only once
+   * SOFT_DELETE_ENABLED is flipped on (after migration 089). Undefined = live.
+   */
+  deletedAt?:  string;
 }
 
 export interface CostCenter { 

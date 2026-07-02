@@ -17,6 +17,7 @@ import { flushOfflineQueue, getDBStatus } from '../../modules/shared/services/su
 import { safeFetch } from '../../modules/shared/services/utils';
 import { toast } from 'sonner';
 import { translateError, OfflineQueue, withRetry } from '../../modules/shared/services/networkService';
+import { SOFT_DELETE_ENABLED, SOFT_DELETE_TABLES } from '../../modules/shared/config/softDelete';
 
 // Inline safeParse — avoids cross-directory import issues in build
 const safeParse = (key: string): any[] => {
@@ -1595,7 +1596,13 @@ const pullTable = async (table: string, localKey: string): Promise<boolean> => {
   try {
     const rawData = await withRetry(
       async () => {
-        const { data, error } = await supabase.from(table).select('*');
+        // Audit #5: skip tombstoned rows so a locally-deleted financial row is
+        // NOT resurrected on pull. Inert while SOFT_DELETE_ENABLED is false.
+        let query = supabase.from(table).select('*');
+        if (SOFT_DELETE_ENABLED && SOFT_DELETE_TABLES.has(table)) {
+          query = query.is('deleted_at', null);
+        }
+        const { data, error } = await query;
         if (error) {
           // 404 = table not found — skip silently
           if (error.code === 'PGRST204' || error.code === '42P01' ||

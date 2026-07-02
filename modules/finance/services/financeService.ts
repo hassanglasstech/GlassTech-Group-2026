@@ -23,6 +23,7 @@ import {
   FinancialMappingRule, GLConfiguration
 } from '../types/finance';
 import { COMPANY_COA, COAAccount } from '../constants/coa.index';
+import { SOFT_DELETE_ENABLED } from '../../shared/config/softDelete';
 import { PeriodService } from './periodService';
 import { useAuthStore, UserRole } from '@/modules/auth/authStore';
 import { useAppStore } from '@/modules/shared/store/appStore';
@@ -153,6 +154,8 @@ const rowToLedger = (r: any): LedgerTransaction => ({
   createdBy:   r.created_by  ?? undefined,
   updatedBy:   r.updated_by  ?? undefined,
   postedAt:    r.posted_at   ?? undefined,
+  // Audit #5: harmless read — undefined when the column is absent (pre-089).
+  deletedAt:   r.deleted_at  ?? undefined,
 });
 
 const rowToCostCenter = (r: any): CostCenter => ({
@@ -289,6 +292,10 @@ export const ledgerToRow = (t: LedgerTransaction) => ({
   updated_by:  t.updatedBy ?? useAuthStore.getState().user?.email ?? null,
   posted_at:   t.postedAt  ?? null,
   updated_at:  new Date().toISOString(),
+  // Audit #5: carry the tombstone through the push. Omitted entirely while
+  // SOFT_DELETE_ENABLED is false so pre-migration upserts never reference a
+  // non-existent column.
+  ...(SOFT_DELETE_ENABLED ? { deleted_at: t.deletedAt ?? null } : {}),
 });
 
 const pettyCashToRow = (e: PettyCashEntry) => ({
@@ -501,8 +508,44 @@ export const FinanceService = {
 
   // ── General Ledger ─────────────────────────────────────────────────
   getLedger: (): LedgerTransaction[] => {
-    if (!_cache.loaded) return safeParse(KEYS.LEDGER);
-    return _cache.ledger;
+    const all = !_cache.loaded ? safeParse(KEYS.LEDGER) : _cache.ledger;
+    // Audit #5: hide tombstoned entries from every reader (trial balance,
+    // statements, aging, posting inbox). Inert while SOFT_DELETE_ENABLED is
+    // false — every entry has deletedAt === undefined until the flag is on.
+    if (SOFT_DELETE_ENABLED) {
+      return all.filter((t: LedgerTransaction) => !t.deletedAt);
+    }
+    return all;
+  },
+
+  /**
+   * Soft-delete (tombstone) a ledger entry so it stops affecting the books and
+   * is NOT resurrected by the next sync pull (audit #5). Stamps deletedAt and
+   * re-saves through saveLedger — the dirty-set pushes ONLY the tombstoned row.
+   *
+   * No-op guard returns an error while SOFT_DELETE_ENABLED is false (the DB
+   * column does not exist yet), so callers can surface a clear message instead
+   * of silently doing nothing.
+   */
+  softDeleteLedgerEntry: (id: string): { ok: boolean; error?: string } => {
+    if (!SOFT_DELETE_ENABLED) {
+      return { ok: false, error: 'Soft-delete is disabled — apply migration 089 and enable SOFT_DELETE_ENABLED first.' };
+    }
+    // Read the FULL buffer (including any already-tombstoned rows) — never
+    // getLedger(), which filters tombstones out and would drop them on re-save.
+    const all: LedgerTransaction[] = _cache.loaded ? _cache.ledger : safeParse(KEYS.LEDGER);
+    const target = all.find(t => t.id === id);
+    if (!target) return { ok: false, error: `Ledger entry ${id} not found.` };
+    if (target.deletedAt) return { ok: true }; // already tombstoned — idempotent
+    const stamped = all.map(t =>
+      t.id === id ? { ...t, deletedAt: new Date().toISOString() } : t
+    );
+    FinanceService.saveLedger(stamped);
+    Logger.action(
+      'FINANCE', 'LEDGER_SOFT_DELETE', `Soft-deleted ledger entry ${id}`,
+      { referenceId: id, extra: { company: target.company, by: useAuthStore.getState().user?.email ?? 'system' } }
+    );
+    return { ok: true };
   },
 
   saveLedger: (d: LedgerTransaction[]): void => {
