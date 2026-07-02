@@ -5,24 +5,12 @@
 //  All GL data now lives in Supabase. localStorage = offline buffer only.
 // ═══════════════════════════════════════════════════════════════════════
 
-// ── Custom Error: GL Double-Entry Imbalance ────────────────────────────
-// Thrown before ANY status flip to 'Posted'. React UI should catch this
-// and surface the txId + amounts to the user — never swallow silently.
-export class LedgerImbalanceError extends Error {
-  constructor(
-    public readonly txId:       string,
-    public readonly sumDebits:  number,
-    public readonly sumCredits: number,
-    public readonly delta:      number,
-  ) {
-    super(
-      `GL Imbalance in "${txId}": Σdebit ${sumDebits.toFixed(2)} ≠ Σcredit ${sumCredits.toFixed(2)} (delta ${delta >= 0 ? '+' : ''}${delta.toFixed(2)})`
-    );
-    this.name = 'LedgerImbalanceError';
-    // Maintain proper prototype chain for instanceof checks across transpile targets
-    Object.setPrototypeOf(this, LedgerImbalanceError.prototype);
-  }
-}
+// GL double-entry balance logic extracted to a dependency-free module
+// (audit #13) so tests import the REAL assertion, not an inline copy.
+// Re-exported here for backward compatibility (many callers import
+// LedgerImbalanceError from financeService).
+import { LedgerImbalanceError, assertGLBalance as _assertGLBalance } from './glBalance';
+export { LedgerImbalanceError };
 
 import { safeParse, safeSave } from '../../shared/services/utils';
 import { supabase } from '@/src/services/supabaseClient';
@@ -54,22 +42,7 @@ const activeCompany = (): string => {
   return useAuthStore.getState().profile?.company ?? '';
 };
 
-// ── GL Balance Assertion (private) ────────────────────────────────────
-// Integer-cent arithmetic eliminates IEEE-754 rounding drift.
-// Must be called before EVERY status transition to 'Posted'. Zero-tolerance.
-const _assertGLBalance = (tx: { id?: string; details?: Array<{ debit?: number; credit?: number }> }): void => {
-  const lines      = tx.details ?? [];
-  const centsDebit  = Math.round(lines.reduce((s, d) => s + (d.debit  ?? 0), 0) * 100);
-  const centsCredit = Math.round(lines.reduce((s, d) => s + (d.credit ?? 0), 0) * 100);
-  if (centsDebit !== centsCredit) {
-    throw new LedgerImbalanceError(
-      tx.id ?? 'UNKNOWN',
-      centsDebit  / 100,
-      centsCredit / 100,
-      (centsDebit - centsCredit) / 100,
-    );
-  }
-};
+// _assertGLBalance is now imported from ./glBalance (single source of truth).
 
 // ── localStorage Keys (offline buffer only) ───────────────────────────
 const KEYS = {

@@ -20,7 +20,10 @@ export default defineConfig(({ mode }) => {
         globals: true,
         environment: 'jsdom',
         setupFiles: [],
-        include: ['modules/__tests__/**/*.test.ts', 'modules/__tests__/**/*.spec.ts'],
+        // Audit #13: was 'modules/__tests__/**' only, which silently DROPPED
+        // co-located suites like modules/factory/services/__tests__/*.test.ts
+        // (10 real tests never ran). Collect every *.test/*.spec under modules.
+        include: ['modules/**/*.test.ts', 'modules/**/*.test.tsx', 'modules/**/*.spec.ts'],
       },
       build: {
         chunkSizeWarningLimit: 5000,

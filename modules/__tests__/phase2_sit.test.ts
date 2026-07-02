@@ -153,28 +153,10 @@ const _mockRecordTransaction = vi.fn();
 const _mockGetLedger         = vi.fn(() => [] as unknown[]);
 const _mockGetAccounts       = vi.fn(() => [] as unknown[]);
 
-vi.mock('@/modules/finance/services/financeService', () => {
-  class LedgerImbalanceError extends Error {
-    constructor(
-      public readonly txId: string,
-      public readonly sumDebits: number,
-      public readonly sumCredits: number,
-      public readonly delta: number,
-    ) {
-      super(`GL Imbalance in "${txId}": Σdebit ${sumDebits.toFixed(2)} ≠ Σcredit ${sumCredits.toFixed(2)} (delta ${delta >= 0 ? '+' : ''}${delta.toFixed(2)})`);
-      this.name = 'LedgerImbalanceError';
-      Object.setPrototypeOf(this, LedgerImbalanceError.prototype);
-    }
-  }
-  // Real-ish assertGLBalance — replicates the integer-cent logic
-  const assertGLBalance = (tx: { id?: string; details?: Array<{ debit?: number; credit?: number }> }) => {
-    const lines = tx.details ?? [];
-    const centsDebit  = Math.round(lines.reduce((s, d) => s + (d.debit  ?? 0), 0) * 100);
-    const centsCredit = Math.round(lines.reduce((s, d) => s + (d.credit ?? 0), 0) * 100);
-    if (centsDebit !== centsCredit) {
-      throw new LedgerImbalanceError(tx.id ?? 'UNKNOWN', centsDebit / 100, centsCredit / 100, (centsDebit - centsCredit) / 100);
-    }
-  };
+vi.mock('@/modules/finance/services/financeService', async () => {
+  // audit #13: the REAL assertGLBalance from ./glBalance (dependency-free, so
+  // it imports cleanly here), not a "real-ish" inline copy that can drift.
+  const { LedgerImbalanceError, assertGLBalance } = await import('@/modules/finance/services/glBalance');
   return {
     LedgerImbalanceError,
     ledgerToRow: vi.fn((tx: { id: string; company: string }) => ({ id: tx.id, company: tx.company, data: tx })),

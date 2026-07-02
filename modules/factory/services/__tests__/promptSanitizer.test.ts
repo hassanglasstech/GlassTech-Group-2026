@@ -46,9 +46,14 @@ describe('promptSanitizer', () => {
       expect(result).not.toContain('{{');
       expect(result).not.toContain('}}');
       expect(result).not.toContain('${');
-      expect(result).not.toContain('[');
-      expect(result).not.toContain(']');
-      expect(result).toContain('[filtered]'); // "forget" keyword filtered
+      // The raw injection wrappers must be gone — their brackets are stripped
+      // to spaces. We assert the specific tokens are neutralized rather than
+      // "no '[' at all", because the legitimate [filtered] marker itself
+      // contains brackets (the original test asserted BOTH no-brackets AND
+      // [filtered] present — self-contradictory, could never pass).
+      expect(result).not.toContain('[INST]');
+      expect(result).not.toContain('[/INST]');
+      expect(result).toContain('[filtered]'); // 'forget' injection keyword neutralized
     });
 
     it('handles null/undefined/empty input', () => {

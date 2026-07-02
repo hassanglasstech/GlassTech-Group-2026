@@ -143,27 +143,11 @@ vi.mock('@/modules/procurement/services/glasscoGLService', () => ({
 
 const _mockGetLedger = vi.fn(() => [] as unknown[]);
 
-vi.mock('@/modules/finance/services/financeService', () => {
-  class LedgerImbalanceError extends Error {
-    constructor(
-      public readonly txId: string,
-      public readonly sumDebits: number,
-      public readonly sumCredits: number,
-      public readonly delta: number,
-    ) {
-      super(`GL Imbalance in "${txId}": Σdebit ${sumDebits.toFixed(2)} ≠ Σcredit ${sumCredits.toFixed(2)} (delta ${delta >= 0 ? '+' : ''}${delta.toFixed(2)})`);
-      this.name = 'LedgerImbalanceError';
-      Object.setPrototypeOf(this, LedgerImbalanceError.prototype);
-    }
-  }
-  const assertGLBalance = (tx: { id?: string; details?: Array<{ debit?: number; credit?: number }> }) => {
-    const lines = tx.details ?? [];
-    const centsDebit  = Math.round(lines.reduce((s, d) => s + (d.debit  ?? 0), 0) * 100);
-    const centsCredit = Math.round(lines.reduce((s, d) => s + (d.credit ?? 0), 0) * 100);
-    if (centsDebit !== centsCredit) {
-      throw new LedgerImbalanceError(tx.id ?? 'UNKNOWN', centsDebit / 100, centsCredit / 100, (centsDebit - centsCredit) / 100);
-    }
-  };
+vi.mock('@/modules/finance/services/financeService', async () => {
+  // audit #13: assert against the REAL extracted GL-balance logic (single
+  // source of truth in ./glBalance — dependency-free, so it imports cleanly
+  // inside this mock), NOT an inline copy that can silently drift from prod.
+  const { LedgerImbalanceError, assertGLBalance } = await import('@/modules/finance/services/glBalance');
   return {
     LedgerImbalanceError,
     ledgerToRow: vi.fn((tx: { id: string; company: string }) => ({ id: tx.id, company: tx.company, data: tx })),
