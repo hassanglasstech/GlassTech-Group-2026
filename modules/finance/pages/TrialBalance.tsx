@@ -1,38 +1,24 @@
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Company } from '../../shared/types';
-import { FinanceService } from '../services/financeService';
+import { FinanceService, TrialBalanceRow } from '../services/financeService';
 import { Download, Printer, BarChart4 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const TrialBalance: React.FC<{ company: Company }> = ({ company }) => {
-  const accounts = FinanceService.getAccounts().filter(a => a.company === company);
-  const ledger = FinanceService.getLedger().filter(t => t.company === company);
+  // Audit #6 (Layer 1): the per-account Dr/Cr roll-up is now done server-side
+  // (RPC `trial_balance`) via getTrialBalanceAsync, which automatically falls
+  // back to the in-memory JS reduce over getLedger() on any error / empty
+  // result (offline or before migration 088 is applied). Same shape either way.
+  const [trialBalanceData, setTrialBalanceData] = useState<TrialBalanceRow[]>([]);
 
-  const trialBalanceData = useMemo(() => {
-    return accounts.map(acc => {
-      let totalDebit = 0;
-      let totalCredit = 0;
-
-      ledger.forEach(tx => {
-        tx.details.forEach(d => {
-          if (d.accountId === acc.id) {
-            totalDebit += d.debit;
-            totalCredit += d.credit;
-          }
-        });
-      });
-
-      const net = totalDebit - totalCredit;
-      return {
-        ...acc,
-        debit: totalDebit,
-        credit: totalCredit,
-        net: Math.abs(net),
-        side: net >= 0 ? 'Dr' : 'Cr'
-      };
-    }).filter(a => a.debit !== 0 || a.credit !== 0);
-  }, [accounts, ledger]);
+  useEffect(() => {
+    let active = true;
+    FinanceService.getTrialBalanceAsync(company).then(rows => {
+      if (active) setTrialBalanceData(rows);
+    });
+    return () => { active = false; };
+  }, [company]);
 
   const totals = trialBalanceData.reduce((acc, curr) => ({
     debit: acc.debit + curr.debit,

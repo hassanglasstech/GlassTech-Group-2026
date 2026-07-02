@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Company, Account } from '../../shared/types';
-import { FinanceService } from '../services/financeService';
+import { FinanceService, ARAgingBuckets } from '../services/financeService';
 import { Calendar, Filter, Printer, Download, AlertCircle, Clock, TrendingUp, TrendingDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -24,6 +24,22 @@ const AgingReport: React.FC<{ company: Company }> = ({ company }) => {
       setLiveInvoiceBalances(rows.filter(r => r.live_balance > 0));
     });
   }, [company]);
+
+  // Audit #6 (Layer 1): server-side AR aging bucket roll-up (RPC `ar_aging`).
+  // getARAgingAsync aggregates the invoices table in Postgres and falls back
+  // to a client-side reduce over invoice balances on any error / empty result
+  // (offline or before migration 088). Shown as a reconciliation strip for
+  // the Receivable view — additive; the per-account ledger table below is
+  // unchanged and remains the fallback source of truth for Payables.
+  const [serverAging, setServerAging] = useState<ARAgingBuckets | null>(null);
+  useEffect(() => {
+    if (reportType !== 'Receivable') { setServerAging(null); return; }
+    let active = true;
+    FinanceService.getARAgingAsync(company).then(buckets => {
+      if (active) setServerAging(buckets);
+    });
+    return () => { active = false; };
+  }, [company, reportType]);
 
   const accounts = FinanceService.getAccounts().filter(a => a.company === company);
   // H-7: Aging reports are management-facing — only 'Posted' entries represent
@@ -146,6 +162,23 @@ const AgingReport: React.FC<{ company: Company }> = ({ company }) => {
             <p className={`text-4xl font-black ${reportType === 'Receivable' ? 'text-emerald-400' : 'text-rose-400'}`}>PKR {(Number(totals.balance) || 0).toLocaleString()}</p>
          </div>
       </div>
+
+      {reportType === 'Receivable' && serverAging && serverAging.total > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {([
+            { label: '0-30 Days',  value: serverAging['0-30'],  accent: 'text-emerald-600' },
+            { label: '31-60 Days', value: serverAging['31-60'], accent: 'text-amber-600' },
+            { label: '61-90 Days', value: serverAging['61-90'], accent: 'text-orange-600' },
+            { label: '90+ Days',   value: serverAging['90+'],   accent: 'text-rose-600' },
+          ]).map(card => (
+            <div key={card.label} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{card.label}</p>
+              <p className={`text-lg font-black mt-1 ${card.accent}`}>PKR {(Number(card.value) || 0).toLocaleString()}</p>
+              <p className="text-[8px] font-bold uppercase tracking-widest text-slate-300 mt-0.5">Invoice Aging (Server)</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap gap-4 justify-between items-center no-print">
          <div className="flex items-center space-x-4">

@@ -44,6 +44,27 @@ const activeCompany = (): string => {
 
 // _assertGLBalance is now imported from ./glBalance (single source of truth).
 
+// ── Audit #6 (Layer 1): report aggregation shapes ─────────────────────
+// Exported so report components consume the exact type the async getters
+// return (server RPC or JS fallback — same shape either way).
+
+/** One Trial Balance row — the account plus its rolled-up Dr/Cr totals. */
+export interface TrialBalanceRow extends Account {
+  debit:  number;
+  credit: number;
+  net:    number;        // absolute value of (debit − credit)
+  side:   'Dr' | 'Cr';   // natural side of the net balance
+}
+
+/** AR aging bucket totals (app vocabulary: 0-30 / 31-60 / 61-90 / 90+). */
+export interface ARAgingBuckets {
+  '0-30':  number;
+  '31-60': number;
+  '61-90': number;
+  '90+':   number;
+  total:   number;
+}
+
 // ── localStorage Keys (offline buffer only) ───────────────────────────
 const KEYS = {
   ACCOUNTS:           'gtk_erp_accounts',
@@ -1049,6 +1070,137 @@ export const FinanceService = {
     allGL.push(settleTx);
     FinanceService.saveLedger(allGL);
     return { settlementId, variance, status: variance === 0 ? 'Exact' : variance < 0 ? 'Under-spend' : 'Over-spend' };
+  },
+
+  // ── Audit #6 (Layer 1): Server-side Trial Balance aggregation ───────
+  // Pushes the per-account Dr/Cr roll-up into Postgres (RPC `trial_balance`,
+  // migration 088) so the browser receives grouped totals instead of the
+  // entire ledger. On ANY error / empty result (e.g. before the migration is
+  // applied, or offline) it FALLS BACK to the in-memory JS reduce over
+  // getLedger() — identical output — so the report never breaks.
+  //
+  // Returns the exact shape TrialBalance.tsx already renders:
+  //   Account + { debit, credit, net, side } — non-zero accounts only.
+  getTrialBalanceAsync: async (company: Company): Promise<TrialBalanceRow[]> => {
+    const accounts = FinanceService.getAccounts().filter(a => a.company === company);
+
+    // Assemble the report row for an account from its Dr/Cr totals.
+    const buildRows = (totals: Map<string, { debit: number; credit: number }>): TrialBalanceRow[] =>
+      accounts.map(acc => {
+        const t = totals.get(acc.id) ?? { debit: 0, credit: 0 };
+        const net = t.debit - t.credit;
+        const row: TrialBalanceRow = {
+          ...acc,
+          debit: t.debit,
+          credit: t.credit,
+          net: Math.abs(net),
+          side: net >= 0 ? 'Dr' : 'Cr',
+        };
+        return row;
+      }).filter(r => r.debit !== 0 || r.credit !== 0);
+
+    // JS fallback — the original in-memory reduce (kept as the safety net).
+    const jsFallback = (): TrialBalanceRow[] => {
+      const totals = new Map<string, { debit: number; credit: number }>();
+      FinanceService.getLedger()
+        .filter(t => t.company === company && t.status === 'Posted')
+        .forEach(tx => {
+          (tx.details || []).forEach(d => {
+            const cur = totals.get(d.accountId) ?? { debit: 0, credit: 0 };
+            cur.debit  += Number(d.debit)  || 0;
+            cur.credit += Number(d.credit) || 0;
+            totals.set(d.accountId, cur);
+          });
+        });
+      return buildRows(totals);
+    };
+
+    try {
+      const { data, error } = await supabase.rpc('trial_balance', { p_company: company });
+      if (error || !Array.isArray(data) || data.length === 0) {
+        if (error) Logger.warn('Finance', `getTrialBalanceAsync: RPC unavailable — JS fallback (${error.message})`);
+        return jsFallback();
+      }
+      const rows = data as Array<{ account_id: string; debit: number; credit: number }>;
+      const totals = new Map<string, { debit: number; credit: number }>();
+      rows.forEach(r => totals.set(r.account_id, {
+        debit:  Number(r.debit)  || 0,
+        credit: Number(r.credit) || 0,
+      }));
+      return buildRows(totals);
+    } catch (e) {
+      Logger.warn('Finance', 'getTrialBalanceAsync: RPC threw — JS fallback', e);
+      return jsFallback();
+    }
+  },
+
+  // ── Audit #6 (Layer 1): Server-side AR Aging aggregation ────────────
+  // Pushes the AR aging bucket roll-up into Postgres (RPC `ar_aging`,
+  // migration 088), computed from the invoices table (outstanding balance
+  // aged by invoice date). On ANY error / empty result it FALLS BACK to a
+  // JS reduce over the live invoice balances (getInvoiceBalancesAsync) →
+  // never breaks before the migration is applied or when offline.
+  //
+  // Buckets use the app's AgingReport vocabulary (0-30 / 31-60 / 61-90 / 90+).
+  getARAgingAsync: async (company: Company): Promise<ARAgingBuckets> => {
+    const empty: ARAgingBuckets = { '0-30': 0, '31-60': 0, '61-90': 0, '90+': 0, total: 0 };
+
+    // JS fallback — age live invoice balances by their invoice date client-side.
+    const jsFallback = async (): Promise<ARAgingBuckets> => {
+      try {
+        const invoices = await supabase
+          .from('invoices')
+          .select('total_amount, received_amount, balance, status, date')
+          .eq('company', company);
+        if (invoices.error || !Array.isArray(invoices.data)) return empty;
+        const now = Date.now();
+        const b: ARAgingBuckets = { '0-30': 0, '31-60': 0, '61-90': 0, '90+': 0, total: 0 };
+        for (const raw of invoices.data as Array<Record<string, unknown>>) {
+          if (String(raw.status ?? '') === 'Void') continue;
+          const total    = Number(raw.total_amount)    || 0;
+          const received = Number(raw.received_amount)  || 0;
+          const balCol   = raw.balance;
+          const bal = Math.max(balCol == null ? total - received : Number(balCol) || 0, 0);
+          if (bal <= 0) continue;
+          const dateStr = typeof raw.date === 'string' ? raw.date : '';
+          const days = dateStr
+            ? Math.floor((now - new Date(dateStr).getTime()) / 86400000)
+            : 0;
+          if (days <= 30)      b['0-30']  += bal;
+          else if (days <= 60) b['31-60'] += bal;
+          else if (days <= 90) b['61-90'] += bal;
+          else                 b['90+']   += bal;
+          b.total += bal;
+        }
+        return b;
+      } catch (e) {
+        Logger.warn('Finance', 'getARAgingAsync: JS fallback failed', e);
+        return empty;
+      }
+    };
+
+    try {
+      const { data, error } = await supabase.rpc('ar_aging', { p_company: company });
+      const row = Array.isArray(data) ? data[0] : data;
+      if (error || !row) {
+        if (error) Logger.warn('Finance', `getARAgingAsync: RPC unavailable — JS fallback (${error.message})`);
+        return jsFallback();
+      }
+      const r = row as {
+        bucket_current: number; bucket_30: number; bucket_60: number;
+        bucket_90plus: number; total: number;
+      };
+      return {
+        '0-30':  Number(r.bucket_current) || 0,
+        '31-60': Number(r.bucket_30)      || 0,
+        '61-90': Number(r.bucket_60)      || 0,
+        '90+':   Number(r.bucket_90plus)  || 0,
+        total:   Number(r.total)          || 0,
+      };
+    } catch (e) {
+      Logger.warn('Finance', 'getARAgingAsync: RPC threw — JS fallback', e);
+      return jsFallback();
+    }
   },
 
   // ── FIN-4: Live Invoice Balances ───────────────────────────────────
