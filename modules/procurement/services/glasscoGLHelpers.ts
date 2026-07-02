@@ -74,8 +74,11 @@ export function glassAccounts(company: Company) {
   const wip       = FinanceService.ensureAccount(company, 'WIP — Glass in Process',  4, inv.id, 'Asset',   '11513');
   // WIP — Direct Labour: receives ALL production wages at payroll time (Option B).
   // Closed to 51311/51312 COGS at delivery. Balance = labour in undelivered WIP.
-  const wipLabour = FinanceService.ensureAccount(company, 'WIP — Direct Labour',     4, inv.id, 'Asset',   '11514');
-  const fg        = FinanceService.ensureAccount(company, 'Finished Goods — Glass',  4, inv.id, 'Asset',   '11515');
+  // Audit #7 fix: was '11514' (collided with Laminated Glass Stock) / '11515'
+  // (collided with Frosted / Decorative Glass) — ensureAccount dedupes by
+  // code, so those postings landed on the wrong-named row. Own codes now.
+  const wipLabour = FinanceService.ensureAccount(company, 'WIP — Direct Labour',     4, inv.id, 'Asset',   '11523');
+  const fg        = FinanceService.ensureAccount(company, 'Finished Goods — Glass',  4, inv.id, 'Asset',   '11533');
 
   const expense      = FinanceService.ensureAccount(company, 'EXPENSES',               1, null,           'Expense', '50');
   const costOfSales  = FinanceService.ensureAccount(company, 'COST OF GOODS SOLD',     2, expense.id,     'Expense', '511');

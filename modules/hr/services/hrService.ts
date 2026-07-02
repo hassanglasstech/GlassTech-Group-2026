@@ -450,7 +450,10 @@ export const HRService = {
         const assets    = FinanceService.ensureAccount(company, 'ASSETS',              1, null,       'Asset', '10');
         const current   = FinanceService.ensureAccount(company, 'CURRENT ASSETS',      2, assets.id,  'Asset', '11');
         const inv       = FinanceService.ensureAccount(company, 'INVENTORY',           3, current.id, 'Asset', '115');
-        const wipLabour = FinanceService.ensureAccount(company, 'WIP — Direct Labour', 4, inv.id,     'Asset', '11514');
+        // Audit #7 fix: code was '11514', colliding with 'Laminated Glass
+        // Stock' (ensureAccount dedupes by code, so both concepts shared one
+        // balance). Own code now — see coa.glassco.ts 1152 WIP bucket.
+        const wipLabour = FinanceService.ensureAccount(company, 'WIP — Direct Labour', 4, inv.id,     'Asset', '11523');
         glDetails.push({
           accountId: wipLabour.id, debit: amount, credit: 0,
           text: `Production wages → WIP Labour ${month}: Cutting PKR ${cuttingWages.toLocaleString()} + Processing PKR ${processingWages.toLocaleString()}`,

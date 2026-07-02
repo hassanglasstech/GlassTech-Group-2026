@@ -28,7 +28,11 @@ export interface TaxSettings {
 export const DEFAULT_TAX_SETTINGS: TaxSettings = {
   enabled:            false,            // ── OFF by default ──
   gst_rate:           18,
-  gst_input_account:  '11514',          // Input GST receivable
+  // Audit #7 fix: was '11514', colliding with Glassco's 'Laminated Glass
+  // Stock' / 'WIP — Direct Labour' codes. Latent (this default isn't posted
+  // to by any live GL path yet), but given a clean code to prevent a future
+  // collision the moment GST posting is wired up.
+  gst_input_account:  '11431',          // Input GST receivable
   gst_output_account: '21105',          // Output GST payable
   wht_enabled:        false,
   wht_rate:           4,

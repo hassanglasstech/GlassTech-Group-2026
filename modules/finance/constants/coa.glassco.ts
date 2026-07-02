@@ -48,10 +48,18 @@ export const GLASSCO_COA: COAAccount[] = [
         { code:'1152', name:'Work in Progress', level:4, type:'Asset', children:[
           leaf('11521','WIP — Cut Glass (Pre-Tempering)','Asset','Dr'),
           leaf('11522','WIP — At Tempering Vendor','Asset','Dr'),
+          // Audit #7 fix: was wrongly posted to '11514' (collided with
+          // 'Laminated Glass Stock' above — ensureAccount dedupes by code,
+          // so every payroll WIP entry landed on THAT row). Own code now.
+          leaf('11523','WIP — Direct Labour','Asset','Dr'),
         ]},
         { code:'1153', name:'Finished Glass', level:4, type:'Asset', children:[
           leaf('11531','Finished — Tempered Glass','Asset','Dr'),
           leaf('11532','Finished — Cut Glass','Asset','Dr'),
+          // Audit #7 fix: was wrongly posted to '11515' ('Frosted /
+          // Decorative Glass' above). Currently unposted-to (dead code path)
+          // but given its own code for correctness / future use.
+          leaf('11533','Finished Goods — Glass','Asset','Dr'),
         ]},
         { code:'1154', name:'Consumables', level:4, type:'Asset', children:[
           leaf('11541','Consumables — Cutting','Asset','Dr'),
