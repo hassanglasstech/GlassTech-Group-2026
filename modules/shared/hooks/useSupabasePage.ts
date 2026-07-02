@@ -131,7 +131,14 @@ export function useSupabasePage<T = any>({
           // For JSONB tables: unwrap 'data' column back to app objects
           const unwrapped = (rows || []).map((row: any) => {
             if (row.data && typeof row.data === 'object' && !Array.isArray(row.data)) {
-              return { ...row.data, id: row.id, company: row.company };
+              // HYBRID tables (e.g. `ledger`) keep the real fields in FLAT columns
+              // and only a PARTIAL blob in `data` (ledger.data is just {reqId}).
+              // The old `{...row.data, id, company}` dropped every flat-only field
+              // — so General Ledger showed blank date/narration/amounts and no
+              // detail lines (details lives in the flat `details` column). Merge
+              // flat columns FIRST, then overlay `data`, so flat-only fields
+              // survive while the JSONB blob still wins for any field it owns.
+              return { ...row, ...row.data, id: row.id, company: row.company };
             }
             return row;
           });
