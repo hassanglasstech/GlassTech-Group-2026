@@ -20,3 +20,26 @@ Live DB has diverged from migration files before (recent HR commits) — verify 
 
 ## Verify gate between every item
 `npm run lint` (tsc — 0 new crash-class) + `npm run build` (✓) + `npm run test` (318+) + `npm run lint:eslint:errors` (0). Commit per item, local only.
+
+---
+
+## ✅ COMPLETION STATUS (all 5 shipped as local commits — 2026-07-02)
+
+| # | Item | Commit | Migration | DB action needed |
+|---|------|--------|-----------|------------------|
+| #13 | Real-service GL-balance tests | `d9fe4c8` | — | none |
+| #6  | Server aggregation RPCs (JS fallback kept) | `6160880` | `088` **staged** | apply 088 when ready (low-risk, read-only) |
+| #3  | Ledger dirty-set (push only changed rows) | `6a2765d` | — | none |
+| #5  | Soft-delete tombstones (flag OFF) | `b88fc89` | `089` **staged** | apply 089 → flip `SOFT_DELETE_ENABLED=true` |
+| #9  | Atomic credit-note/void RPCs (RPC-first + fallback) | `f81dd5a` | `090` **staged** | **SIGN-OFF + two-browser test** → apply 090 |
+
+Final verify gate (after #9): build ✓ · **340 tests pass** · tsc 223 baseline (0 new crash-class) · eslint clean.
+
+### What is inert until the founder acts
+- **#5** ships with `SOFT_DELETE_ENABLED = false` → byte-identical behavior. Apply `089`, verify the `deleted_at` columns exist, THEN flip the flag and redeploy.
+- **#9** detects a missing RPC (Postgres `42883` / PostgREST `PGRST202`) and falls back to today's exact non-atomic path → zero regression while `090` is unapplied. Apply `090` ONLY after founder sign-off + a two-browser concurrency test on staging (it is the highest blast radius change).
+- **#6** keeps the JS-reduce path as an automatic fallback, so applying `088` is purely a speed upgrade — safe to defer.
+
+### Staged, UNAPPLIED migrations (founder applies in order after sign-off)
+`088_finance_aggregation_rpcs.sql` · `089_soft_delete_tombstones.sql` · `090_credit_note_void_atomic.sql`
+(`090` depends on `042` helpers + `032` columns — the VERIFY block at the top of `090` checks both before you run it.)
