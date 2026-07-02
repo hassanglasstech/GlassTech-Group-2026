@@ -158,11 +158,24 @@ export const ProductionService = {
   // The function remains synchronous in its localStorage/IDB path but fires
   // the Supabase existence check before the upsert. If any orderId is
   // not found, the entire batch is aborted and a descriptive error is thrown.
-  saveProductionPieces: async (data: ProductionPiece[]): Promise<void> => {
-    // MFG-1: Collect distinct orderIds present in the batch
-    const orderIds = [...new Set(
-      data.map(p => (p as any).orderId).filter(Boolean)
-    )] as string[];
+  saveProductionPieces: async (
+    data: ProductionPiece[],
+    opts?: { validateOrderIds?: string[] },
+  ): Promise<void> => {
+    // MFG-1: which orderIds to ghost-check.
+    //   • Default (no opts): every distinct orderId in the batch (legacy behaviour).
+    //   • Scoped (opts.validateOrderIds): ONLY those — callers that re-save the
+    //     whole pieces array (e.g. approve flow passes [...otherOrderPieces,
+    //     ...newOrderPieces]) must NOT let a pre-existing stale order (whose
+    //     quotation was since deleted) poison the save of a brand-new order.
+    //     Pass [] to skip the check entirely when the order was just persisted
+    //     by the caller and is therefore known-valid (avoids false-positive
+    //     GhostOrderError from RLS/quota/timing flakiness on the re-lookup).
+    const orderIds = (
+      opts?.validateOrderIds !== undefined
+        ? opts.validateOrderIds
+        : [...new Set(data.map(p => (p as any).orderId).filter(Boolean))]
+    ) as string[];
 
     if (orderIds.length > 0) {
       const { data: foundOrders, error } = await supabase

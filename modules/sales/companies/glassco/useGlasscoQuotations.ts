@@ -328,7 +328,16 @@ export const useGlasscoQuotations = () => {
           newOrderPieces.push(...orphaned);
         }
 
-        await ProductionService.saveProductionPieces([...otherOrderPieces, ...newOrderPieces]);
+        // MFG-1 scope fix: the order (finalOrderNo) was just persisted above via
+        // saveQuotations, so it is known-valid; and otherOrderPieces are already-
+        // persisted pieces of PRIOR orders that we only re-save to preserve them.
+        // Re-validating the whole array let a single stale prior order (whose
+        // quotation was since deleted) throw GhostOrderError and roll THIS order
+        // back to Draft. Pass [] so no false-positive ghost-check runs here.
+        await ProductionService.saveProductionPieces(
+          [...otherOrderPieces, ...newOrderPieces],
+          { validateOrderIds: [] },
+        );
       } catch (pieceErr: unknown) {
         // Roll back: revert the order to Draft so the user can fix and retry.
         toast.error(
