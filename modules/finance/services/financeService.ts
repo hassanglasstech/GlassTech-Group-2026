@@ -89,6 +89,42 @@ let _cache = {
   loaded: false,
 };
 
+// ── Ledger dirty-set snapshot (audit #3 — safe-incremental GL writes) ──
+// PROBLEM: saveLedger previously re-uploaded the ENTIRE ledger array on every
+// posting (`_upsert('ledger', d.map(ledgerToRow))`). With two users holding
+// stale caches, each whole-array push clobbers the other's rows — classic
+// whole-array last-write-wins. Yet the DOMINANT GL op is an APPEND (a brand-new
+// balanced entry): the new row's id is unique, so it can NEVER truly collide
+// with another user's row. The whole-array push manufactured a collision that
+// the append itself never had.
+//
+// FIX: track a per-tx snapshot and push ONLY the new/changed rows. An append
+// is "new" (its id is absent from the snapshot) → pushed alone; rows that
+// another tab/user changed this session, but that THIS save did not touch,
+// are left out of the payload entirely → no clobber.
+//
+// Key   = LedgerTransaction.id
+// Value = a stable JSON hash of the DOMAIN object (JSON.stringify(tx)).
+//   ⚠ We hash the DOMAIN tx, NOT ledgerToRow(tx). ledgerToRow injects
+//     `updated_at: new Date().toISOString()` (and resolves created_by/updated_by
+//     from the auth store) which changes on every call — hashing its output
+//     would mark every row "changed" and defeat the whole purpose.
+//
+// Retry safety: flushRetryQueue (audit #4) still rebuilds the WHOLE ledger from
+// the local buffer on a terminal push failure, so a failed dirty push is fully
+// recovered on next init/online. The dirty-set is a fast-path optimisation for
+// the happy path; the retry queue remains the durable safety net. Deletes are
+// out of scope (audit #5) — this only ever pushes new/changed rows, never removes.
+const _ledgerPushSnapshot = new Map<string, string>();
+
+// Reset + reseed the snapshot from a freshly-loaded ledger. Called after the
+// cache is populated (Supabase or localStorage fallback) so the first save
+// after a load does NOT treat every already-persisted row as "changed".
+const _seedLedgerSnapshot = (ledger: LedgerTransaction[]): void => {
+  _ledgerPushSnapshot.clear();
+  for (const tx of ledger) _ledgerPushSnapshot.set(tx.id, JSON.stringify(tx));
+};
+
 // ── Mappers: Supabase row → App object ────────────────────────────────
 const rowToAccount = (r: any): Account => ({
   id:       r.id,
@@ -209,6 +245,9 @@ const _loadCache = async (): Promise<void> => {
     if (events?.length)      { _cache.financialEvents    = events.map(rowToFinancialEvent);     safeSave(KEYS.FINANCIAL_EVENTS,   _cache.financialEvents); }
 
     _cache.loaded = true;
+    // Audit #3: seed the dirty-set from the just-loaded ledger so the first
+    // saveLedger after a load pushes ONLY new/changed rows, not the whole array.
+    _seedLedgerSnapshot(_cache.ledger);
     Logger.info('Finance', `Cache loaded — ${_cache.ledger.length} GL entries, ${_cache.accounts.length} accounts`);
   } catch (err: any) {
     Logger.warn('Finance', 'Supabase load failed — using localStorage fallback', err);
@@ -219,6 +258,8 @@ const _loadCache = async (): Promise<void> => {
     _cache.recurringExpenses = safeParse(KEYS.RECURRING_EXPENSES);
     _cache.financialEvents   = safeParse(KEYS.FINANCIAL_EVENTS);
     _cache.loaded = true;
+    // Audit #3: seed the dirty-set from the localStorage-fallback ledger too.
+    _seedLedgerSnapshot(_cache.ledger);
   }
 };
 
@@ -496,7 +537,28 @@ export const FinanceService = {
     });
     _cache.ledger = d;
     safeSave(KEYS.LEDGER, d);
-    _upsert('ledger', d.map(ledgerToRow), 'ledger');
+
+    // ── Dirty-set push (audit #3 — safe-incremental GL writes) ─────────
+    // Instead of re-uploading the ENTIRE ledger (whole-array last-write-wins,
+    // which lets two stale caches clobber each other), push ONLY rows that are
+    // new or changed vs the last-seen snapshot. Rationale: the dominant op is
+    // an APPEND — a brand-new balanced entry whose unique id is absent from the
+    // snapshot, so it is pushed alone and can never collide with another user's
+    // row. Rows this save did not touch are omitted entirely, so a concurrent
+    // edit in another tab is not overwritten.
+    //
+    // We hash the DOMAIN tx (JSON.stringify(tx)), NOT ledgerToRow(tx): the row
+    // mapper stamps a fresh `updated_at` on every call, which would make every
+    // row look "changed". A failed push is still fully recovered by
+    // flushRetryQueue (audit #4), which rebuilds the whole ledger from the local
+    // buffer — so this fast-path never risks data loss. Deletes are out of scope
+    // (audit #5); this only ever pushes new/changed rows.
+    const changed = d.filter(tx => _ledgerPushSnapshot.get(tx.id) !== JSON.stringify(tx));
+    if (changed.length) {
+      _upsert('ledger', changed.map(ledgerToRow), 'ledger');
+      // Record the pushed state so the next save recognises these rows as clean.
+      changed.forEach(tx => _ledgerPushSnapshot.set(tx.id, JSON.stringify(tx)));
+    }
   },
 
   // ── Maker-Checker JV workflow (Task 1 — Phase 9) ──────────────────
