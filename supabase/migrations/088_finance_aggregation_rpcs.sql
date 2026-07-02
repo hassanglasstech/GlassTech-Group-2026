@@ -98,7 +98,10 @@ AS $$
         COALESCE(i.balance, COALESCE(i.total_amount, 0) - COALESCE(i.received_amount, 0)),
         0
       ) AS bal,
-      (CURRENT_DATE - COALESCE(i.date, CURRENT_DATE)) AS age_days
+      -- The live invoices.date is TEXT (DB diverged from migration 032's DATE).
+      -- Cast text→date safely (::text first works whether the column is text OR
+      -- date; NULLIF drops '' so bad/empty dates fall back to CURRENT_DATE).
+      (CURRENT_DATE - COALESCE(NULLIF(i.date::text, '')::date, CURRENT_DATE)) AS age_days
     FROM invoices i
     WHERE i.company = p_company
       AND COALESCE(i.status, '') <> 'Void'
@@ -144,7 +147,9 @@ AS $$
   FROM attendance a
   WHERE a.company = p_company
     AND a.employee_id IS NOT NULL
-    AND to_char(a.date, 'YYYY-MM') = p_month
+    -- attendance.date is also TEXT in the live DB — compare the leading
+    -- 'YYYY-MM' of its text form (works for text ISO strings AND real dates).
+    AND substring(a.date::text from 1 for 7) = p_month
   GROUP BY a.employee_id;
 $$;
 
