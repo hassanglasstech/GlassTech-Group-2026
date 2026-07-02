@@ -21,6 +21,7 @@ import { checkSchemaVersion } from '@/modules/shared/services/utils';
 import { prefetchCriticalTables } from '@/modules/shared/hooks/useSupabaseData';
 import { flushOfflineQueue } from '@/modules/shared/services/supabaseDB';
 import { Logger, setLogContext, installConsoleOverride } from '@/modules/shared/services/logger';
+import { installGlobalCrashHandlers } from '@/modules/shared/services/crashReportService';
 const OverrideModeBar = React.lazy(() => import('@/src/components/OverrideModeBar'));
 import { Toaster, toast } from 'sonner';
 import { useAuthStore, isOfficeHours, ROLE_DEFAULT_COMPANY, ROLE_DEFAULT_ROUTE, ROLE_MODULES, ROLE_LABELS } from '@/modules/auth/authStore';
@@ -438,9 +439,11 @@ const App: React.FC = () => {
 
   // Session watch - only matters for time-restricted users
 
-  // Install console override once on app load
+  // Install console override + global crash handlers once on app load
+  // (Audit #14 — window.error / unhandledrejection → activity_logs)
   useEffect(() => {
     installConsoleOverride();
+    installGlobalCrashHandlers();
   }, []);
 
   // ── Global silent crash catcher (Phase F) ─────────────────────────
@@ -451,7 +454,8 @@ const App: React.FC = () => {
       const msg = event.reason?.message || String(event.reason) || 'Unknown error';
       // Ignore benign Supabase auth session-not-found (normal on first load)
       if (msg.includes('Auth session missing') || msg.includes('JWT')) return;
-      Logger.error('UnhandledRejection', msg, event.reason);
+      // Audit #14: server-side logging now handled by crashReportService's
+      // installGlobalCrashHandlers (deduped) — this handler only owns the toast.
       // Show toast only for DB/sync failures — not routine misses
       if (msg.toLowerCase().includes('upsert') || msg.toLowerCase().includes('supabase') || msg.toLowerCase().includes('fetch')) {
         toast.error(`Sync issue — ${msg.slice(0, 80)}`, { duration: 4000 });

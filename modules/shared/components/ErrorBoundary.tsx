@@ -9,6 +9,7 @@
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home, ChevronDown, ChevronUp, Bug } from 'lucide-react';
+import { reportCrash } from '../services/crashReportService';
 
 // ── Error log (in-memory + localStorage) ─────────────────────────────
 interface ErrorLog {
@@ -75,6 +76,9 @@ export class GlobalErrorBoundary extends Component<BoundaryProps, BoundaryState>
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     logError(error, info, 'fatal');
+    // Audit #14 — also push server-side (activity_logs). localStorage
+    // logError above stays as the offline fallback.
+    reportCrash('GlobalErrorBoundary', error, info.componentStack ?? undefined);
   }
 
   render() {
@@ -192,6 +196,8 @@ export class ModuleErrorBoundary extends Component<BoundaryProps & { moduleName?
       if (tryAutoReloadOnce()) return;
     }
     logError(error, info, 'module', this.props.moduleName);
+    // Audit #14 — server-side crash report in addition to localStorage.
+    reportCrash(`Module:${this.props.moduleName || 'unknown'}`, error, info.componentStack ?? undefined);
   }
 
   render() {
@@ -277,6 +283,8 @@ export class SectionErrorBoundary extends Component<BoundaryProps & { sectionNam
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     logError(error, info, 'section', this.props.sectionName);
+    // Audit #14 — server-side crash report in addition to localStorage.
+    reportCrash(`Section:${this.props.sectionName || 'unknown'}`, error, info.componentStack ?? undefined);
   }
 
   render() {

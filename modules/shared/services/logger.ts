@@ -122,6 +122,13 @@ export const Logger = {
   warn: (module: LogModule | string, message: string, meta?: unknown) =>
     writeLog({ level: 'warn', module, action: 'WARNING', description: message, meta: meta as Record<string, any> | undefined }),
 
+  // Fatal crash — used by crashReportService (ErrorBoundary tiers + global
+  // window handlers). Level 'error' guarantees the fire-and-forget push to
+  // Supabase activity_logs; action FATAL_CRASH makes crashes queryable
+  // server-side. Description carries the compact JSON crash record.
+  fatal: (module: LogModule | string, description: string, referenceId?: string) =>
+    writeLog({ level: 'error', module, action: 'FATAL_CRASH', description, referenceId }),
+
   // Error (with optional toast)
   error: (module: LogModule | string, message: string, err?: any, showToast = false) => {
     const entry = writeLog({
@@ -247,6 +254,9 @@ export const installConsoleOverride = () => {
     if (_insideLogger) return;
     const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
     if (msg.includes('Warning:') || msg.includes('ReactDOM')) return;
+    // FATAL_CRASH entries are already written by crashReportService —
+    // re-capturing writeLog's own console echo would double-post them.
+    if (msg.includes('FATAL_CRASH') || msg.includes('[EH-')) return;
     try {
       _insideLogger = true;
       writeLog({

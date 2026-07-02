@@ -1,0 +1,51 @@
+# Audit #15: the off-site backup (scripts/nightly-export.js) was the ONLY thing
+# that survives a Supabase project loss, yet nothing scheduled it and no
+# heartbeat monitored it. This workflow runs it nightly on GitHub's scheduler,
+# stores the export as a workflow artifact (off-site, 30-day retention), and a
+# failed run notifies the repo owner via GitHub's built-in failure email.
+#
+# SETUP (once, repo Settings → Secrets and variables → Actions):
+#   SUPABASE_URL              — the project URL
+#   SUPABASE_SERVICE_ROLE_KEY — service-role key (NOT the anon key: after
+#                               migration 086 strict RLS, the anon key reads
+#                               ZERO rows — backups would be silently empty)
+#
+# Manual run: Actions tab → Nightly Backup → Run workflow.
+name: Nightly Backup
+
+on:
+  schedule:
+    - cron: '30 22 * * *'   # 22:30 UTC = 03:30 PKT daily
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run nightly export
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}  # service key intentionally (see header)
+          OUT_DIR: ./backups
+          QUIET: '1'
+        run: node scripts/nightly-export.js
+      - name: Verify export is non-empty (heartbeat)
+        run: |
+          COUNT=$(find ./backups -type f | wc -l)
+          SIZE=$(du -sb ./backups | cut -f1)
+          echo "files=$COUNT bytes=$SIZE"
+          if [ "$COUNT" -eq 0 ] || [ "$SIZE" -lt 1024 ]; then
+            echo "::error::Backup produced no data — investigate immediately (empty export = silent data-loss risk)"
+            exit 1
+          fi
+      - name: Upload backup artifact (off-site copy)
+        uses: actions/upload-artifact@v4
+        with:
+          name: erp-backup-${{ github.run_id }}
+          path: ./backups
+          retention-days: 30
+          if-no-files-found: error
