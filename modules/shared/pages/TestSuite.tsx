@@ -1078,7 +1078,7 @@ export default function GlassTechTestSuiteAuto() {
   const [activeWF, setActiveWF] = useState(null);
   const [testState, setTestState] = useState({});
   const [activeStep, setActiveStep] = useState({});
-  const [log, setLog] = useState([]);
+  const [log, setLog] = useState<{ time: string; msg: string; type: string }[]>([]);
   const [showLog, setShowLog] = useState(false);
   const [filterDept, setFilterDept] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
@@ -1138,6 +1138,7 @@ export default function GlassTechTestSuiteAuto() {
 
   const startWorkflow = useCallback((wfId) => {
     const wf = WORKFLOWS.find(w => w.id === wfId);
+    if (!wf) return;
     setActiveWF(wfId);
     setActiveStep(prev => ({ ...prev, [wfId]: wf.steps[0].id }));
     setTestState(prev => ({
@@ -1151,6 +1152,7 @@ export default function GlassTechTestSuiteAuto() {
 
   const resetWorkflow = useCallback((wfId) => {
     const wf = WORKFLOWS.find(w => w.id === wfId);
+    if (!wf) return;
     setTestState(prev => { const n = { ...prev }; delete n[wfId]; return n; });
     setActiveStep(prev => { const n = {...prev}; delete n[wfId]; return n; });
     addLog(`[RESET] ${wf.id}: ${wf.name}`, "info");
@@ -1289,6 +1291,7 @@ export default function GlassTechTestSuiteAuto() {
 
   const passStep = useCallback((wfId, stepId) => {
     const wf = WORKFLOWS.find(w => w.id === wfId);
+    if (!wf) return;
     const stepIdx = wf.steps.findIndex(s => s.id === stepId);
     const st = getStepState(wfId, stepId);
 
@@ -1311,6 +1314,7 @@ export default function GlassTechTestSuiteAuto() {
           addLog(`[REGRESSION] ${dep.wfName} may need re-verify (shares ${sheetName})`, "warn");
           // Mark dependent WF steps that use this sheet as reverify
           const depWf = WORKFLOWS.find(w => w.id === dep.wfId);
+          if (!depWf) return;
           depWf.steps.forEach(s => {
             if (s.tab === sheetName || (s.affects || []).some(a => a.startsWith(sheetName))) {
               setStepStatus(dep.wfId, s.id, STATUS.reverify);
@@ -1332,7 +1336,9 @@ export default function GlassTechTestSuiteAuto() {
 
   const failStep = useCallback((wfId, stepId, checkIdx) => {
     const wf = WORKFLOWS.find(w => w.id === wfId);
+    if (!wf) return;
     const step = wf.steps.find(s => s.id === stepId);
+    if (!step) return;
 
     if (checkIdx === -1) {
       setStepStatus(wfId, stepId, STATUS.fail);

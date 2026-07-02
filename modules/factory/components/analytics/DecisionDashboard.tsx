@@ -54,7 +54,7 @@ const DecisionDashboard: React.FC = () => {
       .gte('created_at', since);
 
     // Group by agent
-    const grouped: Record<string, typeof decisions> = {};
+    const grouped: Record<string, NonNullable<typeof decisions>> = {};
     (decisions || []).forEach((d: any) => {
       if (!grouped[d.agent_type]) grouped[d.agent_type] = [];
       grouped[d.agent_type].push(d);

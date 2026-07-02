@@ -25,6 +25,7 @@ import { Loader2 } from 'lucide-react';
 //   • Broken     → terminal (no further moves; NCR is the audit trail)
 const UNIVERSAL_TRANSITIONS: PieceStatus[] = ['Hold', 'Broken', 'Returned'];
 const PIECE_TRANSITIONS: Record<PieceStatus, PieceStatus[]> = {
+  'Pending-Cut':               ['Cut'],                               // awaiting cutting → cut
   'Cut':                       ['Service-Pending', 'QC-Pending', 'QC-Failed'],
   'Service-Pending':           ['QC-Pending', 'Cut', 'QC-Failed'],
   'QC-Pending':                ['QC-Passed', 'QC-Failed', 'Service-Pending'],

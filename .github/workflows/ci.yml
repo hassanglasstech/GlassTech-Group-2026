@@ -1,16 +1,17 @@
 name: CI
 
-# Go-live control: every push/PR to nippon must build clean and pass all tests.
-# HOW TO ADD THIS FILE TO THE REPO (PAT lacks 'workflow' scope, so it couldn't
-# be pushed automatically). Pick ONE:
-#   1) GitHub web UI: repo -> Add file -> Create new file ->
-#      path ".github/workflows/ci.yml" -> paste this content -> Commit to nippon.
-#   2) Or create a Personal Access Token WITH the "workflow" scope and re-push.
+# Gate: every push/PR to the live branches must type-check, lint clean (no
+# ESLint errors), build, and pass all tests.
+#
+# NOTE (audit 2026-07 #12): this previously triggered only on the dead `nippon`
+# branch and its "type-check" step was actually `vite build` (esbuild strips
+# types — it does NOT type-check). Fixed below: real `tsc --noEmit` + eslint
+# error gate, on the live branches.
 on:
   push:
-    branches: [nippon]
+    branches: [multitenant, main]
   pull_request:
-    branches: [nippon]
+    branches: [multitenant, main]
 
 jobs:
   build-test:
@@ -23,7 +24,11 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: npm ci
-      - name: Type-check + build
+      - name: Type-check (real tsc, not vite build)
+        run: npm run lint
+      - name: Lint (ESLint — fail on errors only)
+        run: npm run lint:eslint:errors
+      - name: Build
         run: npm run build
       - name: Run tests
         run: npm test

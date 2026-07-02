@@ -16,6 +16,7 @@ const KEYS = {
 
 import { bgSaveToIDB, safeParse, safeSave, safeAsync } from '../../shared/services/utils';
 import { toast } from 'sonner';
+import { Logger } from '../../shared/services/logger';
 
 export const ProductionService = {
   getProductionPiecesAsync: async (filterCompany?: string): Promise<ProductionPiece[]> => {
@@ -242,6 +243,16 @@ export const ProductionService = {
       supabase.from('production_pieces').upsert(mapped, { onConflict: 'id' })
         .then(({ error }) => { if (error) console.warn('[Pieces] Supabase push:', error.message); });
     }
+  },
+  // Fire-and-forget background variant of saveProductionPieces. Persists +
+  // pushes without the caller awaiting. Any failure is logged (never silently
+  // swallowed) so callers in a synchronous handler (e.g. GlasscoVendorHub,
+  // DispatchPlanner, ncrService, GateControl, ProductionContext) don't have to
+  // await the ghost-order validation / Supabase round-trip.
+  saveProductionPiecesBg: (data: ProductionPiece[]): void => {
+    ProductionService.saveProductionPieces(data).catch((err: unknown) => {
+      Logger.error('Production', 'Background production-piece save failed', err);
+    });
   },
   getTemperingDispatches: (): TemperingDispatch[] => safeParse(KEYS.TEMPERING_DISPATCHES),
   saveTemperingDispatches: (data: TemperingDispatch[]) => safeSave(KEYS.TEMPERING_DISPATCHES, data),

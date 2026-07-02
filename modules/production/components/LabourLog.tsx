@@ -38,7 +38,7 @@ const LabourLogModule: React.FC = () => {
 
   const cutterNames = useMemo(() => {
     const fromLogs = new Set(logs.map(l => l.cutterName));
-    employees.forEach(e => fromLogs.add(e.name));
+    employees.forEach(e => fromLogs.add(e.personal.name));
     return Array.from(fromLogs).sort();
   }, [logs, employees]);
 

@@ -678,6 +678,9 @@ export const FinanceService = {
   getMappingRules:  (): FinancialMappingRule[] => safeParse(KEYS.MAPPING_RULES),
   saveMappingRules: (d: FinancialMappingRule[]): void => { safeSave(KEYS.MAPPING_RULES, d); },
   getGLConfig:      (): GLConfiguration[]      => safeParse(KEYS.GL_CONFIG),
+  // Persist the GL event→account mapping rules. Config-only (localStorage);
+  // does NOT post to the ledger — the double-entry path is untouched.
+  saveGLConfig:     (d: GLConfiguration[]): void => { safeSave(KEYS.GL_CONFIG, d); },
 
   // ── Legacy compat ──────────────────────────────────────────────────
   loadAccountsAsync: async (): Promise<void> => { await FinanceService.init(); },

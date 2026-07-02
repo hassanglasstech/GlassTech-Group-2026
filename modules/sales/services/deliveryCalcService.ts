@@ -44,7 +44,7 @@ export function getVendorTATSummaries(company: string): VendorTATSummary[] {
 
   vendors.filter(v => v.type === 'Tempering' || (v.type as string) === 'Lamination').forEach(v => {
     const vendorDisps = dispatches.filter(d =>
-      d.plantName?.toUpperCase() === v.name?.toUpperCase()
+      String(d.plantName ?? '').toUpperCase() === (v.name ?? '').toUpperCase()
     );
     if (vendorDisps.length === 0) {
       summaries.push({

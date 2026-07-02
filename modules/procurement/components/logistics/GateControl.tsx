@@ -169,7 +169,7 @@ export const GateControl: React.FC<GateControlProps> = ({ company, gatePasses, d
                                         <div className="text-xs text-slate-500">{gp.driverName}</div>
                                     </td>
                                     <td className="p-3">{gp.materialDetails}</td>
-                                    <td className="p-3">{gp.grossWeight - gp.tareWeight} {gp.unit}</td>
+                                    <td className="p-3">{(gp.grossWeight ?? 0) - (gp.tareWeight ?? 0)} {gp.unit}</td>
                                     <td className="p-3">
                                         <span className={`px-2 py-1 rounded-full text-xs ${gp.status === 'Allowed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                                             {gp.status}

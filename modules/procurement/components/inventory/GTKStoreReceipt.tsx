@@ -86,7 +86,7 @@ const GTKStoreReceipt: React.FC<GTKStoreReceiptProps> = ({ isOpen, onClose, refr
   );
   const requisitions = useMemo(() =>
     InventoryService.getRequisitions().filter(r =>
-      r.company === company && r.status === 'Approved' && r.paymentStatus !== 'Received'
+      r.company === company && r.status === 'Approved'
     ),
     [company, isOpen]
   );

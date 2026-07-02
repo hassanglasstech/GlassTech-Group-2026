@@ -100,7 +100,7 @@ const generateCOA = async (company: string): Promise<number> => {
       type: account.type,
       level: account.level,
       data: {},
-    }).catch(() => {});
+    }).then(undefined, () => {});
     count++;
   }
   return count;
@@ -132,7 +132,7 @@ const loadPatterns = async (company: string, industry: string): Promise<number> 
       confidence: 0.85,
       defined_by: 'system',
       active: true,
-    }).catch(() => {});
+    }).then(undefined, () => {});
     count++;
   }
   return count;
@@ -162,7 +162,7 @@ export const onboardNewClient = async (
     company: config.company_name,
     month: currentMonth,
     status: 'Open',
-  }).catch(() => {});
+  }).then(undefined, () => {});
   steps.push(`Fiscal period ${currentMonth} opened`);
 
   // Step 4: EventOS patterns

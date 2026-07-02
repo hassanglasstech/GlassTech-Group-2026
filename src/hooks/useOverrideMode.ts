@@ -69,8 +69,7 @@ export function useOverrideMode() {
         .maybeSingle()
         .then(({ data }) => {
           if (data) setIsOverrideMode(!!data.override_mode_active);
-        })
-        .catch(() => {});
+        }, () => {});
     });
   }, [authData?.id]);
 

@@ -105,6 +105,8 @@ export interface Quotation {
   isAlreadyDispatched?: boolean; 
   receivedAmount?: number; 
   actualDeliveryDate?: string;
+  /** Cutter assigned to this job order (consolidated-branch cutter-tracking overlay). */
+  assignedCutter?: string;
   delayReason?: string;
   delayCategory?: 'Internal' | 'Outsourcing' | 'Client' | '';
   // Replacement order fields (post-delivery customer breakage)
@@ -172,6 +174,15 @@ export interface ProductionPiece {
   revisionNote?: string;
   sqft?: number;            // area of this piece (sqft) — populated at creation from quotation item
   serviceLog?: ServiceLogEntry[]; // history of services performed + worker + cost
+  // ── Consolidated-branch fields (optional; cutter-tracking overlay) ──
+  /** Company owning this piece — denormalized for cross-company logistics screens. */
+  company?: Company;
+  /** Employee/cutter id who cut this piece. */
+  cutBy?: string;
+  /** ISO timestamp when the piece was cut. */
+  cutAt?: string;
+  /** Total sqft alias used by dispatch/logistics screens (mirrors `sqft`). */
+  totalSqFt?: number;
   // ── Barcode / QR (Task 4 — Phase 9) ─────────────────────────────
   /**
    * Barcode / QR string printed on the job card and the physical glass sticker.

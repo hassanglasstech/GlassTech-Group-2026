@@ -186,7 +186,7 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
   // so its OB needs Sheet Count × Sheet Size → Total SqFt × Rate/SqFt.
   // Nippon (trading) and GTK/GTI (aluminium) don't measure stock in sqft —
   // they enter Quantity × Rate directly. Toggle the form per-company.
-  const isGlassCompany = company === 'Glassco' || company === 'GlassCo';
+  const isGlassCompany = company === 'Glassco';
 
   // Initial line for non-glass companies uses PCS + sqftPerSheet=1 so the
   // value pipeline collapses to qty × rate without requiring sheet size.
@@ -280,7 +280,7 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
   // as in the legacy OB_GL.INVENTORY_HW). Without this branch, every Nippon
   // opening hardware entry would have posted to the wrong account.
   const getInventoryAccount = (category: string, thickness?: string, mainCategory?: string) => {
-    const isGlass = company === 'Glassco' || company === 'GlassCo';
+    const isGlass = company === 'Glassco';
     const isAlum = company === 'GTK' || company === 'GTI';
     const isNippon = company === 'Nippon';
     let result;

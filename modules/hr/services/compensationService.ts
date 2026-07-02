@@ -45,7 +45,7 @@ export const analyzeCompensation = async (
 
   const salary      = emp.salary?.basic || 0;
   const designation = emp.work?.designation || '';
-  const joinDate    = emp.work?.joinDate || emp.work?.joindate || '';
+  const joinDate    = emp.work?.joinDate || '';
   const tenureYears = joinDate
     ? Math.floor((Date.now() - new Date(joinDate).getTime()) / (365.25 * 86400000))
     : 0;

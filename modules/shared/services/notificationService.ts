@@ -152,7 +152,7 @@ export const NotificationService = {
     channel?: NotifChannel;
   }): WANotification => {
     const phone = cleanPhone(params.recipientPhone);
-    const templateData = { orderRef: params.orderRef, date: new Date().toLocaleDateString('en-PK'), ...params.templateData };
+    const templateData: Record<string, string> = { orderRef: params.orderRef, date: new Date().toLocaleDateString('en-PK'), ...params.templateData };
     const message = TEMPLATES[params.eventType]?.(templateData) || templateData.message || '';
     const waLink = phone ? buildWaLink(phone, message) : undefined;
 

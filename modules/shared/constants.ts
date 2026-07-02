@@ -9,6 +9,8 @@ export const Company = {
 export type Company = typeof Company[keyof typeof Company];
 
 export const PieceStatus = {
+  // Consolidated cutter-workflow: piece created at approval, awaiting cutting.
+  PENDING_CUT: 'Pending-Cut',
   CUT: 'Cut',
   SERVICE_PENDING: 'Service-Pending',
   QC_PENDING: 'QC-Pending',

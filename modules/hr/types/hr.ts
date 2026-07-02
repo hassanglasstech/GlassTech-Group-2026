@@ -97,6 +97,7 @@ export interface Employee {
     cnic: string;
     phone: string;
     address: string;
+    email?: string;             // Optional contact email
     photoUrl?: string;          // Quick-access photo path
     emergencyContact?: {        // BUG-2 Fix: was two separate `?:string` fields
       name: string;             //   on a shadowed duplicate key block. Now a

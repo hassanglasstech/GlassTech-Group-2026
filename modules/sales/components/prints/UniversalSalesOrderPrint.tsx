@@ -107,7 +107,7 @@ const UniversalSalesOrderPrint: React.FC<Props> = ({ quotation, company, clientN
           {serviceCharges.map((sc, idx: number) => (
             <tr key={`sc-${idx}`} style={{ borderBottom: '0.5px solid #e0e0e0', background: '#fff8f0' }}>
               <td style={{ padding: '7px 8px', color: '#888' }}>—</td>
-              <td style={{ padding: '7px 8px', color: '#b45309' }}>{sc.description || sc.label || 'Service Charge'}</td>
+              <td style={{ padding: '7px 8px', color: '#b45309' }}>{sc.description || 'Service Charge'}</td>
               <td style={{ padding: '7px 8px', textAlign: 'center' }}>—</td>
               <td style={{ padding: '7px 8px', textAlign: 'right' }}>—</td>
               <td style={{ padding: '7px 8px', textAlign: 'right' }}>—</td>

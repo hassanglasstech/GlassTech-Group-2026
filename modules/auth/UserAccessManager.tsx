@@ -880,7 +880,7 @@ export default function UserAccessManager() {
                   {/* Left */}
                   <div className="flex items-center gap-3 min-w-0">
                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                      u.status === 'active' ? 'bg-emerald-100' : u.status === 'pending' ? 'bg-amber-100' : 'bg-slate-100'
+                      u.status === 'active' ? 'bg-emerald-100' : u.status === 'invite_pending' ? 'bg-amber-100' : 'bg-slate-100'
                     }`}>
                       <span className="text-xs font-bold text-slate-700">
                         {u.fullName?.slice(0,2).toUpperCase() || '??'}

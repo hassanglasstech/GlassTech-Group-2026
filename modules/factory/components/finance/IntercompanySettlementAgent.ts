@@ -119,7 +119,7 @@ export const processIntercompanyTransfer = async (
     gl_entry_id_to:   buyerEntry.description,
     eliminated:       false,
     created_at:       new Date().toISOString(),
-  }).select('txn_id').single().catch(() => ({ data: null }));
+  }).select('txn_id').single().then(undefined, () => ({ data: null }));
 
   return {
     success:           true,
@@ -172,14 +172,14 @@ export const generateEliminationEntries = async (period: string): Promise<{
       net_adjustment:        0, // ICO at cost = zero net impact
       elimination_entries:   pairTxns.map(t => t.txn_id),
       created_by:            'IntercompanyAgent',
-    }).catch(() => {});
+    }).then(undefined, () => {});
 
     // Mark as eliminated
     const txnIds = pairTxns.map(t => t.txn_id);
     await supabase.from('intercompany_transaction_log')
       .update({ eliminated: true, elimination_period: period })
       .in('txn_id', txnIds)
-      .catch(() => {});
+      .then(undefined, () => {});
 
     eliminatedCount += pairTxns.length;
     totalRevenue += totalAmount;

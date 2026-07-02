@@ -960,10 +960,10 @@ export default function GuidedTestFlows() {
                                   <select value={phaseValues[inp.key]||""} onChange={e=>setVal(test.id,phase.id,inp.key,e.target.value)}
                                     style={{ width:"100%", padding:"6px 8px", borderRadius:6, border:`1px solid ${mc.color}66`, background:"#0D1B2A", color:"#E0E0E0", fontSize:11 }}>
                                     <option value="">-- select --</option>
-                                    {inp.options.map(o=><option key={o} value={o}>{o}</option>)}
+                                    {('options' in inp && inp.options ? inp.options : []).map(o=><option key={o} value={o}>{o}</option>)}
                                   </select>
                                 ) : (
-                                  <input type={inp.type} value={phaseValues[inp.key]||""} placeholder={inp.placeholder}
+                                  <input type={inp.type} value={phaseValues[inp.key]||""} placeholder={'placeholder' in inp ? inp.placeholder : undefined}
                                     onChange={e=>setVal(test.id,phase.id,inp.key,e.target.value)}
                                     style={{ width:"100%", padding:"6px 8px", borderRadius:6, border:`1px solid ${mc.color}66`, background:"#0D1B2A", color:"#E0E0E0", fontSize:11, boxSizing:"border-box" }} />
                                 )}

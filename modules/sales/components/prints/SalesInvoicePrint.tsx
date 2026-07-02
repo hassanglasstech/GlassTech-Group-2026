@@ -168,15 +168,15 @@ const SalesInvoicePrint: React.FC<InvoicePrintProps> = ({ invoice, company, onCl
                   <span style={{ fontSize: '13px', fontWeight: 900, textTransform: 'uppercase', color: '#0f172a' }}>Total Due</span>
                   <span style={{ fontSize: '13px', fontWeight: 900, color: '#0f172a' }}>PKR {grandTotal.toLocaleString()}</span>
                 </div>
-                {invoice.receivedAmount > 0 && (
+                {(invoice.receivedAmount ?? 0) > 0 && (
                   <>
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
                       <span style={{ color: '#64748b', fontWeight: 700 }}>Received</span>
-                      <span style={{ fontWeight: 700, color: '#059669' }}>PKR {invoice.receivedAmount.toLocaleString()}</span>
+                      <span style={{ fontWeight: 700, color: '#059669' }}>PKR {(invoice.receivedAmount ?? 0).toLocaleString()}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '4px' }}>
                       <span style={{ fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', color: '#be123c' }}>Balance Due</span>
-                      <span style={{ fontSize: '11px', fontWeight: 900, color: '#be123c' }}>PKR {invoice.balance.toLocaleString()}</span>
+                      <span style={{ fontSize: '11px', fontWeight: 900, color: '#be123c' }}>PKR {(invoice.balance ?? 0).toLocaleString()}</span>
                     </div>
                   </>
                 )}

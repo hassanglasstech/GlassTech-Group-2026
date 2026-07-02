@@ -69,7 +69,7 @@ const ToolRegister: React.FC = () => {
   useEffect(() => {
     setTools(getTools().filter(t => t.company === company));
     try {
-      setEmployees(HRService.getEmployees().filter(e => e.company === company && e.status !== 'Inactive'));
+      setEmployees(HRService.getEmployees().filter(e => e.company === company && !['resigned', 'terminated'].includes(e.work?.status || '')));
     } catch { setEmployees([]); }
   }, [company, refreshKey]);
 
@@ -409,7 +409,7 @@ const ToolRegister: React.FC = () => {
                                 <RotateCcw size={14} />
                               </button>
                             )}
-                            {(tool.status === 'Available' || tool.status === 'Damaged' || tool.status === 'Lost') && tool.status !== 'Written Off' && (
+                            {(tool.status === 'Available' || tool.status === 'Damaged' || tool.status === 'Lost') && (
                               <button onClick={() => { setShowWriteOff(tool); setWriteOffReason(''); }}
                                 className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg" title="Write Off">
                                 <XCircle size={14} />

@@ -3,7 +3,7 @@
 // Uses three-layer memory for learning from outcomes
 // ═══════════════════════════════════════════════════════════════════
 
-import { InventoryService } from '@/modules/procurement/services/inventoryService';
+import { SalesService } from '@/modules/sales/services/salesService';
 import {
   saveDecision, getActiveRules, getRelevantFacts, searchFacts,
   getSimilarDecisions,
@@ -68,7 +68,7 @@ export const selectVendor = async (
   requiredQty: number
 ): Promise<OpsDecision> => {
   const decisionId = genId();
-  const vendors = InventoryService.getVendors?.() || JSON.parse(localStorage.getItem('gtk_erp_vendors') || '[]');
+  const vendors = SalesService.getVendors() || JSON.parse(localStorage.getItem('gtk_erp_vendors') || '[]');
   const glasscoVendors = vendors.filter((v: any) => v.company === 'Glassco' || v.company === 'GlassCo');
 
   const [rules, facts, confidence] = await Promise.all([

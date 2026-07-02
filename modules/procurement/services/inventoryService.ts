@@ -695,6 +695,23 @@ export const InventoryService = {
 
   // ── GRN Sheet Entries (Phase 1) ────────────────────────────────────
   getGRNSheetEntries: (): GRNSheetEntry[] => safeParse(KEYS.GRN_SHEET_ENTRIES),
+  // Supabase-first async variant (local fallback). Rows are stored as
+  // { id, company, data } via _sbSync, so the real entry lives on `.data`.
+  getGRNSheetEntriesAsync: async (): Promise<GRNSheetEntry[]> => {
+    const company = activeCompany();
+    try {
+      const { data, error } = await supabase
+        .from('grn_sheet_entries').select('*').eq('company', company);
+      if (!error && data && data.length > 0) {
+        const mapped = data.map((r: any) => (r.data ?? r)) as GRNSheetEntry[];
+        safeSave(KEYS.GRN_SHEET_ENTRIES, mapped);
+        return mapped;
+      }
+    } catch (e) {
+      console.error('[InventoryService] getGRNSheetEntriesAsync error', e);
+    }
+    return safeParse(KEYS.GRN_SHEET_ENTRIES);
+  },
   getGRNSheetEntriesByGRN: (grnId: string): GRNSheetEntry[] =>
     safeParse(KEYS.GRN_SHEET_ENTRIES).filter((e: GRNSheetEntry) => e.grnId === grnId),
   getGRNSheetEntryByTag: (tagId: string): GRNSheetEntry | undefined =>
@@ -834,6 +851,23 @@ export const InventoryService = {
 
   // ── Cutting Sessions (Phase 1) ────────────────────────────────────
   getCuttingSessions: (): CuttingSession[] => safeParse(KEYS.CUTTING_SESSIONS),
+  // Supabase-first async variant (local fallback). Rows are stored as
+  // { id, company, data } via _sbSync, so the real session lives on `.data`.
+  getCuttingSessionsAsync: async (): Promise<CuttingSession[]> => {
+    const company = activeCompany();
+    try {
+      const { data, error } = await supabase
+        .from('cutting_sessions').select('*').eq('company', company);
+      if (!error && data && data.length > 0) {
+        const mapped = data.map((r: any) => (r.data ?? r)) as CuttingSession[];
+        safeSave(KEYS.CUTTING_SESSIONS, mapped);
+        return mapped;
+      }
+    } catch (e) {
+      console.error('[InventoryService] getCuttingSessionsAsync error', e);
+    }
+    return safeParse(KEYS.CUTTING_SESSIONS);
+  },
   getCuttingSessionsByJob: (jobOrderId: string): CuttingSession[] =>
     safeParse(KEYS.CUTTING_SESSIONS).filter((s: CuttingSession) => s.jobOrderId === jobOrderId),
   saveCuttingSessions: (data: CuttingSession[]) => { safeSave(KEYS.CUTTING_SESSIONS, data); _sbSync('cutting_sessions', data); },
