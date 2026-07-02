@@ -21,7 +21,7 @@
  * Flipping this to true BEFORE the migration is applied would make the
  * `.is('deleted_at', null)` pull filter throw (column does not exist).
  */
-export const SOFT_DELETE_ENABLED = false;
+export const SOFT_DELETE_ENABLED = true;
 
 /**
  * Financial-critical tables that carry a `deleted_at` tombstone column.

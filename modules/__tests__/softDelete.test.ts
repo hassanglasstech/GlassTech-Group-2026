@@ -6,10 +6,11 @@ import { describe, it, expect } from 'vitest';
 import { SOFT_DELETE_ENABLED, SOFT_DELETE_TABLES } from '@/modules/shared/config/softDelete';
 
 describe('softDelete config (audit #5)', () => {
-  it('ships OFF by default — inert until migration 089 is applied', () => {
-    // MUST be false at rest: flipping true before the DB column exists makes the
-    // pull filter `.is(deleted_at, null)` throw. Founder flips this post-089.
-    expect(SOFT_DELETE_ENABLED).toBe(false);
+  it('is ON now that migration 089 (deleted_at columns) is applied', () => {
+    // Flipped true on 2026-07-02 AFTER 089 added deleted_at on all SOFT_DELETE_TABLES.
+    // If 089 is ever rolled back, flip this to false too — the pull filter
+    // `.is(deleted_at, null)` throws when the column is absent.
+    expect(SOFT_DELETE_ENABLED).toBe(true);
   });
 
   it('covers exactly the six financial-critical tables from migration 089', () => {
