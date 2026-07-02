@@ -79,7 +79,7 @@ BEGIN
   -- GL idempotency guard is the real double-post protection.
   SELECT status INTO v_cn_status FROM credit_notes WHERE id = v_cn_id FOR UPDATE;
   IF FOUND AND v_cn_status IS DISTINCT FROM 'Pending Approval' THEN
-    RAISE EXCEPTION 'cn_not_pending: % is "%%" — only Pending Approval CNs can be posted',
+    RAISE EXCEPTION 'cn_not_pending: % is "%" — only Pending Approval CNs can be posted',
       v_cn_id, v_cn_status;
   END IF;
 

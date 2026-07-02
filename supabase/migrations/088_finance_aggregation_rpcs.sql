@@ -75,7 +75,7 @@ GRANT EXECUTE ON FUNCTION public.trial_balance(text) TO authenticated, anon;
 -- migration 032). Outstanding per invoice = COALESCE(balance, total_amount -
 -- received_amount). Days overdue measured from invoice.date to CURRENT_DATE.
 -- Only invoices with a positive outstanding balance are bucketed. Voided
--- invoices (status='Void') are excluded.
+-- invoices (status='Voided') are excluded.
 -- Buckets mirror the app's AgingReport vocabulary: current (0-30), 30 (31-60),
 -- 60 (61-90), 90+ (over 90 days).
 CREATE OR REPLACE FUNCTION public.ar_aging(p_company text)
@@ -104,7 +104,7 @@ AS $$
       (CURRENT_DATE - COALESCE(NULLIF(i.date::text, '')::date, CURRENT_DATE)) AS age_days
     FROM invoices i
     WHERE i.company = p_company
-      AND COALESCE(i.status, '') <> 'Void'
+      AND COALESCE(i.status, '') <> 'Voided'   -- app writes 'Voided' (037 CHECK); 'Void' never matched → voided invoices inflated AR
   )
   SELECT
     COALESCE(SUM(bal) FILTER (WHERE age_days <= 30), 0)                 AS bucket_current,
