@@ -268,6 +268,24 @@ const pettyCashToRow = (e: PettyCashEntry) => ({
   updated_at: new Date().toISOString(),
 });
 
+// ── Durable retry register (audit #4) ────────────────────────────────
+// Before this fix, a terminal _upsert failure only showed a toast claiming
+// "will retry on next sync" — but nothing ever retried: the entry stayed in
+// localStorage, shown as posted, and never reached Supabase. Now every
+// terminal failure is recorded here and re-pushed on app init and whenever
+// the browser comes back online (rows are rebuilt from the local buffer at
+// flush time, so the retry always pushes the CURRENT state).
+const RETRY_KEY = 'gtk_erp_finance_retry_tables';
+interface FinanceRetryEntry { table: string; label: string; failedAt: string }
+let _retryListenerWired = false;
+
+const _recordRetry = (table: string, label: string): void => {
+  const cur: FinanceRetryEntry[] = safeParse(RETRY_KEY);
+  const next = cur.filter(r => r.table !== table); // dedupe per table
+  next.push({ table, label, failedAt: new Date().toISOString() });
+  safeSave(RETRY_KEY, next);
+};
+
 // ── Supabase upsert — visible error, never silent ─────────────────────
 const _upsert = async (table: string, rows: any[], label: string): Promise<void> => {
   // Retry on transient Postgres errors (deadlock detected, statement timeout,
@@ -288,7 +306,8 @@ const _upsert = async (table: string, rows: any[], label: string): Promise<void>
       }
 
       Logger.error('Finance', `${label} upsert failed`, error);
-      toast.error(`GL sync failed (${label}) — saved locally, will retry on next sync.`, {
+      _recordRetry(table, label);
+      toast.error(`GL sync failed (${label}) — saved locally, queued for auto-retry.`, {
         id: `finance-sync-${table}`, duration: 5000,
       });
       return;
@@ -298,7 +317,8 @@ const _upsert = async (table: string, rows: any[], label: string): Promise<void>
         continue;
       }
       Logger.error('Finance', `${label} exception`, err);
-      toast.error(`GL sync error (${label}) — offline mode active.`, {
+      _recordRetry(table, label);
+      toast.error(`GL sync error (${label}) — saved locally, queued for auto-retry.`, {
         id: `finance-err-${table}`, duration: 5000,
       });
       return;
@@ -380,11 +400,56 @@ export const FinanceService = {
   // ── Init / Refresh ─────────────────────────────────────────────────
   init: async (): Promise<void> => {
     if (!_cache.loaded) await _loadCache();
+    // Audit #4: drain any GL pushes that terminally failed in a previous
+    // session (fire-and-forget), and re-drain whenever we come back online.
+    void FinanceService.flushRetryQueue();
+    if (typeof window !== 'undefined' && !_retryListenerWired) {
+      _retryListenerWired = true;
+      window.addEventListener('online', () => { void FinanceService.flushRetryQueue(); });
+    }
   },
 
   refresh: async (): Promise<void> => {
     _cache.loaded = false;
     await _loadCache();
+  },
+
+  // ── Durable retry drain (audit #4) ─────────────────────────────────
+  // Re-pushes tables whose last cloud upsert terminally failed. Rows are
+  // rebuilt from the CURRENT local buffer, so the newest state wins. Only
+  // tables with module-scope row mappers are rebuildable here; others are
+  // dropped from the register (they re-push on their next save anyway).
+  flushRetryQueue: async (): Promise<void> => {
+    const pending: FinanceRetryEntry[] = safeParse(RETRY_KEY);
+    if (!pending.length) return;
+
+    const remaining: FinanceRetryEntry[] = [];
+    for (const entry of pending) {
+      let rows: any[] | null = null;
+      switch (entry.table) {
+        case 'accounts':   rows = FinanceService.getAccounts().map(accountToRow); break;
+        case 'ledger':     rows = FinanceService.getLedger().map(ledgerToRow); break;
+        case 'petty_cash': rows = FinanceService.getPettyCashEntries().map(pettyCashToRow); break;
+        default:
+          Logger.warn('Finance', `retry-queue: no row builder for ${entry.table} — dropping (re-pushes on next save)`);
+          continue;
+      }
+      if (!rows.length) continue; // nothing local to push — drop entry
+      try {
+        const { error } = await supabase.from(entry.table).upsert(rows, { onConflict: 'id' });
+        if (error) {
+          Logger.warn('Finance', `retry-queue: ${entry.table} still failing: ${error.message}`);
+          remaining.push(entry);
+        } else {
+          Logger.action('system', 'FINANCE', 'RETRY_SYNC_OK', { extra: { table: entry.table, rows: rows.length } });
+          toast.success(`GL re-sync complete (${entry.label})`, { id: `finance-retry-${entry.table}` });
+        }
+      } catch (err: any) {
+        Logger.warn('Finance', `retry-queue: ${entry.table} exception: ${err?.message || err}`);
+        remaining.push(entry);
+      }
+    }
+    safeSave(RETRY_KEY, remaining);
   },
 
   // ── Accounts ───────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Company } from '@/modules/shared/types';
+import { FinanceService } from '@/modules/finance/services/financeService';
 import LoanManagement from '@/modules/hr/pages/LoanManagement';
 import PayrollManagement from '@/modules/hr/pages/PayrollManagement';
 import ChartOfAccounts from '@/modules/finance/pages/ChartOfAccounts';
@@ -153,7 +154,7 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
         <div className="max-w-[1600px] mx-auto animate-in fade-in duration-300">
           {/* Operations */}
           {activeTab === 'dashboard' && <FinanceDashboardView company={company} />}
-          {activeTab === 'registry' && <FinancialRegistry company={company} />}
+          {activeTab === 'registry' && <FinancialRegistry />}
           {activeTab === 'cash_journal' && <PettyCashBook company={company} />}
           {activeTab === 'ledger' && <GeneralLedger company={company} />}
           {activeTab === 'billing' && <BillingHub company={company} />}
@@ -204,8 +205,9 @@ const CompanyAccounts: React.FC<{ company: Company }> = ({ company }) => {
                     const month = new Date().toISOString().slice(0, 7);
                     if (!await confirmModal(`Run depreciation for ${month}?`)) return;
                     const result = FinanceService.postDepreciation(company, month);
-                    if (result.posted > 0) toast.success(`Depreciation posted: ${result.posted} assets, PKR ${result.total.toLocaleString()}`);
-                    else toast.error(result.total === 0 ? 'No active assets found' : `Already posted for ${month}`);
+                    if (result.posted > 0) toast.success(`Depreciation posted: ${result.posted} assets`);
+                    else if (result.skipped > 0) toast.info(`Already posted for ${month} — ${result.skipped} assets skipped`);
+                    else toast.error('No active assets found');
                   }} className="bg-blue-600 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-blue-700">Run Depreciation</button>
                 </div>
                 <div className="bg-white p-8 rounded-2xl border shadow-sm space-y-4">
