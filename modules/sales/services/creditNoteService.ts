@@ -16,15 +16,63 @@
  */
 
 import { Company } from '@/modules/shared/types/core';
-import { Invoice }  from '@/modules/finance/types/finance';
-import { FinanceService } from '@/modules/finance/services/financeService';
+import { Invoice, LedgerTransaction }  from '@/modules/finance/types/finance';
+import { FinanceService, ledgerToRow } from '@/modules/finance/services/financeService';
 import { SalesService }   from '@/modules/sales/services/salesService';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { allocateSerial } from '@/modules/sales/services/serialAllocator';
 import { reverseDeliveryCOGS } from '@/modules/procurement/services/glasscoGLService';
-import { errMsg } from '@/modules/shared/services/utils';
+import { supabase } from '@/src/services/supabaseClient';
+import { errMsg, safeParse, safeSave } from '@/modules/shared/services/utils';
 import { Logger } from '@/modules/shared/services/logger';
 import { toast } from 'sonner';
+
+// ── Audit #9: atomic-RPC plumbing (migration 090) ───────────────────────────
+// approveCreditNote/voidInvoice each mutate GL + invoice + CN/quote in several
+// steps. Migration 090 wraps that in ONE Postgres transaction. These helpers
+// (a) detect when 090 has NOT been applied so we fall back to the legacy path
+// with ZERO behavior change, and (b) mirror the RPC's committed writes into
+// localStorage WITHOUT re-pushing (the RPC already wrote the cloud) — the same
+// discipline deliveryInvoiceService uses after post_invoice_atomic.
+const LS_LEDGER     = 'gtk_erp_ledger';
+const LS_INVOICES   = 'gtk_erp_invoices';
+const LS_QUOTATIONS = 'gtk_erp_quotations';
+const CN_UNIFIED_KEY = 'gtk_erp_credit_notes';
+
+/** True when the RPC is absent (migration 090 not applied) — 42883 =
+ *  undefined_function, PGRST202 = not in PostgREST schema cache. */
+const isRpcMissing = (error: { code?: string; message?: string } | null): boolean => {
+  if (!error) return false;
+  const code = error.code || '';
+  const msg  = (error.message || '').toLowerCase();
+  return code === '42883' || code === 'PGRST202'
+    || msg.includes('could not find the function')
+    || msg.includes('does not exist');
+};
+
+const mirrorLedgerLocal = (tx: LedgerTransaction): void => {
+  const local = safeParse(LS_LEDGER) as LedgerTransaction[];
+  safeSave(LS_LEDGER, [...local.filter(t => t.id !== tx.id), tx]);
+};
+
+const mirrorInvoiceLocal = (invoiceId: string, patch: Record<string, unknown>): void => {
+  const local = safeParse(LS_INVOICES) as Array<{ id: string }>;
+  safeSave(LS_INVOICES, local.map(i => (i.id === invoiceId ? { ...i, ...patch } : i)));
+};
+
+const mirrorQuotationLocal = (quotationId: string): void => {
+  const local = safeParse(LS_QUOTATIONS) as Array<{ id: string }>;
+  safeSave(LS_QUOTATIONS, local.map(q => (q.id === quotationId ? { ...q, status: 'Approved', invoiceNo: undefined } : q)));
+};
+
+const mirrorCreditNoteLocal = (company: Company, cn: CreditNote): void => {
+  const readArr = (key: string): CreditNote[] => {
+    try { return JSON.parse(localStorage.getItem(key) || '[]') as CreditNote[]; } catch { return []; }
+  };
+  // unified key + legacy per-company key (both consumed by getCreditNotes)
+  localStorage.setItem(CN_UNIFIED_KEY, JSON.stringify([...readArr(CN_UNIFIED_KEY).filter(c => c.id !== cn.id), cn]));
+  localStorage.setItem(CN_KEY(company), JSON.stringify([...readArr(CN_KEY(company)).filter(c => c.id !== cn.id), cn]));
+};
 
 // ── CreditNote record type ────────────────────────────────────────────────────
 // GAP-07: Maker-Checker. A CN starts as 'Pending Approval' (no GL impact) and
@@ -226,30 +274,21 @@ export async function approveCreditNote(params: {
   }
   reversalDetails.push({ accountId: arDetail.accountId, debit: 0, credit: amount, text: `AR reduction: ${invoice.clientName}` });
 
-  // ── Post reversing GL ─────────────────────────────────────────────────────
-  FinanceService.recordTransaction({
+  const newBalance = invoice.balance - amount;
+  const newStatus  = newBalance <= 0 ? 'Paid' : invoice.status;
+
+  // Reversing GL tx (Dr Revenue/GST, Cr AR). Deterministic id = GL-<cnId> so a
+  // re-approve is caught by the RPC's gl_already_posted idempotency guard.
+  const reversalTx: LedgerTransaction = {
     id: txId, company, docType: 'RV',
     docDate: today, date: today,
     description: `CREDIT NOTE ${cnId}: ${invoice.clientName} — ${reason}`,
     referenceId: invoice.id,
     status: 'Posted',
     details: reversalDetails,
-  });
+    postedAt: new Date().toISOString(),
+  };
 
-  // ── Reduce invoice balance ────────────────────────────────────────────────
-  const allInvoices = SalesService.getInvoices() as any[];
-  const newBalance  = invoice.balance - amount;
-  const newStatus   = newBalance <= 0 ? 'Paid' : invoice.status;
-
-  SalesService.saveInvoices(
-    allInvoices.map(i =>
-      i.id === invoice.id
-        ? { ...i, balance: Math.max(0, newBalance), status: newStatus }
-        : i
-    )
-  );
-
-  // ── Persist approved CN record (Supabase + localStorage) ────────────────
   const approvedCN: CreditNote = {
     ...cn,
     glTxId: txId,
@@ -257,7 +296,51 @@ export async function approveCreditNote(params: {
     approvedBy: approver,
     approvedAt: new Date().toISOString(),
   };
-  persistCreditNote(company, approvedCN);
+
+  // ── Audit #9: ONE atomic Postgres transaction (migration 090) ──────────────
+  // Reversing GL + invoice-balance reduction + CN→Posted commit together or not
+  // at all. A crash can no longer leave the GL reversed while the CN stays
+  // "Pending Approval" (which a retry would double-reverse). Falls back to the
+  // legacy 3-step path with ZERO behavior change when 090 is not yet applied.
+  const { error: rpcError } = await supabase.rpc('credit_note_atomic', {
+    p_payload: {
+      company,
+      cn_id: cnId,
+      reversal_ledger_row: ledgerToRow(reversalTx),
+      invoice_id: invoice.id,
+      invoice_new_balance: Math.max(0, newBalance),
+      invoice_new_status: newStatus === invoice.status ? null : newStatus,
+      cn_data: approvedCN,
+    },
+  });
+
+  if (rpcError && !isRpcMissing(rpcError)) {
+    // Real atomic failure — nothing committed (no GL, no balance change, CN
+    // still pending). Surface so the operator can retry safely.
+    throw new Error(
+      `Atomic credit-note post failed: ${rpcError.message || 'unknown'}. ` +
+      `No GL entry, no balance change, credit note still pending — retry safely.`
+    );
+  }
+
+  if (rpcError) {
+    // migration 090 not applied → legacy non-atomic path (unchanged behavior).
+    FinanceService.recordTransaction(reversalTx);
+    const allInvoices = SalesService.getInvoices() as any[];
+    SalesService.saveInvoices(
+      allInvoices.map(i =>
+        i.id === invoice.id
+          ? { ...i, balance: Math.max(0, newBalance), status: newStatus }
+          : i
+      )
+    );
+    persistCreditNote(company, approvedCN);
+  } else {
+    // Cloud committed atomically → mirror to localStorage without re-pushing.
+    mirrorLedgerLocal(reversalTx);
+    mirrorInvoiceLocal(invoice.id, { balance: Math.max(0, newBalance), status: newStatus });
+    mirrorCreditNoteLocal(company, approvedCN);
+  }
 
   // ── Phase-3 (3.6): reverse COGS proportionally to the CN amount ──
   // Audit I6: previously gross profit was overstated forever after a CN
@@ -347,28 +430,37 @@ export async function voidInvoice(params: {
   const allGL  = FinanceService.getLedger();
   const origTx = allGL.find(t => t.id === invoice.glTxId);
 
-  if (origTx) {
-    // Post exact reversal of original GL entry
-    FinanceService.recordTransaction({
-      id: voidId, company, docType: 'RV',
-      docDate: today, date: today,
-      description: `VOID: ${invoice.id} — ${invoice.clientName} — Voided by ${voidedBy}`,
-      referenceId: invoice.id,
-      status: 'Posted',
-      details: origTx.details.map(d => ({
-        ...d,
-        debit:  d.credit,   // swap debit/credit
-        credit: d.debit,
-        text:   `VOID ${d.text}`,
-      })),
-    });
-  } else {
-    // P2-23: origTx not found in the ledger cache. We still proceed with the
-    // void (the invoice must be taken off the books — it likely has bad/missing
-    // GL and leaving it Outstanding overstates AR), but the revenue/AR reversal
-    // could NOT be posted automatically. Surface loudly so Finance posts a
-    // manual reversal JV — without this signal a void could mark the invoice
-    // Voided while revenue stays recognised.
+  // Reversal tx = exact swap of the original GL entry. null when origTx is
+  // missing (bad/missing GL) — we still void, but Finance must post a manual JV.
+  const reversalTx: LedgerTransaction | null = origTx
+    ? {
+        id: voidId, company, docType: 'RV',
+        docDate: today, date: today,
+        description: `VOID: ${invoice.id} — ${invoice.clientName} — Voided by ${voidedBy}`,
+        referenceId: invoice.id,
+        status: 'Posted',
+        details: origTx.details.map(d => ({
+          ...d,
+          debit:  d.credit,   // swap debit/credit
+          credit: d.debit,
+          text:   `VOID ${d.text}`,
+        })),
+        postedAt: new Date().toISOString(),
+      }
+    : null;
+
+  const invoicePatch = {
+    revertedStatus: invoice.status,   // preserve prior (Partial / Outstanding)
+    status: 'Voided',
+    balance: 0,
+    voidedBy,
+    voidedAt: today,
+  };
+  const quotationId = invoice.orderId;
+
+  // P2-23: origTx missing — void still proceeds (leaving it Outstanding
+  // overstates AR), but the AR/Revenue reversal cannot be posted automatically.
+  const warnMissingGL = (): void => {
     Logger.error(
       'CreditNote',
       `Void of ${invoice.id}: original GL "${invoice.glTxId}" not found — reversal NOT posted automatically`,
@@ -378,9 +470,58 @@ export async function voidInvoice(params: {
       `Invoice ${invoice.id} voided, but its GL entry was not found — post the AR/Revenue reversal manually.`,
       { duration: 8000 }
     );
+  };
+
+  // ── Audit #9: ONE atomic Postgres transaction (migration 090) ──────────────
+  // Reversing GL + invoice→Voided + quotation→Approved commit together or not
+  // at all. A crash can no longer mark the invoice Voided while revenue stays
+  // recognised, and FOR UPDATE + the Voided re-assert block a double-void.
+  // Falls back to the legacy path with ZERO behavior change when 090 is absent.
+  const { error: rpcError } = await supabase.rpc('void_invoice_atomic', {
+    p_payload: {
+      company,
+      invoice_id: invoice.id,
+      reversal_ledger_row: reversalTx ? ledgerToRow(reversalTx) : null,
+      quotation_id: quotationId ?? null,
+      voided_by: voidedBy,
+      voided_at: today,
+    },
+  });
+
+  if (rpcError && !isRpcMissing(rpcError)) {
+    // Real atomic failure — invoice unchanged. Surface so the operator retries.
+    throw new Error(
+      `Atomic invoice void failed: ${rpcError.message || 'unknown'}. Invoice unchanged — retry safely.`
+    );
   }
 
-  // ── Phase-3 (3.6): also reverse the COGS entry (full 100%) ──
+  if (rpcError) {
+    // migration 090 not applied → legacy non-atomic path (unchanged behavior).
+    if (reversalTx) {
+      FinanceService.recordTransaction(reversalTx);
+    } else {
+      warnMissingGL();
+    }
+    const allInvoices = await AsyncSalesService.getInvoices() as any[];
+    await AsyncSalesService.saveInvoices(
+      allInvoices.map(i => (i.id === invoice.id ? { ...i, ...invoicePatch } : i))
+    );
+    const allQ = SalesService.getQuotations();
+    SalesService.saveQuotations(
+      allQ.map((q) =>
+        q.id === invoice.orderId ? { ...q, status: 'Approved', invoiceNo: undefined } : q
+      )
+    );
+  } else {
+    // Cloud committed atomically → mirror to localStorage without re-pushing.
+    if (reversalTx) mirrorLedgerLocal(reversalTx); else warnMissingGL();
+    mirrorInvoiceLocal(invoice.id, invoicePatch);
+    if (quotationId) mirrorQuotationLocal(quotationId);
+  }
+
+  // ── Phase-3 (3.6): reverse the COGS entry (full 100%) — best-effort, outside
+  // the atomic txn (touches inventory via a separate service; already flagged
+  // when it fails). Runs identically in both paths.
   try {
     reverseDeliveryCOGS({
       company,
@@ -396,29 +537,4 @@ export async function voidInvoice(params: {
     Logger.error('CreditNote', `COGS reversal failed on void of ${invoice.id}`, cogsErr);
     toast.error(`Invoice ${invoice.id} voided, but COGS reversal failed — finance review required.`, { duration: 8000 });
   }
-
-  // ── Mark invoice Voided (preserve prior status for restore) ──────────────
-  const allInvoices = await AsyncSalesService.getInvoices() as any[];
-  await AsyncSalesService.saveInvoices(
-    allInvoices.map(i =>
-      i.id === invoice.id
-        ? {
-            ...i,
-            revertedStatus: i.status,         // preserve prior (Partial / Outstanding)
-            status: 'Voided',
-            balance: 0,
-            voidedBy,
-            voidedAt: today,
-          }
-        : i
-    )
-  );
-
-  // ── Revert quotation to Approved ──────────────────────────────────────────
-  const allQ = SalesService.getQuotations();
-  SalesService.saveQuotations(
-    allQ.map((q) =>
-      q.id === invoice.orderId ? { ...q, status: 'Approved', invoiceNo: undefined } : q
-    )
-  );
 }

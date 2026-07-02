@@ -468,6 +468,84 @@ describe('§6 · creditNoteService', () => {
       .rejects.toThrow('Cannot void a fully paid invoice.');
   });
 
+  // ── Audit #9: atomic credit-note / void RPC path (migration 090) ──────────
+  it('UT-30 · approveCreditNote posts via credit_note_atomic with a BALANCED reversal', async () => {
+    const { approveCreditNote } = await import('@/modules/sales/services/creditNoteService');
+    const { supabase } = await import('@/src/services/supabaseClient');
+    const rpc = vi.mocked(supabase.rpc);
+    rpc.mockClear();
+
+    // Original invoice GL: Dr AR 50000 / Cr Revenue 50000 (no GST)
+    _mockGetLedger.mockReturnValue([{
+      id: 'GL-INV-002', company: 'Glassco',
+      details: [
+        { accountId: 'Glassco-12210', debit: 50000, credit: 0, text: 'AR' },
+        { accountId: 'Glassco-41110', debit: 0, credit: 50000, text: 'Revenue' },
+      ],
+    }]);
+    // Pending CN awaiting approval (maker must differ from checker)
+    _mockLS.setItem('gtk_erp_credit_notes', JSON.stringify([{
+      id: 'CN-GLS-2026-0009', company: 'Glassco', invoiceId: 'INV-002',
+      amount: 20000, reason: 'return', glTxId: '', status: 'Pending Approval',
+      createdBy: 'maker@glasstech.pk', createdAt: '2026-07-01T00:00:00Z',
+    }]));
+
+    const invoice = {
+      id: 'INV-002', glTxId: 'GL-INV-002', balance: 50000, receivedAmount: 0,
+      status: 'Outstanding', clientId: 'C1', clientName: 'ACME', totalAmount: 50000, gstAmount: 0,
+    } as any;
+
+    const result = await approveCreditNote({
+      cnId: 'CN-GLS-2026-0009', company: 'Glassco', approver: 'checker@glasstech.pk', invoice,
+    });
+
+    // The atomic RPC fired…
+    const call = rpc.mock.calls.find(c => c[0] === 'credit_note_atomic');
+    expect(call).toBeTruthy();
+    // …with a balanced reversal (Σdebit === Σcredit === CN amount)
+    const details = (call![1] as any).p_payload.reversal_ledger_row.data.details as Array<{ debit: number; credit: number }>;
+    const dr = details.reduce((s, d) => s + d.debit, 0);
+    const cr = details.reduce((s, d) => s + d.credit, 0);
+    expect(dr).toBe(cr);
+    expect(cr).toBe(20000);
+    // …and the CN is now Posted with the approver recorded
+    expect(result.status).toBe('Posted');
+    expect(result.approvedBy).toBe('checker@glasstech.pk');
+    expect(result.glTxId).toBe('GL-CN-GLS-2026-0009');
+  });
+
+  it('UT-31 · voidInvoice posts via void_invoice_atomic with the reversal swapped', async () => {
+    const { voidInvoice } = await import('@/modules/sales/services/creditNoteService');
+    const { supabase } = await import('@/src/services/supabaseClient');
+    const rpc = vi.mocked(supabase.rpc);
+    rpc.mockClear();
+
+    _mockGetLedger.mockReturnValue([{
+      id: 'GL-INV-003', company: 'Glassco',
+      details: [
+        { accountId: 'Glassco-12210', debit: 30000, credit: 0, text: 'AR' },
+        { accountId: 'Glassco-41110', debit: 0, credit: 30000, text: 'Revenue' },
+      ],
+    }]);
+
+    const invoice = {
+      id: 'INV-003', orderId: 'Q-003', glTxId: 'GL-INV-003',
+      status: 'Outstanding', receivedAmount: 0, balance: 30000,
+      clientName: 'ACME', totalAmount: 30000,
+    } as any;
+
+    await voidInvoice({ invoice, company: 'Glassco', voidedBy: 'boss@glasstech.pk' });
+
+    const call = rpc.mock.calls.find(c => c[0] === 'void_invoice_atomic');
+    expect(call).toBeTruthy();
+    const payload = (call![1] as any).p_payload;
+    // reversal present and balanced (swapped Dr/Cr of the original)
+    const details = payload.reversal_ledger_row.data.details as Array<{ debit: number; credit: number }>;
+    expect(details.reduce((s, d) => s + d.debit, 0)).toBe(details.reduce((s, d) => s + d.credit, 0));
+    expect(payload.quotation_id).toBe('Q-003');
+    expect(payload.invoice_id).toBe('INV-003');
+  });
+
 });
 
 // ══════════════════════════════════════════════════════════════════════
