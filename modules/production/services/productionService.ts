@@ -18,6 +18,7 @@ import { bgSaveToIDB, safeParse, safeSave, safeAsync } from '../../shared/servic
 import { toast } from 'sonner';
 import { Logger } from '../../shared/services/logger';
 import { useAppStore } from '../../shared/store/appStore';
+import { SyncService } from '@/src/services/SyncService';
 
 export const ProductionService = {
   getProductionPiecesAsync: async (filterCompany?: string): Promise<ProductionPiece[]> => {
@@ -105,7 +106,14 @@ export const ProductionService = {
       return all.filter((q: any) => q.company === targetCompany);
   },
   getPurchaseOrders: (): PurchaseOrder[] => safeParse(KEYS.PURCHASE_ORDERS),
-  savePurchaseOrders: (data: PurchaseOrder[]) => safeSave(KEYS.PURCHASE_ORDERS, data),
+  savePurchaseOrders: (data: PurchaseOrder[]) => {
+    // P1-18: safeSave alone left every 3-way-match state change (grnRef,
+    // vendorInvoiceNo, matchStatus, Matched/Paid, apInvoiceId) in localStorage
+    // only — the next SyncService pull (authoritative overwrite) wiped it.
+    // markDirty queues + pushes purchase_orders to Supabase (mappers exist).
+    safeSave(KEYS.PURCHASE_ORDERS, data);
+    try { SyncService.markDirty('purchase_orders'); } catch { /* SyncService not yet init */ }
+  },
   getProductionPieces: (): ProductionPiece[] => safeParse(KEYS.PRODUCTION_PIECES),
 
   // ── Paginated fetch from Supabase (use in list views) ────────────

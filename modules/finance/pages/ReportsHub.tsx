@@ -471,7 +471,19 @@ const AgingReport: React.FC<{
   const isAR = type === 'ar_aging';
   const accType = isAR ? 'Asset' : 'Liability';
 
-  const targetAccounts = accounts.filter(a => a.type === accType && a.level === 5);
+  // P1-4: the aging report is for TRADE receivables/payables only. Filtering by
+  // "every level-5 Asset/Liability" wrongly bucketed Cash, Inventory, Prepaids
+  // (AR) and Tax/Wages/Loans (AP) as customer/vendor balances. Restrict to real
+  // AR/AP accounts: per-client AR sub-accounts carry code 122xx (Customers
+  // Control) or a receivable/customer name; vendor AP sub-accounts carry code
+  // 211xx/221xx (Kin Long / Trade Payables) or a vendor/supplier name.
+  const isARAcct = (a: AccountRow) =>
+    /^122/.test(a.code || '') || /receivab|customer|debtor|client/i.test(a.name || '');
+  const isAPAcct = (a: AccountRow) =>
+    /^(211|221)/.test(a.code || '') || /vendor|supplier|trade payable|creditor/i.test(a.name || '');
+  const targetAccounts = accounts.filter(
+    a => a.type === accType && a.level === 5 && (isAR ? isARAcct(a) : isAPAcct(a))
+  );
   const { debit, credit } = useMemo(() => calcBalances(accounts, ledger), [accounts, ledger]);
 
   const rows = useMemo(() => {
