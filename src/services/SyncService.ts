@@ -1812,6 +1812,13 @@ export const SyncService = {
   // App.tsx calls this first (await), then fires fetchFromCloud in background.
   fetchCritical: async (): Promise<void> => {
     if (!isOnline) return;
+    // P1-8: flush unsynced offline writes to the cloud BEFORE the pull. pullTable
+    // is authoritative-overwrite (correct — it lets soft-delete tombstones drop
+    // locally-deleted rows, Audit #5), so a boot pull that runs first permanently
+    // WIPES rows written offline in a previous session. On reconnect the online
+    // handler already pushes-then-syncs; this closes the same gap for a cold boot
+    // that starts already-online. No-op (instant) when nothing is pending.
+    try { await SyncService.pushPending(); } catch { /* best-effort — pull still proceeds */ }
     // The 8 tables that matter most on first render:
     const PRIORITY: Array<keyof typeof TABLE_MAP> = [
       'quotations', 'clients', 'invoices', 'accounts',
@@ -1830,6 +1837,10 @@ export const SyncService = {
       console.log('[Sync] Offline — using cached localStorage data');
       return { success: false };
     }
+
+    // P1-8: push unsynced local writes before the authoritative overwrite-pull
+    // (see fetchCritical). Guards the device-switch path that calls this directly.
+    try { await SyncService.pushPending(); } catch { /* best-effort */ }
 
     // Pull all tables in parallel batches of 5 (safe: each pullTable
     // is independent — writes to a separate localStorage key)
