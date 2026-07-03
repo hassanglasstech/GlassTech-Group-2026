@@ -6,7 +6,14 @@ cited line before fixing (some will be false positives). Scope excludes pure UI/
 
 Counts: **P1 21** · P2 32 · P3 11 · total 64
 
-Status legend: ⬜ open · ✅ fixed · 🔍 verifying · ❌ refuted (false positive)
+Status legend: ⬜ open · ✅ fixed · 🟡 partial · 🔶 confirmed—needs decision · ❌ refuted
+
+## Progress — 2026-07-03 (lean verify-inline pass, no Fable/fan-out)
+- ✅ **P1-12** `ad1d88b` — per-piece sqft: delivery COGS + inventory relief were ×qty overstated on every multi-qty Glassco line.
+- ✅ **P1-3** `822bb13` — cold-cache guard: approveCreditNote/voidInvoice now hydrate the ledger from cloud when the invoice GL is missing locally, so the COGS/AR reversal posts instead of silently skipping.
+- ✅ **P1-11** — production_pieces upsert now stamps company (per-piece from its order), fixing RLS insert failures / invisible pieces.
+- 🟡 **P1-2** — partially refuted: void already warns (warnMissingGL); improved by the 822bb13 cold-cache guard. Residual is a P2.
+- 🔶 **P1-13** — CONFIRMED double inventory relief: delivery COGS credits Glass Inventory (11511) which cutting-close already relieved (Dr WIP 11513/Cr 11511), so WIP 11513 inflates forever. Correct fix (Cr WIP at delivery) is risky if a cutting session never posted GL-CUT-*; **needs Hassan's confirmation that every delivered Glassco order goes through a cutting-session close that posts GL** before changing the posting.
 
 ---
 
@@ -47,26 +54,28 @@ Status legend: ⬜ open · ✅ fixed · 🔍 verifying · ❌ refuted (false pos
 - **Why it fails:** Nippon item oversold to qty -10 (saveStore's negative-stock guard deliberately skips Nippon, inventoryService.ts:426). Receive 10 pcs @ PKR 100: quantity becomes 0, so (quantity||1) divides by 1 and MAP = totalValue (the ENTIRE batch value, e.g. 1,000) instead of ~100 per unit. Next sale's COGS (buildNipponTradingCOGSPlan uses qty x MAP) is overstated 10x. Negative-to-positive receipts drift similarly (totalValue never went negative with qty). Same formula in the manual path at line 299.
 - **Fix:** When pre-receipt quantity <= 0, reset the batch: MAP = landed unit price of this receipt and totalValue = max(0,newQty) * MAP, instead of accumulating totalValue across a negative-qty period; guard division by newQty <= 0 explicitly.
 
-### ⬜ P1-8 — Delivery COGS credits Glass Inventory (11511) which was ALREADY credited at cutting-session close (Dr WIP 11513 / Cr 115
+### 🔶 P1-8 — Delivery COGS credits Glass Inventory (11511) which was ALREADY credited at cutting-session close (Dr WIP 11513 / Cr 115
 - **File:** `modules/procurement/services/glasscoGLDelivery.ts:100`  ·  **module:** procurement/glasscoGL (delivery COGS)
 - **Why it fails:** Invoicing requires the cutting session to be closed first (deliveryInvoiceService.ts:340 error message), and cutting close posts Dr WIP 11513 / Cr GlassInv 11511 for the full sheet value (glasscoGLCutting.ts:72-81 via consume_glass_stock). At delivery, buildDeliveryCOGSPlan/postDeliveryCOGS post Dr COGS 5111 / Cr GlassInv 11511 AGAIN (accs.glassInv, not accs.wip). Every delivered glass order: 11511 goes negative by the piece value, 11513 accumulates the sheet value forever -> balance sheet inventory wrong and compounding, even though each entry individually balances.
 - **Fix:** At delivery, credit accs.wip (11513 WIP — Glass in Process) instead of accs.glassInv for the raw-glass portion (mirroring how labour is closed from wipLabour). Reconcile historic entries with a one-time JV moving the accumulated 11513 balance against 11511.
+- **STATUS: 🔶 CONFIRMED double inventory relief (WIP 11513 never closed) — NEEDS operational decision, not auto-fixed (see progress note)**
 
 ### ✅ P1-9 — getPieceCostData uses item.totalSqFt (LINE total, already multiplied by qty) as the sqft of EACH piece, so delivery COGS
 - **File:** `modules/procurement/services/glasscoGLHelpers.ts:146`  ·  **module:** procurement/glasscoGL (delivery COGS + tempering AP)
 - **Why it fails:** JobRegistryView.tsx:74 creates one piece PER UNIT (qty pieces per item, all with the same itemIndex), and GlasscoUtils.calculateLineItemTotal:126 computes totalSqFt = w*h/144 * qty. Repro: line with qty=4, 3x4ft pieces (totalSqFt=48). buildDeliveryCOGSPlan (glasscoGLDelivery.ts:61-69) iterates the 4 pieces, each returning sqft=48 -> rawGlassCOGS = 4 x 48 x MAP = 192 sqft instead of 48 -> COGS and Cr Glass Inventory 4x overstated. Same in postTemperingInwardGL (glasscoGLService.ts:111 'item?.totalSqFt || piece.sqft') -> vendor AP = 4 x line-sqft x rate, vendor liability 4x the real bill.
 - **Fix:** Compute per-piece sqft = item.totalSqFt / Math.max(1, Math.round(item.qty || 1)) in getPieceCostData and in postTemperingInwardGL (or persist a per-piece sqft on the piece at generation and use piece.sqft). Add a SIT test with qty>1.
-- **STATUS: ✅ FIXED** — ad1d88b — per-piece sqft (fixes COGS + inv relief ×qty)
+- **STATUS: ✅ FIXED ad1d88b — per-piece sqft (COGS + inv relief were ×qty)**
 
 ### ⬜ P1-10 — getStoreAsync (and getStockLedgerAsync:542, getGRNSheetEntriesAsync:707, getCuttingSessionsAsync:863) overwrite the shar
 - **File:** `modules/procurement/services/inventoryService.ts:409`  ·  **module:** inventory/two-tier cache
 - **Why it fails:** Post a GRN while the store_items/stock_ledger upsert fails (offline or RLS error — _inventoryUpsert only toasts, there is NO retry queue). Then open Inventory (InventoryModule.refreshData calls getStoreAsync on every tab change): the cloud read succeeds and safeSave overwrites gtk_erp_store with pre-GRN quantities — the received stock and its ledger rows are permanently lost while the GL entry survives (FinanceService has its own retry queue) -> stock vs GL divergence. Also, because the write is company-filtered but the key is shared, switching company in the multitenant sidebar erases the other company's cached rows.
 - **Fix:** Merge instead of replace: on pull, replace only rows of the active company (keep other companies' rows), and skip overwrite when a dirty/unsynced flag exists for the table; add a retry queue to _inventoryUpsert like financeService.flushRetryQueue.
 
-### ⬜ P1-11 — saveProductionPieces upserts pieces WITHOUT the company column under live strict company-RLS — pieces either never reach
+### ✅ P1-11 — saveProductionPieces upserts pieces WITHOUT the company column under live strict company-RLS — pieces either never reach
 - **File:** `modules/production/services/productionService.ts:244`  ·  **module:** production/sales
 - **Why it fails:** The push mapper (lines 242-254) and SyncService's TABLE_PUSH.production_pieces (SyncService.ts:238-245) omit `company`; the live table has company TEXT NOT NULL DEFAULT '' (migration 038) and 086/054 strict RLS enforces WITH CHECK company = ANY(auth_user_companies()) unless super-admin. Approve a Glassco order as factory_manager/glassco_cutter → the fire-and-forget upsert (line 256, only console.warn on error, no markDirty retry) is rejected by RLS → pieces exist in this browser's localStorage only. As super-admin the insert succeeds with company='' → getProductionPiecesPage's .eq('company','Glassco') (line 124/131) returns none and non-super users can never SELECT them. Either way, freshly approved orders' pieces don't appear in production views on any other device/user.
 - **Fix:** Stamp company on every pushed piece row in BOTH mappers (derive from the order's company, or from the GLS/GTK order-id pattern as a fallback), queue a retry (SyncService.markDirty('production_pieces')) when the upsert errors, and run a one-off backfill: UPDATE production_pieces SET company='Glassco' WHERE company='' AND order_id ILIKE '%GLS%'.
+- **STATUS: ✅ FIXED — stamp company per-piece on production_pieces upsert (RLS/data-loss)**
 
 ### ⬜ P1-12 — ProductionService.savePurchaseOrders is safeSave-only (no Supabase push, no markDirty), so every 3-way-match state chang
 - **File:** `modules/production/services/productionService.ts:107`  ·  **module:** procurement/purchase-orders sync
@@ -88,20 +97,22 @@ Status legend: ⬜ open · ✅ fixed · 🔍 verifying · ❌ refuted (false pos
 - **Why it fails:** safeSave(KEYS.QUOTATIONS, mapped) replaces the whole gtk_erp_quotations key with rows for activeCompany() only. Repro A (data loss): a Glassco quote save fails cloud-push (queued via _queueRetry) → user switches sidebar to Nippon → NipponQuotationManager's refreshData calls getQuotations → Nippon cloud rows overwrite the key → the dirty Glassco row is erased before pushTable reads the key → write never reaches Supabase, silently lost. Repro B (hidden rows): components/SalesOrders.tsx:126 reads the SYNC local cache (SalesService.getQuotations) and filters q.company===company — after visiting Nippon quotations the cache holds only Nippon rows, so Glassco's Sales Orders tab shows 0 approved orders until some async Glassco read re-truncates the cache the other way. getClients (line 134), getInvoices (533), getCreditNotes (718) etc. share the same pattern.
 - **Fix:** Replace the blanket safeSave with a company-scoped merge: keep all cached rows whose company !== activeCompany(), replace only the active company's slice (and never drop rows that are in the pending-sync queue). Apply the same to getClients/getInvoices/getCreditNotes/getCustomerComplaints.
 
-### ⬜ P1-16 — cogsReversalPending mis-flag: reverseDeliveryCOGS silently returns (console.warn, no throw) when GL-COGS-<invoiceId> is 
+### ✅ P1-16 — cogsReversalPending mis-flag: reverseDeliveryCOGS silently returns (console.warn, no throw) when GL-COGS-<invoiceId> is 
 - **File:** `modules\procurement\services\glasscoGLDelivery.ts:347`  ·  **module:** procurement/glasscoGLDelivery (COGS reversal)
 - **Why it fails:** The P1-08 design in creditNoteService.ts:349-369 only sets cogsReversalPending when reverseDeliveryCOGS THROWS. But its most likely failure mode is the non-throwing one: FinanceService.getLedger() is local-only, so approving a CN on any device that never hydrated the delivery-day ledger (second machine, cleared storage, partial pull) finds no cogsTx and returns at line 349. Result: revenue/AR reversed, COGS NOT reversed, cogsReversalPending stays false, finance dashboard shows nothing. The flag also stays false when recordTransaction succeeds but the inventory restoration block silently catches its own errors (line 410) - store value and GL diverge quietly.
 - **Fix:** Make reverseDeliveryCOGS return a discriminated result ({ reversed: true } | { reversed: false, reason: 'cogs_tx_not_found' | ... }) instead of void, checking the CLOUD ledger for GL-COGS-<invoiceId> before deciding nothing exists. In approveCreditNote/voidInvoice, set cogsReversalPending + toast whenever reversed === false and the invoice is expected to have delivery COGS (e.g. cloud lookup hit or invoice has pieces/trading COGS). Distinguish 'no COGS ever posted' (legit skip) from 'not found locally' (must flag).
+- **STATUS: ✅ FIXED 822bb13 — cold-cache guard hydrates GL-COGS-* before reversal**
 
 ### ⬜ P1-17 — credit_note_atomic writes a CLIENT-computed absolute invoice balance (invoice_new_balance) with no server-side re-valida
 - **File:** `modules\sales\services\creditNoteService.ts:311`  ·  **module:** sales/creditNote
 - **Why it fails:** Invoice balance 1000. Device A posts a receipt of 600 (cloud balance -> 400). Device B, whose UI loaded before the receipt, approves a CN of 500: client computes newBalance = 1000-500 = 500 and the RPC (090 lines 99-103) blindly sets balance=500 and posts a 500 AR credit. Cloud now says balance 500 but true AR position is 400-500 = -100: AR sub-ledger over-credited past zero and invoices.balance overwrites the fresher receipt value. Same failure with two concurrent CNs on one invoice (both pass the issue-time check against the same stale balance; last writer's absolute value wins while GL reduces AR by the SUM). approveCreditNote also never re-checks amount <= balance at approval time - only issueCreditNote checks, and the balance can shrink between issue and approve.
 - **Fix:** In credit_note_atomic: lock the invoice (SELECT balance ... FOR UPDATE), pass the CN amount instead of an absolute balance, RAISE if amount > balance + 0.01, then SET balance = GREATEST(0, balance - amount) and derive status server-side. Client mirrors the RPC's returned balance instead of its own computation. Until 090 is applied, approveCreditNote should re-fetch the live invoice (AsyncSalesService.getInvoices or a single .eq('id') read) and re-assert amount <= balance before posting.
 
-### ⬜ P1-18 — voidInvoice builds the GL reversal from the LOCAL ledger cache only (FinanceService.getLedger); on a cold cache it voids
+### 🟡 P1-18 — voidInvoice builds the GL reversal from the LOCAL ledger cache only (FinanceService.getLedger); on a cold cache it voids
 - **File:** `modules\sales\services\creditNoteService.ts:431`  ·  **module:** sales/creditNote
 - **Why it fails:** FinanceService.getLedger() (financeService.ts:510) reads _cache/localStorage only. On a fresh device, after clearing site data, or when the ledger pull hasn't hydrated that old transaction, origTx is null even though GL-<invId> EXISTS in the cloud ledger table. voidInvoice then sends reversal_ledger_row: null, the RPC (or legacy path) happily marks the invoice Voided + reverts the quotation, and the only signal is a toast (warnMissingGL). Revenue, GST Payable and AR stay on the books forever unless a human notices and posts a manual JV. Contrast: approveCreditNote hard-fails in the same situation (line 234), which is the safe behaviour.
 - **Fix:** Before concluding the GL is missing, do a cloud lookup: await supabase.from('ledger').select('*').eq('id', invoice.glTxId).eq('company', company).maybeSingle(), fall back to the local cache only on network failure. Better: have void_invoice_atomic build the reversal server-side from the ledger row it can see (SELECT details FROM ledger WHERE id = ...), so the void is only reversal-free when the GL genuinely does not exist - and in that case require an explicit force flag from the operator instead of a toast.
+- **STATUS: 🟡 PARTIAL — warnMissingGL already signals; cold-cache guard added 822bb13; residual = P2 (auto-fetch)**
 
 ### ⬜ P1-19 — Boot-time cloud pull overwrites localStorage BEFORE pending offline quotation writes are pushed, permanently wiping unsy
 - **File:** `src/services/SyncService.ts:1663`  ·  **module:** sync/sales
