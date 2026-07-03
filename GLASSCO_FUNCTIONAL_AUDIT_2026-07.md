@@ -16,6 +16,16 @@ Status legend: ⬜ open · ✅ fixed · 🟡 partial · 🔶 confirmed—needs d
 - ✅ **NEW FEATURE — "Service Only"** `a4f291f` — per-line toggle in the Glassco quotation editor for client-supplied glass (services only, no glass rate, no inventory consume, no raw-glass COGS at delivery; pieces still generate + track; tempering AP still applies).
 - ❌ **P1-13 — REFUTED (false positive)**: the finder assumed cutting-close posts `Dr WIP 11513 / Cr Glass Inventory 11511`, but that code (postCuttingGL / buildCuttingGLPlan / consume_glass_stock) is **DEAD** — zero call sites; the live cutting flow (CutterWorkbench) consumes GRN sheet entries via consume_grn_sheet with NO GL and no store-value change. So delivery `Cr 11511` is the SOLE, correct relief. Applying the "fix" would have broken it (11513 is never debited → negative). No change made. Dead cutting-GL code flagged for cleanup.
 
+### Data-loss cluster (cloud read overwrote shared cache) — all FIXED
+- ✅ **P1-9** `682ba0c` — 12 AsyncSalesService cloud-reads merged into the shared cache instead of overwriting it (was wiping other companies + unsynced rows; the "saved then disappeared" class). Covers P2-3 + P2-17.
+- ✅ **P1-19** `00c6e81` — same fix for InventoryService (store / stock-ledger / GRN-sheet / cutting-session reads).
+- ✅ **P1-8** `cbcbf71` — SyncService pushes unsynced writes before the authoritative boot pull (merge rejected — would resurrect soft-deletes).
+
+### Cluster 2 — finance integrity + security — all FIXED
+- ✅ **P1-5** `1cc07d9` — Posted GL rows no longer Edit/Delete-able (immutability; reverse via JV).
+- ✅ **P1-6** `1cc07d9` — finance cache reloads on company switch (was showing boot company's data).
+- ✅ **P1-7** migration `092` (DB-gated) — 088 finance RPCs: revoke anon + company authorization gate (was an anon/cross-company financial-aggregate leak).
+
 ---
 
 ## P1 (21)
@@ -25,20 +35,22 @@ Status legend: ⬜ open · ✅ fixed · 🟡 partial · 🔶 confirmed—needs d
 - **Why it fails:** Normal flow: post glass GRN via GoodsReceiptMIGO (grnGLService.postGRNMaterialGL writes docType:'JV', referenceId=grnId, Posted) -> open ThreeWayMatching, link the same grnRef. existingGLs filter (referenceId===grnRef && docType==='WE') finds nothing -> a second Posted entry Dr Inventory / Cr GR-IR is recorded. Inventory and GR/IR are double-counted for every PO-linked GRN. Bonus bug on line 104: grnAmount = grnForm.grnQty || selectedPO.totalAmount — grnQty is a QUANTITY (sheets/sqft) used as the PKR GL amount, so entering qty 500 posts a PKR 500 journal.
 - **Fix:** Change the guard to match what MIGO actually writes: filter on referenceId===grnRef && (docType==='JV' || id.startsWith('WE-')), and never use grnQty as a money amount — use selectedPO.totalAmount (or a dedicated grnValue field).
 
-### ⬜ P1-2 — Posted tab renders Edit and Delete buttons on POSTED documents — posted GL entries can be mutated or locally hidden with
+### ✅ P1-2 — Posted tab renders Edit and Delete buttons on POSTED documents — posted GL entries can be mutated or locally hidden with
 - **File:** `modules/finance/pages/GeneralLedger.tsx:399`  ·  **module:** GeneralLedger
 - **Why it fails:** The action cell (lines 397-414) is not gated by activeTab/status. On the Posted tab, Edit → handleEditParked → handleSaveDocument replaces the posted tx with new amounts; saveLedger's dirty-set sees it changed and UPSERTs the mutation to Supabase (financeService.ts:599-604) — posted financials rewritten with no audit trail. Delete → handleDeleteParked filters it from the local array, but the dirty-set never deletes cloud rows, so local TB/dashboard exclude the entry while the trial_balance RPC still includes it, and the row resurrects on next pull — books diverge between paths.
 - **Fix:** Render Edit/Delete only when tx.status === 'Parked' (and only on the Parked tab); route posted-entry corrections through voidInvoice/reversal JV or softDeleteLedgerEntry once migration 089 is live.
+- **STATUS: ✅ FIXED 1cc07d9 — Edit/Delete gated on status!==Posted (posted = Locked)**
 
 ### ⬜ P1-3 — Live AR/AP aging treats EVERY level-5 Asset/Liability account as a receivable/payable and buckets the WHOLE balance by l
 - **File:** `modules/finance/pages/ReportsHub.tsx:474`  ·  **module:** Finance Reports (ReportsHub — live AR/AP Aging)
 - **Why it fails:** targetAccounts = accounts.filter(type===Asset && level===5) — Cash in Hand 11112, banks 1112x, inventory 115xx, employee advances 11421 all appear as 'receivables', so Total AR ≈ total current assets. Then daysPast = days since the LAST tx touching the account (line 491) and the ENTIRE balance lands in ONE bucket (494-498): one fresh invoice/receipt on an account with 6-month-old dues moves the full balance to 'Current 0-30', hiding all 90+ exposure. This is the mounted aging report (CompanyAccounts > Reports Hub).
 - **Fix:** Restrict target accounts to the AR control subtree (parents 122/1221 per deliveryInvoiceService JIT chain) and AP subtree (2111); age per open item (FIFO walk like modules/finance/components/AgingReport.tsx lines 88-113, or the ar_aging RPC), not whole-balance-by-last-activity.
 
-### ⬜ P1-4 — Finance cache is loaded once per login for the boot-time company and never reloaded on company switch — all cache-fed fi
+### ✅ P1-4 — Finance cache is loaded once per login for the boot-time company and never reloaded on company switch — all cache-fed fi
 - **File:** `modules/finance/services/financeService.ts:221`  ·  **module:** Finance cache / multitenant
 - **Why it fails:** _loadCache queries accounts/ledger with .eq('company', activeCompany()) exactly once (FinanceService.init at App.tsx:514, dep [user?.id]); appStore.setSelectedCompany (appStore.ts:16) triggers no refresh and init() is a no-op once loaded. Switch Glassco→Nippon: getAccounts()/getLedger() still return Glassco → GeneralLedger detail lines resolve to 'Unknown'/'0000', dashboardMetrics/FinanceDashboard show zeros, getTrialBalanceAsync returns [] even when the RPC works (buildRows maps totals over a 0-account stale list, line 1194). Boot race worsens it: selectedCompany defaults 'Nippon' and the role-default effect (App.tsx:556-565) may flip it AFTER _loadCache already ran.
 - **Fix:** Subscribe to appStore.selectedCompany (useAppStore.subscribe) and call FinanceService.refresh() on change (same for HR/Sales caches); in getTrialBalanceAsync, fetch the account list for the requested company from Supabase when the cached list is empty/mismatched.
+- **STATUS: ✅ FIXED 1cc07d9 — finance cache reloads on appStore company switch (subscribe)**
 
 ### ⬜ P1-5 — Vendor-Included freight and unloading labour are double-posted: they are capitalized into inventory with a Cr Cash insid
 - **File:** `modules/procurement/components/inventory/GoodsReceiptMIGO.tsx:727`  ·  **module:** procurement/GRN-GL (Glassco MIGO)
@@ -67,16 +79,17 @@ Status legend: ⬜ open · ✅ fixed · 🟡 partial · 🔶 confirmed—needs d
 - **Fix:** Compute per-piece sqft = item.totalSqFt / Math.max(1, Math.round(item.qty || 1)) in getPieceCostData and in postTemperingInwardGL (or persist a per-piece sqft on the piece at generation and use piece.sqft). Add a SIT test with qty>1.
 - **STATUS: ✅ FIXED ad1d88b — per-piece sqft (COGS + inv relief were ×qty)**
 
-### ⬜ P1-10 — getStoreAsync (and getStockLedgerAsync:542, getGRNSheetEntriesAsync:707, getCuttingSessionsAsync:863) overwrite the shar
+### ✅ P1-10 — getStoreAsync (and getStockLedgerAsync:542, getGRNSheetEntriesAsync:707, getCuttingSessionsAsync:863) overwrite the shar
 - **File:** `modules/procurement/services/inventoryService.ts:409`  ·  **module:** inventory/two-tier cache
 - **Why it fails:** Post a GRN while the store_items/stock_ledger upsert fails (offline or RLS error — _inventoryUpsert only toasts, there is NO retry queue). Then open Inventory (InventoryModule.refreshData calls getStoreAsync on every tab change): the cloud read succeeds and safeSave overwrites gtk_erp_store with pre-GRN quantities — the received stock and its ledger rows are permanently lost while the GL entry survives (FinanceService has its own retry queue) -> stock vs GL divergence. Also, because the write is company-filtered but the key is shared, switching company in the multitenant sidebar erases the other company's cached rows.
 - **Fix:** Merge instead of replace: on pull, replace only rows of the active company (keep other companies' rows), and skip overwrite when a dirty/unsynced flag exists for the table; add a retry queue to _inventoryUpsert like financeService.flushRetryQueue.
+- **STATUS: ✅ FIXED 00c6e81 — store/stock-ledger/GRN-sheet/cutting-session reads merge into cache**
 
 ### ✅ P1-11 — saveProductionPieces upserts pieces WITHOUT the company column under live strict company-RLS — pieces either never reach
 - **File:** `modules/production/services/productionService.ts:244`  ·  **module:** production/sales
 - **Why it fails:** The push mapper (lines 242-254) and SyncService's TABLE_PUSH.production_pieces (SyncService.ts:238-245) omit `company`; the live table has company TEXT NOT NULL DEFAULT '' (migration 038) and 086/054 strict RLS enforces WITH CHECK company = ANY(auth_user_companies()) unless super-admin. Approve a Glassco order as factory_manager/glassco_cutter → the fire-and-forget upsert (line 256, only console.warn on error, no markDirty retry) is rejected by RLS → pieces exist in this browser's localStorage only. As super-admin the insert succeeds with company='' → getProductionPiecesPage's .eq('company','Glassco') (line 124/131) returns none and non-super users can never SELECT them. Either way, freshly approved orders' pieces don't appear in production views on any other device/user.
 - **Fix:** Stamp company on every pushed piece row in BOTH mappers (derive from the order's company, or from the GLS/GTK order-id pattern as a fallback), queue a retry (SyncService.markDirty('production_pieces')) when the upsert errors, and run a one-off backfill: UPDATE production_pieces SET company='Glassco' WHERE company='' AND order_id ILIKE '%GLS%'.
-- **STATUS: ✅ FIXED — stamp company per-piece on production_pieces upsert (RLS/data-loss)**
+- **STATUS: ✅ FIXED 81915fc — stamp company per-piece on production_pieces upsert (RLS/data-loss)**
 
 ### ⬜ P1-12 — ProductionService.savePurchaseOrders is safeSave-only (no Supabase push, no markDirty), so every 3-way-match state chang
 - **File:** `modules/production/services/productionService.ts:107`  ·  **module:** procurement/purchase-orders sync
@@ -93,10 +106,11 @@ Status legend: ⬜ open · ✅ fixed · 🟡 partial · 🔶 confirmed—needs d
 - **Why it fails:** Sell an uncounted item (no store row): approval pushes a row with quantity -qty and MAP = sale price. buildNipponTradingCOGSPlan (deliveryInvoiceService.ts:133-139) then resolves that row and uses unitCost = si.movingAveragePrice -> COGS = qty x SALE price = revenue. P&L shows 0 gross profit for the line and 11514 inventory goes negative by the full sale value. The intended 'no stock match -> loud NO-COGS warning' path is bypassed because a (bogus) store row now exists.
 - **Fix:** Create the bootstrap row with movingAveragePrice: 0 (and let the existing unmatched/zero-cost warning fire), or seed MAP from the product master's cost/purchase price — never from item.pricePerUnit.
 
-### ⬜ P1-15 — getQuotations' cloud-success path overwrites the shared multi-company local cache with ONLY the active company's rows, w
+### ✅ P1-15 — getQuotations' cloud-success path overwrites the shared multi-company local cache with ONLY the active company's rows, w
 - **File:** `modules/sales/services/asyncSalesService.ts:374`  ·  **module:** sales
 - **Why it fails:** safeSave(KEYS.QUOTATIONS, mapped) replaces the whole gtk_erp_quotations key with rows for activeCompany() only. Repro A (data loss): a Glassco quote save fails cloud-push (queued via _queueRetry) → user switches sidebar to Nippon → NipponQuotationManager's refreshData calls getQuotations → Nippon cloud rows overwrite the key → the dirty Glassco row is erased before pushTable reads the key → write never reaches Supabase, silently lost. Repro B (hidden rows): components/SalesOrders.tsx:126 reads the SYNC local cache (SalesService.getQuotations) and filters q.company===company — after visiting Nippon quotations the cache holds only Nippon rows, so Glassco's Sales Orders tab shows 0 approved orders until some async Glassco read re-truncates the cache the other way. getClients (line 134), getInvoices (533), getCreditNotes (718) etc. share the same pattern.
 - **Fix:** Replace the blanket safeSave with a company-scoped merge: keep all cached rows whose company !== activeCompany(), replace only the active company's slice (and never drop rows that are in the pending-sync queue). Apply the same to getClients/getInvoices/getCreditNotes/getCustomerComplaints.
+- **STATUS: ✅ FIXED 682ba0c — all 12 sales cloud-reads merge into cache (not overwrite)**
 
 ### ✅ P1-16 — cogsReversalPending mis-flag: reverseDeliveryCOGS silently returns (console.warn, no throw) when GL-COGS-<invoiceId> is 
 - **File:** `modules\procurement\services\glasscoGLDelivery.ts:347`  ·  **module:** procurement/glasscoGLDelivery (COGS reversal)
@@ -115,20 +129,22 @@ Status legend: ⬜ open · ✅ fixed · 🟡 partial · 🔶 confirmed—needs d
 - **Fix:** Before concluding the GL is missing, do a cloud lookup: await supabase.from('ledger').select('*').eq('id', invoice.glTxId).eq('company', company).maybeSingle(), fall back to the local cache only on network failure. Better: have void_invoice_atomic build the reversal server-side from the ledger row it can see (SELECT details FROM ledger WHERE id = ...), so the void is only reversal-free when the GL genuinely does not exist - and in that case require an explicit force flag from the operator instead of a toast.
 - **STATUS: 🟡 PARTIAL — warnMissingGL already signals; cold-cache guard added 822bb13; residual = P2 (auto-fetch)**
 
-### ⬜ P1-19 — Boot-time cloud pull overwrites localStorage BEFORE pending offline quotation writes are pushed, permanently wiping unsy
+### ✅ P1-19 — Boot-time cloud pull overwrites localStorage BEFORE pending offline quotation writes are pushed, permanently wiping unsy
 - **File:** `src/services/SyncService.ts:1663`  ·  **module:** sync/sales
 - **Why it fails:** Save a quotation while offline: saveQuotations merges it into gtk_erp_quotations and _queueRetry('quotations') persists a pending entry (gtk_erp_pending_sync). Close the app, reopen while online: App.tsx init (App.tsx:487-502) runs SyncService.fetchCritical()/fetchFromCloud() which call pullTable → localStorage.setItem(localKey, JSON.stringify(cloudData)) — a FULL overwrite that does not contain the unsynced row. pushPending() is never called at boot (only on the 'online' event and a 5-min interval; flushOfflineQueue() at App.tsx:502 flushes a different queue). When pushPending finally runs, pushTable (SyncService.ts:1505) reads the already-overwritten key — the offline quote is gone from local AND cloud, with zero error surfaced.
 - **Fix:** In App.tsx init, await SyncService.pushPending() (flushing gtk_erp_pending_sync) BEFORE fetchCritical()/fetchFromCloud(); additionally make pullTable skip (or merge-by-id instead of overwrite) any table that currently has a pending dirty entry, so a pull can never clobber locally-dirty rows.
+- **STATUS: ✅ FIXED cbcbf71 — push unsynced writes before boot pull (fetchCritical/fetchFromCloud)**
 
 ### ⬜ P1-20 — post_invoice_atomic merges the quotation patch (status='Invoiced', wastage items) ONLY into the data JSONB, never the fl
 - **File:** `supabase/migrations/042_atomic_rpcs.sql:188`  ·  **module:** db/rpc + sales sync (quotation status)
 - **Why it fails:** quotations is hybrid (032 added flat status/items; index idx_quotations_status). RPC step 3 does SET data = data || patch. asyncSalesService.getQuotations:355-356 rebuilds with 'status: r.status ?? base.status' and 'items: r.items (if non-empty)' then safeSave(KEYS.QUOTATIONS, mapped) — the cloud flat status ('Approved') wins over data.status ('Invoiced') and clobbers the local mirror written in deliveryInvoiceService.ts:634-639. Order reappears as invoiceable; if the invoices cache is cold or a second device is used (guard at deliveryInvoiceService.ts:237 is local-cache only, RPC dedupes by invoice id only, and each attempt allocates a fresh serial), the same order can be invoiced twice -> double revenue + double COGS.
 - **Fix:** In post_invoice_atomic step 3 also update the flat columns: SET status = COALESCE(patch->>'status', status), items = COALESCE(patch->'items', items), data = data || patch. Additionally add a partial unique index ON invoices(order_id) WHERE status <> 'Voided' and a duplicate-order check inside the RPC.
 
-### ⬜ P1-21 — trial_balance / ar_aging / attendance_summary are SECURITY DEFINER, GRANTed to anon+authenticated, with zero company-aut
+### ✅ P1-21 — trial_balance / ar_aging / attendance_summary are SECURITY DEFINER, GRANTed to anon+authenticated, with zero company-aut
 - **File:** `supabase/migrations/088_finance_aggregation_rpcs.sql:70`  ·  **module:** 088 aggregation RPCs
 - **Why it fails:** 086 strict RLS is live, but SECURITY DEFINER runs as the function owner and bypasses RLS. GRANT EXECUTE ... TO authenticated, anon (lines 70/119/156) means an UNAUTHENTICATED caller can POST /rest/v1/rpc/trial_balance {p_company:'Glassco'} with only the public anon key and receive per-account Dr/Cr totals; any company-A user can pull company-B's trial balance, AR totals, and per-employee attendance. The staged migration ships a cross-company + public financial-data leak the day the founder applies it.
 - **Fix:** Remove the anon grant; inside each function require p_company = ANY(auth_user_companies()) OR auth_user_is_super() (raise exception otherwise), or make them SECURITY INVOKER so 086 RLS applies to the underlying scans.
+- **STATUS: ✅ FIXED via migration 092 (DB-gated) — revoke anon + company authz gate**
 
 ---
 
@@ -264,10 +280,11 @@ Status legend: ⬜ open · ✅ fixed · 🟡 partial · 🔶 confirmed—needs d
 - **Why it fails:** Nippon delivery COGS credits Hardware Inventory 11514 and its store items carry hardware categories, not 'Raw'. On a Nippon credit note: invCreditLine lookup by glassAccounts(company).glassInv.id finds nothing -> inventoryRelieved = 0 -> restore skipped silently (and even if it matched, store.filter(category === 'Raw') returns no Nippon rows). GL inventory account is restored by the reversing entry, but the MAP-valued store sub-ledger is not, so the stock-value <-> GL reconciliation report shows a growing gap after every Nippon CN, and MAP-based COGS on subsequent sales is understated.
 - **Fix:** Branch on isTradingCompany: identify the inventory credit line by matching the ORIGINAL cogsTx detail accounts (any account whose line credited inventory) instead of hardcoding glassInv, and for Nippon restore proportionally into the specific store items the invoice consumed (persist materialDeductions/item ids in the COGS tx data blob at posting time so the reversal can target them exactly).
 
-### ⬜ P2-48 — AsyncSalesService.getCreditNotes cloud-read OVERWRITES the unified gtk_erp_credit_notes key with only the active company
+### ✅ P2-48 — AsyncSalesService.getCreditNotes cloud-read OVERWRITES the unified gtk_erp_credit_notes key with only the active company
 - **File:** `modules\sales\services\asyncSalesService.ts:718`  ·  **module:** sales/asyncSalesService (CN sync layer)
 - **Why it fails:** persistCreditNote's push failing (offline) calls _queueRetry('credit_notes') = SyncService.markDirty; the reconnect flush rebuilds rows from 'gtk_erp_credit_notes' (SyncService.ts:105). If getCreditNotes runs first while online (cloud has >= 1 row for the company), safeSave(KEYS.CREDIT_NOTES, mapped) replaces the WHOLE unified key with the mapped cloud rows: the unsynced pending CN (and every other company's CNs) vanish from it, so the retry pushes nothing - the CN survives only in the legacy per-company key on one device and never reaches Supabase (same class as the HRService.saveEmployees markDirty/safeSave rule). A cogsReversalPending=true update queued for retry can be lost the same way, un-flagging a CN that needs finance review.
 - **Fix:** Replace the safeSave overwrite with an id-keyed merge that (a) preserves rows of other companies and (b) preserves local rows not present in the cloud response (they may be unsynced): reuse _mergeIntoLocal semantics but scoped - remove only local rows of THIS company that the cloud also returned, keep everything else.
+- **STATUS: ✅ FIXED 682ba0c — getCreditNotes merges (part of P1-9 sweep)**
 
 ### ⬜ P2-49 — Legacy fallback has no GL-<cnId> duplicate guard before FinanceService.recordTransaction, and recordTransaction appends 
 - **File:** `modules\sales\services\creditNoteService.ts:328`  ·  **module:** sales/creditNote (fallback path - live today, 090 unapplied)
