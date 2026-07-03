@@ -13,7 +13,8 @@ Status legend: ⬜ open · ✅ fixed · 🟡 partial · 🔶 confirmed—needs d
 - ✅ **P1-3** `822bb13` — cold-cache guard: approveCreditNote/voidInvoice now hydrate the ledger from cloud when the invoice GL is missing locally, so the COGS/AR reversal posts instead of silently skipping.
 - ✅ **P1-11** — production_pieces upsert now stamps company (per-piece from its order), fixing RLS insert failures / invisible pieces.
 - 🟡 **P1-2** — partially refuted: void already warns (warnMissingGL); improved by the 822bb13 cold-cache guard. Residual is a P2.
-- 🔶 **P1-13** — CONFIRMED double inventory relief: delivery COGS credits Glass Inventory (11511) which cutting-close already relieved (Dr WIP 11513/Cr 11511), so WIP 11513 inflates forever. Correct fix (Cr WIP at delivery) is risky if a cutting session never posted GL-CUT-*; **needs Hassan's confirmation that every delivered Glassco order goes through a cutting-session close that posts GL** before changing the posting.
+- ✅ **NEW FEATURE — "Service Only"** `a4f291f` — per-line toggle in the Glassco quotation editor for client-supplied glass (services only, no glass rate, no inventory consume, no raw-glass COGS at delivery; pieces still generate + track; tempering AP still applies).
+- ❌ **P1-13 — REFUTED (false positive)**: the finder assumed cutting-close posts `Dr WIP 11513 / Cr Glass Inventory 11511`, but that code (postCuttingGL / buildCuttingGLPlan / consume_glass_stock) is **DEAD** — zero call sites; the live cutting flow (CutterWorkbench) consumes GRN sheet entries via consume_grn_sheet with NO GL and no store-value change. So delivery `Cr 11511` is the SOLE, correct relief. Applying the "fix" would have broken it (11513 is never debited → negative). No change made. Dead cutting-GL code flagged for cleanup.
 
 ---
 
@@ -54,11 +55,11 @@ Status legend: ⬜ open · ✅ fixed · 🟡 partial · 🔶 confirmed—needs d
 - **Why it fails:** Nippon item oversold to qty -10 (saveStore's negative-stock guard deliberately skips Nippon, inventoryService.ts:426). Receive 10 pcs @ PKR 100: quantity becomes 0, so (quantity||1) divides by 1 and MAP = totalValue (the ENTIRE batch value, e.g. 1,000) instead of ~100 per unit. Next sale's COGS (buildNipponTradingCOGSPlan uses qty x MAP) is overstated 10x. Negative-to-positive receipts drift similarly (totalValue never went negative with qty). Same formula in the manual path at line 299.
 - **Fix:** When pre-receipt quantity <= 0, reset the batch: MAP = landed unit price of this receipt and totalValue = max(0,newQty) * MAP, instead of accumulating totalValue across a negative-qty period; guard division by newQty <= 0 explicitly.
 
-### 🔶 P1-8 — Delivery COGS credits Glass Inventory (11511) which was ALREADY credited at cutting-session close (Dr WIP 11513 / Cr 115
+### ❌ P1-8 — Delivery COGS credits Glass Inventory (11511) which was ALREADY credited at cutting-session close (Dr WIP 11513 / Cr 115
 - **File:** `modules/procurement/services/glasscoGLDelivery.ts:100`  ·  **module:** procurement/glasscoGL (delivery COGS)
 - **Why it fails:** Invoicing requires the cutting session to be closed first (deliveryInvoiceService.ts:340 error message), and cutting close posts Dr WIP 11513 / Cr GlassInv 11511 for the full sheet value (glasscoGLCutting.ts:72-81 via consume_glass_stock). At delivery, buildDeliveryCOGSPlan/postDeliveryCOGS post Dr COGS 5111 / Cr GlassInv 11511 AGAIN (accs.glassInv, not accs.wip). Every delivered glass order: 11511 goes negative by the piece value, 11513 accumulates the sheet value forever -> balance sheet inventory wrong and compounding, even though each entry individually balances.
 - **Fix:** At delivery, credit accs.wip (11513 WIP — Glass in Process) instead of accs.glassInv for the raw-glass portion (mirroring how labour is closed from wipLabour). Reconcile historic entries with a one-time JV moving the accumulated 11513 balance against 11511.
-- **STATUS: 🔶 CONFIRMED double inventory relief (WIP 11513 never closed) — NEEDS operational decision, not auto-fixed (see progress note)**
+- **STATUS: ❌ REFUTED (false positive): premise wrong — cutting-close GL (postCuttingGL/buildCuttingGLPlan/consume_glass_stock) is DEAD CODE, never called. Cutting posts no GL, so delivery Cr 11511 is the SOLE correct relief. Changing to Cr WIP 11513 would break it (11513 never debited).**
 
 ### ✅ P1-9 — getPieceCostData uses item.totalSqFt (LINE total, already multiplied by qty) as the sqft of EACH piece, so delivery COGS
 - **File:** `modules/procurement/services/glasscoGLHelpers.ts:146`  ·  **module:** procurement/glasscoGL (delivery COGS + tempering AP)
