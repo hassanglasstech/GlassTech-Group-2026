@@ -33,6 +33,19 @@ export default {
       letterSpacing: {
         tightest: '-0.04em',
       },
+      // Semantic tokens used across the app (bg-primary, bg-primary-subtle,
+      // text-primary-fg, border-danger-border, bg-success-subtle, …) that were
+      // NEVER defined — under the CDN they produced no CSS, so those elements
+      // rendered unstyled (e.g. `bg-primary text-white` = white text on nothing
+      // = invisible "buttons that are just text" on the quotation editor).
+      // Values follow the app's existing --sap-* palette in index.css.
+      colors: {
+        primary: { DEFAULT: '#2563eb', subtle: '#eff6ff', hover: '#1d4ed8', border: '#bfdbfe', fg: '#ffffff' },
+        success: { DEFAULT: '#059669', subtle: '#ecfdf5', border: '#a7f3d0' },
+        danger:  { DEFAULT: '#e11d48', subtle: '#fff1f2', border: '#fecdd3' },
+        warning: { DEFAULT: '#d97706', subtle: '#fffbeb', border: '#fde68a' },
+        info:    { DEFAULT: '#2563eb', subtle: '#eff6ff', border: '#bfdbfe' },
+      },
     },
   },
   plugins: [],
