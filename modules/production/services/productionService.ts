@@ -17,6 +17,7 @@ const KEYS = {
 import { bgSaveToIDB, safeParse, safeSave, safeAsync } from '../../shared/services/utils';
 import { toast } from 'sonner';
 import { Logger } from '../../shared/services/logger';
+import { useAppStore } from '../../shared/store/appStore';
 
 export const ProductionService = {
   getProductionPiecesAsync: async (filterCompany?: string): Promise<ProductionPiece[]> => {
@@ -239,10 +240,29 @@ export const ProductionService = {
     // Push to Supabase in background
     // MFG-4: include cost_center_id in every upsert row so piece-level
     // cost attribution is persisted to Supabase (column added in Migration 018).
+    // P1-11: production_pieces has a `company` column (used by every
+    // company-filtered read like getProductionPiecesPage + strict-RLS WITH
+    // CHECK), but the upsert row never set it — so rows either FAILED the RLS
+    // insert for non-super users, or landed with a null company and were
+    // invisible to every company-filtered read. Derive company PER PIECE from
+    // its own order — NOT a blanket activeCompany(): this save is called with
+    // `[...others, ...newPieces]` where `others` can belong to OTHER companies
+    // (getProductionPieces isn't company-filtered), so a blanket stamp would
+    // corrupt them. Fall back to the selected company only when the order is
+    // unknown.
+    const _quotes = safeParse(KEYS.QUOTATIONS) as any[];
+    const _orderCompany = new Map<string, string>();
+    for (const q of _quotes) {
+      if (q?.orderNo) _orderCompany.set(q.orderNo, q.company);
+      if (q?.id)      _orderCompany.set(q.id, q.company);
+    }
+    let _fallbackCompany = '';
+    try { _fallbackCompany = useAppStore.getState().selectedCompany || ''; } catch { /* store not ready */ }
     const mapped = data
       .filter(p => p.id && (p as any).orderId)
       .map(p => ({
         id: p.id,
+        company: (p as any).company || _orderCompany.get((p as any).orderId) || _fallbackCompany,
         order_id: (p as any).orderId || '',
         item_index: Number((p as any).itemIndex || 0),
         specs: p.specs || '',
