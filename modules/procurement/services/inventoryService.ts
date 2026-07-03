@@ -28,6 +28,23 @@ const activeCompany = (): string => {
   return useAuthStore.getState().profile?.company ?? '';
 };
 
+// P1-19: merge cloud rows into the shared cache by id instead of OVERWRITING it.
+// Every *Async read below filters by activeCompany(), so the cloud response holds
+// ONLY the active company's rows. `safeSave(KEY, mapped)` then wiped every OTHER
+// company's cached rows AND any local rows not yet pushed to the cloud (unsynced
+// offline writes / append-only ledger + sheet entries). Merge overlays the fresh
+// cloud rows (cloud wins for the ids it returned) while preserving local-only rows.
+const _mergeCloudIntoCache = <T extends { id: string }>(key: string, cloudRows: T[]): T[] => {
+  let existing: T[] = [];
+  try { existing = safeParse(key) as T[]; } catch { existing = []; }
+  const byId = new Map<string, T>();
+  for (const r of existing)  if (r && r.id) byId.set(r.id, r);
+  for (const r of cloudRows) if (r && r.id) byId.set(r.id, r);
+  const merged = Array.from(byId.values());
+  safeSave(key, merged);
+  return merged;
+};
+
 // ── Visible Supabase upsert — never silent, surfaces schema/permission errors to user ──
 const _inventoryUpsert = async (table: string, rows: any[], label: string): Promise<void> => {
   try {
@@ -406,8 +423,7 @@ export const InventoryService = {
           minLevel: r.min_level,
           reorderPoint: r.reorder_point,
         }));
-        safeSave(KEYS.STORE, mapped);
-        return mapped;
+        return _mergeCloudIntoCache(KEYS.STORE, mapped as unknown as Array<{ id: string }>) as unknown as StoreItem[];   // P1-19: merge, don't overwrite
       }
     } catch (e) {
       console.error('[InventoryService] getStoreAsync error', e);
@@ -539,7 +555,7 @@ export const InventoryService = {
           reversalOf: r.reversal_of, isReversal: r.is_reversal,
           reversalReason: r.reversal_reason,
         }));
-        safeSave(KEYS.STOCK_LEDGER, mapped);
+        _mergeCloudIntoCache(KEYS.STOCK_LEDGER, mapped as unknown as Array<{ id: string }>);   // P1-19: merge, don't overwrite
         bgSaveToIDB('stockLedger', mapped);
         return mapped;
       }
@@ -704,7 +720,7 @@ export const InventoryService = {
         .from('grn_sheet_entries').select('*').eq('company', company);
       if (!error && data && data.length > 0) {
         const mapped = data.map((r: any) => (r.data ?? r)) as GRNSheetEntry[];
-        safeSave(KEYS.GRN_SHEET_ENTRIES, mapped);
+        _mergeCloudIntoCache(KEYS.GRN_SHEET_ENTRIES, mapped as unknown as Array<{ id: string }>);   // P1-19: merge, don't overwrite
         return mapped;
       }
     } catch (e) {
@@ -860,7 +876,7 @@ export const InventoryService = {
         .from('cutting_sessions').select('*').eq('company', company);
       if (!error && data && data.length > 0) {
         const mapped = data.map((r: any) => (r.data ?? r)) as CuttingSession[];
-        safeSave(KEYS.CUTTING_SESSIONS, mapped);
+        _mergeCloudIntoCache(KEYS.CUTTING_SESSIONS, mapped as unknown as Array<{ id: string }>);   // P1-19: merge, don't overwrite
         return mapped;
       }
     } catch (e) {
