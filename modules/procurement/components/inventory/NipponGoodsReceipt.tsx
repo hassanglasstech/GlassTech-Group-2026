@@ -210,7 +210,15 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
                 s.quantity = (s.quantity || 0) + item.qty;
                 s.unrestrictedQty = (s.unrestrictedQty || 0) + item.qty;
                 s.totalValue = (s.totalValue || 0) + newVal;
-                s.movingAveragePrice = Number((s.totalValue / (s.quantity || 1)).toFixed(2));
+                // P1-21: MAP = totalValue/quantity ONLY holds when quantity > 0.
+                // Nippon's bootstrap allows negative stock (sell-before-GRN), so a
+                // receipt can leave quantity ≤ 0 — then `quantity || 1` still yields
+                // a NEGATIVE denominator → negative MAP → negative COGS at delivery.
+                // When quantity ≤ 0, fall back to THIS lot's unit landed cost (the
+                // best available cost basis); keep the old MAP if even that is absent.
+                s.movingAveragePrice = s.quantity > 0
+                  ? Number((s.totalValue / s.quantity).toFixed(2))
+                  : (item.qty > 0 ? Number((newVal / item.qty).toFixed(2)) : (s.movingAveragePrice || 0));
                 updatedStore[sIdx] = s;
 
                 newLedger.push({

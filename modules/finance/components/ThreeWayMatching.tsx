@@ -92,8 +92,14 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
     // If maal MIGO se already post hua hai to grnService ne ye entry already bana di hogi.
     // ThreeWayMatching mein sirf PO-level GRN link karte hain — duplicate GL avoid karne ke liye
     // hum sirf GL entry banate hain agar MIGO se koi matching WE- journal nahi mila.
+    // P1-16: the MIGO GRN material GL is docType 'JV' (its id is prefixed 'WE-',
+    // not its docType), with referenceId = grnId. The old guard required
+    // docType === 'WE', so it NEVER matched a MIGO post and this component
+    // re-posted Dr Inventory / Cr GR-IR a second time. Dedup on referenceId
+    // alone — the reliable GRN link — so ANY prior GL for this GRN (MIGO's JV +
+    // freight PVs, or a previous 3-way post) suppresses a duplicate.
     const existingGLs = FinanceService.getLedger().filter(
-      gl => gl.referenceId === grnForm.grnRef && (gl.docType === 'WE' as any)
+      gl => gl.referenceId === grnForm.grnRef
     );
     if (existingGLs.length === 0 && selectedPO.totalAmount > 0) {
       // GRN was not posted via MIGO — post GL now
