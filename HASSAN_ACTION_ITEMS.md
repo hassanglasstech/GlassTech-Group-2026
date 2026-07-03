@@ -28,6 +28,7 @@ _Last updated: 2026-07-04 · sirf AAP ke karne wale kaam. (Claude ke dev-fixes n
 - [x] **Tailwind CDN → build-time Tailwind** migrate — slow load + buttons-as-text theek. (2026-07-04, aap ne "kafi behter" confirm kiya)
 - [x] **Production nav** wapas 2 alag: "Production Board" + "Production" (hub); canonical design tokens standalone se sync. (2026-07-04)
 - [x] **Migration `083_cutter_workflow.sql`** live DB pe apply — cloud-side cutter flow on. (2026-07-04)
+- [x] **Migrations `085 / 086 / 087` SECURITY** live DB pe apply — anon writes REVOKE + strict RLS ENABLE + server finance controls. **God-mode audit ke top-2 P0 blockers (anon key + no company-isolation) BAND.** Security dimension 2/10 → ~6.5/10. (2026-07-04)
 - [x] **Migration `092`** live DB pe apply — anon financial-leak band. (2026-07-04)
 - [x] Migrations `088 / 089 / 090` apply + soft-delete flag flip (pehle).
 - [x] Console errors + issues Claude ko bhej diye.
