@@ -320,6 +320,7 @@ const pettyCashToRow = (e: PettyCashEntry) => ({
 const RETRY_KEY = 'gtk_erp_finance_retry_tables';
 interface FinanceRetryEntry { table: string; label: string; failedAt: string }
 let _retryListenerWired = false;
+let _companySwitchWired = false;   // P1-6: reload finance cache on company switch (wire once)
 
 const _recordRetry = (table: string, label: string): void => {
   const cur: FinanceRetryEntry[] = safeParse(RETRY_KEY);
@@ -448,6 +449,19 @@ export const FinanceService = {
     if (typeof window !== 'undefined' && !_retryListenerWired) {
       _retryListenerWired = true;
       window.addEventListener('online', () => { void FinanceService.flushRetryQueue(); });
+    }
+    // P1-6: the cache is loaded ONCE for the boot company. Without this, every
+    // cache-fed finance report (trial balance, GL, statements, dashboards) keeps
+    // showing the boot company's data after a sidebar company switch. Subscribe
+    // once so a selectedCompany change re-pulls the finance cache for the new
+    // company. refresh() sets _cache.loaded=false then reloads via activeCompany().
+    if (!_companySwitchWired) {
+      _companySwitchWired = true;
+      useAppStore.subscribe((state, prev) => {
+        if (state.selectedCompany && state.selectedCompany !== prev.selectedCompany) {
+          void FinanceService.refresh();
+        }
+      });
     }
   },
 

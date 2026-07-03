@@ -395,6 +395,10 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
                   <td colSpan={2} />
                   <td className="py-1.5 px-3 text-center"><StatusChip status={tx.status} /></td>
                   <td className="py-1.5 px-3 text-center">
+                    {/* P1-5: a POSTED GL document is immutable — corrections go
+                        through a reversal JV, never by editing or locally hiding
+                        the posted entry. Only Parked/Draft rows may be edited. */}
+                    {tx.status !== 'Posted' ? (
                     <div className="flex items-center justify-center gap-1.5">
                       <button
                         onClick={() => handleEditParked(tx)}
@@ -411,6 +415,9 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
                         <Trash2 size={11} />
                       </button>
                     </div>
+                    ) : (
+                      <span className="text-[9px] font-semibold text-slate-300 uppercase tracking-wide" title="Posted entries are immutable — reverse via a JV">Locked</span>
+                    )}
                   </td>
                 </tr>
 
