@@ -31,6 +31,12 @@ export interface QuotationItem {
   glassType?: string;
   subCategory?: string;
   selectedServices?: string[];
+  /** SERVICE ONLY (client-supplied glass): the client brings their own glass and
+   *  Glassco performs only services (grinding/beveling/tempering). The line is
+   *  priced at service rates only (NO glass base rate), pieces still generate for
+   *  tracking, but NO glass is consumed from inventory and delivery books NO
+   *  raw-glass COGS / inventory relief — only service labour (+ vendor tempering AP). */
+  serviceOnly?: boolean;
   notchCount?: number;
   holes?: HoleLocation[]; 
   attachedImage?: string; 
@@ -172,6 +178,9 @@ export interface ProductionPiece {
   pendingServices?: string[];
   isRevised?: boolean;
   revisionNote?: string;
+  /** Mirrors the quotation item's serviceOnly flag (client-supplied glass): this
+   *  piece consumes no glass inventory and books no raw-glass COGS at delivery. */
+  serviceOnly?: boolean;
   sqft?: number;            // area of this piece (sqft) — populated at creation from quotation item
   serviceLog?: ServiceLogEntry[]; // history of services performed + worker + cost
   // ── Consolidated-branch fields (optional; cutter-tracking overlay) ──

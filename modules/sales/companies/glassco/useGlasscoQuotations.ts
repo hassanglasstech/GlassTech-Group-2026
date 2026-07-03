@@ -310,7 +310,9 @@ export const useGlasscoQuotations = () => {
               itemIndex: idx,
               specs: `${item.width}x${item.height} ${item.glassSize || '5mm'} ${item.glassType || 'Plain'}`,
               status: (finalQuo.isAlreadyDispatched ? 'Delivered' : 'Pending-Cut') as any,
-              lastUpdated: new Date().toISOString(), isRevised: false
+              lastUpdated: new Date().toISOString(), isRevised: false,
+              company,                                       // P1-11: stamp owning company at creation
+              serviceOnly: (item as any).serviceOnly || false, // client-supplied glass → no glass COGS at delivery
             });
             globalSerialCounter++;
           }
@@ -403,14 +405,15 @@ export const useGlasscoQuotations = () => {
     
     (item as any)[field] = value;
 
-    if (['glassSize', 'glassType', 'subCategory', 'glassColor', 'selectedServices'].includes(field)) {
+    if (['glassSize', 'glassType', 'subCategory', 'glassColor', 'selectedServices', 'serviceOnly'].includes(field)) {
         item.pricePerUnit = calculateAutoRate(
-            item.glassSize || '5mm', 
-            item.glassType || 'Plain', 
-            item.subCategory || 'Standard', 
-            item.selectedServices || [], 
+            item.glassSize || '5mm',
+            item.glassType || 'Plain',
+            item.subCategory || 'Standard',
+            item.selectedServices || [],
             products,
-            item.glassColor
+            item.glassColor,
+            (item as any).serviceOnly           // SERVICE ONLY → glass base rate excluded
         );
     }
 
@@ -438,7 +441,7 @@ export const useGlasscoQuotations = () => {
 
   const makeBlankItem = (ts: number = Date.now()): QuotationItem => ({
     id: `ITM-${ts}`, description: '', qty: 1, inchW: 0, sootW: 0, inchH: 0, sootH: 0, mmW: 0, mmH: 0,
-    width: 0, height: 0, glassSize: '5mm', glassType: 'Plain', subCategory: 'Standard', selectedServices: [],
+    width: 0, height: 0, glassSize: '5mm', glassType: 'Plain', subCategory: 'Standard', selectedServices: [], serviceOnly: false,
     totalSqFt: 0, pricePerUnit: calculateAutoRate('5mm', 'Plain', 'Standard', [], products), amount: 0,
     locationCode: '', glazingSpecs: '', inputUnit: isMM ? 'MM' : 'Inch'
   });

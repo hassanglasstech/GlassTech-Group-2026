@@ -536,13 +536,21 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                                                 <td className="align-middle py-1 px-2">
                                                     {!item.isSection && (
                                                         // P2-07: width:90px -> Tailwind w-[90px]
-                                                        <div className="grid grid-cols-3 gap-px w-[90px]">
+                                                        <div className="w-[90px]">
+                                                            <div className="grid grid-cols-3 gap-px">
                                                             {serviceNicks.map(nick => {
                                                                 const isTGDisabled = nick === 'T/G' && isNonTemperable;
                                                                 return (
                                                                     <button key={nick} disabled={isTGDisabled} onClick={() => { const current = item.selectedServices || []; const next = current.includes(nick) ? current.filter(s => s !== nick) : [...current, nick]; handleUpdateItemWithLogic(idx, 'selectedServices', next); }} className={`h-5 rounded-sm text-[7px] font-black leading-none transition-all ${isTGDisabled ? 'bg-slate-100 text-slate-300 opacity-50' : item.selectedServices?.includes(nick) ? 'bg-primary text-white' : 'bg-slate-50 text-slate-400 hover:bg-primary-subtle'}`}>{nick}</button>
                                                                 );
                                                             })}
+                                                            </div>
+                                                            {/* SERVICE ONLY — client-supplied glass: services-only rate, no glass rate, no inventory consume */}
+                                                            <button
+                                                                onClick={() => handleUpdateItemWithLogic(idx, 'serviceOnly', !item.serviceOnly)}
+                                                                title="Service Only — client brings their own glass. Charges services only (no glass rate); pieces still generate & track, but no glass is consumed from inventory."
+                                                                className={`mt-0.5 w-full h-5 rounded-sm text-[7px] font-black leading-none uppercase transition-all ${item.serviceOnly ? 'bg-amber-500 text-white' : 'bg-slate-50 text-slate-400 hover:bg-amber-100'}`}
+                                                            >{item.serviceOnly ? '✓ SVC ONLY' : 'SVC ONLY'}</button>
                                                         </div>
                                                     )}
                                                 </td>

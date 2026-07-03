@@ -16,7 +16,7 @@ const normalize = (s: unknown) => String(s || '').trim().toLowerCase();
  * NOTE: Notch is EXCLUDED here — it is charged per-notch-count in calculateLineItemTotal.
  * NOTE: APT on Mirror glass is EXCLUDED here — it becomes per-piece Rs 1000 flat in calculateLineItemTotal.
  */
-export const calculateAutoRate = (size: string, type: string, subType: string, services: string[], products: Product[], finishColor?: string) => {
+export const calculateAutoRate = (size: string, type: string, subType: string, services: string[], products: Product[], finishColor?: string, serviceOnly: boolean = false) => {
     const sSize = normalize(size);
     const sType = normalize(type);
     const sSubType = normalize(subType || 'Standard');
@@ -50,6 +50,9 @@ export const calculateAutoRate = (size: string, type: string, subType: string, s
     if (glass) {
         baseRate = (isTempered && glass.temperingPrice) ? glass.temperingPrice : (glass.basePrice || 0);
     }
+    // SERVICE ONLY (client-supplied glass): never charge the glass base/tempering
+    // rate — only the selected services below contribute to the line rate.
+    if (serviceOnly) baseRate = 0;
 
     let serviceTotal = 0;
     services.forEach(srvNick => {

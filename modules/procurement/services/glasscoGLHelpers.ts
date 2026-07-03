@@ -141,6 +141,15 @@ export function getPieceCostData(piece: any, company: Company): {
   const item = (order.items || [])[piece.itemIndex];
   if (!item) return { sqft: 0, materialId: null, map: 0, totalCost: 0 };
 
+  // SERVICE ONLY (client-supplied glass): Glassco never owned this glass, so book
+  // NO raw-glass COGS and NO inventory relief at delivery. Service labour is
+  // posted separately from piece.serviceLog, and vendor tempering stays as AP —
+  // only the raw-glass cost is zeroed here. Prefer the item flag (authoritative,
+  // persisted on the order); fall back to the piece flag for safety.
+  if ((item as any).serviceOnly || (piece as any).serviceOnly) {
+    return { sqft: 0, materialId: null, map: 0, totalCost: 0 };
+  }
+
   // P1-COGS-QTY: `totalSqFt` is the WHOLE-LINE total (perUnit sqft × qty, set in
   // useQuotations). Every caller of this helper iterates ONE glass piece at a
   // time (a qty=N line spawns N pieces), so charging each piece the whole-line
