@@ -1,4 +1,12 @@
 
+/* Build-time Tailwind (replaces the runtime cdn.tailwindcss.com Play CDN).
+   These three directives are expanded by PostCSS + Tailwind at build time; this
+   file is imported in index.tsx so Vite processes it. Must stay at the very top
+   so Tailwind's base/preflight loads before the custom rules below. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* ══════════════════════════════════════════════════════════
    GLASSTECH ERP — Global Styles
    Mobile-first responsive design

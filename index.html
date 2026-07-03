@@ -24,26 +24,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ["'Plus Jakarta Sans'", 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
-              mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
-            },
-            fontSize: {
-              '2xs': ['0.6875rem', { lineHeight: '1rem' }],
-            },
-            letterSpacing: {
-              tightest: '-0.04em',
-            },
-          }
-        }
-      }
-    </script>
-    <link rel="stylesheet" href="/index.css">
+    <!-- Tailwind is now compiled at BUILD time (tailwind.config.js + postcss.config.js),
+         and index.css is imported in index.tsx so Vite/PostCSS process it. The old
+         cdn.tailwindcss.com Play CDN + inline tailwind.config + static <link href="/index.css">
+         were removed: the CDN compiled CSS in the browser on every load (slow on
+         list-heavy pages + FOUC — buttons rendered as plain text until it finished). -->
 
     <style>
       /* ── Safe area insets (iPhone notch / home bar) ─────────── */

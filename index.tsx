@@ -1,4 +1,5 @@
 
+import './index.css';   // build-time Tailwind + global styles (was a static <link> in index.html)
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
