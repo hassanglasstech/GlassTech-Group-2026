@@ -3,7 +3,7 @@ import { GlobalErrorBoundary, ModuleErrorBoundary } from '@/modules/shared/compo
 import { HashRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, ShoppingBag, Landmark, ShieldCheck,
-  Briefcase, Factory, Globe, Warehouse, Menu, Bell, Search,
+  Briefcase, Factory, LayoutGrid, Globe, Warehouse, Menu, Bell, Search,
   Truck, Handshake, Folder, Loader2, X, LogOut, ChevronDown,
   Home, DollarSign, Settings, BarChart3, Package, ScanLine
 } from 'lucide-react';
@@ -120,7 +120,8 @@ const CORE_NAV = [
   { name: 'Home',              path: '/',                 icon: LayoutDashboard, key: 'dashboard'        },
   { name: 'Insights',          path: '/insights',         icon: BarChart3,       key: 'dashboard'        },
   { name: 'Sales',             path: '/sales',            icon: Briefcase,       key: 'sales'            },
-  { name: 'Production',        path: '/production/workbench', icon: Factory,     key: 'production'       },
+  { name: 'Production Board',  path: '/production/workbench', icon: LayoutGrid,  key: 'production'       },
+  { name: 'Production',        path: '/production',           icon: Factory,     key: 'production'       },
   { name: 'Material Mgmt',     path: '/inventory',        icon: Warehouse,       key: 'inventory'        },
   { name: 'Procurement',       path: '/requisitions',     icon: Package,         key: 'requisitions'     },
   { name: 'Finance (FICO)',     path: '/accounts',         icon: Landmark,        key: 'accounts'         },
@@ -717,9 +718,10 @@ const App: React.FC = () => {
                   <Route path="/vendors"       element={<ModuleErrorBoundary moduleName="Vendors"><VendorHub /></ModuleErrorBoundary>} />
                   <Route path="/projects/*"    element={<ModuleErrorBoundary moduleName="Projects"><ProjectsModule /></ModuleErrorBoundary>} />
                   <Route path="/insights"      element={<ModuleErrorBoundary moduleName="Business Insights"><InsightsDashboard /></ModuleErrorBoundary>} />
-                  {/* Sprint 19: /production now redirects to Workbench. Legacy tabs
-                      moved under /production/legacy/* (deprecate after 30 days = 2026-06-10). */}
-                  <Route path="/production"             element={<Navigate to="/production/workbench" replace/>} />
+                  {/* /production = the Production hub (card launcher, ProductionModule).
+                      /production/workbench = the Production Board (Workbench). Two separate
+                      nav entries — restores the standalone Glassco split. */}
+                  <Route path="/production"             element={<ModuleErrorBoundary moduleName="Production"><ProductionModule /></ModuleErrorBoundary>} />
                   <Route path="/production/fabrication" element={<Navigate to="/production/workbench" replace/>} />
                   <Route path="/production/processing"  element={<Navigate to="/production/workbench" replace/>} />
                   <Route path="/production/qc-dispatch" element={<Navigate to="/production/workbench" replace/>} />

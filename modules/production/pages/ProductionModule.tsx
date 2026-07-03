@@ -7,8 +7,9 @@ import GTKProduction from '../../system/pages/GTKProduction';
 import GTIProduction from '../../system/pages/GTIProduction';
 import NipponProduction from '../companies/nippon/NipponProduction';
 import FactoryProduction from '../../factory/pages/FactoryProduction';
-// Glassco production surface = the piece-tracking Workbench board.
-import GlasscoProduction from '../companies/glassco/pages/Workbench';
+// Glassco "Production" = the module hub (card launcher). The piece-tracking
+// Workbench board is the SEPARATE "Production Board" nav entry (/production/workbench).
+import GlasscoProduction from '../companies/glassco/pages/GlasscoProductionHub';
 
 const ProductionModule: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
