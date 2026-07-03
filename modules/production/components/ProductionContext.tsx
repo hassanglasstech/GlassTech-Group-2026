@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { Company, Quotation, Client, ProductionPiece, PieceStatus, TemperingDispatch, GatePass, WarehouseSpot, PieceFault } from '@/modules/shared/types';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { SalesService } from '@/modules/sales/services/salesService';
+import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { postTemperingInwardGL, postDeliveryCOGS } from '@/modules/procurement/services/glasscoGLService';
 import { supabase } from '@/src/services/supabaseClient';                       // Sprint 5
 import { useAuthStore } from '@/modules/auth/authStore';                       // Sprint 5
@@ -151,16 +152,33 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
       : allPieces.filter(p => p && p.orderId?.includes(companyCode));
 
     setPieces(companyPieces);
-    // Show all active job orders — Approved, Invoiced, Partial Payment
+    // Show all active job orders — Approved, Invoiced, Partial Payment.
+    // Cloud-backed loaders (scoped to the active company) — NOT the sync
+    // SalesService cache getters, which are empty on a fresh route and left
+    // the Job filters, client names and glass specs blank until a manual sync.
     const ACTIVE_STATUSES = ['Approved', 'Invoiced', 'Partial Payment', 'approved', 'invoiced'];
-    const allQuotes = SalesService.getQuotations();
-    const companyJobs = allQuotes.filter(q => {
-      const qCompany = q.company || (q as any).data?.company;
-      const qStatus = q.status || (q as any).data?.status;
-      return (qCompany === company) && ACTIVE_STATUSES.includes(qStatus);
-    });
-    setJobOrders(companyJobs);
-    setClients(SalesService.getClients().filter(c => c.company === company));
+    try {
+      const [allQuotes, allClients] = await Promise.all([
+        AsyncSalesService.getQuotations(),
+        AsyncSalesService.getClients(),
+      ]);
+      const companyJobs = allQuotes.filter(q => {
+        const qCompany = q.company || (q as any).data?.company;
+        const qStatus = q.status || (q as any).data?.status;
+        return (!qCompany || qCompany === company) && ACTIVE_STATUSES.includes(qStatus);
+      });
+      setJobOrders(companyJobs);
+      setClients(allClients.filter(c => !c.company || c.company === company));
+    } catch {
+      // Offline / cloud error — fall back to whatever the local cache has.
+      const cachedQuotes = SalesService.getQuotations();
+      setJobOrders(cachedQuotes.filter(q => {
+        const qCompany = q.company || (q as any).data?.company;
+        const qStatus = q.status || (q as any).data?.status;
+        return (qCompany === company) && ACTIVE_STATUSES.includes(qStatus);
+      }));
+      setClients(SalesService.getClients().filter(c => c.company === company));
+    }
     setDispatches(ProductionService.getTemperingDispatches().filter(d => d.company === company || d.company === 'Factory'));
     setGatePasses(ProductionService.getGatePasses().filter(g => g.company === company));
     setSpots(ProductionService.getWarehouseSpots().filter(s => s.company === company));
@@ -252,7 +270,7 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
       // RPC committed. Mirror to localStorage for synchronous reads.
       ProductionService.getProductionPiecesAsync().then(all => {
         const newAll = all.map(p => p.id === id ? { ...p, ...optimistic } as ProductionPiece : p);
-        ProductionService.saveProductionPieces(newAll);
+        ProductionService.saveProductionPiecesBg(newAll);
       });
       // Sprint 10 — fire cross-team toast on the same device
       dispatchPieceStatusEvent(id, status, company);
@@ -262,7 +280,7 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
       console.warn('[update_piece_status_atomic] network exception (kept local):', e?.message);
       ProductionService.getProductionPiecesAsync().then(all => {
         const newAll = all.map(p => p.id === id ? { ...p, ...optimistic } as ProductionPiece : p);
-        ProductionService.saveProductionPieces(newAll);
+        ProductionService.saveProductionPiecesBg(newAll);
       });
     }
   };
@@ -393,7 +411,7 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
         }
         return p;
       });
-      ProductionService.saveProductionPieces(updatedPcs);
+      ProductionService.saveProductionPiecesBg(updatedPcs);
       setPieces(updatedPcs.filter(p => (p as any).company === company));
 
       const newPieceIds = [...new Set([...targetTrip.pieceIds, ...pieceIds])];
@@ -474,7 +492,7 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
     setSelectedPiecesForDelivery(next);
   };
 
-  const executeDirectDelivery = () => {
+  const executeDirectDelivery = async () => {
     if (!directDeliveryForm.vehicleNo || !directDeliveryForm.siteName) return toast.error("Validation: Vehicle and Site Name required.", { duration: 4000 });
     if (selectedPiecesForDelivery.size === 0) return toast.error("No pieces selected.", { duration: 4000 });
 
@@ -511,30 +529,41 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
       totalCharges: 0
     };
 
-    ProductionService.saveTemperingDispatches([...dispatches, newChallan]);
-    
     const deliveredPieceIds = Array.from(selectedPiecesForDelivery);
-    ProductionService.getProductionPiecesAsync().then(allPieces => {
-        const updatedPieces = allPieces.map(p => selectedPiecesForDelivery.has(p.id) ? { ...p, status: 'Delivered' as PieceStatus, dispatchId: newChallan.id } : p);
-        ProductionService.saveProductionPieces(updatedPieces);
 
-        // ── Post COGS: Dr COGS / Cr Glass Inventory at MAP ──────────
-        postDeliveryCOGS({
-          company: company as any,
-          invoiceId: newChallan.id,
-          orderId: directDeliveryForm.siteName,
-          pieceIds: deliveredPieceIds,
-          date: new Date().toISOString().split('T')[0],
-          clientName: directDeliveryForm.siteName,
-        });
+    // ── Post COGS FIRST (Dr COGS / Cr Glass Inventory at MAP) ──────────
+    // Money-path fix: previously the GL post sat inside an un-awaited .then()
+    // AFTER pieces were marked Delivered + saved, and a GL failure (imbalance /
+    // closed period / missing account) was swallowed — leaving pieces Delivered
+    // with NO COGS journal (COGS understated, inventory overstated) while the
+    // user saw a success toast. Now COGS posts up front; if it throws, nothing
+    // is committed and the user is told.
+    try {
+      postDeliveryCOGS({
+        company: company as any,
+        invoiceId: newChallan.id,
+        orderId: directDeliveryForm.siteName,
+        pieceIds: deliveredPieceIds,
+        date: new Date().toISOString().split('T')[0],
+        clientName: directDeliveryForm.siteName,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`Delivery blocked — COGS GL post failed (${msg}). Nothing was committed; fix and retry.`, { duration: 8000 });
+      return;
+    }
 
-        refreshData();
-    });
+    // ── GL committed — persist the challan + mark pieces Delivered ──
+    ProductionService.saveTemperingDispatches([...dispatches, newChallan]);
+    const _allPieces = await ProductionService.getProductionPiecesAsync();
+    const updatedPieces = _allPieces.map(p => selectedPiecesForDelivery.has(p.id) ? { ...p, status: 'Delivered' as PieceStatus, dispatchId: newChallan.id } : p);
+    ProductionService.saveProductionPiecesBg(updatedPieces);
+    refreshData();
 
     setIsDirectDeliveryModalOpen(false);
     setSelectedPiecesForDelivery(new Set());
     setDirectDeliveryForm({ vehicleNo: '', driverName: '', siteName: '' });
-    toast.error(`Direct Delivery Challan ${newChallan.id} Created. Pieces marked Delivered.`, { duration: 4000 });
+    toast.success(`Direct Delivery Challan ${newChallan.id} created — pieces Delivered, COGS posted.`, { duration: 4000 });
   };
 
   const handleRecordFault = () => {
@@ -546,7 +575,7 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
           const nextId = `${selectedPieceForFault.orderId}/R${all.filter(p => p.orderId === selectedPieceForFault.orderId).length + 1}`;
           const replacement: ProductionPiece = { ...selectedPieceForFault, id: nextId, status: 'Cut', lastUpdated: new Date().toISOString(), fault: undefined, dispatchId: undefined, receivedAtGateId: undefined };
           const updatedList = all.map(p => p.id === selectedPieceForFault.id ? { ...p, status: 'Returned' as PieceStatus, fault } : p);
-          ProductionService.saveProductionPieces([...updatedList, replacement]);
+          ProductionService.saveProductionPiecesBg([...updatedList, replacement]);
           refreshData();
       });
     } else {
