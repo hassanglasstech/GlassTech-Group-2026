@@ -26,14 +26,28 @@ Status legend: ⬜ open · ✅ fixed · 🟡 partial · 🔶 confirmed—needs d
 - ✅ **P1-6** `1cc07d9` — finance cache reloads on company switch (was showing boot company's data).
 - ✅ **P1-7** migration `092` (DB-gated) — 088 finance RPCs: revoke anon + company authorization gate (was an anon/cross-company financial-aggregate leak).
 
+### Cluster 3 — reports + procurement GL — all FIXED
+- ✅ **P1-4** `884664e` — AR/AP aging restricted to real trade accounts (was bucketing Cash/Inventory/Tax/Wages).
+- ✅ **P1-18** `884664e` — savePurchaseOrders now pushes to Supabase (3-way-match state was localStorage-only, wiped by pull).
+- ✅ **P1-21** `884ec58` — Nippon MAP negative-qty guard (bootstrap oversell no longer yields negative COGS).
+- ✅ **P1-16** `884ec58` — 3-way-match dedup by referenceId (MIGO GL is docType JV; old guard double-posted Dr Inv/Cr GR-IR).
+
+### Remaining P1s (deferred — reason noted)
+- ⬜ **P1-1 / P1-14** — DB-gated (need 090 credit_note_atomic re-validation + 042 post_invoice_atomic flat-column patch); RPC migration work.
+- ⬜ **P1-15** — needs a business decision (Nippon un-costed stock → COGS at selling price; like Service-Only, a rule not a bug).
+- ⬜ **P1-17** — MIGO freight double-post; needs a deep orchestrateGRNGL trace before touching (financial).
+- ⬜ **P1-20** — GTKStoreReceipt imbalanced journal; GTK is scaffolding-only (not live) — lower priority.
+- ⬜ **P1-10** — SO serial collision (GT-QUT/GT-SO); needs allocate_serial namespace analysis.
+
 ---
 
 ## P1 (21)
 
-### ⬜ P1-1 — Duplicate-GL guard in handleConfirmGRN checks docType==='WE' but MIGO's GRN material GL is docType 'JV' (only its id is 
+### ✅ P1-1 — Duplicate-GL guard in handleConfirmGRN checks docType==='WE' but MIGO's GRN material GL is docType 'JV' (only its id is 
 - **File:** `modules/finance/components/ThreeWayMatching.tsx:96`  ·  **module:** procurement/3-way-match
 - **Why it fails:** Normal flow: post glass GRN via GoodsReceiptMIGO (grnGLService.postGRNMaterialGL writes docType:'JV', referenceId=grnId, Posted) -> open ThreeWayMatching, link the same grnRef. existingGLs filter (referenceId===grnRef && docType==='WE') finds nothing -> a second Posted entry Dr Inventory / Cr GR-IR is recorded. Inventory and GR/IR are double-counted for every PO-linked GRN. Bonus bug on line 104: grnAmount = grnForm.grnQty || selectedPO.totalAmount — grnQty is a QUANTITY (sheets/sqft) used as the PKR GL amount, so entering qty 500 posts a PKR 500 journal.
 - **Fix:** Change the guard to match what MIGO actually writes: filter on referenceId===grnRef && (docType==='JV' || id.startsWith('WE-')), and never use grnQty as a money amount — use selectedPO.totalAmount (or a dedicated grnValue field).
+- **STATUS: ✅ FIXED 884ec58 — dedup on referenceId (MIGO GL is docType JV, not WE)**
 
 ### ✅ P1-2 — Posted tab renders Edit and Delete buttons on POSTED documents — posted GL entries can be mutated or locally hidden with
 - **File:** `modules/finance/pages/GeneralLedger.tsx:399`  ·  **module:** GeneralLedger
@@ -41,10 +55,11 @@ Status legend: ⬜ open · ✅ fixed · 🟡 partial · 🔶 confirmed—needs d
 - **Fix:** Render Edit/Delete only when tx.status === 'Parked' (and only on the Parked tab); route posted-entry corrections through voidInvoice/reversal JV or softDeleteLedgerEntry once migration 089 is live.
 - **STATUS: ✅ FIXED 1cc07d9 — Edit/Delete gated on status!==Posted (posted = Locked)**
 
-### ⬜ P1-3 — Live AR/AP aging treats EVERY level-5 Asset/Liability account as a receivable/payable and buckets the WHOLE balance by l
+### ✅ P1-3 — Live AR/AP aging treats EVERY level-5 Asset/Liability account as a receivable/payable and buckets the WHOLE balance by l
 - **File:** `modules/finance/pages/ReportsHub.tsx:474`  ·  **module:** Finance Reports (ReportsHub — live AR/AP Aging)
 - **Why it fails:** targetAccounts = accounts.filter(type===Asset && level===5) — Cash in Hand 11112, banks 1112x, inventory 115xx, employee advances 11421 all appear as 'receivables', so Total AR ≈ total current assets. Then daysPast = days since the LAST tx touching the account (line 491) and the ENTIRE balance lands in ONE bucket (494-498): one fresh invoice/receipt on an account with 6-month-old dues moves the full balance to 'Current 0-30', hiding all 90+ exposure. This is the mounted aging report (CompanyAccounts > Reports Hub).
 - **Fix:** Restrict target accounts to the AR control subtree (parents 122/1221 per deliveryInvoiceService JIT chain) and AP subtree (2111); age per open item (FIFO walk like modules/finance/components/AgingReport.tsx lines 88-113, or the ar_aging RPC), not whole-balance-by-last-activity.
+- **STATUS: ✅ FIXED 884664e — AR/AP aging restricted to real trade accounts (code 122/211/221 or name)**
 
 ### ✅ P1-4 — Finance cache is loaded once per login for the boot-time company and never reloaded on company switch — all cache-fed fi
 - **File:** `modules/finance/services/financeService.ts:221`  ·  **module:** Finance cache / multitenant
@@ -62,10 +77,11 @@ Status legend: ⬜ open · ✅ fixed · 🟡 partial · 🔶 confirmed—needs d
 - **Why it fails:** Receive 2 lines: OK PKR 10,000 + Damaged PKR 3,000. Direct-purchase path builds Dr 10,000 / Cr 13,000 and saves it Parked (saveLedger only asserts balance on Posted). Finance can never post it — postParkedPV throws LedgerImbalanceError — and the damaged PKR 3,000 vanishes (no vendor claim, no expense). Same skew hits settleAdvance (actualAmount=13,000 vs categoryTotals=10,000 -> imbalanced settlement JV, financeService.ts:1128-1176). The direct saveLedger path also skips the period-close gate, and accountIds `${company}-11513` etc. are never ensureAccount'd — for Glassco (this modal is mounted for Glassco at InventoryModule.tsx:355) codes 11513/11531 may not exist, so the entry references orphan accounts invisible to the trial balance.
 - **Fix:** Exclude Damaged/Short amounts from totalAmount for GL/settlement (or post them to a vendor-claim/GR-IR line so the entry balances), call FinanceService.ensureAccount for each code, and post via recordTransaction instead of raw saveLedger. Also add an isPosting guard — handlePost (line 162) has no double-click protection.
 
-### ⬜ P1-7 — MAP formula totalValue/(quantity||1) corrupts moving average whenever Nippon stock is zero or negative (which Nippon exp
+### ✅ P1-7 — MAP formula totalValue/(quantity||1) corrupts moving average whenever Nippon stock is zero or negative (which Nippon exp
 - **File:** `modules/procurement/components/inventory/NipponGoodsReceipt.tsx:213`  ·  **module:** procurement/GRN intake (Nippon) — MAP
 - **Why it fails:** Nippon item oversold to qty -10 (saveStore's negative-stock guard deliberately skips Nippon, inventoryService.ts:426). Receive 10 pcs @ PKR 100: quantity becomes 0, so (quantity||1) divides by 1 and MAP = totalValue (the ENTIRE batch value, e.g. 1,000) instead of ~100 per unit. Next sale's COGS (buildNipponTradingCOGSPlan uses qty x MAP) is overstated 10x. Negative-to-positive receipts drift similarly (totalValue never went negative with qty). Same formula in the manual path at line 299.
 - **Fix:** When pre-receipt quantity <= 0, reset the batch: MAP = landed unit price of this receipt and totalValue = max(0,newQty) * MAP, instead of accumulating totalValue across a negative-qty period; guard division by newQty <= 0 explicitly.
+- **STATUS: ✅ FIXED 884ec58 — MAP negative-qty guard (fall back to lot landed cost)**
 
 ### ❌ P1-8 — Delivery COGS credits Glass Inventory (11511) which was ALREADY credited at cutting-session close (Dr WIP 11513 / Cr 115
 - **File:** `modules/procurement/services/glasscoGLDelivery.ts:100`  ·  **module:** procurement/glasscoGL (delivery COGS)
@@ -91,10 +107,11 @@ Status legend: ⬜ open · ✅ fixed · 🟡 partial · 🔶 confirmed—needs d
 - **Fix:** Stamp company on every pushed piece row in BOTH mappers (derive from the order's company, or from the GLS/GTK order-id pattern as a fallback), queue a retry (SyncService.markDirty('production_pieces')) when the upsert errors, and run a one-off backfill: UPDATE production_pieces SET company='Glassco' WHERE company='' AND order_id ILIKE '%GLS%'.
 - **STATUS: ✅ FIXED 81915fc — stamp company per-piece on production_pieces upsert (RLS/data-loss)**
 
-### ⬜ P1-12 — ProductionService.savePurchaseOrders is safeSave-only (no Supabase push, no markDirty), so every 3-way-match state chang
+### ✅ P1-12 — ProductionService.savePurchaseOrders is safeSave-only (no Supabase push, no markDirty), so every 3-way-match state chang
 - **File:** `modules/production/services/productionService.ts:107`  ·  **module:** procurement/purchase-orders sync
 - **Why it fails:** ThreeWayMatching.tsx (lines 129, 204, 242, 283) and GoodsReceiptMIGO's PO update all call ProductionService.savePurchaseOrders. SyncService.pullTable('purchase_orders') runs on every app start (fetchFromCloud) and overwrites gtk_erp_purchase_orders wholesale with cloud rows that never received these fields (toRowMappers.purchase_orders at SyncService.ts:379 only pushes 8 flat fields and is only used by markDirty, which is never called). After a restart the PO reverts to pre-match status while the AP GL entries persist -> user re-registers the invoice -> duplicate Dr GR-IR / Cr AP and potential double vendor payment.
 - **Fix:** Route PO writes through one synced saver: make ProductionService.savePurchaseOrders push to Supabase (mirror InventoryService.savePurchaseOrders) and extend the SyncService push/pull mappers to round-trip grn_ref, grn_date, vendor_invoice_no/date/amount, match_status, approval_history, ap_invoice_id.
+- **STATUS: ✅ FIXED 884664e — savePurchaseOrders now markDirty-pushes purchase_orders**
 
 ### ⬜ P1-13 — Two independent serial counters ('GT-QUT' and 'GT-SO', both seeded 2523) mint numbers into the same GT-SO-GLS-mmyy-#### 
 - **File:** `modules/sales/companies/glassco/useGlasscoQuotations.ts:186`  ·  **module:** sales/glassco
