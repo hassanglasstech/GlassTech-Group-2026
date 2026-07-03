@@ -221,8 +221,21 @@ export async function approveCreditNote(params: {
   const today = new Date().toISOString().split('T')[0];
 
   // ── Find AR account from original invoice GL ──────────────────────────────
-  const allGL  = FinanceService.getLedger();
-  const origTx = allGL.find(t => t.id === invoice.glTxId);
+  let allGL  = FinanceService.getLedger();
+  let origTx = allGL.find(t => t.id === invoice.glTxId);
+
+  // COLD-CACHE GUARD (P1-3): the invoice GL — and its GL-COGS-* sibling that the
+  // COGS reversal below relies on — may live in the cloud but not in THIS
+  // device's local finance cache (fresh login / cleared cache / old invoice;
+  // gtk_erp_ledger is frequently empty). Without this, a cold cache wrongly
+  // BLOCKS the CN here and makes reverseDeliveryCOGS silently skip. Refresh once
+  // from cloud before giving up. Only fires on a miss, so warm caches (which may
+  // hold unsynced writes) are never overwritten.
+  if (!origTx) {
+    await FinanceService.refresh();
+    allGL  = FinanceService.getLedger();
+    origTx = allGL.find(t => t.id === invoice.glTxId);
+  }
 
   // Phase-7 (P2-2): hard-fail when the original GL entry can't be located.
   // Previously the code fell back to hard-coded account codes
@@ -427,8 +440,19 @@ export async function voidInvoice(params: {
   const voidId = `VOID-${invoice.id}`;
   const today  = new Date().toISOString().split('T')[0];
 
-  const allGL  = FinanceService.getLedger();
-  const origTx = allGL.find(t => t.id === invoice.glTxId);
+  let allGL  = FinanceService.getLedger();
+  let origTx = allGL.find(t => t.id === invoice.glTxId);
+
+  // COLD-CACHE GUARD (P1-3): hydrate the invoice GL (+ its GL-COGS-* sibling)
+  // from cloud when it isn't in this device's local cache, so the void posts the
+  // AR/Revenue reversal automatically instead of falling back to warnMissingGL(),
+  // and so the COGS reversal below finds its tx instead of silently skipping.
+  // Only fires on a miss — warm caches with unsynced writes are never touched.
+  if (!origTx) {
+    await FinanceService.refresh();
+    allGL  = FinanceService.getLedger();
+    origTx = allGL.find(t => t.id === invoice.glTxId);
+  }
 
   // Reversal tx = exact swap of the original GL entry. null when origTx is
   // missing (bad/missing GL) — we still void, but Finance must post a manual JV.
