@@ -44,6 +44,15 @@ const NipponQuotationManager: React.FC = () => {
     isSaving,
   } = useNipponQuotations();
 
+  // Focus mode: while the Nippon editor view is open, add `erp-focus-mode` to
+  // <body> so index.css hides the app shell header (.sap-shell) + Sales tab bar
+  // (.sd-nav) — otherwise the tabs bleed over the editor (same fix as Glassco).
+  React.useEffect(() => {
+    if (view === 'list') { document.body.classList.remove('erp-focus-mode'); return; }
+    document.body.classList.add('erp-focus-mode');
+    return () => document.body.classList.remove('erp-focus-mode');
+  }, [view]);
+
   const isLocked = formData.status === 'Approved';
 
   const filteredQuotations = useMemo(() => {
