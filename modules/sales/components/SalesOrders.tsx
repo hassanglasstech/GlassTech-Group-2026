@@ -122,16 +122,29 @@ const SalesOrders: React.FC = () => {
         }
     }, [isAutoProcessing, autoServiceQueue, selectedOrder, isServiceOrderModalOpen, approvedOrders]);
 
-    const refreshData = () => {
-        const allQuos = SalesService.getQuotations();
-        const quos = allQuos.filter(q => 
-            q.company === company && 
-            (q.status || '').toUpperCase() === 'APPROVED'
-        );
-        
-        setApprovedOrders(quos);
+    const refreshData = async () => {
+        // Populate/merge the shared cache from cloud (P1-9 merge), THEN read the
+        // MERGED cache below. That set = cloud rows PLUS any just-approved
+        // local-only order whose cloud push is still in flight — the exact
+        // "approved a Glassco quote but the Sales Orders tab is empty" symptom
+        // (AsyncSalesService.getQuotations() returns cloud-only, so it can miss the
+        // fresh order). The sync cache alone was empty on a fresh route and held
+        // only Nippon's rows after visiting Nippon; the async read repopulates it.
+        try {
+            await Promise.all([
+                AsyncSalesService.getQuotations(),
+                AsyncSalesService.getClients(),
+            ]);
+            setAllPieces(await ProductionService.getProductionPiecesAsync());
+        } catch {
+            setAllPieces(ProductionService.getProductionPieces());   // offline — local pieces
+        }
+        setApprovedOrders(SalesService.getQuotations().filter(q => {
+            const qCompany = q.company || (q as any).data?.company;
+            const qStatus = q.status || (q as any).data?.status;
+            return qCompany === company && (qStatus || '').toUpperCase() === 'APPROVED';
+        }));
         setClients(SalesService.getClients().filter(c => c.company === company));
-        setAllPieces(ProductionService.getProductionPieces());
         setChallans(ProductionService.getTemperingDispatches().filter(d => d.company === company || d.company === 'Factory'));
         setVendors(SalesService.getVendors());
     };
