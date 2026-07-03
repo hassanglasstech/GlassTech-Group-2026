@@ -46,6 +46,18 @@ export default {
         warning: { DEFAULT: '#d97706', subtle: '#fffbeb', border: '#fde68a' },
         info:    { DEFAULT: '#2563eb', subtle: '#eff6ff', border: '#bfdbfe' },
       },
+      // Semantic z-index scale (z-dropdown/z-popover/z-overlay/z-modal/z-top) —
+      // used app-wide but NEVER defined, so under the CDN every one produced no
+      // z-index. That's why full-screen overlays like the Glassco quotation
+      // editor (`fixed inset-0 ... z-top`) failed to cover the Sales module tabs,
+      // and why modals/dropdowns could stack wrong. Ordered low→high.
+      zIndex: {
+        dropdown: '1000',
+        popover:  '1100',
+        overlay:  '1200',
+        modal:    '1300',
+        top:      '9999',
+      },
     },
   },
   plugins: [],
