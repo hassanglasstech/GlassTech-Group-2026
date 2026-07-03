@@ -34,7 +34,7 @@ Status legend: ⬜ open · ✅ fixed · 🟡 partial · 🔶 confirmed—needs d
 
 ### Remaining P1s (deferred — reason noted)
 - ⬜ **P1-1 / P1-14** — DB-gated (need 090 credit_note_atomic re-validation + 042 post_invoice_atomic flat-column patch); RPC migration work.
-- ⬜ **P1-15** — needs a business decision (Nippon un-costed stock → COGS at selling price; like Service-Only, a rule not a bug).
+- ✅ **P1-15** `useNipponQuotations.ts` — bootstrap stock row now seeds `movingAveragePrice` from the product-master **costPrice** (not the SELLING price `item.pricePerUnit`). Was: COGS==revenue (0 gross profit) + inventory 11514 negative by full sale value. Rule (founder-decided 2026-07-04): product cost if set, else 0 + a post-approval warning listing the uncosted items to stock-take/cost. Never blocks (Nippon oversells by design). Gate green.
 - ⬜ **P1-17** — MIGO freight double-post; needs a deep orchestrateGRNGL trace before touching (financial).
 - ⬜ **P1-20** — GTKStoreReceipt imbalanced journal; GTK is scaffolding-only (not live) — lower priority.
 - ⬜ **P1-10** — SO serial collision (GT-QUT/GT-SO); needs allocate_serial namespace analysis.

@@ -358,6 +358,7 @@ export const useNipponQuotations = () => {
       if (approve) {
         const currentStore = InventoryService.getStore();
         const updatedStore = [...currentStore];
+        const uncostedItems: string[] = [];   // P1-15: names sold with no product-master cost
 
         finalQuo.items.forEach(item => {
           if (item.isSection) return;
@@ -387,6 +388,14 @@ export const useNipponQuotations = () => {
           } else {
             // No stock row yet → create one at negative qty (keyed by the real
             // product id when matched) so it shows in "Needs stock-taking".
+            // P1-15: seed MAP from the product-master COST (matched.costPrice) —
+            // NOT item.pricePerUnit (the SELLING price). Seeding the selling price
+            // made delivery COGS == revenue (0 gross profit) and drove inventory
+            // 11514 negative by the full sale value. No cost on the product yet →
+            // seed 0 and flag it (warning after the loop) so it's stock-taken +
+            // costed; COGS books 0 on these lines until the real GRN cost lands.
+            const seedCost = Number(matched?.costPrice) || 0;
+            if (seedCost <= 0) uncostedItems.push(matched?.description || item.description || refId);
             updatedStore.push({
               id: refId,
               company,
@@ -396,12 +405,20 @@ export const useNipponQuotations = () => {
               qiQty: 0, blockedQty: 0, reservedQty: 0, consignmentQty: 0,
               unit: (matched?.unit || item.glassSize || 'PCS') as StoreItem['unit'],
               minLevel: 10, reorderPoint: 5,
-              movingAveragePrice: Number(item.pricePerUnit) || 0,
+              movingAveragePrice: seedCost,
               totalValue: 0, storageBin: 'New',
               lastMovementDate: new Date().toISOString(),
             } as StoreItem);
           }
         });
+        if (uncostedItems.length > 0) {
+          // P1-15: warn (never BLOCK — Nippon deliberately oversells) so the user
+          // stock-takes + sets a cost. COGS on these lines books 0 until then.
+          toast.warning(
+            `${uncostedItems.length} item(s) sold with no cost in the product master — COGS booked at 0. Stock-take + set a cost so profit is correct: ${uncostedItems.slice(0, 3).join(', ')}${uncostedItems.length > 3 ? '…' : ''}`,
+            { duration: 8000 },
+          );
+        }
         InventoryService.saveStore(updatedStore);
       }
 
