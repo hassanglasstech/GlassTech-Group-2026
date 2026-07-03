@@ -5,6 +5,8 @@ _Last updated: 2026-07-04 · sirf AAP ke karne wale kaam. (Claude ke dev-fixes n
 
 ## 🔴 Ab karne wale (priority)
 
+- [ ] **⚡ Migration `093_PERF_rls_subquery_wrap.sql` apply karo** (Supabase SQL editor) — **URGENT, sabse pehle**. 086 strict RLS ke baad quotations/accounts queries **timeout** ho rahi hain (console: `canceling statement due to statement timeout`) → quotations cache load hi nahi hoti → **Sales Order tab + kai list-pages khali**. 093 RLS ko per-row ki jagah **per-query** evaluate karta hai (`(SELECT auth_user_is_super())` wrap) — security bilkul same, sirf 10-100x tez. Idempotent. **Iske baghair SO tab theek NAHI hoga.**
+
 - [ ] **Functional fixes test karo** (aaj ke 13 P1 fixes). Checklist Claude ne chat mein di hai — Priority 1 pehle:
   - [ ] Quotation save → refresh → gayab na ho (Glassco + Nippon)
   - [ ] Company switch (Glassco ↔ Nippon) → dono ka data salamat
