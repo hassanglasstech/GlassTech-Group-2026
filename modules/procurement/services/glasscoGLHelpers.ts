@@ -141,9 +141,14 @@ export function getPieceCostData(piece: any, company: Company): {
   const item = (order.items || [])[piece.itemIndex];
   if (!item) return { sqft: 0, materialId: null, map: 0, totalCost: 0 };
 
-  // QuotationItem field is `totalSqFt` — the `sqft` fallback referenced
-  // a non-existent field and would have always been undefined.
-  const sqft = item.totalSqFt || 0;
+  // P1-COGS-QTY: `totalSqFt` is the WHOLE-LINE total (perUnit sqft × qty, set in
+  // useQuotations). Every caller of this helper iterates ONE glass piece at a
+  // time (a qty=N line spawns N pieces), so charging each piece the whole-line
+  // sqft overstated delivery COGS AND inventory relief by a factor of qty.
+  // Divide back to per-piece sqft (guard qty=0/undefined → 1, so qty=1 lines
+  // that were already correct are byte-unchanged).
+  const qty  = Number(item.qty) || 1;
+  const sqft = (Number(item.totalSqFt) || 0) / qty;
 
   // Find matching store item by glass type + thickness
   const store = InventoryService.getStore().filter((s: any) => s.company === company && s.category === 'Raw');

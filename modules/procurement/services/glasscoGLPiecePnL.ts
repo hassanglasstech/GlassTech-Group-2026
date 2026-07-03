@@ -45,9 +45,13 @@ export async function getPiecePnL(pieceId: string, company: Company): Promise<Pi
     .find((j: any) => j.orderNo === piece.orderId || j.id === piece.orderId);
   const item  = order ? (order.items || [])[piece.itemIndex] : null;
 
-  const sqft         = item?.totalSqFt || piece.sqft || 0;
+  // Per-PIECE figures: item.totalSqFt and item.amount are LINE totals (× qty),
+  // but this P&L is for a single piece. Divide by qty so it stays consistent
+  // with the now per-piece COGS from getPieceCostData (P1-COGS-QTY fix).
+  const qty          = Number(item?.qty) || 1;
+  const sqft         = Number(item?.totalSqFt) ? Number(item!.totalSqFt) / qty : (piece.sqft || 0);
   const pricePerUnit = item?.pricePerUnit || 0;
-  const totalRevenue = item ? (item.amount || sqft * pricePerUnit) : 0;
+  const totalRevenue = item ? (Number(item.amount) ? Number(item.amount) / qty : sqft * pricePerUnit) : 0;
   const month        = ((piece as any).lastUpdated || new Date().toISOString()).slice(0, 7);
 
   // ── 1. Raw glass COGS (MAP × sqft) — Direct Material ──────────
