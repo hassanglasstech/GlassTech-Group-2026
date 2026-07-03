@@ -7,6 +7,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Focus mode ─────────────────────────────────────────────
+   A full-screen editor (e.g. GlasscoEditor) adds `erp-focus-mode` to <body>
+   while open. Hide the app shell header (.sap-shell, z-80) and the module tab
+   bar (.sd-nav, z-30) so they can NEVER bleed over the editor — the editor
+   renders its own top bar + Close. This is display:none (not just z-index), so
+   it holds even if the editor's `fixed`/`z-top` is trapped in a stacking
+   context. Fixes "new estimate kholo to Sales tabs bhi dikhte hain". */
+body.erp-focus-mode .sap-shell,
+body.erp-focus-mode .sd-nav {
+  display: none !important;
+}
+
 /* ══════════════════════════════════════════════════════════
    GLASSTECH ERP — Global Styles
    Mobile-first responsive design
