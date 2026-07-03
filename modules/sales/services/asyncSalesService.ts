@@ -66,6 +66,14 @@ const KEYS = {
 // concurrent writers (multi-tab / multi-device) to overwrite each other.
 // Now: callers pass ONLY the rows being changed; existing localStorage
 // rows are preserved by id-keyed merge.
+//
+// P1-9: ALSO used on the cloud-READ path. Every fetch here filters by
+// activeCompany(), so the cloud response holds ONLY the active company's rows.
+// The old `safeSave(KEY, mapped)` overwrote the shared multi-company cache with
+// just those, wiping OTHER companies' cached rows AND any local rows not yet
+// pushed to the cloud (unsynced offline writes). Merging by id instead means a
+// read overlays the fresh cloud rows (cloud wins for the ids it returned) while
+// preserving every local-only row — no read ever destroys unsynced data.
 const _mergeIntoLocal = <T extends { id: string }>(key: string, incoming: T[]): T[] => {
   let existing: T[] = [];
   try { existing = safeParse(key) as T[]; } catch { existing = []; }
@@ -131,7 +139,7 @@ export const AsyncSalesService = {
             createdAt:     r.created_at     ?? str(base.createdAt),
           };
         });
-        safeSave(KEYS.CLIENTS, mapped);
+        _mergeIntoLocal(KEYS.CLIENTS, mapped);   // P1-9: merge, don't overwrite shared cache
         return mapped as Client[];
       }
       // Supabase empty — fall back to localStorage
@@ -371,7 +379,7 @@ export const AsyncSalesService = {
             costBearer:         r.cost_bearer           ?? base.costBearer            ?? undefined,
           };
         });
-        safeSave(KEYS.QUOTATIONS, mapped);
+        _mergeIntoLocal(KEYS.QUOTATIONS, mapped);   // P1-9: merge, don't overwrite shared cache
         return mapped as unknown as Quotation[];
       }
       return safeParse(KEYS.QUOTATIONS);
@@ -460,7 +468,7 @@ export const AsyncSalesService = {
         return safeParse(KEYS.PROJECTS);
       }
       if (data && data.length > 0) {
-        safeSave(KEYS.PROJECTS, data);
+        _mergeIntoLocal(KEYS.PROJECTS, data as unknown as Array<{ id: string }>);   // P1-9: merge, don't overwrite
         return data as Project[];
       }
       return safeParse(KEYS.PROJECTS);
@@ -476,7 +484,7 @@ export const AsyncSalesService = {
       const { data, error } = await supabase.from('vendors').select('*').eq('company', company);
       if (error || !data || data.length === 0) return safeParse(KEYS.VENDORS);
       const mapped = data.map((r) => ({ ...r }));
-      safeSave(KEYS.VENDORS, mapped);
+      _mergeIntoLocal(KEYS.VENDORS, mapped);   // P1-9: merge, don't overwrite shared cache
       return mapped as Vendor[];
     } catch {
       return safeParse(KEYS.VENDORS);
@@ -530,7 +538,7 @@ export const AsyncSalesService = {
           revertedStatus: r.reverted_status ?? base.revertedStatus,
         };
       });
-      safeSave('gtk_erp_invoices', mapped);
+      _mergeIntoLocal('gtk_erp_invoices', mapped as unknown as Array<{ id: string }>);   // P1-9: merge, don't overwrite shared cache
       return mapped as unknown as Invoice[];
     } catch {
       return safeParse('gtk_erp_invoices');
@@ -628,7 +636,7 @@ export const AsyncSalesService = {
         method: r.method ?? '', reference: r.reference ?? '',
         glTxId: (r as SbPaymentReceiptRow & { gl_tx_id?: string }).gl_tx_id ?? '',
       }));
-      safeSave('gtk_erp_payment_receipts', mapped);
+      _mergeIntoLocal('gtk_erp_payment_receipts', mapped as unknown as Array<{ id: string }>);   // P1-9: merge, don't overwrite shared cache
       return mapped as PaymentReceipt[];
     } catch {
       return safeParse('gtk_erp_payment_receipts');
@@ -715,7 +723,7 @@ export const AsyncSalesService = {
           createdAt:  r.created_at  ?? base.createdAt  ?? '',
         };
       });
-      safeSave(KEYS.CREDIT_NOTES, mapped);
+      _mergeIntoLocal(KEYS.CREDIT_NOTES, mapped);   // P1-9/P2-3: merge, don't overwrite shared cache
       return mapped;
     } catch {
       return safeParse(KEYS.CREDIT_NOTES);
@@ -789,7 +797,7 @@ export const AsyncSalesService = {
           createdAt:   r.created_at     ?? base.createdAt      ?? '',
         };
       });
-      safeSave(KEYS.CUSTOMER_COMPLAINTS, mapped);
+      _mergeIntoLocal(KEYS.CUSTOMER_COMPLAINTS, mapped);   // P1-9: merge, don't overwrite shared cache
       return mapped;
     } catch {
       return safeParse(KEYS.CUSTOMER_COMPLAINTS);
@@ -852,7 +860,7 @@ export const AsyncSalesService = {
         createdBy:     r.created_by ?? '',
         createdAt:     r.created_at ?? '',
       }));
-      safeSave(KEYS.PRICE_LISTS, mapped);
+      _mergeIntoLocal(KEYS.PRICE_LISTS, mapped);   // P1-9: merge, don't overwrite shared cache
       return mapped;
     } catch { return safeParse(KEYS.PRICE_LISTS); }
   },
@@ -896,7 +904,7 @@ export const AsyncSalesService = {
         uom:          r.uom ?? 'sqft',
         notes:        r.notes ?? '',
       }));
-      safeSave(KEYS.PRICE_LIST_ITEMS, mapped);
+      _mergeIntoLocal(KEYS.PRICE_LIST_ITEMS, mapped);   // P1-9: merge, don't overwrite shared cache
       return mapped;
     } catch { return safeParse(KEYS.PRICE_LIST_ITEMS); }
   },
@@ -951,7 +959,7 @@ export const AsyncSalesService = {
         createdBy:    r.created_by ?? '',
         createdAt:    r.created_at ?? '',
       }));
-      safeSave(KEYS.WORK_ORDERS, mapped);
+      _mergeIntoLocal(KEYS.WORK_ORDERS, mapped);   // P1-9: merge, don't overwrite shared cache
       return mapped;
     } catch { return safeParse(KEYS.WORK_ORDERS); }
   },
@@ -1017,7 +1025,7 @@ export const AsyncSalesService = {
         createdAt:     r.created_at ?? '',
         stageChangedAt:r.stage_changed_at ?? '',
       }));
-      safeSave(KEYS.LEADS, mapped);
+      _mergeIntoLocal(KEYS.LEADS, mapped);   // P1-9: merge, don't overwrite shared cache
       return mapped;
     } catch { return safeParse(KEYS.LEADS); }
   },
