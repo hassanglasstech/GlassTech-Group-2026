@@ -14,8 +14,6 @@ _Last updated: 2026-07-04 · sirf AAP ke karne wale kaam. (Claude ke dev-fixes n
   - [ ] Company switch → finance report naye company ke numbers
   - **→ Jo fail ho uska screenshot / message Claude ko bhejo.**
 
-- [ ] **Migration `083_cutter_workflow.sql` apply karo** (Supabase SQL editor). Standalone Glassco se aayi — multitenant mein missing thi. Iske baghair cutter ka "Pending-Cut → Cut" cloud pe reject hota hai (abhi local pe chal jata, cloud pe nahi). Idempotent (IF NOT EXISTS) — do baar chale to bhi safe. File: `supabase/migrations/083_cutter_workflow.sql`.
-
 ---
 
 ## 🟡 Decisions — Claude ko batao (yes/no)
@@ -29,6 +27,7 @@ _Last updated: 2026-07-04 · sirf AAP ke karne wale kaam. (Claude ke dev-fixes n
 
 - [x] **Tailwind CDN → build-time Tailwind** migrate — slow load + buttons-as-text theek. (2026-07-04, aap ne "kafi behter" confirm kiya)
 - [x] **Production nav** wapas 2 alag: "Production Board" + "Production" (hub); canonical design tokens standalone se sync. (2026-07-04)
+- [x] **Migration `083_cutter_workflow.sql`** live DB pe apply — cloud-side cutter flow on. (2026-07-04)
 - [x] **Migration `092`** live DB pe apply — anon financial-leak band. (2026-07-04)
 - [x] Migrations `088 / 089 / 090` apply + soft-delete flag flip (pehle).
 - [x] Console errors + issues Claude ko bhej diye.
@@ -64,6 +63,13 @@ genuine cheezein port huin:
 Baaki (SyncService, useGlasscoQuotations, hrService, inventoryService, UserAccessManager,
 App.tsx, waghera) **jaan-boojh kar chhori** — multitenant unmein pehle se behtar/aage hai
 (porting se P1-8/P1-9/P1-11/Service-Only jaise fixes ULT jate).
+
+**Nippon branch check (2026-07-04):** `origin/nippon` **poora ka poora multitenant ke
+andar pehle se maujood hai** — multitenant nippon branch ke AAKHRI commit (`e367f96`,
+aap ka 30-June discount-rounding fix) se hi fork hua tha, phir uske UPAR 51 commits
+(Glassco + audit) lagaye. Yani nippon ki koi cheez missing NAHI — kuch port karne ki
+zaroorat nahi. (Glassco alag tha kyunki woh ALAG repo hai jo baad mein aage barhta raha;
+nippon multitenant ki buniyaad hi thi.)
 
 ---
 
