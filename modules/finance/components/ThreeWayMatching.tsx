@@ -107,7 +107,12 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
       const grirAcc  = accounts.find(a => a.code === '21151');
       if (invAccs.length > 0 && grirAcc) {
         const invAcc = invAccs[0]; // first raw inventory account
-        const grnAmount = grnForm.grnQty || selectedPO.totalAmount;
+        // Money amount = the PO's monetary value, NEVER grnForm.grnQty (a
+        // QUANTITY — sheets/sqft/units). The old `grnQty || totalAmount` posted
+        // the received quantity as PKR (e.g. 500 sheets -> a PKR 500 journal);
+        // both legs used the same value so the entry balanced and slipped past
+        // the ledger-balance guard. This branch already requires totalAmount > 0.
+        const grnAmount = selectedPO.totalAmount;
         const grnGLId = `WE-${grnForm.grnRef}-TW`;
         const grnGL: LedgerTransaction = {
           id: grnGLId, company, docType: 'KR',
