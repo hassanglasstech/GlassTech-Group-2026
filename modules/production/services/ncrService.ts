@@ -209,7 +209,7 @@ export const NCRService = {
     NCRService.getVendorClaims().filter(c => c.company === company),
 
   createVendorClaim: (data: Omit<NCRVendorClaim, 'id'>): NCRVendorClaim => {
-    // GAP-05: One claim per NCR event. The previous behaviour allowed multiple
+    // One claim per NCR event. The previous behaviour allowed multiple
     // claims to be raised for the same ncrId, which produced double GL recovery
     // entries when both got settled. We enforce uniqueness at the app boundary
     // (DB-level UNIQUE constraint to be added by migration). 'Rejected' claims

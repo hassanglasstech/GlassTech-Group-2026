@@ -1,5 +1,5 @@
 /**
- * money.ts — NaN-safe money coercion + validation (audit P1-11)
+ * money.ts — NaN-safe money coercion + validation
  *
  * Raw `Number(input)` / `parseFloat(input)` at form + mapper boundaries yields
  * NaN on blank/garbage input. NaN slips past the usual `x <= 0` / `x > balance`

@@ -136,7 +136,7 @@ const WIPAging: React.FC = () => {
     return [...pieces].map(p => ({ piece: p, days: daysSince(p.lastUpdated), order: allOrders.find(o => o.orderNo === p.orderId) }));
   }, [stuckPieces, pieces, filter, allOrders]);
 
-  // P1-4: paginate the aging table (the 'all' filter renders every piece).
+  // paginate the aging table (the 'all' filter renders every piece).
   // Pagination self-hides at ≤1 page, so small shops see no change.
   const WIP_PAGE_SIZE = 50;
   const [wipPage, setWipPage] = useState(1);

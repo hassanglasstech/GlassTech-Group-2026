@@ -25,7 +25,7 @@ const AgingReport: React.FC<{ company: Company }> = ({ company }) => {
     });
   }, [company]);
 
-  // Audit #6 (Layer 1): server-side AR aging bucket roll-up (RPC `ar_aging`).
+  // server-side AR aging bucket roll-up (RPC `ar_aging`).
   // getARAgingAsync aggregates the invoices table in Postgres and falls back
   // to a client-side reduce over invoice balances on any error / empty result
   // (offline or before migration 088). Shown as a reconciliation strip for

@@ -114,7 +114,7 @@ const trackUsage = (agentId: string, model: string, input: number, output: numbe
 };
 
 // ── Retry with exponential backoff ───────────────────────────────────────
-// P2-28: each attempt is wrapped in an AbortController so a hung request can't
+// each attempt is wrapped in an AbortController so a hung request can't
 // block the UI indefinitely. `timeoutMs` (default 60s) aborts the in-flight
 // fetch; an AbortError is treated like any other network error so the normal
 // retry/back-off logic applies. Pass 0 to disable the timeout (used by
@@ -164,7 +164,7 @@ const callClaudeDirect = async (
   agentId: string,
   model: string,
 ): Promise<ClaudeResponse> => {
-  // P1-19: NEVER call Anthropic directly from a production browser bundle — it
+  // NEVER call Anthropic directly from a production browser bundle — it
   // would compile VITE_ANTHROPIC_API_KEY (a secret sk-ant-… key) into the public
   // JS, readable in DevTools. This direct path is a DEV-ONLY escape hatch for
   // local testing when the claude-proxy Edge Function isn't running.
@@ -313,7 +313,7 @@ export const streamClaude = async (
   };
   if (opts.system) body.system = opts.system;
 
-  // P2-28: streaming connections are intentionally long-lived — disable the
+  // streaming connections are intentionally long-lived — disable the
   // per-request abort timeout (timeoutMs = 0) so a slow token stream isn't
   // killed mid-response.
   const res = await fetchWithRetry(proxyUrl, {
@@ -500,7 +500,7 @@ const EXPENSE_TOOL: ClaudeToolDef = {
 };
 
 const executeRecordExpense = async (params: Record<string, any>): Promise<any> => {
-  // P2-24: route the expense through FinanceService.createParkedPV() instead of
+  // route the expense through FinanceService.createParkedPV() instead of
   // a raw `expenses` insert. createParkedPV builds a balanced double-entry PV
   // (Dr expense / Cr Cash|Petty Cash), resolves the subcategory→GL mapping,
   // ensures the accounts exist, runs the period-open check, and asserts
@@ -559,7 +559,7 @@ export const queryWithTools = async (
   systemPrompt: string,
   agentId = 'query-agent'
 ): Promise<{ answer: string; toolsUsed: string[] }> => {
-  // P2-26: sanitize the raw user message before it reaches Claude (prompt-
+  // sanitize the raw user message before it reaches Claude (prompt-
   // injection defence) — mirrors QuotationAgent / the other ERP agents. The
   // model sees the sanitized text; the original is only used for display.
   const safeMessage = sanitizeUserInput(message);

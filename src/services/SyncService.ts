@@ -1596,7 +1596,7 @@ const pullTable = async (table: string, localKey: string): Promise<boolean> => {
   try {
     const rawData = await withRetry(
       async () => {
-        // Audit #5: skip tombstoned rows so a locally-deleted financial row is
+        // skip tombstoned rows so a locally-deleted financial row is
         // NOT resurrected on pull. Inert while SOFT_DELETE_ENABLED is false.
         let query = supabase.from(table).select('*');
         if (SOFT_DELETE_ENABLED && SOFT_DELETE_TABLES.has(table)) {
@@ -1812,9 +1812,9 @@ export const SyncService = {
   // App.tsx calls this first (await), then fires fetchFromCloud in background.
   fetchCritical: async (): Promise<void> => {
     if (!isOnline) return;
-    // P1-8: flush unsynced offline writes to the cloud BEFORE the pull. pullTable
+    // flush unsynced offline writes to the cloud BEFORE the pull. pullTable
     // is authoritative-overwrite (correct — it lets soft-delete tombstones drop
-    // locally-deleted rows, Audit #5), so a boot pull that runs first permanently
+    // locally-deleted rows), so a boot pull that runs first permanently
     // WIPES rows written offline in a previous session. On reconnect the online
     // handler already pushes-then-syncs; this closes the same gap for a cold boot
     // that starts already-online. No-op (instant) when nothing is pending.
@@ -1838,7 +1838,7 @@ export const SyncService = {
       return { success: false };
     }
 
-    // P1-8: push unsynced local writes before the authoritative overwrite-pull
+    // push unsynced local writes before the authoritative overwrite-pull
     // (see fetchCritical). Guards the device-switch path that calls this directly.
     try { await SyncService.pushPending(); } catch { /* best-effort */ }
 

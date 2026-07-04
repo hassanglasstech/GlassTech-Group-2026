@@ -45,7 +45,7 @@ const QuotationManager: React.FC = () => {
   const isLocked = formData.status === 'Approved';
   const subTotal = formData.items?.reduce((s, i) => s + i.amount, 0) || 0;
 
-  // SAL-3: Credit limit guard — wraps handleSave with an AR check.
+  // Credit limit guard — wraps handleSave with an AR check.
   // Queries the live outstanding AR balance for the selected client.
   // Blocks save if: outstanding_ar + new_order_net_value > client.credit_limit.
   // Fails open (allows save) when offline or credit limit is 0/unset.

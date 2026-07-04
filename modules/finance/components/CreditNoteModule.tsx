@@ -63,7 +63,7 @@ const CreditNoteModule: React.FC<Props> = ({ company }) => {
     if (!finalReason.trim()) { toast.error('Enter reason.'); return; }
 
     const ok = await confirmModal(
-      `Raise Credit Note request of PKR ${amt.toLocaleString()} against ${selInvoice.id} (${selInvoice.clientName})?\n\nReason: ${finalReason}\n\nGAP-07 — Maker-Checker: this CN will be PENDING APPROVAL. A different finance user must approve it before any GL entry or balance reduction.`
+      `Raise Credit Note request of PKR ${amt.toLocaleString()} against ${selInvoice.id} (${selInvoice.clientName})?\n\nReason: ${finalReason}\n\nMaker-Checker: this CN will be PENDING APPROVAL. A different finance user must approve it before any GL entry or balance reduction.`
     );
     if (!ok) return;
 
@@ -81,7 +81,7 @@ const CreditNoteModule: React.FC<Props> = ({ company }) => {
     }
   };
 
-  // GAP-07: Checker approves a Pending Approval CN (must differ from maker).
+  // Checker approves a Pending Approval CN (must differ from maker).
   const handleApprove = async (cn: CreditNote) => {
     if (cn.createdBy === actor) {
       toast.error('Maker cannot approve their own credit note. Ask another finance user.');

@@ -52,7 +52,7 @@ const LoanManagement: React.FC<{ company: Company }> = ({ company }) => {
     );
     setLoans(filtered);
 
-    // Phase-7 (P5-1): reqType mismatch fix. Audit RC-20: PR module saves
+    // reqType mismatch fix. PR module saves
     // reqType from the user-facing subCategory ("Loan Request" / "Salary
     // Advance"), but LoanAdvance.type uses canonical "Loan" / "Advance".
     // Previously approved loan PRs never appeared here → Hassan couldn't

@@ -12,7 +12,7 @@ export interface AuditFields {
 // ── Lightweight Validation ───────────────────────────────────────────
 export type ValidationRule = {
   field: string;
-  check: (val: any) => boolean;
+  check: (val: unknown) => boolean;
   message: string;
 };
 
@@ -27,16 +27,16 @@ export const validate = (data: Record<string, any>, rules: ValidationRule[]): { 
 
 // ── Common validation checks ─────────────────────────────────────────
 export const V = {
-  required:    (val: any) => val !== undefined && val !== null && val !== '',
-  string:      (val: any) => typeof val === 'string' && val.trim().length > 0,
-  number:      (val: any) => typeof val === 'number' && !isNaN(val),
-  positive:    (val: any) => typeof val === 'number' && val > 0,
-  nonNegative: (val: any) => typeof val === 'number' && val >= 0,
-  date:        (val: any) => typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val),
-  email:       (val: any) => typeof val === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val),
-  minLen:      (n: number) => (val: any) => typeof val === 'string' && val.length >= n,
-  maxLen:      (n: number) => (val: any) => typeof val === 'string' && val.length <= n,
-  oneOf:       (opts: any[]) => (val: any) => opts.includes(val),
-  array:       (val: any) => Array.isArray(val),
-  notEmpty:    (val: any) => Array.isArray(val) && val.length > 0,
+  required:    (val: unknown) => val !== undefined && val !== null && val !== '',
+  string:      (val: unknown) => typeof val === 'string' && val.trim().length > 0,
+  number:      (val: unknown) => typeof val === 'number' && !isNaN(val),
+  positive:    (val: unknown) => typeof val === 'number' && val > 0,
+  nonNegative: (val: unknown) => typeof val === 'number' && val >= 0,
+  date:        (val: unknown) => typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val),
+  email:       (val: unknown) => typeof val === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val),
+  minLen:      (n: number) => (val: unknown) => typeof val === 'string' && val.length >= n,
+  maxLen:      (n: number) => (val: unknown) => typeof val === 'string' && val.length <= n,
+  oneOf:       (opts: unknown[]) => (val: unknown) => opts.includes(val),
+  array:       (val: unknown) => Array.isArray(val),
+  notEmpty:    (val: unknown) => Array.isArray(val) && val.length > 0,
 };

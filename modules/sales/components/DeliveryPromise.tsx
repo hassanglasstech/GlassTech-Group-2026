@@ -11,7 +11,7 @@ import { Truck, Clock, Zap, AlertTriangle, CheckCircle2, ChevronRight } from 'lu
 
 interface Props {
   company: string;
-  items?: any[];  // quotation items to detect services
+  items?: Array<{ selectedServices?: string[] }>;  // quotation items to detect services
   orderValuePKR?: number;
 }
 

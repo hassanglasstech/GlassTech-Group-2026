@@ -47,7 +47,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
         currentSqFt: 0,
         sheetSizeLabel: ''
     });
-    // P1-20: hold the manual override value in React state. Reading it back via
+    // hold the manual override value in React state. Reading it back via
     // document.querySelector('[autofocus]') returned null in React 19 (autoFocus
     // is not reflected as a DOM attribute), so "Confirm Override" always saved 0.
     const [manualSqFtValue, setManualSqFtValue] = useState<string>('');
@@ -66,7 +66,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
 
     const handleSaveClick = async (action: 'draft' | 'save' | 'approve') => {
       if (isSaving) return;
-      // P2-09: lightweight client-side guard for save/approve (drafts may be
+      // lightweight client-side guard for save/approve (drafts may be
       // incomplete). The hook also validates server-side — this just gives fast
       // feedback and avoids a round-trip on obviously invalid input.
       if (action === 'save' || action === 'approve') {
@@ -93,7 +93,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
         if (msg.includes('version_conflict')) {
           setConflictModal({ action });
         } else {
-          // P2-10/P1-05: surface the error instead of re-throwing. This runs
+          // surface the error instead of re-throwing. This runs
           // from both button clicks and keyboard shortcuts (Ctrl+S/D/Enter);
           // re-throwing in the keyboard path produced a silent unhandled
           // promise rejection with no feedback to the user.
@@ -247,7 +247,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                     const label = sheet === '144x84' ? '7x12 FT (84")' : '8x12 FT (96")';
                     // Trigger Modal
                     setTimeout(() => {
-                        setManualSqFtValue(String(item.totalSqFt || 0));  // P1-20: prefill override
+                        setManualSqFtValue(String(item.totalSqFt || 0));  // prefill override
                         setManualSqFtModal({
                             isOpen: true,
                             itemIndex: idx,
@@ -273,7 +273,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
         setManualSqFtModal({ isOpen: false, itemIndex: -1, currentSqFt: 0, sheetSizeLabel: '' });
     };
 
-    // P2-07: replaced inline positioning/sizing with Tailwind utilities
+    // replaced inline positioning/sizing with Tailwind utilities
     return (
         <div className="bg-white w-full flex flex-col no-print fixed inset-0 h-screen z-top">
             {/* ── Fixed Action Bar — always visible ── */}
@@ -435,7 +435,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                     <div className="space-y-1 col-span-1">
                         <label className="text-xs font-bold uppercase text-slate-400 tracking-widest ml-1 flex items-center gap-1.5">
                           Order Date
-                          {/* P2-12: surface the previously-unused isBackdated memo */}
+                          {/* surface the previously-unused isBackdated memo */}
                           {isBackdated && <span className="text-[8px] bg-amber-500 text-white px-1 py-0.5 rounded font-black tracking-wider">BACKDATED</span>}
                         </label>
                         <input type="date" className="sap-input w-full font-bold h-10 border-slate-300" value={formData.date} onChange={e => handleUpdateItemWithLogic(-1, 'date', e.target.value)} />
@@ -460,7 +460,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                 </div>
 
                 <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                    {/* P2-11: overflow-auto already covers vertical scroll; the table
+                    {/* overflow-auto already covers vertical scroll; the table
                         min-width makes columns hold their size and scroll horizontally
                         on narrow screens instead of squishing. */}
                     <div className="flex-1 overflow-auto min-h-0" ref={tableRef}>
@@ -505,7 +505,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                                               onContextMenu={(e) => {
                                                 if (!item.isSection) {
                                                   e.preventDefault();
-                                                  // P2-08: clamp to viewport so the 192px-wide / ~200px-tall
+                                                  // clamp to viewport so the 192px-wide / ~200px-tall
                                                   // menu never overflows the window edge.
                                                   const MENU_W = 192;
                                                   const MENU_H = 200;
@@ -535,7 +535,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                                                 </td>
                                                 <td className="align-middle py-1 px-2">
                                                     {!item.isSection && (
-                                                        // P2-07: width:90px -> Tailwind w-[90px]
+                                                        // width:90px -> Tailwind w-[90px]
                                                         <div className="w-[90px]">
                                                             <div className="grid grid-cols-3 gap-px">
                                                             {serviceNicks.map(nick => {
@@ -634,7 +634,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
             <div className="px-10 py-5 bg-slate-900 text-white flex justify-between items-center shrink-0 border-t-4 border-blue-600">
                <div className="flex flex-col md:flex-row md:space-x-10 items-center">
                    <div>
-                       {/* P1-21: show glass-only subtotal. item.amount already bakes in
+                       {/* show glass-only subtotal. item.amount already bakes in
                            notchCharges, so displaying totalAmount here AND a separate
                            "+ Notch Charges" line below double-counted notch visually and
                            disagreed with the print (which shows glass subtotal + notch line
@@ -699,7 +699,7 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                     <div className="bg-white rounded-3xl p-8 w-96 shadow-2xl border-2 border-amber-400">
                         <div className="flex items-center space-x-3 mb-4 text-amber-600">
                             <AlertTriangle size={32}/>
-                            {/* P3-08: id referenced by aria-labelledby on the dialog */}
+                            {/* id referenced by aria-labelledby on the dialog */}
                             <h3 id="manual-sqft-title" className="text-lg font-bold uppercase">Wastage Alert</h3>
                         </div>
                         <p className="text-xs font-bold text-slate-600 mb-4 leading-relaxed">

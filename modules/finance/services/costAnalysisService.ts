@@ -55,7 +55,7 @@ export interface DeliveryKPI {
   monthlyTrend: { month: string; onTimePct: number; total: number }[];
 }
 
-// ── MFG-2: Production cost config ─────────────────────────────────
+// ── Production cost config ─────────────────────────────────
 // Replaces the hardcoded wages (PKR 150,000) and wastage default (12%)
 // that were baked into calculateTrueCostPerSqft.
 //
@@ -123,7 +123,7 @@ export function calculateTrueCostPerSqft(company: string): TrueCostPerSqft[] {
   const sessions = InventoryService.getCuttingSessions().filter(s => s.company === company);
   const dispatches = ProductionService.getTemperingDispatches().filter(d => d.company === company);
 
-  // MFG-2: Load per-company cost config — replaces hardcoded wages/wastage.
+  // Load per-company cost config — replaces hardcoded wages/wastage.
   const costConfig = getProductionCostConfig(company);
 
   // Compute averages
@@ -132,13 +132,13 @@ export function calculateTrueCostPerSqft(company: string): TrueCostPerSqft[] {
   const energyPerSqft = totalGenSqft > 0 ? totalGenFuelCost / totalGenSqft : 0;
 
   const totalLabourSqft = labourLogs.reduce((s: number, l: any) => s + (l.sqftProduced || 0), 0);
-  // MFG-2: wages and working-days-per-month now from config, not hardcoded.
+  // wages and working-days-per-month now from config, not hardcoded.
   const labourDays = new Set(labourLogs.map((l: any) => l.logDate)).size;
   const labourPerSqft = totalLabourSqft > 0
     ? (costConfig.monthlyWagesBasis * (labourDays / costConfig.workingDaysPerMonth)) / totalLabourSqft
     : 0;
 
-  // MFG-2: default wastage % from config, not hardcoded 12.
+  // default wastage % from config, not hardcoded 12.
   const avgWastagePct = sessions.length > 0
     ? sessions.reduce((s, cs) => s + (cs.estimatedWastagePct || 0), 0) / sessions.length
     : costConfig.defaultWastagePct;

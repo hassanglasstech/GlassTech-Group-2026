@@ -39,8 +39,8 @@ export const analyzeCompensation = async (
   employeeId: string,
   company:    string
 ): Promise<CompensationAnalysis | null> => {
-  const employees = HRService.getEmployees().filter((e: any) => e.company === company);
-  const emp       = employees.find((e: any) => e.id === employeeId);
+  const employees = HRService.getEmployees().filter((e) => e.company === company);
+  const emp       = employees.find((e) => e.id === employeeId);
   if (!emp) return null;
 
   const salary      = emp.salary?.basic || 0;
@@ -59,8 +59,8 @@ export const analyzeCompensation = async (
   const bench = benchmarks?.[0] || null;
 
   // Loans / advances
-  const loans = HRService.getLoans().filter((l: any) => l.employeeId === employeeId && l.status === 'Active');
-  const loanAmount  = loans.reduce((s: number, l: any) => s + (l.amount || 0), 0);
+  const loans = HRService.getLoans().filter((l) => l.employeeId === employeeId && l.status === 'Active');
+  const loanAmount  = loans.reduce((s: number, l) => s + (l.amount || 0), 0);
   const loanCount   = loans.length;
 
   // Inflation adjustment (last raise assumption — using tenure as proxy)
@@ -137,8 +137,8 @@ export const analyzeCompensation = async (
 // ── Analyze all employees ─────────────────────────────────────────────
 export const analyzeAllCompensation = async (company: string): Promise<CompensationAnalysis[]> => {
   const employees = HRService.getEmployees()
-    .filter((e: any) => e.company === company && !['resigned', 'terminated'].includes(e.work?.status || ''));
-  const results = await Promise.all(employees.map((e: any) => analyzeCompensation(e.id, company)));
+    .filter((e) => e.company === company && !['resigned', 'terminated'].includes(e.work?.status || ''));
+  const results = await Promise.all(employees.map((e) => analyzeCompensation(e.id, company)));
   return results.filter(Boolean) as CompensationAnalysis[];
 };
 
@@ -154,9 +154,9 @@ export const calculateProfitShare = async (
 
   if (!kpiData || kpiData.length === 0) return null;
 
-  const employees   = HRService.getEmployees().filter((e: any) => e.company === company);
+  const employees   = HRService.getEmployees().filter((e) => e.company === company);
   const cutters     = kpiData.filter((k: any) =>
-    employees.find((e: any) => e.id === k.employee_id && (e.work?.designation || '').toLowerCase().includes('cut'))
+    employees.find((e) => e.id === k.employee_id && (e.work?.designation || '').toLowerCase().includes('cut'))
   );
 
   if (cutters.length === 0) return null;
@@ -173,7 +173,7 @@ export const calculateProfitShare = async (
   const perPerson   = Math.round(bonusPool / cutters.length / 100) * 100;
 
   const recipients = cutters.map((k: any) => {
-    const emp = employees.find((e: any) => e.id === k.employee_id);
+    const emp = employees.find((e) => e.id === k.employee_id);
     return {
       id:    k.employee_id,
       name:  emp?.personal?.name || 'Unknown',

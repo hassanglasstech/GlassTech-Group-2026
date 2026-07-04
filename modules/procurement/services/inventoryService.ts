@@ -28,7 +28,7 @@ const activeCompany = (): string => {
   return useAuthStore.getState().profile?.company ?? '';
 };
 
-// P1-19: merge cloud rows into the shared cache by id instead of OVERWRITING it.
+// merge cloud rows into the shared cache by id instead of OVERWRITING it.
 // Every *Async read below filters by activeCompany(), so the cloud response holds
 // ONLY the active company's rows. `safeSave(KEY, mapped)` then wiped every OTHER
 // company's cached rows AND any local rows not yet pushed to the cloud (unsynced
@@ -423,7 +423,7 @@ export const InventoryService = {
           minLevel: r.min_level,
           reorderPoint: r.reorder_point,
         }));
-        return _mergeCloudIntoCache(KEYS.STORE, mapped as unknown as Array<{ id: string }>) as unknown as StoreItem[];   // P1-19: merge, don't overwrite
+        return _mergeCloudIntoCache(KEYS.STORE, mapped as unknown as Array<{ id: string }>) as unknown as StoreItem[];   // merge, don't overwrite
       }
     } catch (e) {
       console.error('[InventoryService] getStoreAsync error', e);
@@ -555,7 +555,7 @@ export const InventoryService = {
           reversalOf: r.reversal_of, isReversal: r.is_reversal,
           reversalReason: r.reversal_reason,
         }));
-        _mergeCloudIntoCache(KEYS.STOCK_LEDGER, mapped as unknown as Array<{ id: string }>);   // P1-19: merge, don't overwrite
+        _mergeCloudIntoCache(KEYS.STOCK_LEDGER, mapped as unknown as Array<{ id: string }>);   // merge, don't overwrite
         bgSaveToIDB('stockLedger', mapped);
         return mapped;
       }
@@ -720,7 +720,7 @@ export const InventoryService = {
         .from('grn_sheet_entries').select('*').eq('company', company);
       if (!error && data && data.length > 0) {
         const mapped = data.map((r: any) => (r.data ?? r)) as GRNSheetEntry[];
-        _mergeCloudIntoCache(KEYS.GRN_SHEET_ENTRIES, mapped as unknown as Array<{ id: string }>);   // P1-19: merge, don't overwrite
+        _mergeCloudIntoCache(KEYS.GRN_SHEET_ENTRIES, mapped as unknown as Array<{ id: string }>);   // merge, don't overwrite
         return mapped;
       }
     } catch (e) {
@@ -876,7 +876,7 @@ export const InventoryService = {
         .from('cutting_sessions').select('*').eq('company', company);
       if (!error && data && data.length > 0) {
         const mapped = data.map((r: any) => (r.data ?? r)) as CuttingSession[];
-        _mergeCloudIntoCache(KEYS.CUTTING_SESSIONS, mapped as unknown as Array<{ id: string }>);   // P1-19: merge, don't overwrite
+        _mergeCloudIntoCache(KEYS.CUTTING_SESSIONS, mapped as unknown as Array<{ id: string }>);   // merge, don't overwrite
         return mapped;
       }
     } catch (e) {

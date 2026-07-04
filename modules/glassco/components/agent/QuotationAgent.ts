@@ -654,7 +654,7 @@ function executeTool(
         discountPercent:   Number(params.discountPercent)  || 0,
         discountAmount:    Number(params.discountAmount)   || 0,
         glassDiscountPercent: 0,
-        // P2-25: Human-in-the-loop guard. The save_quotation tool is the ONLY
+        // Human-in-the-loop guard. The save_quotation tool is the ONLY
         // write path the agent can reach, and it is HARD-CODED to persist a
         // Draft — the tool schema deliberately exposes no `status` param, so the
         // model cannot auto-approve, send, or otherwise elevate a quotation.
@@ -669,7 +669,7 @@ function executeTool(
       (newQuotation as any).clientName = params.clientName || params.clientId || 'Walk-in';
 
       SalesService.saveQuotations([...existing, newQuotation]);
-      // P1-27: also push to Supabase so an AI-created quotation isn't lost if
+      // also push to Supabase so an AI-created quotation isn't lost if
       // the tab closes before the next background sync. AsyncSalesService does
       // a per-row merge locally + cloud upsert + offline retry-queue; fire it
       // and forget so executeTool stays synchronous.
@@ -812,7 +812,7 @@ export async function generateQuotation(
   userRequest: string,
   company:     Company,
 ): Promise<QuotationAgentResult> {
-  // P2-26: defence-in-depth against prompt injection. The system prompt itself
+  // defence-in-depth against prompt injection. The system prompt itself
   // interpolates no user-derived free text (only the typed `company` enum and
   // the date), but the user's request still reaches Claude via the messages
   // channel — so sanitize it at the entry point, matching the convention used
@@ -854,7 +854,7 @@ export async function chatQuotation(
   userMessage: string,
   session:     QuotationAgentSession,
 ): Promise<QuotationAgentResult & { updatedSession: QuotationAgentSession }> {
-  // P2-26: sanitize the turn before it enters the session history that is
+  // sanitize the turn before it enters the session history that is
   // replayed to Claude (defence-in-depth; see generateQuotation). The original
   // text is still shown verbatim in the returned agentMessages transcript.
   const safeMessage = sanitizeUserInput(userMessage);

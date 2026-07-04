@@ -6,7 +6,7 @@ import { Download, Printer, BarChart4 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const TrialBalance: React.FC<{ company: Company }> = ({ company }) => {
-  // Audit #6 (Layer 1): the per-account Dr/Cr roll-up is now done server-side
+  // the per-account Dr/Cr roll-up is now done server-side
   // (RPC `trial_balance`) via getTrialBalanceAsync, which automatically falls
   // back to the in-memory JS reduce over getLedger() on any error / empty
   // result (offline or before migration 088 is applied). Same shape either way.

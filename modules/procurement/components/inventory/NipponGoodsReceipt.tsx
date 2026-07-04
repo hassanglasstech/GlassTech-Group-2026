@@ -210,7 +210,7 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
                 s.quantity = (s.quantity || 0) + item.qty;
                 s.unrestrictedQty = (s.unrestrictedQty || 0) + item.qty;
                 s.totalValue = (s.totalValue || 0) + newVal;
-                // P1-21: MAP = totalValue/quantity ONLY holds when quantity > 0.
+                // MAP = totalValue/quantity ONLY holds when quantity > 0.
                 // Nippon's bootstrap allows negative stock (sell-before-GRN), so a
                 // receipt can leave quantity ≤ 0 — then `quantity || 1` still yields
                 // a NEGATIVE denominator → negative MAP → negative COGS at delivery.

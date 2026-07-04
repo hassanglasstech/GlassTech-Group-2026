@@ -395,7 +395,7 @@ const GeneralLedger: React.FC<{ company: Company }> = ({ company }) => {
                   <td colSpan={2} />
                   <td className="py-1.5 px-3 text-center"><StatusChip status={tx.status} /></td>
                   <td className="py-1.5 px-3 text-center">
-                    {/* P1-5: a POSTED GL document is immutable — corrections go
+                    {/* a POSTED GL document is immutable — corrections go
                         through a reversal JV, never by editing or locally hiding
                         the posted entry. Only Parked/Draft rows may be edited. */}
                     {tx.status !== 'Posted' ? (

@@ -198,7 +198,7 @@ const QCWorkbench: React.FC = () => {
     return list;
   }, [items, filter, search]);
 
-  // P1-4: client-side pagination of the QC queue so the card stream stays light
+  // client-side pagination of the QC queue so the card stream stays light
   // at real volume. Pagination renders nothing when there is ≤1 page, so small
   // queues are unchanged. Reset to page 1 on filter/search; clamp if the queue
   // shrinks (pieces get processed out of QC-Pending).

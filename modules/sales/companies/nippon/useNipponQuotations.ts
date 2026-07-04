@@ -274,7 +274,7 @@ export const useNipponQuotations = () => {
     // or, if a prior quote was loaded, approved the WRONG quote. Prefer the override.
     const src = quoteOverride ?? formData;
 
-    // P1-4: required-field + business validation
+    // required-field + business validation
     if (!src.clientId) return toast.error("Client is required.");
     if (!src.manualSerial) return toast.error("Serial Number is required.");
 
@@ -284,7 +284,7 @@ export const useNipponQuotations = () => {
     const itemsSubtotal = lineItems.reduce((s, i) => s + (Number(i.amount) || 0), 0);
     if (itemsSubtotal <= 0) return toast.error("Quotation total must be greater than zero.");
 
-    // P1-5: block edit-after-approval to prevent inventory double-decrement.
+    // block edit-after-approval to prevent inventory double-decrement.
     // Once approved, the quote becomes a Sales Order — edits must go through
     // credit notes / amendments, not direct re-save.
     if (src.status === 'Approved') {
@@ -350,7 +350,7 @@ export const useNipponQuotations = () => {
         orderNo: approve ? `SO-${mmyy}-${src.manualSerial}` : undefined
       };
 
-      // P1-7: persist quote FIRST, then decrement inventory only on success.
+      // persist quote FIRST, then decrement inventory only on success.
       // Previous order (inventory → quote) left stock out of sync when the
       // quote save failed.
       await AsyncSalesService.saveQuotations([...all.filter(x => x.id !== finalQuo.id), finalQuo]);
@@ -358,7 +358,7 @@ export const useNipponQuotations = () => {
       if (approve) {
         const currentStore = InventoryService.getStore();
         const updatedStore = [...currentStore];
-        const uncostedItems: string[] = [];   // P1-15: names sold with no product-master cost
+        const uncostedItems: string[] = [];   // names sold with no product-master cost
 
         finalQuo.items.forEach(item => {
           if (item.isSection) return;
@@ -388,7 +388,7 @@ export const useNipponQuotations = () => {
           } else {
             // No stock row yet → create one at negative qty (keyed by the real
             // product id when matched) so it shows in "Needs stock-taking".
-            // P1-15: seed MAP from the product-master COST (matched.costPrice) —
+            // seed MAP from the product-master COST (matched.costPrice) —
             // NOT item.pricePerUnit (the SELLING price). Seeding the selling price
             // made delivery COGS == revenue (0 gross profit) and drove inventory
             // 11514 negative by the full sale value. No cost on the product yet →
@@ -412,7 +412,7 @@ export const useNipponQuotations = () => {
           }
         });
         if (uncostedItems.length > 0) {
-          // P1-15: warn (never BLOCK — Nippon deliberately oversells) so the user
+          // warn (never BLOCK — Nippon deliberately oversells) so the user
           // stock-takes + sets a cost. COGS on these lines books 0 until then.
           toast.warning(
             `${uncostedItems.length} item(s) sold with no cost in the product master — COGS booked at 0. Stock-take + set a cost so profit is correct: ${uncostedItems.slice(0, 3).join(', ')}${uncostedItems.length > 3 ? '…' : ''}`,

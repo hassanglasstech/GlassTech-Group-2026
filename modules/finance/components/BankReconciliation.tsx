@@ -142,7 +142,7 @@ const BankReconciliation: React.FC<{ company: Company }> = ({ company }) => {
   };
 
 
-  // ── EC-03: Bank Statement CSV Import ─────────────────────────────────────
+  // ── Bank Statement CSV Import ─────────────────────────────────────
   // CSV import handled via file input onChange
 
   const handleCSVImport = (e: React.ChangeEvent<HTMLInputElement>) => {

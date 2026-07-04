@@ -1,8 +1,8 @@
 /**
  * creditNoteService.ts — Phase 2 (EC-01, BA-01)
  *
- * EC-01: Credit Note — partial/full reversal of a posted invoice
- * BA-01: Invoice Void — full reversal, marks invoice Voided
+ * Credit Note — partial/full reversal of a posted invoice
+ * Invoice Void — full reversal, marks invoice Voided
  *
  * GL pattern (mirror of deliveryInvoiceService):
  *   Credit Note: Dr Revenue  / Cr AR  (reduce both)
@@ -27,7 +27,7 @@ import { errMsg, safeParse, safeSave } from '@/modules/shared/services/utils';
 import { Logger } from '@/modules/shared/services/logger';
 import { toast } from 'sonner';
 
-// ── Audit #9: atomic-RPC plumbing (migration 090) ───────────────────────────
+// ── atomic-RPC plumbing (migration 090) ───────────────────────────
 // approveCreditNote/voidInvoice each mutate GL + invoice + CN/quote in several
 // steps. Migration 090 wraps that in ONE Postgres transaction. These helpers
 // (a) detect when 090 has NOT been applied so we fall back to the legacy path
@@ -75,7 +75,7 @@ const mirrorCreditNoteLocal = (company: Company, cn: CreditNote): void => {
 };
 
 // ── CreditNote record type ────────────────────────────────────────────────────
-// GAP-07: Maker-Checker. A CN starts as 'Pending Approval' (no GL impact) and
+// Maker-Checker. A CN starts as 'Pending Approval' (no GL impact) and
 // only posts to GL once an approver — distinct from the maker — calls
 // `approveCreditNote`. This mirrors the JV maker-checker pattern (FIN module).
 export interface CreditNote {
@@ -97,7 +97,7 @@ export interface CreditNote {
   rejectedBy?: string;
   rejectedAt?: string;
   rejectionReason?: string;
-  /** P1-08: set when the GL reversal posted but the COGS wind-back failed.
+  /** set when the GL reversal posted but the COGS wind-back failed.
    *  Finance must manually post the COGS reversal — gross profit is overstated
    *  until they do. Surfaced as a badge on the finance dashboard. */
   cogsReversalPending?: boolean;
@@ -105,7 +105,7 @@ export interface CreditNote {
 }
 
 // ── Sequential CN numbering (Phase-2: atomic via Postgres allocate_serial) ──
-// RC-9 fix: was a pure local counter with zero collision protection. Now
+// fix: was a pure local counter with zero collision protection. Now
 // issued by the same RPC that protects orderNo and invoice numbers.
 const getNextCNNumber = async (company: Company): Promise<string> => {
   const year = new Date().getFullYear();
@@ -147,7 +147,7 @@ const persistCreditNote = (company: Company, cn: CreditNote): void => {
 };
 
 // ── Issue Credit Note (Maker step — no GL yet) ──────────────────────────────
-// GAP-07: This now creates a pending CN only. Call `approveCreditNote` from
+// This now creates a pending CN only. Call `approveCreditNote` from
 // a separate user to actually post the GL reversal and reduce the invoice
 // balance. To preserve callers that expect single-step issuance, pass
 // `approve: { approver, role }` and we'll auto-approve in the same call.
@@ -216,7 +216,7 @@ export async function approveCreditNote(params: {
   }
 
   const amount = cn.amount;
-  // P1-14: re-assert amount <= the invoice's LIVE balance at APPROVAL time.
+  // re-assert amount <= the invoice's LIVE balance at APPROVAL time.
   // issueCreditNote checks this only at issue time; between issue and approve
   // (or with a receipt posted on another device/session) the balance can shrink,
   // so approval would over-credit AR past zero and overwrite the fresher receipt
@@ -238,7 +238,7 @@ export async function approveCreditNote(params: {
   let allGL  = FinanceService.getLedger();
   let origTx = allGL.find(t => t.id === invoice.glTxId);
 
-  // COLD-CACHE GUARD (P1-3): the invoice GL — and its GL-COGS-* sibling that the
+  // COLD-CACHE GUARD: the invoice GL — and its GL-COGS-* sibling that the
   // COGS reversal below relies on — may live in the cloud but not in THIS
   // device's local finance cache (fresh login / cleared cache / old invoice;
   // gtk_erp_ledger is frequently empty). Without this, a cold cache wrongly
@@ -251,7 +251,7 @@ export async function approveCreditNote(params: {
     origTx = allGL.find(t => t.id === invoice.glTxId);
   }
 
-  // Phase-7 (P2-2): hard-fail when the original GL entry can't be located.
+  // hard-fail when the original GL entry can't be located.
   // Previously the code fell back to hard-coded account codes
   // (`${company}-12210`, `${company}-41110`) that may not exist or may
   // refer to the wrong client sub-ledger. Reconciliation broke silently
@@ -270,7 +270,7 @@ export async function approveCreditNote(params: {
   // ── Derive AR / Revenue / GST lines from the original invoice GL ──────────
   // Original invoice GL (deliveryInvoiceService) posts:
   //   Dr AR (grandTotal) / Cr Revenue (net) / Cr GST Payable (gst)
-  // P1-24: the CN must reverse GST Payable too, otherwise it stays overstated
+  // the CN must reverse GST Payable too, otherwise it stays overstated
   // forever after any CN on a GST-inclusive invoice. The CN `amount` is
   // GST-inclusive (it reduces the GST-inclusive balance), so we split it
   // proportionally between revenue and GST while keeping AR reduction = amount
@@ -324,7 +324,7 @@ export async function approveCreditNote(params: {
     approvedAt: new Date().toISOString(),
   };
 
-  // ── Audit #9: ONE atomic Postgres transaction (migration 090) ──────────────
+  // ── ONE atomic Postgres transaction (migration 090) ──────────────
   // Reversing GL + invoice-balance reduction + CN→Posted commit together or not
   // at all. A crash can no longer leave the GL reversed while the CN stays
   // "Pending Approval" (which a retry would double-reverse). Falls back to the
@@ -384,7 +384,7 @@ export async function approveCreditNote(params: {
       reversalSuffix: cnId,
     });
   } catch (cogsErr: unknown) {
-    // P1-08: revenue/AR reversal is already committed, but the COGS wind-back
+    // revenue/AR reversal is already committed, but the COGS wind-back
     // failed. Do NOT swallow — gross profit is overstated until a human posts
     // the COGS reversal. Flag the CN for the finance dashboard + alert now.
     const msg = errMsg(cogsErr);
@@ -457,7 +457,7 @@ export async function voidInvoice(params: {
   let allGL  = FinanceService.getLedger();
   let origTx = allGL.find(t => t.id === invoice.glTxId);
 
-  // COLD-CACHE GUARD (P1-3): hydrate the invoice GL (+ its GL-COGS-* sibling)
+  // COLD-CACHE GUARD: hydrate the invoice GL (+ its GL-COGS-* sibling)
   // from cloud when it isn't in this device's local cache, so the void posts the
   // AR/Revenue reversal automatically instead of falling back to warnMissingGL(),
   // and so the COGS reversal below finds its tx instead of silently skipping.
@@ -496,7 +496,7 @@ export async function voidInvoice(params: {
   };
   const quotationId = invoice.orderId;
 
-  // P2-23: origTx missing — void still proceeds (leaving it Outstanding
+  // origTx missing — void still proceeds (leaving it Outstanding
   // overstates AR), but the AR/Revenue reversal cannot be posted automatically.
   const warnMissingGL = (): void => {
     Logger.error(
@@ -510,7 +510,7 @@ export async function voidInvoice(params: {
     );
   };
 
-  // ── Audit #9: ONE atomic Postgres transaction (migration 090) ──────────────
+  // ── ONE atomic Postgres transaction (migration 090) ──────────────
   // Reversing GL + invoice→Voided + quotation→Approved commit together or not
   // at all. A crash can no longer mark the invoice Voided while revenue stays
   // recognised, and FOR UPDATE + the Voided re-assert block a double-void.
@@ -571,7 +571,7 @@ export async function voidInvoice(params: {
       reversalSuffix: voidId,
     });
   } catch (cogsErr: unknown) {
-    // P1-08: GL reversal committed but COGS wind-back failed — alert, don't swallow.
+    // GL reversal committed but COGS wind-back failed — alert, don't swallow.
     Logger.error('CreditNote', `COGS reversal failed on void of ${invoice.id}`, cogsErr);
     toast.error(`Invoice ${invoice.id} voided, but COGS reversal failed — finance review required.`, { duration: 8000 });
   }

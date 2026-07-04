@@ -77,7 +77,7 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
     if (po.grnRef && !po.vendorInvoiceNo)          return '2-Way';   // PO + GRN
     if (!po.grnRef && po.vendorInvoiceNo)          return '2-Way';   // PO + Invoice
     if (po.grnRef && po.vendorInvoiceNo) {
-      // P2-5: shared, tested tolerance helper (was inline 2% check).
+      // shared, tested tolerance helper (was inline 2% check).
       return withinMatchTolerance(po.totalAmount, po.vendorInvoiceAmount || 0) ? '3-Way' : 'Mismatch';
     }
     return 'Pending';
@@ -92,7 +92,7 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
     // If maal MIGO se already post hua hai to grnService ne ye entry already bana di hogi.
     // ThreeWayMatching mein sirf PO-level GRN link karte hain — duplicate GL avoid karne ke liye
     // hum sirf GL entry banate hain agar MIGO se koi matching WE- journal nahi mila.
-    // P1-16: the MIGO GRN material GL is docType 'JV' (its id is prefixed 'WE-',
+    // the MIGO GRN material GL is docType 'JV' (its id is prefixed 'WE-',
     // not its docType), with referenceId = grnId. The old guard required
     // docType === 'WE', so it NEVER matched a MIGO post and this component
     // re-posted Dr Inventory / Cr GR-IR a second time. Dedup on referenceId
@@ -227,7 +227,7 @@ const ThreeWayMatching: React.FC<{ company: Company }> = ({ company }) => {
         .filter((r: any) => r.grnId === (selectedPO.grnRef || '') && r.status === 'Verbally Confirmed');
       vdrList.forEach((vdr: any) => {
         postDefectAdjustmentGL({ company, grnId: vdr.grnId, adjustmentDate: new Date().toISOString().split('T')[0], adjustmentAmount: vdr.totalAdjustment, vendorName: vdr.vendorName, defectReportId: vdr.id });
-        // Phase-7 (P3-1): was `matchGL.id` — undefined variable would throw
+        // was `matchGL.id` — undefined variable would throw
         // ReferenceError on every defect-settlement attempt. Use the MIRO GL
         // id created at line 155 as the settlement reference.
         const settlementId = `IR-${invForm.vendorInvoiceNo}-MATCH`;

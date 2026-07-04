@@ -468,7 +468,7 @@ describe('§6 · creditNoteService', () => {
       .rejects.toThrow('Cannot void a fully paid invoice.');
   });
 
-  // ── Audit #9: atomic credit-note / void RPC path (migration 090) ──────────
+  // ── atomic credit-note / void RPC path (migration 090) ──────────
   it('UT-30 · approveCreditNote posts via credit_note_atomic with a BALANCED reversal', async () => {
     const { approveCreditNote } = await import('@/modules/sales/services/creditNoteService');
     const { supabase } = await import('@/src/services/supabaseClient');

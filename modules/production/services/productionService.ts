@@ -112,7 +112,7 @@ export const ProductionService = {
   },
   getPurchaseOrders: (): PurchaseOrder[] => safeParse(KEYS.PURCHASE_ORDERS),
   savePurchaseOrders: (data: PurchaseOrder[]) => {
-    // P1-18: safeSave alone left every 3-way-match state change (grnRef,
+    // safeSave alone left every 3-way-match state change (grnRef,
     // vendorInvoiceNo, matchStatus, Matched/Paid, apInvoiceId) in localStorage
     // only — the next SyncService pull (authoritative overwrite) wiped it.
     // markDirty queues + pushes purchase_orders to Supabase (mappers exist).
@@ -163,7 +163,7 @@ export const ProductionService = {
       return { data: statusFiltered.slice(from, from + pageSize), total: statusFiltered.length };
     }
   },
-  // MFG-1: saveProductionPieces now validates that every unique orderId in the
+  // saveProductionPieces now validates that every unique orderId in the
   // batch actually exists in the quotations table before writing any records.
   // This prevents ghost pieces from being created for cancelled or deleted orders.
   //
@@ -176,7 +176,7 @@ export const ProductionService = {
     data: ProductionPiece[],
     opts?: { validateOrderIds?: string[] },
   ): Promise<void> => {
-    // MFG-1: which orderIds to ghost-check.
+    // which orderIds to ghost-check.
     //   • Default (no opts): every distinct orderId in the batch (legacy behaviour).
     //   • Scoped (opts.validateOrderIds): ONLY those — callers that re-save the
     //     whole pieces array (e.g. approve flow passes [...otherOrderPieces,
@@ -198,7 +198,7 @@ export const ProductionService = {
         .in('id', orderIds);
 
       if (error) {
-        // GAP-02: Offline ghost-order prevention. Previously, when Supabase
+        // Offline ghost-order prevention. Previously, when Supabase
         // was unreachable, the check fell through silently — pieces could be
         // saved against quotation IDs that had been deleted while offline.
         // Now: fall back to the localStorage quotations + job_orders cache as
@@ -258,7 +258,7 @@ export const ProductionService = {
     // costCenterId still persists in localStorage (safeSave above) for local cost
     // attribution; to sync it to the cloud, add the column via a migration and
     // restore the field in the mapper below.
-    // P1-11: production_pieces has a `company` column (used by every
+    // production_pieces has a `company` column (used by every
     // company-filtered read like getProductionPiecesPage + strict-RLS WITH
     // CHECK), but the upsert row never set it — so rows either FAILED the RLS
     // insert for non-super users, or landed with a null company and were
@@ -329,7 +329,7 @@ export const ProductionService = {
   getWarehouseSpots: (): WarehouseSpot[] => safeParse(KEYS.WAREHOUSE_SPOTS),
   saveWarehouseSpots: (data: WarehouseSpot[]) => safeSave(KEYS.WAREHOUSE_SPOTS, data),
 
-  // ── MFG-5: Vehicle Payload Guard (replaces oven constraint) ──────
+  // ── Vehicle Payload Guard (replaces oven constraint) ──────
   // Glass is outsourced to external tempering vendors — we guard
   // vehicle payload limits, NOT in-house oven capacity.
   // Queries dispatch_vehicles (Migration 023) for max_payload_kg.
@@ -377,7 +377,7 @@ export const ProductionService = {
     }
   },
 
-  // ── MFG-2: Production cost config helpers ────────────────────────
+  // ── Production cost config helpers ────────────────────────
   // Provide read/write access to the per-company wages & wastage config
   // that costAnalysisService reads. Stored in localStorage and editable
   // via the Manufacturing → Settings panel without code changes.

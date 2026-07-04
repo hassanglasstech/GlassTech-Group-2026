@@ -149,7 +149,7 @@ export const useQuotations = () => {
   const handleSave = async (approve: boolean) => {
     if (!formData.clientId) return alert("Client is required.");
 
-    // SAL-1: Discount hard-cap — prevents negative invoices and revenue fraud.
+    // Discount hard-cap — prevents negative invoices and revenue fraud.
     // Mirrors the server-side guard in asyncSalesService.saveQuotations.
     const _subTotal   = (formData.items ?? []).reduce((s, i) => s + (Number((i as any).amount) || 0), 0);
     const _discPct    = Number(formData.discountPercent ?? 0);
@@ -204,7 +204,7 @@ export const useQuotations = () => {
             }
         });
         const others = currentPieces.filter(p => !p.id.startsWith(`${numericPart}/`));
-        // MFG-1 scope fix: skip the ghost re-check — the order is persisted just
+        // scope fix: skip the ghost re-check — the order is persisted just
         // below (saveQuotations) and `others` are already-saved prior-order pieces.
         // Validating the whole array let a stale prior order block this save.
         ProductionService.saveProductionPieces([...others, ...newPieces], { validateOrderIds: [] });

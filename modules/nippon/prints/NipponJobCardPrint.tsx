@@ -9,6 +9,19 @@ interface Props {
     products: Product[];
 }
 
+interface PrintableRow {
+    isSection?: boolean;
+    isPiece?: boolean;
+    isEmpty?: boolean;
+    description?: string;
+    pId?: string;
+    displaySize?: string;
+    unitLabel?: string;
+    materialSpec?: string;
+    itemDescription?: string;
+    services?: string;
+}
+
 export const NipponJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces, products }) => {
     const items = quote.items || [];
     const jobPieces = (pieces || []).filter(p => p.orderId === quote.orderNo);
@@ -69,7 +82,7 @@ export const NipponJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces,
                 <h3 className="text-lg font-black uppercase mb-4 border-b-2 border-black pb-1">Piece Specification Manifest</h3>
                 
                 {(() => {
-                    const printableItems: any[] = [];
+                    const printableItems: PrintableRow[] = [];
                     items.forEach((item, itemIdx) => {
                         if (item.isSection) {
                             printableItems.push({ isSection: true, description: item.description });
@@ -93,8 +106,8 @@ export const NipponJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces,
                     });
 
                     const MAX_ROWS = 25;
-                    const chunks: any[][] = [];
-                    let currentChunk: any[] = [];
+                    const chunks: PrintableRow[][] = [];
+                    let currentChunk: PrintableRow[] = [];
 
                     printableItems.forEach(item => {
                         currentChunk.push(item);

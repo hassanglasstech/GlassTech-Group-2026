@@ -471,7 +471,7 @@ const AgingReport: React.FC<{
   const isAR = type === 'ar_aging';
   const accType = isAR ? 'Asset' : 'Liability';
 
-  // P1-4: the aging report is for TRADE receivables/payables only. Filtering by
+  // the aging report is for TRADE receivables/payables only. Filtering by
   // "every level-5 Asset/Liability" wrongly bucketed Cash, Inventory, Prepaids
   // (AR) and Tax/Wages/Loans (AP) as customer/vendor balances. Restrict to real
   // AR/AP accounts: per-client AR sub-accounts carry code 122xx (Customers

@@ -4,7 +4,7 @@ import { TrendingUp, TrendingDown, Wallet, BarChart3 } from 'lucide-react';
 
 interface Props {
   company: string;
-  metrics?: any; // keep backward compat
+  metrics?: unknown; // keep backward compat
 }
 
 const FinanceDashboardView: React.FC<Props> = ({ company }) => {

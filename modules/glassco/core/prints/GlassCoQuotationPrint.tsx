@@ -6,9 +6,9 @@ import { getGlasscoCompanyInfo } from '../constants/companyInfo';
 interface Props {
     quote: Quotation;
     clientName: string;
-    clientAddress?: string;   // P1-12
-    clientPhone?: string;     // P1-12
-    clientNtn?: string;       // P1-12
+    clientAddress?: string;   // customer-facing print field
+    clientPhone?: string;     // customer-facing print field
+    clientNtn?: string;       // customer-facing print field
 }
 
 export const GlassCoQuotationPrint: React.FC<Props> = ({ quote, clientName, clientAddress, clientPhone, clientNtn }) => {

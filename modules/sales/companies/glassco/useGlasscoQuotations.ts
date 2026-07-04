@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-// P3-05: dropped unused `Company` and `PieceStatus` imports (never referenced).
+// dropped unused `Company` and `PieceStatus` imports (never referenced).
 import { Client, Quotation, QuotationItem, Product, ProductionPiece } from '@/modules/shared/types';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { allocateSerial } from '@/modules/sales/services/serialAllocator';
@@ -11,7 +11,7 @@ import { Logger } from '@/modules/shared/services/logger';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import * as XLSX from 'xlsx';
 
-// P1-22: narrow shape for the Excel import rows (was `as any[]`). Mismatched
+// narrow shape for the Excel import rows (was `as any[]`). Mismatched
 // column headers now surface as typed `undefined` rather than silently
 // populating QuotationItem with NaN/empty values.
 interface ExcelImportRow {
@@ -99,7 +99,7 @@ export const useGlasscoQuotations = () => {
 
       // Phase-6 (6.6): auto-expire any Draft/Sent quotation past dueDate.
       // Fire-and-forget so refresh isn't blocked.
-      // P2-02: log unexpected rejections instead of swallowing silently.
+      // log unexpected rejections instead of swallowing silently.
       _autoExpire(all).catch((e: unknown) => Logger.error('Sales', 'Glassco auto-expire rejected', e));
     } finally {
       setIsLoading(false);
@@ -107,7 +107,7 @@ export const useGlasscoQuotations = () => {
   };
 
   const handleSaveQuotation = async (action: 'draft' | 'save' | 'approve', directData?: Quotation): Promise<void> => {
-    // P2-05: this hook is Glassco-only. A directData passed from elsewhere could
+    // this hook is Glassco-only. A directData passed from elsewhere could
     // carry a non-Glassco company and leak a row into the wrong company. Force
     // company = 'Glassco' before any validation or save.
     const dataToSave: Partial<Quotation> = { ...(directData || formData), company };
@@ -158,7 +158,7 @@ export const useGlasscoQuotations = () => {
     }
 
     const originalId = dataToSave.id;
-    // P2-01: capture the pre-approve status + orderNo so a piece-save failure
+    // capture the pre-approve status + orderNo so a piece-save failure
     // can fully restore the draft (id + orderNo + status) instead of leaving an
     // orphaned formal GT-SO row behind.
     const originalOrderNo = dataToSave.orderNo;
@@ -173,7 +173,7 @@ export const useGlasscoQuotations = () => {
     const hasDraftId = finalId && finalId.startsWith('DRF-');
 
     // ── Phase-2 (2.5): atomic serial allocation via Postgres allocate_serial RPC ──
-    // RC-1 fix: parallel approves no longer compute the same maxSeq+1 from
+    // fix: parallel approves no longer compute the same maxSeq+1 from
     // a stale local snapshot. Falls back to local counter when offline.
     if (action === 'draft') {
         if (!hasFormalId && !hasDraftId) {
@@ -193,7 +193,7 @@ export const useGlasscoQuotations = () => {
         }
     }
 
-    // P1-10: guarantee the minted Sales Order id is GLOBALLY UNIQUE. The two
+    // guarantee the minted Sales Order id is GLOBALLY UNIQUE. The two
     // approve paths draw GT-SO ids from overlapping serial sources — a
     // direct-approved Draft allocates a FRESH GT-SO serial (seed 2523) while a
     // converted GT-QUT KEEPS its QUT serial (also seeded 2523) — so both can mint
@@ -235,7 +235,7 @@ export const useGlasscoQuotations = () => {
 
     // ── Phase-2 (2.4 + 2.6): SAVE QUOTATION FIRST, THEN PIECES ───────────
     // Audit B1: previous code saved pieces synchronously BEFORE the
-    // quotation was persisted, then MFG-1 ghost-order rejection silently
+    // quotation was persisted, then ghost-order rejection silently
     // dropped the pieces. Order: persist quotation → cleanup old id →
     // (only if approve) build & save pieces with rollback on failure.
     try {
@@ -257,7 +257,7 @@ export const useGlasscoQuotations = () => {
       return;
     }
 
-    // 2.4: pieces save AFTER quotation is in Supabase — MFG-1 ghost-order
+    // 2.4: pieces save AFTER quotation is in Supabase — ghost-order
     // check now passes because the order id exists. Wrap in try/catch so
     // a piece-save failure rolls the order back to Draft (not silently lost).
     if (action === 'approve') {
@@ -265,7 +265,7 @@ export const useGlasscoQuotations = () => {
         const currentPieces = ProductionService.getProductionPieces();
         const orderRef = finalOrderNo || finalId || '';
 
-        // ── P1-25: collision-safe, company-scoped piece-id prefix ──
+        // ── collision-safe, company-scoped piece-id prefix ──
         // Previously the prefix was just the last-4 numeric digits, so two
         // orders from different months with the same trailing serial (e.g.
         // GT-SO-GLS-0626-2523 vs GT-SO-GLS-0126-2523) both produced `GLS-2523`
@@ -333,7 +333,7 @@ export const useGlasscoQuotations = () => {
               specs: `${item.width}x${item.height} ${item.glassSize || '5mm'} ${item.glassType || 'Plain'}`,
               status: (finalQuo.isAlreadyDispatched ? 'Delivered' : 'Pending-Cut') as any,
               lastUpdated: new Date().toISOString(), isRevised: false,
-              company,                                       // P1-11: stamp owning company at creation
+              company,                                       // stamp owning company at creation
               serviceOnly: (item as any).serviceOnly || false, // client-supplied glass → no glass COGS at delivery
             });
             globalSerialCounter++;
@@ -352,7 +352,7 @@ export const useGlasscoQuotations = () => {
           newOrderPieces.push(...orphaned);
         }
 
-        // MFG-1 scope fix: the order (finalOrderNo) was just persisted above via
+        // scope fix: the order (finalOrderNo) was just persisted above via
         // saveQuotations, so it is known-valid; and otherOrderPieces are already-
         // persisted pieces of PRIOR orders that we only re-save to preserve them.
         // Re-validating the whole array let a single stale prior order (whose
@@ -370,7 +370,7 @@ export const useGlasscoQuotations = () => {
           { duration: 12000 }
         );
         try {
-          // P2-01: restore the row under its ORIGINAL draft id/orderNo/status.
+          // restore the row under its ORIGINAL draft id/orderNo/status.
           // When approve minted a new formal id (finalId !== originalId), the
           // original draft row was already deleted above — re-persist it under
           // originalId and remove the orphaned formal row so no ghost GT-SO id
@@ -394,7 +394,7 @@ export const useGlasscoQuotations = () => {
 
     // Always close editor and return to list after save
     setIsEditorOpen(false);
-    // P2-34: refreshData is async — await it directly instead of a 200ms
+    // refreshData is async — await it directly instead of a 200ms
     // setTimeout race (the timeout could fire before Supabase had committed).
     await refreshData();
 
@@ -468,9 +468,9 @@ export const useGlasscoQuotations = () => {
     locationCode: '', glazingSpecs: '', inputUnit: isMM ? 'MM' : 'Inch'
   });
 
-  // P3-02: removed unused DEFAULT_ROW_COUNT constant.
+  // removed unused DEFAULT_ROW_COUNT constant.
 
-  // P3-04: explicit return types on trivial handlers.
+  // explicit return types on trivial handlers.
   const addItem = (): void => {
     const newItem = makeBlankItem();
     setFormData(prev => ({ ...prev, items: [...(prev.items || []), newItem] }));
@@ -501,7 +501,7 @@ export const useGlasscoQuotations = () => {
   const handlePrintRequest = (q: Quotation, mode: 'Quotation' | 'SalesOrder' | 'JobCard'): void => {
       setPrintMode(mode);
       setPrintingQuote(q);
-      // P3-03: prefer the onafterprint event to clear the print state (fires
+      // prefer the onafterprint event to clear the print state (fires
       // when the print dialog closes), with the fixed timeout only as a
       // fallback in case onafterprint never fires (some embedded browsers).
       const delay = mode === 'JobCard' ? 2500 : 800;
@@ -522,7 +522,7 @@ export const useGlasscoQuotations = () => {
 
   const handleDeleteQuotation = async (id: string): Promise<void> => {
       if (await confirmModal("Delete this quotation? The ID will not be reused.")) {
-          // P2-21: wrap the async delete + refresh so a failed delete surfaces a
+          // wrap the async delete + refresh so a failed delete surfaces a
           // toast instead of an unhandled rejection.
           try {
             // Phase-2 (2.6): per-row delete (was full-table overwrite, race-prone).
@@ -588,7 +588,7 @@ export const useGlasscoQuotations = () => {
       toast.error("Approved / Invoiced quotations cannot be rejected — issue Credit Note or Void instead.");
       return;
     }
-    // P2-16: no styled text-prompt modal exists (ConfirmDialog is confirm-only),
+    // no styled text-prompt modal exists (ConfirmDialog is confirm-only),
     // so keep window.prompt but treat Cancel (null) as "abort the transition"
     // instead of silently rejecting with an empty reason.
     const reason = prompt('Reject reason (optional):');
@@ -601,7 +601,7 @@ export const useGlasscoQuotations = () => {
       toast.error("Won / Invoiced / Paid quotations cannot be marked Lost.");
       return;
     }
-    // P2-16: keep window.prompt (no styled prompt modal available) but abort
+    // keep window.prompt (no styled prompt modal available) but abort
     // the transition when the user cancels (null) rather than marking Lost with
     // an empty reason.
     const reason = prompt('Lost reason (e.g. price, competitor, project cancelled):');
@@ -627,7 +627,7 @@ export const useGlasscoQuotations = () => {
       q.dueDate && q.dueDate < today
     );
     if (candidates.length === 0) return;
-    // P3-06: was `...(q as any)` — use a typed intersection so the extra
+    // was `...(q as any)` — use a typed intersection so the extra
     // statusReason/statusChangedAt fields are allowed without `any`.
     const expired: (Quotation & Record<string, unknown>)[] = candidates.map(q => ({
       ...q,
@@ -639,7 +639,7 @@ export const useGlasscoQuotations = () => {
       await AsyncSalesService.saveQuotations(expired);
       toast.info(`${expired.length} quotation(s) auto-expired (past due date).`, { duration: 5000 });
     } catch (e: unknown) {
-      // P2-02: was a silent empty catch — surface the failure via Logger so a
+      // was a silent empty catch — surface the failure via Logger so a
       // broken auto-expire is visible (ops can still mark expired manually).
       Logger.error('Sales', 'Glassco auto-expire failed', e);
     }

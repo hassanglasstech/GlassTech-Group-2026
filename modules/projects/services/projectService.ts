@@ -4,6 +4,7 @@
  */
 
 import { Project } from '../../shared/types';
+import { Company } from '../../shared/types/core';
 import { safeParse, safeSave } from '../../shared/services/utils';
 import { supabase } from '@/src/services/supabaseClient';
 import { Logger } from '@/modules/shared/services/logger';
@@ -39,7 +40,7 @@ export const ProjectService = {
     try {
       const { data } = await supabase.from('projects').select('data').order('updated_at', { ascending: false });
       if (data?.length) {
-        const projects = data.map((r: any) => r.data as Project).filter(Boolean);
+        const projects = data.map((r: { data: Project }) => r.data as Project).filter(Boolean);
         _cache = projects;
         safeSave(KEY, projects);
       } else {
@@ -57,7 +58,7 @@ export const ProjectService = {
   },
 
   postProjectCost: (params: {
-    projectId: string; company: any;
+    projectId: string; company: Company;
     costType: 'Glass' | 'Aluminium' | 'Hardware' | 'Installation' | 'Other';
     amount: number; description: string; referenceId?: string;
   }): void => {
@@ -95,7 +96,7 @@ export const ProjectService = {
     toast.success(`Job Order ${jobOrderId} linked to project.`);
   },
 
-  completeProject: (projectId: string, company: any, finalValue?: number): void => {
+  completeProject: (projectId: string, company: Company, finalValue?: number): void => {
     const all = ProjectService.getProjects();
     const idx = all.findIndex(p => p.id === projectId);
     if (idx === -1) return;

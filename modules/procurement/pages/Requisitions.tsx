@@ -376,7 +376,7 @@ const Requisitions: React.FC = () => {
         totalValue = formHeader.amount;
     }
 
-    // Phase-7 (P4-6): zero-value PR guard. Audit RC-19: previously a PR with
+    // zero-value PR guard. previously a PR with
     // 0 total could be saved (e.g. all rates left at 0), polluting the
     // approval queue and creating a PKR 0 PV when approved. HR-category
     // exempt (Waive Absent / Loan Request initial draft can be 0 by design
@@ -492,7 +492,7 @@ const Requisitions: React.FC = () => {
     const pr = requisitions.find(r => r.id === id);
     if (!pr) return;
 
-    // Phase-7 (P4-1): zero-value PR guard. Audit RC-15: previously a PR with
+    // zero-value PR guard. previously a PR with
     // totalValue===0 (empty items, or all rates=0) would be approved and a
     // PKR 0 Parked PV created → cluttered ledger + meaningless audit trail.
     const prAmount = (pr as any).totalValue || (pr as any).loanAmount || (pr as any).amount || 0;
@@ -503,7 +503,7 @@ const Requisitions: React.FC = () => {
 
     const approvedPr = { ...pr, status: 'Approved' as const, approvedBy: 'MD', paymentStatus: 'Pending' as const };
 
-    // ── Phase-7 (P4-2): atomic approval. Audit RC-16: previously the
+    // ── atomic approval. previously the
     // try/catch swallowed PV creation failures and STILL marked the PR as
     // Approved → orphan Approved PR with no GL entry, breaking the audit
     // chain. Now PV creation must succeed before the PR status changes.
@@ -523,8 +523,8 @@ const Requisitions: React.FC = () => {
     SyncService.markDirty('requisitions');
     SyncService.markDirty('ledger');
 
-    // Phase-7 (P5-2): auto-apply Overtime Approval to attendance.
-    // Audit RC-21: previously an approved Overtime PR went to a Parked PV
+    // auto-apply Overtime Approval to attendance.
+    // previously an approved Overtime PR went to a Parked PV
     // but the OT hours never reached attendance/payroll → payroll computed
     // OT only from manually-entered attendance, ignoring approved PRs.
     let otApplied = 0;
@@ -604,7 +604,7 @@ const Requisitions: React.FC = () => {
   };
 
   const handleDelete = (id: string) => {
-    // Phase-7 (P4-3): block delete when PR is downstream-bound. Audit RC-17:
+    // block delete when PR is downstream-bound. 
     // previously deleting an Approved PR left an orphan Parked PV in the
     // ledger (pv.reqId points to a PR that no longer exists). Likewise
     // 'Converted to PO' would orphan the PO. Now we hard-block.

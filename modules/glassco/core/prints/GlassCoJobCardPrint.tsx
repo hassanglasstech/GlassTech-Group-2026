@@ -51,7 +51,7 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
     
     const displayId = quote.orderNo || quote.id;
     const isMMGlobal = quote.items.some(i => !i.isSection && (i.mmW || i.mmH));
-    // P2-31: surface the sheet-requirement / wastage from the saved wastageDecision
+    // surface the sheet-requirement / wastage from the saved wastageDecision
     // so the cutter knows how many sheets to pull and the planned wastage. Rendered
     // only when the quote actually carries a decision (set in QuotationWastageTab).
     const wastage = quote.wastageDecision;
@@ -123,7 +123,7 @@ export const GlassCoJobCardPrint: React.FC<Props> = ({ quote, clientName, pieces
                                 <div><div style={{ fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', color: '#64748b' }}>Total Pieces</div><div style={{ fontSize: '12px', fontWeight: 900 }}>{jobPieces.length}</div></div>
                                 <div><div style={{ fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', color: '#64748b' }}>Project Site</div><div style={{ fontSize: '12px', fontWeight: 900, textTransform: 'uppercase' }}>{quote.projectName || 'Stock'}</div></div>
                             </div>
-                            {/* P2-31: sheet-requirement / wastage line for the cutting floor */}
+                            {/* sheet-requirement / wastage line for the cutting floor */}
                             {wastage && (
                                 <div style={{ display: 'flex', gap: '20px', alignItems: 'center', marginBottom: '16px', background: '#fff7ed', border: '2px solid black', borderRadius: '4px', padding: '8px 12px' }}>
                                     <div style={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#9a3412' }}>Sheet Plan</div>

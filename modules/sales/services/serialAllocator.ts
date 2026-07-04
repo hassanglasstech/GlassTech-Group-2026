@@ -25,7 +25,7 @@ const localKey = (company: string, docType: string, year: number) =>
 /** Local fallback — used when Supabase RPC is unreachable (offline). */
 const allocateLocal = (company: string, docType: string, year: number, minSeed: number): number => {
   const key = localKey(company, docType, year);
-  // P2-20: localStorage can throw (private-mode / quota exceeded). Read and write
+  // localStorage can throw (private-mode / quota exceeded). Read and write
   // are guarded independently so a persistence failure still returns a usable
   // serial rather than crashing the caller mid-document-creation.
   let current = 0;
@@ -63,7 +63,7 @@ export async function allocateSerial(
       p_min_seed: minSeed,
     });
     if (error) {
-      // P3-20: Logger instead of console.warn
+      // Logger instead of console.warn
       Logger.warn('Sales', `serialAllocator RPC error for ${company}/${docType}/${year} — falling back to local counter`, error.message);
       return allocateLocal(company, docType, year, minSeed);
     }
@@ -76,7 +76,7 @@ export async function allocateSerial(
     if (Number.isFinite(seq) && seq > 0) {
       // Mirror the allocated number into local cache so subsequent
       // local fallback calls don't regress below the cloud value.
-      // P2-20: guard localStorage — a quota/private-mode failure must not lose
+      // guard localStorage — a quota/private-mode failure must not lose
       // the cloud-allocated serial (it's already authoritative, just return it).
       try {
         const key = localKey(company, docType, year);
@@ -89,7 +89,7 @@ export async function allocateSerial(
     }
     return allocateLocal(company, docType, year, minSeed);
   } catch (err: unknown) {
-    // P3-20: Logger instead of console.warn
+    // Logger instead of console.warn
     Logger.warn('Sales', `serialAllocator RPC exception for ${company}/${docType}/${year} — falling back to local counter`, errMsg(err));
     return allocateLocal(company, docType, year, minSeed);
   }

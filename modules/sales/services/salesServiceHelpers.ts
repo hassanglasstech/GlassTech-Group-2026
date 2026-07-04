@@ -28,13 +28,13 @@ export const activeCompany = (): string => {
 };
 
 // Helper — gets current user email at call time (outside React, so we use getState)
-// P3-17: explicit return type.
+// explicit return type.
 export const _currentUser = (): string => useAuthStore.getState().profile?.email ?? useAuthStore.getState().user?.email ?? 'unknown';
 
 // ── D5 helper: queue table for retry when a direct Supabase write fails. ──
 // On the next online tick / reconnect, SyncService.pushPending() will flush
 // the table from localStorage to Supabase using TABLE_PUSH mappers.
-// P3-17: explicit return type.
+// explicit return type.
 export const _queueRetry = (table: string): void => {
   try { SyncService.markDirty(table); } catch (e) { Logger.warn('Sales', `_queueRetry markDirty failed for ${table}`, e); }
 };
@@ -79,7 +79,7 @@ export const _deleteRow = async (table: string, localKey: string, id: string): P
     const existing = safeParse(localKey) as Array<{ id: string }>;
     safeSave(localKey, existing.filter((r) => r.id !== id));
   } catch (e: unknown) {
-    // P3-16: Logger instead of console.warn
+    // Logger instead of console.warn
     Logger.warn('Sales', `_deleteRow local prune failed for ${table}/${id}`, e);
   }
   // Cloud delete

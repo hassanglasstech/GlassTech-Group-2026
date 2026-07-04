@@ -51,7 +51,7 @@ const buildInvoiceNumber = (company: Company, seq: number): string => {
   return `INV-${prefix}-${year}-${String(seq).padStart(4, '0')}`;
 };
 
-// ── P1-2 (Nippon): trading COGS plan ─────────────────────────────────
+// ── (Nippon): trading COGS plan ─────────────────────────────────
 // Nippon sells hardware from on-hand inventory. At invoice time:
 //   Dr COGS — General Hardware  (sum of qty × moving-avg-price)
 //   Cr Hardware Inventory — General Hardware
@@ -322,7 +322,7 @@ export async function generateDeliveryInvoice(
   // were linked, permanently inflating gross profit. Validate UPFRONT — before
   // any GL or DB writes — so the books stay clean if pieces are missing.
   //
-  // P1-3 (Nippon go-live): trading companies don't produce anything — they
+  // (Nippon go-live): trading companies don't produce anything — they
   // sell from on-hand inventory. The pieces gate must be skipped for them;
   // COGS for trading flows comes from inventory (handled in the trading
   // revenue branch below).
@@ -357,7 +357,7 @@ export async function generateDeliveryInvoice(
     5, arControl.id, 'Asset', '12210'
   );
 
-  // P1-1 (Nippon go-live): trading revenue chain differs from glass services.
+  // (Nippon go-live): trading revenue chain differs from glass services.
   // Nippon sells hardware — revenue must hit "HARDWARE SALES" under SALES
   // REVENUE, not "GLASS PROCESSING SERVICES". Wrong chain = wrong P&L from day 1.
   const revParent  = FinanceService.ensureAccount(company, 'REVENUE',                    1, null,           'Revenue', '40');

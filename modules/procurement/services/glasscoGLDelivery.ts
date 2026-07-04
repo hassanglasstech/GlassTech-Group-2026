@@ -212,7 +212,7 @@ export function postDeliveryCOGS(params: {
   const totalProcessingCost = processingLabor.reduce((s, l) => s + l.cost, 0);
 
   // ── 3. Compute updated store inventory value (do NOT save yet) ────
-  // P1-09: build the new store state here but defer the write until AFTER
+  // build the new store state here but defer the write until AFTER
   // the GL posts successfully. Previously saveStore ran before
   // recordTransaction, so a GL failure (imbalance / period lock / Supabase
   // error) left inventory decremented with no matching COGS entry — stock
@@ -293,7 +293,7 @@ export function postDeliveryCOGS(params: {
     details: glDetails,
   } as any);
 
-  // P1-09: GL committed successfully — only now apply the inventory deduction.
+  // GL committed successfully — only now apply the inventory deduction.
   // If recordTransaction above throws, this line never runs and stock stays
   // intact (commit-then-apply, matching the atomic buildDeliveryCOGSPlan path).
   if (newStore) InventoryService.saveStore(newStore);

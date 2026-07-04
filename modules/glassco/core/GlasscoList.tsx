@@ -6,7 +6,7 @@ import { StatusBadge } from '@/modules/shared/components/StatusBadge';
 import { EmptyState } from '@/modules/shared/components/EmptyState';
 import { Search, Plus, Edit2, Printer, FileSpreadsheet, FileJson, FileUp, Filter, Send, Trash2, SlidersHorizontal, X, FileText } from 'lucide-react';
 
-// P4-01: structured filter state shared between the toolbar (UI) and the parent
+// structured filter state shared between the toolbar (UI) and the parent
 // (which applies it in its filteredQuotations memo). '' means "no constraint".
 export interface QuoteFilters {
     status:   string; // exact status match, '' = all
@@ -64,10 +64,10 @@ const STATUS_PILL: Record<string, string> = {
     Paid:            'bg-emerald-100 text-emerald-800 border-emerald-200',
 };
 
-// P4-01: status dropdown options — single source of truth is the pill map above.
+// status dropdown options — single source of truth is the pill map above.
 const STATUS_OPTIONS = Object.keys(STATUS_PILL);
 
-// P5-03: plain-language hint per status — shown as a tooltip on the pill so the
+// plain-language hint per status — shown as a tooltip on the pill so the
 // abbreviation-like labels aren't cryptic to a first-time user.
 const STATUS_HINT: Record<string, string> = {
     Draft:            'Draft — not yet sent to the customer',
@@ -81,7 +81,7 @@ const STATUS_HINT: Record<string, string> = {
     Paid:             'Paid — fully settled',
 };
 
-// P4-01: total net value of a quote (same reduction the table cell uses).
+// total net value of a quote (same reduction the table cell uses).
 const quoteValue = (q: Quotation): number =>
     q.items?.reduce((s, i) => s + (i.amount || 0), 0) || 0;
 
@@ -95,7 +95,7 @@ export const GlasscoList: React.FC<GlasscoListProps> = ({
     const jsonInputRef = useRef<HTMLInputElement>(null);
     const excelInputRef = useRef<HTMLInputElement>(null);
 
-    // P2-14: simple client-side pagination so large lists don't render every row at once.
+    // simple client-side pagination so large lists don't render every row at once.
     const PAGE_SIZE = 25;
     const [page, setPage] = useState(1);
     const totalPages = Math.max(1, Math.ceil(quotations.length / PAGE_SIZE));
@@ -115,7 +115,7 @@ export const GlasscoList: React.FC<GlasscoListProps> = ({
     const toggleAllPage = () => setSelectedIds(prev => { const n = new Set(prev); if (allPageSelected) pageIds.forEach(id => n.delete(id)); else pageIds.forEach(id => n.add(id)); return n; });
     const clearSelection = () => setSelectedIds(new Set());
 
-    // P4-01: advanced filter panel (date + value range) toggle + state helpers.
+    // advanced filter panel (date + value range) toggle + state helpers.
     const [showAdvanced, setShowAdvanced] = useState(false);
     const patchFilter = (patch: Partial<QuoteFilters>) => setFilters({ ...filters, ...patch });
     // Count of *advanced* constraints active (status has its own visible dropdown).
@@ -139,7 +139,7 @@ export const GlasscoList: React.FC<GlasscoListProps> = ({
                             onChange={e => setSearchTerm(e.target.value)}
                         />
                     </div>
-                    {/* P4-01: status filter — '' shows all */}
+                    {/* status filter — '' shows all */}
                     <div className="relative w-full md:w-44">
                         <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                         <select
@@ -167,7 +167,7 @@ export const GlasscoList: React.FC<GlasscoListProps> = ({
                             <option value="client">By Client</option>
                         </select>
                     </div>
-                    {/* P4-01: advanced (date + value range) toggle */}
+                    {/* advanced (date + value range) toggle */}
                     <button
                         onClick={() => setShowAdvanced(v => !v)}
                         aria-expanded={showAdvanced}
@@ -185,7 +185,7 @@ export const GlasscoList: React.FC<GlasscoListProps> = ({
                     </button>
                 </div>
                 
-                {/* P3-10: flex-wrap + gap-y so the cluster wraps instead of overflowing on small screens */}
+                {/* flex-wrap + gap-y so the cluster wraps instead of overflowing on small screens */}
                 <div className="flex flex-wrap gap-y-2 items-center space-x-2 w-full md:w-auto">
                     <input type="file" ref={jsonInputRef} onChange={e => e.target.files?.[0] && onImportJson(e.target.files[0])} className="hidden" accept=".json" />
                     <input type="file" ref={excelInputRef} onChange={e => e.target.files?.[0] && onImportExcel(e.target.files[0])} className="hidden" accept=".xlsx,.xls" />
@@ -209,7 +209,7 @@ export const GlasscoList: React.FC<GlasscoListProps> = ({
                 </div>
             </div>
 
-            {/* P4-01: advanced filter panel — date range + value range */}
+            {/* advanced filter panel — date range + value range */}
             {showAdvanced && (
                 <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm no-print flex flex-wrap items-end gap-4 animate-in fade-in slide-in-from-top-1 duration-150">
                     <div className="flex flex-col gap-1">
@@ -356,7 +356,7 @@ export const GlasscoList: React.FC<GlasscoListProps> = ({
                         </tbody>
                     </table>
                 </div>
-                {/* P2-14: pagination footer — only shown when more than one page */}
+                {/* pagination footer — only shown when more than one page */}
                 {totalPages > 1 && (
                     <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50 no-print">
                         <span className="text-2xs font-black uppercase tracking-widest text-slate-400">

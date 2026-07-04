@@ -73,7 +73,7 @@ export const GlasscoPrintTemplate: React.FC<GlasscoPrintTemplateProps> = ({
 }) => {
     const clientObj = clients.find(c => c.id === printingQuote.clientId);
     const clientName = clientObj?.name || 'Unknown Client';
-    // P1-12: surface client address / phone / NTN on customer-facing prints
+    // surface client address / phone / NTN on customer-facing prints
     const clientAddress = clientObj?.address || undefined;
     const clientPhone = clientObj?.phone || undefined;
     const clientNtn = clientObj?.ntn || undefined;
@@ -84,7 +84,7 @@ export const GlasscoPrintTemplate: React.FC<GlasscoPrintTemplateProps> = ({
     useEffect(() => {
         if (!pieces && printMode === 'JobCard') {
             const orderId = printingQuote.orderNo || printingQuote.id;
-            // P1-26: filter by the exact order_id. orderId is company-unique
+            // filter by the exact order_id. orderId is company-unique
             // (GT-SO-GLS-… vs GT-SO-GTK-…), so this cannot leak another
             // company's pieces — no cross-company contamination on the job card.
             // (Avoids .eq('company',…) which would miss legacy rows whose

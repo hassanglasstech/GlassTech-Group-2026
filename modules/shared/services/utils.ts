@@ -313,13 +313,13 @@ export const ensureArray = <T>(val: any): T[] => {
 };
 
 // ── Ensure number helper ──────────────────────────────────────────────
-export const ensureNumber = (val: any, fallback = 0): number => {
+export const ensureNumber = (val: unknown, fallback = 0): number => {
   const n = Number(val);
   return isNaN(n) ? fallback : n;
 };
 
 // ── Ensure string helper ──────────────────────────────────────────────
-export const ensureString = (val: any, fallback = ''): string => {
+export const ensureString = (val: unknown, fallback = ''): string => {
   if (val === null || val === undefined) return fallback;
   return String(val);
 };

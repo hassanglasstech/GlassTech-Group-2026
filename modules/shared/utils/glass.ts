@@ -3,7 +3,7 @@
 //
 // Consolidates the 5 identical `sqftOf` copies that had drifted across
 // GlasscoPurchaseOrder, GoodsReceiptMIGO/grnHelpers, OpeningBalance helpers,
-// WeightMaster, and Requisitions helpers (audit P1-5). All five computed the
+// WeightMaster, and Requisitions helpers. All five computed the
 // same thing; this is the canonical implementation they now reference.
 // ============================================================================
 

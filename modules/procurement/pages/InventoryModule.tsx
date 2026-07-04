@@ -88,7 +88,7 @@ const InventoryModule: React.FC = () => {
   const [handlingUnits, setHUs] = useState<HandlingUnit[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isMigoOpen, setIsMigoOpen] = useState(false);
-  // Phase-7 (P6-1): Glassco store-purchase MIGO. Audit RC-22: Glassco's
+  // Glassco store-purchase MIGO. Glassco's
   // existing GoodsReceiptMIGO is glass-only (filters PO category='Glass')
   // and does NOT call FinanceService.settleAdvance — so local-purchase
   // requisitions (Maintenance, Tool Purchase, Consumables, etc.) had no

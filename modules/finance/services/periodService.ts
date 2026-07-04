@@ -82,7 +82,7 @@ export const PeriodService = {
   },
 
   // ── Open a period ─────────────────────────────────────────────────
-  // GAP-03: Re-opening a CLOSED period is an audit-sensitive action. Every
+  // Re-opening a CLOSED period is an audit-sensitive action. Every
   // such re-open is now logged to `bypass_log` (Control Exception Register)
   // with a mandatory reason — CFO/auditor can see WHY a closed period was
   // re-opened. First-time opens of a fresh month skip the bypass entry.

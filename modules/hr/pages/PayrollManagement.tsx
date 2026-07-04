@@ -359,10 +359,10 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
 
       // DEBIT SIDE: Expense breakdowns split by department → costCenterId
       // Group employees by department, find matching cost center, tag GL lines
-      const costCenters = FinanceService.getCostCenters().filter((cc: any) => cc.company === company);
+      const costCenters = FinanceService.getCostCenters().filter((cc) => cc.company === company);
 
       const findCCId = (dept: string): string | undefined => {
-        const cc = costCenters.find((c: any) =>
+        const cc = costCenters.find((c) =>
           c.department?.toLowerCase() === dept?.toLowerCase() ||
           c.name?.toLowerCase().includes(dept?.toLowerCase().slice(0, 6))
         );
@@ -565,7 +565,7 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
     const allRows: any[] = [];
 
     for (const co of COMPANIES_ALL) {
-      const emps = HRService.getEmployees().filter((e: any) => e.company === co);
+      const emps = HRService.getEmployees().filter((e) => e.company === co);
       if (emps.length === 0) continue;
 
       const overrides = await AttendanceOverrideService.load(co, selectedMonth);
@@ -587,8 +587,8 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
         const lateDed = Math.round(latePenaltyDays * dayRate);
         const loanDed = override?.manualLoanDeduction !== undefined && override.manualLoanDeduction >= 0
           ? override.manualLoanDeduction
-          : loans.filter((l: any) => l.employeeId === emp.id && l.status === 'Active')
-                 .reduce((s: number, l: any) => s + (l.repaymentAmount || l.amount || 0), 0);
+          : loans.filter((l) => l.employeeId === emp.id && l.status === 'Active')
+                 .reduce((s: number, l) => s + (l.repaymentAmount || l.amount || 0), 0);
         const net = Math.max(0, gross + otPay - absentDed - lateDed - loanDed);
 
         return {

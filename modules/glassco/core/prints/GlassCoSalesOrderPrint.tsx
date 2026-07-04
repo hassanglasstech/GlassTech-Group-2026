@@ -7,9 +7,9 @@ interface Props {
     quote: Quotation;
     clientName: string;
     ledger: any[];
-    clientAddress?: string;   // P1-12
-    clientPhone?: string;     // P1-12
-    clientNtn?: string;       // P1-12
+    clientAddress?: string;   // customer-facing print field
+    clientPhone?: string;     // customer-facing print field
+    clientNtn?: string;       // customer-facing print field
 }
 
 export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName, clientAddress, clientPhone, clientNtn }) => {
@@ -21,7 +21,7 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName, cli
 
     const subTotal = quote.items.reduce((s, i) => s + i.amount, 0);
     const aptChargesTotal = quote.items.reduce((s, i) => s + ((i as any).aptCharges || 0), 0);
-    // P1-13: include serviceCharges (freight / installation) in the order net.
+    // include serviceCharges (freight / installation) in the order net.
     // Without this, the Sales Order printed a LOWER total than the Quotation
     // for the same order whenever service charges existed.
     const serviceChargesTotal = (((quote as Quotation & { serviceCharges?: Array<{ amount?: number }> }).serviceCharges) || [])
@@ -136,7 +136,7 @@ export const GlassCoSalesOrderPrint: React.FC<Props> = ({ quote, clientName, cli
                         const isDoubleGlazed = item.selectedServices?.some((s: string) => s === 'Double Glaze' || s === 'D/G' || s === 'Double Glazing');
                         const qtyDisplay = isDoubleGlazed ? `${item.qty} Set` : item.qty;
                         const description = formatGlassDescription(item);
-                        // P2-29: MM orders must print their MM dimensions. formatBillingSize
+                        // MM orders must print their MM dimensions. formatBillingSize
                         // works purely off item.width/height (inches) and applies the 6"/12"
                         // billing-rounding protocol, so it silently discarded MM input — the
                         // header column read "mm" while the cell showed inch-rounded figures.

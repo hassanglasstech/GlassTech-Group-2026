@@ -55,12 +55,12 @@ const CompensationJustice: React.FC = () => {
 
   const loadWelfare = async () => {
     setWLoading(true);
-    const employees = HRService.getEmployees().filter((e: any) => e.company === company && !['resigned','terminated'].includes(e.work?.status||''));
-    const totalSalary = employees.reduce((s: number, e: any) => s + (e.salary?.basic || 0), 0);
+    const employees = HRService.getEmployees().filter((e) => e.company === company && !['resigned','terminated'].includes(e.work?.status||''));
+    const totalSalary = employees.reduce((s: number, e) => s + (e.salary?.basic || 0), 0);
     const medicalCostPerEmp  = 8500;
     const medicalTotal       = employees.length * medicalCostPerEmp;
-    const medLeave = HRService.getAttendance().filter((a: any) =>
-      employees.map((e:any)=>e.id).includes(a.employeeId) && a.status === 'Absent'
+    const medLeave = HRService.getAttendance().filter((a) =>
+      employees.map((e)=>e.id).includes(a.employeeId) && a.status === 'Absent'
     ).length;
     const medLeaveCost = medLeave * (totalSalary / employees.length / 30);
     const medicalROI   = ((medLeaveCost * 0.35) - medicalTotal);

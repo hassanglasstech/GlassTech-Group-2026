@@ -2,7 +2,7 @@ import React from 'react';
 import { ProductionPiece, Quotation, WarehouseSpot } from '@/modules/shared/types';
 import { MapPin } from 'lucide-react';
 
-// ── MFG-3: Production state machine ───────────────────────────────────────
+// ── Production state machine ───────────────────────────────────────
 // Defines ALL allowed status transitions for a production piece.
 // Any transition not listed here is illegal and MUST be blocked in the UI
 // and any service that mutates piece status.

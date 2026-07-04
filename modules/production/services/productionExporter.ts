@@ -36,7 +36,7 @@ const _writeWorkbook = (rows: any[], sheetName: string, fileName: string) => {
 
 // ── 1. Production pieces ────────────────────────────────────────────────
 //
-// Phase-7 (P2-10): an explicit `company` filter is now mandatory. Without
+// an explicit `company` filter is now mandatory. Without
 // it, an operator scoped to Glassco could accidentally export GTK / GTI
 // pieces that bled in via a parent component pulling `getProductionPieces()`
 // without a filter. The function signature is backward-compatible — when

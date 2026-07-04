@@ -5,7 +5,7 @@ import { GlasscoEditor } from '@/modules/glassco/core/GlasscoEditor';
 import { useGlasscoQuotations } from './useGlasscoQuotations';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { Quotation } from '@/modules/shared/types';
-// P2-27: guard the lazy agent chunk so a failed dynamic import can't crash the list.
+// guard the lazy agent chunk so a failed dynamic import can't crash the list.
 import { ModuleErrorBoundary } from '@/modules/shared/components/ErrorBoundary';
 
 // Lazy-load the agent chat (keeps initial bundle small)
@@ -56,7 +56,7 @@ const GlasscoQuotationManager: React.FC = () => {
     handleReopen,
   } = useGlasscoQuotations();
 
-  // P4-01: status / date-range / value-range filter state (applied below).
+  // status / date-range / value-range filter state (applied below).
   const [filters, setFilters] = useState<QuoteFilters>(EMPTY_QUOTE_FILTERS);
 
   // Open a quotation produced by the agent in the manual editor
@@ -86,7 +86,7 @@ const GlasscoQuotationManager: React.FC = () => {
     const raw = localStorage.getItem('glassco_replacement_prefill');
     if (raw) {
       try {
-        // P2-04: parse + apply the prefill BEFORE clearing localStorage. If
+        // parse + apply the prefill BEFORE clearing localStorage. If
         // JSON.parse threw while the key was already removed, the replacement
         // prefill was lost forever. Now the key is only removed after the
         // editor has been populated successfully.
@@ -124,7 +124,7 @@ const GlasscoQuotationManager: React.FC = () => {
       );
     }
 
-    // P4-01: status / date-range / value-range filters. An undefined status
+    // status / date-range / value-range filters. An undefined status
     // renders as "Draft" in the list, so it matches a Draft filter too.
     if (filters.status)   result = result.filter(q => (q.status || 'Draft') === filters.status);
     if (filters.dateFrom) result = result.filter(q => (q.date || '') >= filters.dateFrom);
@@ -142,7 +142,7 @@ const GlasscoQuotationManager: React.FC = () => {
         const nameB = clients.find(c => c.id === b.clientId)?.name || '';
         return nameA.localeCompare(nameB);
     });
-    // P1-07: the toolbar dropdown offers "Ref #: Newest/Oldest" (order_desc /
+    // the toolbar dropdown offers "Ref #: Newest/Oldest" (order_desc /
     // order_asc) but the sort had no branch for them — selecting either did
     // nothing. Sort by the trailing numeric serial of orderNo/id.
     const refSeq = (q: Quotation) =>
@@ -164,7 +164,7 @@ const GlasscoQuotationManager: React.FC = () => {
             onClick={(e) => { if (e.target === e.currentTarget) setAgentOpen(false); }}
           >
             <div className="w-full max-w-2xl h-[85vh]">
-              {/* P2-27: ModuleErrorBoundary catches a failed chunk load (or a
+              {/* ModuleErrorBoundary catches a failed chunk load (or a
                   runtime crash inside the agent) so the quotation list survives. */}
               <ModuleErrorBoundary moduleName="AI Quotation Agent">
                 <Suspense fallback={
@@ -253,7 +253,7 @@ const GlasscoQuotationManager: React.FC = () => {
         ) : null}
 
         {isEditorOpen && (
-            // P3-11: inline minHeight → Tailwind arbitrary value class min-h-[calc(100vh-120px)]
+            // inline minHeight → Tailwind arbitrary value class min-h-[calc(100vh-120px)]
             <div className="bg-white rounded-xl w-full shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[calc(100vh-120px)]">
                 <GlasscoEditor
                   formData={formData} clients={clients} products={products} isMM={isMM} setIsMM={setIsMM}

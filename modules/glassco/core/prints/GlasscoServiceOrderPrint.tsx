@@ -25,7 +25,7 @@ export const GlasscoServiceOrderPrint: React.FC<Props> = ({ po }) => {
 
     return (
         <div id="glassco-service-order-root" className="glassco-service-order-page bg-white text-black p-0 font-sans leading-tight min-h-screen flex flex-col">
-            {/* P2-30: this print renders STANDALONE (not via GlasscoPrintTemplate),
+            {/* this print renders STANDALONE (not via GlasscoPrintTemplate),
                 so its print CSS must be self-contained and conflict-free. Previously it
                 reused the shared `.glassco-print-page` class and emitted UNSCOPED global
                 rules (body *, table, thead, tr) that clashed with GlasscoPrintTemplate's

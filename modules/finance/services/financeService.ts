@@ -45,7 +45,7 @@ const activeCompany = (): string => {
 
 // _assertGLBalance is now imported from ./glBalance (single source of truth).
 
-// ── Audit #6 (Layer 1): report aggregation shapes ─────────────────────
+// ── report aggregation shapes ─────────────────────
 // Exported so report components consume the exact type the async getters
 // return (server RPC or JS fallback — same shape either way).
 
@@ -154,7 +154,7 @@ const rowToLedger = (r: any): LedgerTransaction => ({
   createdBy:   r.created_by  ?? undefined,
   updatedBy:   r.updated_by  ?? undefined,
   postedAt:    r.posted_at   ?? undefined,
-  // Audit #5: harmless read — undefined when the column is absent (pre-089).
+  // harmless read — undefined when the column is absent (pre-089).
   deletedAt:   r.deleted_at  ?? undefined,
 });
 
@@ -248,7 +248,7 @@ const _loadCache = async (): Promise<void> => {
     if (events?.length)      { _cache.financialEvents    = events.map(rowToFinancialEvent);     safeSave(KEYS.FINANCIAL_EVENTS,   _cache.financialEvents); }
 
     _cache.loaded = true;
-    // Audit #3: seed the dirty-set from the just-loaded ledger so the first
+    // seed the dirty-set from the just-loaded ledger so the first
     // saveLedger after a load pushes ONLY new/changed rows, not the whole array.
     _seedLedgerSnapshot(_cache.ledger);
     Logger.info('Finance', `Cache loaded — ${_cache.ledger.length} GL entries, ${_cache.accounts.length} accounts`);
@@ -261,7 +261,7 @@ const _loadCache = async (): Promise<void> => {
     _cache.recurringExpenses = safeParse(KEYS.RECURRING_EXPENSES);
     _cache.financialEvents   = safeParse(KEYS.FINANCIAL_EVENTS);
     _cache.loaded = true;
-    // Audit #3: seed the dirty-set from the localStorage-fallback ledger too.
+    // seed the dirty-set from the localStorage-fallback ledger too.
     _seedLedgerSnapshot(_cache.ledger);
   }
 };
@@ -292,7 +292,7 @@ export const ledgerToRow = (t: LedgerTransaction) => ({
   updated_by:  t.updatedBy ?? useAuthStore.getState().user?.email ?? null,
   posted_at:   t.postedAt  ?? null,
   updated_at:  new Date().toISOString(),
-  // Audit #5: carry the tombstone through the push. Omitted entirely while
+  // carry the tombstone through the push. Omitted entirely while
   // SOFT_DELETE_ENABLED is false so pre-migration upserts never reference a
   // non-existent column.
   ...(SOFT_DELETE_ENABLED ? { deleted_at: t.deletedAt ?? null } : {}),
@@ -320,7 +320,7 @@ const pettyCashToRow = (e: PettyCashEntry) => ({
 const RETRY_KEY = 'gtk_erp_finance_retry_tables';
 interface FinanceRetryEntry { table: string; label: string; failedAt: string }
 let _retryListenerWired = false;
-let _companySwitchWired = false;   // P1-6: reload finance cache on company switch (wire once)
+let _companySwitchWired = false;   // reload finance cache on company switch (wire once)
 
 const _recordRetry = (table: string, label: string): void => {
   const cur: FinanceRetryEntry[] = safeParse(RETRY_KEY);
@@ -443,14 +443,14 @@ export const FinanceService = {
   // ── Init / Refresh ─────────────────────────────────────────────────
   init: async (): Promise<void> => {
     if (!_cache.loaded) await _loadCache();
-    // Audit #4: drain any GL pushes that terminally failed in a previous
+    // drain any GL pushes that terminally failed in a previous
     // session (fire-and-forget), and re-drain whenever we come back online.
     void FinanceService.flushRetryQueue();
     if (typeof window !== 'undefined' && !_retryListenerWired) {
       _retryListenerWired = true;
       window.addEventListener('online', () => { void FinanceService.flushRetryQueue(); });
     }
-    // P1-6: the cache is loaded ONCE for the boot company. Without this, every
+    // the cache is loaded ONCE for the boot company. Without this, every
     // cache-fed finance report (trial balance, GL, statements, dashboards) keeps
     // showing the boot company's data after a sidebar company switch. Subscribe
     // once so a selectedCompany change re-pulls the finance cache for the new
@@ -523,7 +523,7 @@ export const FinanceService = {
   // ── General Ledger ─────────────────────────────────────────────────
   getLedger: (): LedgerTransaction[] => {
     const all = !_cache.loaded ? safeParse(KEYS.LEDGER) : _cache.ledger;
-    // Audit #5: hide tombstoned entries from every reader (trial balance,
+    // hide tombstoned entries from every reader (trial balance,
     // statements, aging, posting inbox). Inert while SOFT_DELETE_ENABLED is
     // false — every entry has deletedAt === undefined until the flag is on.
     if (SOFT_DELETE_ENABLED) {
@@ -1023,8 +1023,8 @@ export const FinanceService = {
       pvDesc = `[PARKED] ${subCategory.toUpperCase()}: ${itemDesc}`.toUpperCase();
     }
 
-    // Phase-7 (P4-4): ensure both accounts exist before referencing them.
-    // Audit RC-18: previously the PV referenced "${company}-${code}" without
+    // ensure both accounts exist before referencing them.
+    // previously the PV referenced "${company}-${code}" without
     // calling ensureAccount — if the COA hadn't been seeded yet (or someone
     // added a custom subcategory), the Parked PV pointed to a non-existent
     // account → invisible in trial balance, ledger orphaned at post-time.
@@ -1050,7 +1050,7 @@ export const FinanceService = {
       ],
     };
 
-    // Phase-7 (P4-5): assert balance before persisting. Already balanced by
+    // assert balance before persisting. Already balanced by
     // construction (debit = credit = amount), but if a future refactor adds
     // a third line we want LedgerImbalanceError, not silent corruption.
     _assertGLBalance(pv);
@@ -1062,7 +1062,7 @@ export const FinanceService = {
   },
 
   // ── Settle Advance on GRN ───────────────────────────────────────────
-  // GAP-04: `cfoOverride` lets a CFO/Finance Manager approve a settlement
+  // `cfoOverride` lets a CFO/Finance Manager approve a settlement
   // that exceeds the 1.5× FIN-1 cap. The override is logged to bypass_log
   // (Control Exception Register) with mandatory reason + approver — no
   // silent overruns. Without the override, the original hard cap stands.
@@ -1191,7 +1191,7 @@ export const FinanceService = {
     return { settlementId, variance, status: variance === 0 ? 'Exact' : variance < 0 ? 'Under-spend' : 'Over-spend' };
   },
 
-  // ── Audit #6 (Layer 1): Server-side Trial Balance aggregation ───────
+  // ── Server-side Trial Balance aggregation ───────
   // Pushes the per-account Dr/Cr roll-up into Postgres (RPC `trial_balance`,
   // migration 088) so the browser receives grouped totals instead of the
   // entire ledger. On ANY error / empty result (e.g. before the migration is
@@ -1253,7 +1253,7 @@ export const FinanceService = {
     }
   },
 
-  // ── Audit #6 (Layer 1): Server-side AR Aging aggregation ────────────
+  // ── Server-side AR Aging aggregation ────────────
   // Pushes the AR aging bucket roll-up into Postgres (RPC `ar_aging`,
   // migration 088), computed from the invoices table (outstanding balance
   // aged by invoice date). On ANY error / empty result it FALLS BACK to a
@@ -1378,7 +1378,7 @@ export const FinanceService = {
       }).sort((a, b) => b.date.localeCompare(a.date));
   },
 
-  // ── Phase-7 (P3-2): Vendor AP balance — sum of all AP debits/credits ─
+  // ── Vendor AP balance — sum of all AP debits/credits ─
   // Returns the net outstanding payable to a vendor (positive = we owe them).
   // Walks the full ledger, identifies AP entries by account-name match
   // (Payable / AP) AND a vendor-name match in the line text. Cheap because
@@ -1414,7 +1414,7 @@ export const FinanceService = {
     };
   },
 
-  // ── Phase-7 (P3-3): Post a vendor payment voucher ────────────────────
+  // ── Post a vendor payment voucher ────────────────────
   // Standard payment GL: Dr AP — Vendor / Cr Cash-in-Hand or Bank.
   // Reduces the AP balance + reduces cash. Used by the vendor payment UI
   // (Finance / Procurement). Throws if the input is malformed; uses

@@ -17,13 +17,14 @@ import { GeneratorService } from '@/modules/production/services/generatorService
 import { LabourService } from '@/modules/production/services/labourService';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { Upload, Download, FileText, CheckCircle2, AlertTriangle, X, Loader2, Zap, Users, Truck } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 type ImportType = 'generator' | 'labour' | 'delivery';
 
 interface ParsedRow { [key: string]: string; }
 
-const TEMPLATES: Record<ImportType, { name: string; icon: any; iconClass: string; bgClass: string; headers: string[]; sampleRow: string; description: string }> = {
+const TEMPLATES: Record<ImportType, { name: string; icon: LucideIcon; iconClass: string; bgClass: string; headers: string[]; sampleRow: string; description: string }> = {
   generator: {
     name: 'Generator Hours',
     icon: Zap, iconClass: 'text-amber-600', bgClass: 'bg-amber-100',
