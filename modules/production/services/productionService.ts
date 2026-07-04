@@ -251,8 +251,13 @@ export const ProductionService = {
     }
     bgSaveToIDB('productionPieces', data);
     // Push to Supabase in background
-    // MFG-4: include cost_center_id in every upsert row so piece-level
-    // cost attribution is persisted to Supabase (column added in Migration 018).
+    // NOTE: cost_center_id is intentionally NOT sent — the LIVE production_pieces
+    // table never got that column (Migration 018 diverged on this instance), so
+    // including it made EVERY upsert 400 ("Could not find the 'cost_center_id'
+    // column") → pieces never synced to the cloud + repeated console warnings.
+    // costCenterId still persists in localStorage (safeSave above) for local cost
+    // attribution; to sync it to the cloud, add the column via a migration and
+    // restore the field in the mapper below.
     // P1-11: production_pieces has a `company` column (used by every
     // company-filtered read like getProductionPiecesPage + strict-RLS WITH
     // CHECK), but the upsert row never set it — so rows either FAILED the RLS
@@ -281,7 +286,6 @@ export const ProductionService = {
         specs: p.specs || '',
         status: p.status || 'Cut',
         last_updated: (p as any).lastUpdated || new Date().toISOString(),
-        cost_center_id: (p as any).costCenterId ?? null,
         sqft: (p as any).sqft ?? null,
         service_log: (p as any).serviceLog ?? null,  // JSONB — worker-to-service history
       }));
