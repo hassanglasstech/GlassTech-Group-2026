@@ -216,6 +216,20 @@ export async function approveCreditNote(params: {
   }
 
   const amount = cn.amount;
+  // P1-14: re-assert amount <= the invoice's LIVE balance at APPROVAL time.
+  // issueCreditNote checks this only at issue time; between issue and approve
+  // (or with a receipt posted on another device/session) the balance can shrink,
+  // so approval would over-credit AR past zero and overwrite the fresher receipt
+  // balance. The caller (CreditNoteModule) passes a freshly-fetched invoice —
+  // block if the CN now exceeds it. (+0.5 epsilon absorbs GST proportional-split
+  // rounding.) The server-side FOR-UPDATE re-check belongs in the 090 RPC
+  // migration (094); this is the client defence for the common single-user
+  // issue -> receipt -> approve sequence.
+  if (amount > (Number(invoice.balance) || 0) + 0.5) {
+    throw new Error(
+      `Credit note ${cnId} amount (${amount}) exceeds invoice ${invoice.id} live balance (${invoice.balance}) — the balance changed since issue (a receipt may have posted). Re-issue the credit note for the current balance.`
+    );
+  }
   const reason = cn.reason;
   const txId  = `GL-${cnId}`;
   const today = new Date().toISOString().split('T')[0];
