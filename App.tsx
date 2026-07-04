@@ -25,6 +25,7 @@ import { installGlobalCrashHandlers } from '@/modules/shared/services/crashRepor
 const OverrideModeBar = React.lazy(() => import('@/src/components/OverrideModeBar'));
 import { Toaster, toast } from 'sonner';
 import { useAuthStore, isOfficeHours, ROLE_DEFAULT_COMPANY, ROLE_DEFAULT_ROUTE, ROLE_MODULES, ROLE_LABELS } from '@/modules/auth/authStore';
+import { supabase } from '@/src/services/supabaseClient';
 import { HRService } from '@/modules/hr/services/hrService';
 import { loadShiftRules } from '@/modules/hr/pages/ShiftMaster';
 import { FinanceService } from '@/modules/finance/services/financeService';
@@ -466,6 +467,45 @@ const App: React.FC = () => {
     return () => window.removeEventListener('unhandledrejection', handler);
   }, []);
 
+  // ── Auth-session reconciliation (fixes the stale-session desync) ──────
+  // The app decides "logged in vs login screen" from the PERSISTED zustand
+  // user (localStorage 'glasstech-auth'), so on reload it trusts that user and
+  // shows the dashboard — even if the Supabase JWT has since expired/died. When
+  // that happens, every query goes out as `anon` → "permission denied for table
+  // X" → "Cloud sync failed — using local products", with no login prompt.
+  // Reconcile on boot + listen for auth changes: if we have a persisted user
+  // but no live Supabase session (and it can't be refreshed), sign out cleanly
+  // so the app routes to login instead of rendering a dashboard that silently
+  // fails every read.
+  useEffect(() => {
+    let cancelled = false;
+    const reconcile = async () => {
+      const persistedUser = useAuthStore.getState().user;
+      if (!persistedUser) return;                       // not "logged in" — LoginPage handles it
+      const { data: { session } } = await supabase.auth.getSession();
+      if (cancelled) return;
+      const expired = !!session?.expires_at && session.expires_at * 1000 < Date.now();
+      if (!session || expired) {
+        const { data, error } = await supabase.auth.refreshSession();
+        if (cancelled) return;
+        if (error || !data.session) {
+          toast.error('Session expired — please sign in again.');
+          await useAuthStore.getState().signOut();      // clears persisted user → LoginPage
+        }
+      }
+    };
+    reconcile().catch(() => {});
+    // If the token later can't be refreshed (or user signs out in another tab),
+    // clear the persisted user so the app falls back to login rather than anon.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if ((event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) &&
+          useAuthStore.getState().user) {
+        useAuthStore.getState().signOut().catch(() => {});
+      }
+    });
+    return () => { cancelled = true; subscription.unsubscribe(); };
+  }, []);
+
   useEffect(() => {
     if (!user) {
       RealtimeService.stop();
@@ -486,9 +526,17 @@ const App: React.FC = () => {
       const cacheAgeMs = lastSync ? Date.now() - new Date(lastSync).getTime() : Infinity;
       const CACHE_FRESH_MS = 30 * 60 * 1000; // 30 minutes
       if (cacheAgeMs > CACHE_FRESH_MS) {
-        // Cold cache (new device / first login / >30 min ago) — await priority tables
-        await SyncService.fetchCritical();
-        perfMonitor.markBoot('sync_critical');
+        // Cold cache (new device / first login / >30 min ago).
+        // Fire the critical sync NON-BLOCKING — do NOT await it. The boot pull
+        // is an unfiltered select('*') per table; for a super_admin (allowed =
+        // all companies) that returns every company's rows, and the JSONB-heavy
+        // quotations/invoices + base64-image products trip Postgres
+        // statement_timeout — which previously blocked the whole UI ~60s before
+        // any tab could render. Each module tab reads authoritatively from its
+        // OWN company-filtered cloud query (e.g. getQuotations → .eq('company'))
+        // and unions with cache, so the tab renders immediately while the cache
+        // warms in the background.
+        SyncService.fetchCritical().then(() => perfMonitor.markBoot('sync_critical')).catch(() => {});
       } else {
         // Warm cache — skip await, just fire background sync immediately
         perfMonitor.markBoot('sync_critical_skipped');

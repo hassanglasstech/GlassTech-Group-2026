@@ -1615,7 +1615,10 @@ const pullTable = async (table: string, localKey: string): Promise<boolean> => {
         }
         return data;
       },
-      { context: `Pull:${table}`, maxRetries: 2, delayMs: 1000 }
+      // maxRetries:1 — a statement_timeout deterministically re-times-out on a
+      // retry, so a 2nd attempt only doubles the wall time and DB load; fail
+      // fast to the localStorage fallback instead.
+      { context: `Pull:${table}`, maxRetries: 1, delayMs: 1000 }
     );
     if (rawData && rawData.length > 0) {
       const puller = TABLE_PULL[table];

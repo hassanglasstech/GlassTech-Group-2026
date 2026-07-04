@@ -137,10 +137,18 @@ const SalesOrders: React.FC = () => {
                 AsyncSalesService.getQuotations(),
                 AsyncSalesService.getClients(),
             ]);
-            setAllPieces(await ProductionService.getProductionPiecesAsync());
         } catch {
-            setAllPieces(ProductionService.getProductionPieces());   // offline — local pieces
+            // offline — approved orders fall back to the local cache union below
         }
+        // Pieces feed ONLY the progress bars (getProgressStats), so fetch them
+        // company-scoped and OFF the critical path. Passing `company` applies
+        // .eq('company', …); previously this ran with no arg → an unbounded
+        // all-company production_pieces scan that hit statement_timeout (~60s)
+        // and, being awaited before setApprovedOrders, blocked the whole tab.
+        // Non-blocking now, so approved orders render as soon as quotations resolve.
+        ProductionService.getProductionPiecesAsync(company)
+            .then(setAllPieces)
+            .catch(() => setAllPieces(ProductionService.getProductionPieces()));   // offline — local pieces
 
         const quotesById = new Map<string, Quotation>();
         for (const q of SalesService.getQuotations()) if (q?.id) quotesById.set(q.id, q);
