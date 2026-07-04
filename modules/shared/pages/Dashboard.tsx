@@ -72,7 +72,7 @@ const Dashboard: React.FC = () => {
     const awaitingPaymentPOs = allPOs.filter((p: any) => p.status === 'Payment Pending');
     
     const monthSales = quotations
-      .filter(q => q.status === 'Approved' && q.date.startsWith(currentMonth))
+      .filter(q => q.status === 'Approved' && q.date?.startsWith(currentMonth))
       .reduce((sum, q) => sum + q.items.reduce((s, i) => s + (i.amount || 0), 0), 0);
 
     const factoryPieces = company === 'Factory' || company === 'Glassco' ? pieces : pieces.filter(p => p && p.specs?.includes(company)); 
@@ -82,7 +82,7 @@ const Dashboard: React.FC = () => {
     const lowStockCount = store.filter(i => i.quantity <= i.minLevel).length;
     const inventoryValue = store.reduce((sum, i) => sum + (i.totalValue || 0), 0);
 
-    const cashFlow = ledger.filter(t => t.date.startsWith(currentMonth)).length;
+    const cashFlow = ledger.filter(t => t.date?.startsWith(currentMonth)).length;
 
     // Stock alerts from FinanceService
     const stockAlerts = FinanceService.getStockAlerts(company);
