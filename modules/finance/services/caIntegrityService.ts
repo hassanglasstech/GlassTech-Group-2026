@@ -107,7 +107,7 @@ export const CAIntegrityService = {
         const hasInvoice    = !!order.invoiceNo || invoicedOrderIds.has(order.id);
         return isDelivered && !hasInvoice;
       })
-      .map((order: any) => {
+      .map((order: any): UnbilledItem => {
         const deliveryDate = order.actualDeliveryDate || order.dueDate || order.date || '';
         const days         = daysSince(deliveryDate);
         const client       = clients.find((c: any) => c.id === order.clientId);

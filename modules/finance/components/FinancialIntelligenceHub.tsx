@@ -8,7 +8,7 @@
  *  - Improvement Summary (4F)
  */
 
-import React, { useState, useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import TrueCostCalculator from '@/modules/finance/components/TrueCostCalculator';
 import JobProfitabilityReport from '@/modules/finance/components/JobProfitability';

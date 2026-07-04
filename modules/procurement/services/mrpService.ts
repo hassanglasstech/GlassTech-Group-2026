@@ -234,7 +234,7 @@ export function runMRP(company: string): MRPResult {
   schedule.sort((a, b) => a.daysUntilDue - b.daysUntilDue);
 
   // ── Build requirements with shortage calc ────────────────────────
-  const requirements: MRPRequirement[] = Object.entries(reqMap).map(([key, data]) => {
+  const requirements: MRPRequirement[] = Object.entries(reqMap).map(([key, data]): MRPRequirement => {
     const wastage = getHistoricalWastage(company, data.glassType);
     const gross = Number((data.sqft * (1 + wastage / 100)).toFixed(1));
     const stock = stockMap[key] || 0;

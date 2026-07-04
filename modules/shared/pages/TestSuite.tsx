@@ -1,6 +1,58 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { runWorkflow as aiRunWorkflow, runFullSuite as aiRunFullSuite, storeTestResults } from "@/modules/factory/services/testRunnerService";
+import type { WorkflowResult, SuiteResult } from "@/modules/factory/services/testRunnerService";
 import { setWorkflows as setAgentWorkflows } from "@/modules/factory/components/agent/TestRunnerAgent";
+
+// ── Domain types ────────────────────────────────────────────────────────────
+type StepStatus = "idle" | "running" | "pass" | "fail" | "blocked" | "reverify";
+type DeptCode = "MASTERS" | "SALES" | "HR" | "FINANCE" | "STORE";
+
+interface StepInput {
+  key: string;
+  label: string;
+  type: string;
+  placeholder?: string;
+  options?: string[];
+}
+
+interface WorkflowStep {
+  id: string;
+  tab: string;
+  action: string;
+  vba: string;
+  inputs: StepInput[];
+  checks: string[];
+  affects?: string[];
+}
+
+interface Workflow {
+  id: string;
+  name: string;
+  dept: DeptCode;
+  color: string;
+  desc: string;
+  steps: WorkflowStep[];
+}
+
+interface CrossWorkflowDep {
+  wfId: string;
+  wfName: string;
+  stepAction: string;
+}
+
+interface StepRunState {
+  status: StepStatus;
+  inputs: Record<string, string>;
+  failedChecks: number[];
+}
+
+type TestState = Record<string, Record<string, StepRunState>>;
+
+interface LogEntry {
+  time: string;
+  msg: string;
+  type: string;
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // GlassTech ERP — Auto-Discovered UAT Test Suite
@@ -12,9 +64,9 @@ import { setWorkflows as setAgentWorkflows } from "@/modules/factory/components/
 /** @typedef {'idle'|'running'|'pass'|'fail'|'blocked'|'reverify'} StepStatus */
 /** @typedef {'MASTERS'|'SALES'|'HR'|'FINANCE'|'STORE'} DeptCode */
 
-const STATUS = { idle:"idle", running:"running", pass:"pass", fail:"fail", blocked:"blocked", reverify:"reverify" };
+const STATUS: Record<StepStatus, StepStatus> = { idle:"idle", running:"running", pass:"pass", fail:"fail", blocked:"blocked", reverify:"reverify" };
 
-const DEPT_COLORS = {
+const DEPT_COLORS: Record<DeptCode, { primary: string; bg: string; text: string }> = {
   STORE:   { primary:"#27AE60", bg:"#EAFAF1", text:"#1A5C35" },
   SALES:   { primary:"#2980B9", bg:"#EBF5FB", text:"#1A4A7A" },
   HR:      { primary:"#E67E22", bg:"#FEF9E7", text:"#7D3C00" },
@@ -24,8 +76,8 @@ const DEPT_COLORS = {
 
 // ── Sheet/Table Dependency Graph ────────────────────────────────────────────
 // Maps each sheet to all workflow IDs that READ or WRITE it
-const SHEET_DEPENDENCY_GRAPH = {};
-function buildDependencyGraph(workflows) {
+const SHEET_DEPENDENCY_GRAPH: Record<string, Set<string>> = {};
+function buildDependencyGraph(workflows: Workflow[]) {
   workflows.forEach(wf => {
     wf.steps.forEach(step => {
       const sheets = [step.tab, ...(step.affects || []).map(a => a.split(" ")[0])];
@@ -41,7 +93,7 @@ function buildDependencyGraph(workflows) {
 // ── Auto-Discovered Workflow Definitions ────────────────────────────────────
 // Extracted from: TypeScript interfaces, Supabase .from() calls, VBA Sub names,
 // status enums, business rule constants, and FK relationships
-export const WORKFLOWS = [
+export const WORKFLOWS: Workflow[] = [
   // ═══════════════════════════════════════════════════════════════════════════
   // MODULE 1: MASTER DATA (6 workflows)
   // ═══════════════════════════════════════════════════════════════════════════
@@ -870,8 +922,8 @@ buildDependencyGraph(WORKFLOWS);
 /** @param {string} wfId - Current workflow ID
  *  @param {string} sheetName - Sheet being modified
  *  @returns {Array<{wfId:string, wfName:string, stepAction:string}>} */
-function findCrossWorkflowDeps(wfId, sheetName) {
-  const deps = [];
+function findCrossWorkflowDeps(wfId: string, sheetName: string): CrossWorkflowDep[] {
+  const deps: CrossWorkflowDep[] = [];
   const dependentWFs = SHEET_DEPENDENCY_GRAPH[sheetName];
   if (!dependentWFs) return deps;
   dependentWFs.forEach(depWfId => {
@@ -885,8 +937,21 @@ function findCrossWorkflowDeps(wfId, sheetName) {
 }
 
 // ── Step Box Component ──────────────────────────────────────────────────────
-function StepBox({ step, stepIdx, wfColor, status, active, onClick, inputs, onInputChange, failedChecks, onMarkFailed, onMarkPass }) {
-  const statusColors = {
+interface StepBoxProps {
+  step: WorkflowStep;
+  stepIdx: number;
+  wfColor: string;
+  status: StepStatus;
+  active: boolean;
+  onClick: () => void;
+  inputs: Record<string, string>;
+  onInputChange: (key: string, val: string) => void;
+  failedChecks: number[];
+  onMarkFailed: (checkIdx: number) => void;
+  onMarkPass: () => void;
+}
+function StepBox({ step, stepIdx, wfColor, status, active, onClick, inputs, onInputChange, failedChecks, onMarkFailed, onMarkPass }: StepBoxProps) {
+  const statusColors: Record<StepStatus, { bg: string; border: string; dot: string; text: string }> = {
     idle:     { bg:"#1B2B3A", border:"#3C4E5E", dot:"#3C4E5E", text:"#8899AA" },
     running:  { bg:"#0D1B2A", border:wfColor,   dot:wfColor,   text:"#E0E0E0" },
     pass:     { bg:"#0A2E1A", border:"#27AE60",  dot:"#27AE60", text:"#AAFFCC" },
@@ -966,7 +1031,7 @@ function StepBox({ step, stepIdx, wfColor, status, active, onClick, inputs, onIn
                   }}
                 >
                   <option value="">-- select --</option>
-                  {inp.options.map(o => <option key={o} value={o}>{o}</option>)}
+                  {(inp.options || []).map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               ) : (
                 <input
@@ -1017,7 +1082,7 @@ function StepBox({ step, stepIdx, wfColor, status, active, onClick, inputs, onIn
               <div style={{ fontSize:8, fontWeight:700, color:"#F39C12", marginBottom:3 }}>
                 IMPACTS:
               </div>
-              {step.affects.map((a,i) => (
+              {(step.affects || []).map((a,i) => (
                 <div key={i} style={{ fontSize:8, color:"#FFD699" }}>{"-> " + a}</div>
               ))}
             </div>
@@ -1048,7 +1113,7 @@ function StepBox({ step, stepIdx, wfColor, status, active, onClick, inputs, onIn
 }
 
 // ── Arrow Component ─────────────────────────────────────────────────────────
-function Arrow({ color, broken }) {
+function Arrow({ color, broken }: { color: string; broken: boolean }) {
   return (
     <div style={{ display:"flex", alignItems:"center", flexShrink:0, margin:"0 2px" }}>
       <div style={{
@@ -1075,28 +1140,28 @@ function Arrow({ color, broken }) {
 
 // ── Main Component ──────────────────────────────────────────────────────────
 export default function GlassTechTestSuiteAuto() {
-  const [activeWF, setActiveWF] = useState(null);
-  const [testState, setTestState] = useState({});
-  const [activeStep, setActiveStep] = useState({});
-  const [log, setLog] = useState<{ time: string; msg: string; type: string }[]>([]);
+  const [activeWF, setActiveWF] = useState<string | null>(null);
+  const [testState, setTestState] = useState<TestState>({});
+  const [activeStep, setActiveStep] = useState<Record<string, string>>({});
+  const [log, setLog] = useState<LogEntry[]>([]);
   const [showLog, setShowLog] = useState(false);
-  const [filterDept, setFilterDept] = useState("ALL");
+  const [filterDept, setFilterDept] = useState<DeptCode | "ALL">("ALL");
   const [searchTerm, setSearchTerm] = useState("");
   const [aiRunning, setAiRunning] = useState(false);
-  const [aiRunningWF, setAiRunningWF] = useState(null);
-  const [aiResults, setAiResults] = useState(null);
+  const [aiRunningWF, setAiRunningWF] = useState<string | null>(null);
+  const [aiResults, setAiResults] = useState<WorkflowResult | SuiteResult | null>(null);
 
   // Register workflows with TestRunnerAgent for EventOS integration
   useEffect(() => { setAgentWorkflows(WORKFLOWS); }, []);
 
-  const addLog = useCallback((msg, type="info") => {
+  const addLog = useCallback((msg: string, type = "info") => {
     setLog(prev => [{time: new Date().toLocaleTimeString(), msg, type}, ...prev].slice(0,100));
   }, []);
 
-  const getStepState = useCallback((wfId, stepId) =>
+  const getStepState = useCallback((wfId: string, stepId: string): StepRunState =>
     testState[wfId]?.[stepId] || { status: STATUS.idle, inputs: {}, failedChecks: [] }, [testState]);
 
-  const getWFStatus = useCallback((wfId) => {
+  const getWFStatus = useCallback((wfId: string) => {
     const wf = WORKFLOWS.find(w => w.id === wfId);
     if (!wf) return STATUS.idle;
     const states = wf.steps.map(s => getStepState(wfId, s.id).status);
@@ -1136,7 +1201,7 @@ export default function GlassTechTestSuiteAuto() {
     return s;
   }, [getWFStatus]);
 
-  const startWorkflow = useCallback((wfId) => {
+  const startWorkflow = useCallback((wfId: string) => {
     const wf = WORKFLOWS.find(w => w.id === wfId);
     if (!wf) return;
     setActiveWF(wfId);
@@ -1150,7 +1215,7 @@ export default function GlassTechTestSuiteAuto() {
     addLog(`[START] ${wf.id}: ${wf.name}`, "info");
   }, [addLog]);
 
-  const resetWorkflow = useCallback((wfId) => {
+  const resetWorkflow = useCallback((wfId: string) => {
     const wf = WORKFLOWS.find(w => w.id === wfId);
     if (!wf) return;
     setTestState(prev => { const n = { ...prev }; delete n[wfId]; return n; });
@@ -1167,7 +1232,7 @@ export default function GlassTechTestSuiteAuto() {
   }, [addLog]);
 
   // ── AI Auto-Test: Single Workflow ─────────────────────────────────
-  const aiTestWorkflow = useCallback(async (wfId) => {
+  const aiTestWorkflow = useCallback(async (wfId: string) => {
     const wf = WORKFLOWS.find(w => w.id === wfId);
     if (!wf || aiRunning) return;
     setAiRunningWF(wfId);
@@ -1279,7 +1344,7 @@ export default function GlassTechTestSuiteAuto() {
     }
   }, [aiRunning, addLog]);
 
-  const setStepStatus = useCallback((wfId, stepId, status) => {
+  const setStepStatus = useCallback((wfId: string, stepId: string, status: StepStatus) => {
     setTestState(prev => ({
       ...prev,
       [wfId]: {
@@ -1289,7 +1354,7 @@ export default function GlassTechTestSuiteAuto() {
     }));
   }, []);
 
-  const passStep = useCallback((wfId, stepId) => {
+  const passStep = useCallback((wfId: string, stepId: string) => {
     const wf = WORKFLOWS.find(w => w.id === wfId);
     if (!wf) return;
     const stepIdx = wf.steps.findIndex(s => s.id === stepId);
@@ -1334,7 +1399,7 @@ export default function GlassTechTestSuiteAuto() {
     }
   }, [getStepState, getWFStatus, addLog, setStepStatus]);
 
-  const failStep = useCallback((wfId, stepId, checkIdx) => {
+  const failStep = useCallback((wfId: string, stepId: string, checkIdx: number) => {
     const wf = WORKFLOWS.find(w => w.id === wfId);
     if (!wf) return;
     const step = wf.steps.find(s => s.id === stepId);
@@ -1369,7 +1434,7 @@ export default function GlassTechTestSuiteAuto() {
     }
   }, [addLog, setStepStatus, getStepState]);
 
-  const updateInput = useCallback((wfId, stepId, key, val) => {
+  const updateInput = useCallback((wfId: string, stepId: string, key: string, val: string) => {
     setTestState(prev => ({
       ...prev,
       [wfId]: {
@@ -1388,7 +1453,7 @@ export default function GlassTechTestSuiteAuto() {
     return count;
   }, []);
 
-  const wfStatusColors = {
+  const wfStatusColors: Record<StepStatus, { bg: string; border: string; badge: string; label: string }> = {
     idle:     { bg:"#1B2B3A", border:"#3C4E5E", badge:"#667788", label:"IDLE" },
     running:  { bg:"#0D1B2A", border:"#2980B9", badge:"#2980B9", label:"RUNNING" },
     pass:     { bg:"#0A2E1A", border:"#27AE60", badge:"#27AE60", label:"PASSED" },
@@ -1397,7 +1462,7 @@ export default function GlassTechTestSuiteAuto() {
     reverify: { bg:"#2E2A0A", border:"#F1C40F", badge:"#F1C40F", label:"RE-VERIFY" },
   };
 
-  const logColors = { info:"#8899AA", pass:"#27AE60", fail:"#E74C3C", warn:"#F39C12" };
+  const logColors: Record<string, string> = { info:"#8899AA", pass:"#27AE60", fail:"#E74C3C", warn:"#F39C12" };
 
   return (
     <div style={{ fontFamily:"'Segoe UI', Calibri, sans-serif", background:"#0D1B2A", minHeight:"100vh", padding:0, color:"#E0E0E0" }}>
@@ -1417,12 +1482,12 @@ export default function GlassTechTestSuiteAuto() {
           </div>
         </div>
         <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-          {[
+          {([
             {s:"pass",c:"#27AE60",l:"Passed"},
             {s:"fail",c:"#E74C3C",l:"Failed"},
             {s:"running",c:"#2980B9",l:"Running"},
             {s:"reverify",c:"#F1C40F",l:"Re-Verify"},
-          ].map(({s,c,l}) => {
+          ] as { s: keyof typeof stats; c: string; l: string }[]).map(({s,c,l}) => {
             const count = stats[s];
             return count > 0 ? (
               <div key={s} style={{
@@ -1472,7 +1537,7 @@ export default function GlassTechTestSuiteAuto() {
         display:"flex", gap:12, alignItems:"center", flexWrap:"wrap"
       }}>
         <div style={{ fontSize:9, color:"#667788", fontWeight:700, letterSpacing:1 }}>MODULES:</div>
-        {Object.entries(DEPT_COLORS).map(([dept, colors]) => (
+        {(Object.entries(DEPT_COLORS) as [DeptCode, (typeof DEPT_COLORS)[DeptCode]][]).map(([dept, colors]) => (
           <div key={dept}
             onClick={() => setFilterDept(prev => prev === dept ? "ALL" : dept)}
             style={{
@@ -1638,7 +1703,8 @@ export default function GlassTechTestSuiteAuto() {
           ) : (() => {
             const wf = WORKFLOWS.find(w => w.id === activeWF);
             if (!wf) return null;
-            const wfStatus = getWFStatus(activeWF);
+            const wfId = wf.id;
+            const wfStatus = getWFStatus(wfId);
             const dc = DEPT_COLORS[wf.dept] || DEPT_COLORS.STORE;
 
             return (
@@ -1679,8 +1745,8 @@ export default function GlassTechTestSuiteAuto() {
                 {/* Flow diagram */}
                 <div style={{ display:"flex", alignItems:"flex-start", gap:0, flexWrap:"nowrap", overflowX:"auto", paddingBottom:16 }}>
                   {wf.steps.map((step, idx) => {
-                    const st = getStepState(activeWF, step.id);
-                    const isActive = activeStep[activeWF] === step.id;
+                    const st = getStepState(wfId, step.id);
+                    const isActive = activeStep[wfId] === step.id;
                     const isBroken = st.status === STATUS.fail;
 
                     return (
@@ -1700,17 +1766,17 @@ export default function GlassTechTestSuiteAuto() {
                             active={isActive}
                             onClick={() => {
                               if (st.status !== STATUS.blocked) {
-                                setActiveStep(prev => ({ ...prev, [activeWF]: step.id }));
+                                setActiveStep(prev => ({ ...prev, [wfId]: step.id }));
                                 if (st.status === STATUS.idle) {
-                                  setStepStatus(activeWF, step.id, STATUS.running);
+                                  setStepStatus(wfId, step.id, STATUS.running);
                                 }
                               }
                             }}
                             inputs={st.inputs}
-                            onInputChange={(key, val) => updateInput(activeWF, step.id, key, val)}
+                            onInputChange={(key, val) => updateInput(wfId, step.id, key, val)}
                             failedChecks={st.failedChecks}
-                            onMarkFailed={(ci) => failStep(activeWF, step.id, ci)}
-                            onMarkPass={() => passStep(activeWF, step.id)}
+                            onMarkFailed={(ci) => failStep(wfId, step.id, ci)}
+                            onMarkPass={() => passStep(wfId, step.id)}
                           />
                         </div>
                         {idx < wf.steps.length - 1 && (
@@ -1752,7 +1818,7 @@ export default function GlassTechTestSuiteAuto() {
                   </div>
                   {wf.steps.map(step => {
                     const sheets = [step.tab, ...(step.affects || []).map(a => a.split(" ")[0])];
-                    const allDeps = [];
+                    const allDeps: (CrossWorkflowDep & { sheet: string })[] = [];
                     sheets.forEach(sheet => {
                       const deps = findCrossWorkflowDeps(wf.id, sheet);
                       deps.forEach(d => {

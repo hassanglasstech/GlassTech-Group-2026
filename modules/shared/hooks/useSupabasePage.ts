@@ -62,7 +62,7 @@ export function useSupabasePage<T = any>({
 
   // Debounce search
   const searchRef = useRef('');
-  const debounceTimer = useRef<ReturnType<typeof setTimeout>>();
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const handleSetSearch = useCallback((s: string) => {
     searchRef.current = s;

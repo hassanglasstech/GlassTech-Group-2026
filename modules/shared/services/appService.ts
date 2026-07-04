@@ -181,7 +181,7 @@ export const AppService = {
         const lsItems = safeParse(KEYS.ACTIVITY_LOGS);
         if (lsItems.length > 0) {
             const tx = db.transaction('activityLogs', 'readwrite');
-            await Promise.all(lsItems.map(item => tx.store.put(item)));
+            await Promise.all(lsItems.map((item: ActivityLog) => tx.store.put(item)));
             await tx.done;
             return lsItems;
         }

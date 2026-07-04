@@ -33,6 +33,7 @@
     "node_modules",
     "dist",
     "supabase/functions",
+    "modules/supabase/functions",
     "server",
     "scripts"
   ]

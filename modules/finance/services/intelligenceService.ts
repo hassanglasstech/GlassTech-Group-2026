@@ -121,7 +121,7 @@ export const IntelligenceService = {
       map[cid].sqft    += getOrderSqft(o);
     });
 
-    return Object.entries(map).map(([clientId, data]) => {
+    return Object.entries(map).map(([clientId, data]): ClientProfitability => {
       const client = clients.find((c: any) => c.id === clientId);
       const estGlassCost   = data.sqft * glassMAP;
       const estServiceCost = data.revenue * 0.12; // ~12% service cost ratio

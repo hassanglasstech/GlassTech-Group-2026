@@ -641,7 +641,7 @@ const GoodsReceiptMIGO: React.FC<Props> = ({ products, isOpen, onClose, refreshD
           try {
             NCRService.createNCR({
               company, stage: 'Inward-Inspection',
-              cause: 'BR-05-Complete-Break',
+              cause: 'BR-04-Raw-Material-Defect',
               description: `GRN ${grnId} — Tag ${insp.tagId}: Complete break, zero usable area`,
               reportedBy: 'Store Incharge',
               sqftLost: line.sqftPerSheet,

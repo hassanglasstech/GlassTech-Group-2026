@@ -5,11 +5,52 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 // SAP-Style visual flow + step-by-step input collection + live GL entries
 // ══════════════════════════════════════════════════════════════════════════════
 
-const fmt = (n) => n != null && !isNaN(n) ? Number(n).toLocaleString() : "0";
-const n = (v) => Number(v) || 0;
+const fmt = (n: number | string | null | undefined): string => n != null && !isNaN(Number(n)) ? Number(n).toLocaleString() : "0";
+const n = (v: number | string | null | undefined): number => Number(v) || 0;
+
+// ── Types ────────────────────────────────────────────────────────────
+// Every phase input writes e.target.value (a string) into this map, so all
+// collected test values are strings keyed by the input's `key`.
+type TestValues = Record<string, string>;
+
+interface ModInfo { color: string; bg: string; label: string; icon: string; }
+
+interface GLEntry { side: string; code: string; name: string; amount: string; }
+interface GLPosting { docType: string; status: string; id: string; entries: GLEntry[]; note?: string; }
+
+interface PhaseField { name: string; value: string; desc?: string; }
+
+interface PhaseInput {
+  key: string;
+  label: string;
+  type: string;
+  placeholder?: string;
+  options?: string[];
+}
+
+interface Phase {
+  id: string;
+  title: string;
+  module: string;
+  icon: string;
+  tcode: string;
+  trigger: string;
+  table: string;
+  inputs: PhaseInput[];
+  fields: (v: TestValues) => PhaseField[];
+  gl: ((v: TestValues) => GLPosting | null) | null;
+  checks: string[];
+}
+
+interface GuidedTest {
+  id: string;
+  name: string;
+  desc: string;
+  phases: Phase[];
+}
 
 // ── Module Colors ────────────────────────────────────────────────────
-const MOD = {
+const MOD: Record<string, ModInfo> = {
   STORE:   { color:"#27AE60", bg:"#27AE6012", label:"Material Management", icon:"WH" },
   SALES:   { color:"#2980B9", bg:"#2980B912", label:"Sales & Distribution", icon:"SD" },
   HR:      { color:"#E67E22", bg:"#E67E2212", label:"HCM / Payroll", icon:"HR" },
@@ -21,7 +62,7 @@ const MOD = {
 // ALL GUIDED TESTS — 24 tests, 5 modules
 // Each phase: inputs (user fills) → fields (computed) → gl (live amounts)
 // ══════════════════════════════════════════════════════════════════════════════
-const GUIDED_TESTS = {
+const GUIDED_TESTS: Record<string, GuidedTest[]> = {
   STORE: [
     { id:"GT-ST01", name:"Stock Opening Balance (561)", desc:"Item create karo, opening stock post karo, GL journal OB, Trial Balance verify",
       phases:[
@@ -706,7 +747,7 @@ const ALL_TESTS = Object.entries(GUIDED_TESTS).flatMap(([mod, tests]) =>
 // COMPONENTS
 // ══════════════════════════════════════════════════════════════════════════════
 
-function GLBox({ gl }) {
+function GLBox({ gl }: { gl: GLPosting | null }) {
   if (!gl) return null;
   return (
     <div style={{ marginTop:10, padding:"10px 12px", borderRadius:8, background:"#0A1628", border:"1px solid #2C3E5066" }}>
@@ -721,7 +762,7 @@ function GLBox({ gl }) {
         <thead><tr>
           {["","Code","Account","PKR"].map(h=><th key={h} style={{ fontSize:8, color:"#667788", textAlign:h==="PKR"?"right":"left", padding:"2px 4px", borderBottom:"1px solid #2C3E50" }}>{h}</th>)}
         </tr></thead>
-        <tbody>{gl.entries.map((e,i)=>(
+        <tbody>{gl.entries.map((e: GLEntry, i: number)=>(
           <tr key={i}>
             <td style={{ fontSize:10, padding:"4px", fontWeight:700, color:e.side==="Dr"?"#E74C3C":"#27AE60" }}>{e.side}</td>
             <td style={{ fontSize:10, padding:"4px", color:"#AABBCC", fontFamily:"monospace" }}>{e.code}</td>
@@ -735,7 +776,7 @@ function GLBox({ gl }) {
   );
 }
 
-function FlowArrow({ amount, fromMod, toMod }) {
+function FlowArrow({ amount, fromMod, toMod }: { amount: string | null; fromMod: string; toMod: string }) {
   const c1 = MOD[fromMod]?.color || "#2C3E50";
   const c2 = MOD[toMod]?.color || c1;
   const cross = fromMod !== toMod;
@@ -753,11 +794,11 @@ function FlowArrow({ amount, fromMod, toMod }) {
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════════
 export default function GuidedTestFlows() {
-  const [activeTest, setActiveTest] = useState(null);
+  const [activeTest, setActiveTest] = useState<string | null>(null);
   const [activePhase, setActivePhase] = useState(0);
-  const [values, setValues] = useState({});
-  const [completedPhases, setCompletedPhases] = useState({});
-  const [expandedMod, setExpandedMod] = useState("STORE");
+  const [values, setValues] = useState<Record<string, Record<string, TestValues>>>({});
+  const [completedPhases, setCompletedPhases] = useState<Record<string, boolean>>({});
+  const [expandedMod, setExpandedMod] = useState<string | null>("STORE");
 
   // Load saved sessions from localStorage
   useEffect(() => {
@@ -773,8 +814,8 @@ export default function GuidedTestFlows() {
 
   // Merged values across all phases of active test (so phase 3 can see phase 1 inputs)
   const mergedValues = useMemo(() => {
-    if (!test) return {};
-    const merged = {};
+    if (!test) return {} as TestValues;
+    const merged: TestValues = {};
     test.phases.forEach(p => {
       const pv = values[test.id]?.[p.id] || {};
       Object.assign(merged, pv);
@@ -782,14 +823,14 @@ export default function GuidedTestFlows() {
     return merged;
   }, [test, values]);
 
-  const setVal = useCallback((testId, phaseId, key, val) => {
+  const setVal = useCallback((testId: string, phaseId: string, key: string, val: string) => {
     setValues(prev => ({
       ...prev,
       [testId]: { ...prev[testId], [phaseId]: { ...prev[testId]?.[phaseId], [key]: val } }
     }));
   }, []);
 
-  const completePhase = useCallback((testId, phaseId, idx) => {
+  const completePhase = useCallback((testId: string, phaseId: string, idx: number) => {
     setCompletedPhases(prev => ({ ...prev, [`${testId}-${phaseId}`]: true }));
     if (test && idx < test.phases.length - 1) setActivePhase(idx + 1);
   }, [test]);
@@ -805,17 +846,17 @@ export default function GuidedTestFlows() {
     setActivePhase(0);
   }, [test]);
 
-  const selectTest = (id) => { setActiveTest(id); setActivePhase(0); };
+  const selectTest = (id: string) => { setActiveTest(id); setActivePhase(0); };
 
   // Compute flow amounts for connectors
-  const getFlowAmount = (phaseIdx) => {
+  const getFlowAmount = (phaseIdx: number): string | null => {
     if (!test || phaseIdx < 1) return null;
     const prev = test.phases[phaseIdx - 1];
     const glFn = prev.gl;
     if (!glFn || typeof glFn !== "function") return null;
     const gl = glFn(mergedValues);
     if (!gl?.entries?.length) return null;
-    return gl.entries[0]?.amount;
+    return gl.entries[0]?.amount ?? null;
   };
 
   return (

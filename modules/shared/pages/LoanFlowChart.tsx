@@ -5,7 +5,69 @@ import { useState } from "react";
 // Complete E2E: Requisition → Approval → Loan → PV → Payroll → GL → Completion
 // ══════════════════════════════════════════════════════════════════════════════
 
-const PHASES = [
+type ModuleKey = "SCM" | "HR" | "FICO";
+
+interface GLEntry {
+  side: "Dr" | "Cr";
+  code: string;
+  name: string;
+  amount: string;
+}
+
+interface GLPosting {
+  docType: string;
+  status: string;
+  id: string;
+  entries: GLEntry[];
+  note?: string;
+}
+
+interface StatusBefore {
+  table: string;
+  field: string;
+  value: string;
+  color: string;
+}
+
+interface StatusAfter {
+  table: string;
+  field: string;
+  from: string;
+  to: string;
+  color: string;
+}
+
+interface PhaseField {
+  name: string;
+  value: string;
+  desc: string;
+  badge?: string;
+}
+
+interface PhaseFormula {
+  title: string;
+  lines: string[];
+}
+
+interface Phase {
+  id: string;
+  phase: string;
+  title: string;
+  module: ModuleKey;
+  moduleColor: string;
+  icon: string;
+  transaction: string;
+  trigger: string;
+  table: string;
+  fields: PhaseField[];
+  gl: GLPosting | null;
+  statusBefore: StatusBefore | null;
+  statusAfter: StatusAfter | null;
+  formula?: PhaseFormula;
+  note?: string;
+}
+
+const PHASES: Phase[] = [
   {
     id: "P1", phase: "Phase 1", title: "Requisition Creation",
     module: "SCM", moduleColor: "#27AE60", icon: "REQ",
@@ -193,13 +255,13 @@ const PHASES = [
 ];
 
 // ── Colors ───────────────────────────────────────────────────────────
-const MODULE_COLORS = {
+const MODULE_COLORS: Record<ModuleKey, { bg: string; border: string; text: string; label: string }> = {
   SCM:  { bg: "#27AE6018", border: "#27AE60", text: "#27AE60", label: "SCM / Procurement" },
   HR:   { bg: "#E67E2218", border: "#E67E22", text: "#E67E22", label: "HCM / Payroll" },
   FICO: { bg: "#1A3A5C18", border: "#1A3A5C", text: "#5DADE2", label: "FICO / Finance" },
 };
 
-function GLBox({ gl }) {
+function GLBox({ gl }: { gl: GLPosting | null }) {
   if (!gl) return null;
   return (
     <div style={{
@@ -236,7 +298,7 @@ function GLBox({ gl }) {
           </tr>
         </thead>
         <tbody>
-          {gl.entries.map((e, i) => (
+          {gl.entries.map((e: GLEntry, i: number) => (
             <tr key={i}>
               <td style={{
                 fontSize: 9, padding: "3px 4px", fontWeight: 700,
@@ -258,7 +320,7 @@ function GLBox({ gl }) {
   );
 }
 
-function StatusTransition({ before, after }) {
+function StatusTransition({ before, after }: { before: StatusBefore | null; after: StatusAfter | null }) {
   if (!after) return null;
   return (
     <div style={{
@@ -283,7 +345,7 @@ function StatusTransition({ before, after }) {
   );
 }
 
-function PhaseConnector({ fromModule, toModule }) {
+function PhaseConnector({ fromModule, toModule }: { fromModule: ModuleKey; toModule: ModuleKey }) {
   const fromColor = MODULE_COLORS[fromModule]?.border || "#2C3E50";
   const toColor = MODULE_COLORS[toModule]?.border || "#2C3E50";
   const isCrossModule = fromModule !== toModule;
@@ -315,10 +377,10 @@ function PhaseConnector({ fromModule, toModule }) {
 }
 
 export default function LoanFlowChart() {
-  const [expanded, setExpanded] = useState({});
-  const [activePhase, setActivePhase] = useState(null);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [activePhase, setActivePhase] = useState<string | null>(null);
 
-  const toggleExpand = (id) => {
+  const toggleExpand = (id: string) => {
     setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
     setActivePhase(id);
   };

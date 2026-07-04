@@ -991,7 +991,7 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
                     </div>
                 </div>
             </div>
-          )})}
+          )})()}
          </div>
     );
 };

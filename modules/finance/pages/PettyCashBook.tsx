@@ -160,7 +160,7 @@ const PettyCashBook: React.FC<{ company: Company }> = ({ company }) => {
             const updatedReqs = allReqs.map(r => r.id === linkedReqId ? {
               ...r,
               status: 'Completed' as const,
-              paymentStatus: 'Paid',
+              paymentStatus: 'Paid' as const,
               paymentRef: txId,
               paidAmount: entryOrForm.amount,
               paymentDate: selectedDate,

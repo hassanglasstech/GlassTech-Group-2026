@@ -47,7 +47,7 @@ const HRModule: React.FC = () => {
         </button>
       </div>
       {activeTab === 'registry'   && <EmployeeManagement company={company} />}
-      {activeTab === 'attendance' && <AttendanceRegister company={company} />}
+      {activeTab === 'attendance' && <AttendanceRegister />}
       {activeTab === 'leave'      && <LeaveManagement company={company} />}
       {activeTab === 'loans'      && <LoanManagement company={company} />}
       {activeTab === 'payroll'    && <PayrollManagement company={company} />}

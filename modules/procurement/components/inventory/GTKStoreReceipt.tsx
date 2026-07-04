@@ -563,7 +563,7 @@ const GTKStoreReceipt: React.FC<GTKStoreReceiptProps> = ({ isOpen, onClose, refr
                       </td>
                       <td className="px-3 py-2">
                         <select className="w-full p-2 bg-slate-50 border rounded-lg font-bold text-[11px]"
-                          value={line.category} onChange={e => updateLine(line.id, { category: e.target.value })}>
+                          value={line.category} onChange={e => updateLine(line.id, { category: e.target.value as ReceiptLine['category'] })}>
                           {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </td>
@@ -598,7 +598,7 @@ const GTKStoreReceipt: React.FC<GTKStoreReceiptProps> = ({ isOpen, onClose, refr
                           line.condition === 'Damaged' ? 'bg-red-50 text-red-700' :
                           'bg-amber-50 text-amber-700'
                         }`}
-                          value={line.condition} onChange={e => updateLine(line.id, { condition: e.target.value })}>
+                          value={line.condition} onChange={e => updateLine(line.id, { condition: e.target.value as ReceiptLine['condition'] })}>
                           <option value="OK">OK</option>
                           <option value="Damaged">Damaged</option>
                           <option value="Short">Short</option>

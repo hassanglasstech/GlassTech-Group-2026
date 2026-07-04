@@ -36,6 +36,9 @@ export interface CustomerComplaint {
   resolvedBy?:  string;
   createdBy:    string;
   createdAt:    string;
+  // Index signature so this row conforms to SbLooseRow (JSONB-primary table)
+  // consumed by AsyncSalesService.saveCustomerComplaints.
+  [key: string]: unknown;
 }
 
 type ComplaintCategory =

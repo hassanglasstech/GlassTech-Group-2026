@@ -71,9 +71,9 @@ const AdminSecurity: React.FC = () => {
     if (!file) return;
     if (!await confirmModal("CRITICAL: Overwrite database with backup file? This will replace all current data.")) return;
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       const content = evt.target?.result as string;
-      if (AppService.importDatabaseFromFile(content)) {
+      if (await AppService.importDatabaseFromFile(content)) {
         toast.success("System Restored Successfully. Application will reload.", { duration: 3000 });
         window.location.reload();
       }

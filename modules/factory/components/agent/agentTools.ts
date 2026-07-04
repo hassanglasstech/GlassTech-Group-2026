@@ -653,9 +653,9 @@ export const executeTool = async (
       accounts.forEach((a: any) => { balances[a.id] = 0; });
       ledger.forEach((tx: any) => tx.details?.forEach((d: any) => { if (balances[d.accountId] !== undefined) balances[d.accountId] += (d.debit || 0) - (d.credit || 0); }));
       const tb = accounts.filter((a: any) => Math.abs(balances[a.id] || 0) > 0.01).map((a: any) => ({ code: a.code, name: a.name, type: a.type, debit: balances[a.id] > 0 ? balances[a.id] : 0, credit: balances[a.id] < 0 ? Math.abs(balances[a.id]) : 0 }));
-      const totalDebit = tb.reduce((s, a) => s + a.debit, 0);
-      const totalCredit = tb.reduce((s, a) => s + a.credit, 0);
-      result = { accounts_with_balance: tb.length, total_debit: totalDebit, total_credit: totalCredit, balanced: Math.abs(totalDebit - totalCredit) < 1, top_accounts: tb.sort((a, b) => (b.debit + b.credit) - (a.debit + a.credit)).slice(0, 10) };
+      const totalDebit = tb.reduce((s: number, a: { debit: number; credit: number }) => s + a.debit, 0);
+      const totalCredit = tb.reduce((s: number, a: { debit: number; credit: number }) => s + a.credit, 0);
+      result = { accounts_with_balance: tb.length, total_debit: totalDebit, total_credit: totalCredit, balanced: Math.abs(totalDebit - totalCredit) < 1, top_accounts: tb.sort((a: { debit: number; credit: number }, b: { debit: number; credit: number }) => (b.debit + b.credit) - (a.debit + a.credit)).slice(0, 10) };
     }
 
     // ── VENDOR BALANCE ────────────────────────────────────────────

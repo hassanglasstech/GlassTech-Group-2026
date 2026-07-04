@@ -8,6 +8,7 @@
 
 import { SalesService } from '@/modules/sales/services/salesService';
 import { ProductionService } from '@/modules/production/services/productionService';
+import type { TemperingDispatch, ProductionPiece } from '@/modules/production/types/production';
 
 export interface VendorTATSummary {
   vendorId: string;
@@ -35,7 +36,7 @@ export interface DeliveryEstimate {
 export function getVendorTATSummaries(company: string): VendorTATSummary[] {
   const vendors = SalesService.getVendors().filter(v => v.company === company || !v.company);
   
-  let dispatches: Record<string, unknown>[] = [];
+  let dispatches: TemperingDispatch[] = [];
   try {
     dispatches = ProductionService.getTemperingDispatches().filter(d => d.company === company);
   } catch { dispatches = []; }
@@ -63,7 +64,7 @@ export function getVendorTATSummaries(company: string): VendorTATSummary[] {
       }
     });
 
-    const completed = vendorDisps.filter(d => d.status === 'Received' || d.status === 'Completed' || d.status === 'Returned').length;
+    const completed = vendorDisps.filter(d => (d.status as string) === 'Received' || (d.status as string) === 'Completed' || (d.status as string) === 'Returned').length;
     const avg = tatDays.length > 0 ? tatDays.reduce((s, d) => s + d, 0) / tatDays.length : 0;
 
     summaries.push({
@@ -107,7 +108,7 @@ export function calculateDeliveryPromise(params: {
   const notes: string[] = [];
 
   // 1. Cutting backlog
-  let cuttingPieces: Record<string, unknown>[] = [];
+  let cuttingPieces: ProductionPiece[] = [];
   try {
     // ProductionPiece type lacks `company` flat field; access via cast.
     cuttingPieces = ProductionService.getProductionPieces().filter(p => (p as unknown as { company: string }).company === company && (p.status as string) === 'Cut');
