@@ -630,16 +630,19 @@ export function orchestrateGRNGL(params: {
   });
   if (ok1) glCount++;
 
-  // 2. Freight — Vendor Included only needs separate PV (Dr Vendor Payable / Cr Cash)
-  // Own Expense freight is already in landed charges → no separate GL needed
-  if (freightAmount > 0 && freightType === 'Vendor Included') {
-    const ok2 = postFreightVendorIncludedGL({
-      company: params.company, grnId: params.grnId, grnDate: params.grnDate,
-      vendorName: params.vendorName, freightAmount,
-      cashPaymentRef: params.cashPaymentRef,
-    });
-    if (ok2) glCount++;
-  }
+  // 2. Freight — NO separate voucher (was a DOUBLE cash post). Per the process:
+  // freight is paid in CASH at GRN time and netted off the vendor invoice (the
+  // vendor is billed for GOODS only). That is EXACTLY what the material GL above
+  // already records: Dr Inventory (goods + freight, capitalized per IAS-2) /
+  // Cr GR-IR (goods only = vendor invoice net of freight) / Cr Cash (freight).
+  // The old Vendor-Included PV (Dr Vendor Payable / Cr Cash) posted freight to
+  // Cash a SECOND time and reduced the vendor payable by freight it was never
+  // charged — so it is removed. Freight itself is already rolled into
+  // landedChargesTotal by the caller (MIGO) before the material GL runs.
+  // REFINEMENT (not yet modeled): part of the freight is settled IN-KIND with
+  // packing material / pallettes; that portion should relieve packing-material
+  // stock rather than Cash. Freight is currently booked wholly as cash.
+  void freightAmount; void freightType; // consumed upstream; referenced to satisfy no-unused
 
   // 3-5: Crane, Labour, Other — cash already credited in material GL entry
   // Labour packing PV still needed for IFRS gross accounting visibility
