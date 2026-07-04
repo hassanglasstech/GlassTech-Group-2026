@@ -123,15 +123,17 @@ const SalesOrders: React.FC = () => {
     }, [isAutoProcessing, autoServiceQueue, selectedOrder, isServiceOrderModalOpen, approvedOrders]);
 
     const refreshData = async () => {
-        // Populate/merge the shared cache from cloud (P1-9 merge), THEN read the
-        // MERGED cache below. That set = cloud rows PLUS any just-approved
-        // local-only order whose cloud push is still in flight — the exact
-        // "approved a Glassco quote but the Sales Orders tab is empty" symptom
-        // (AsyncSalesService.getQuotations() returns cloud-only, so it can miss the
-        // fresh order). The sync cache alone was empty on a fresh route and held
-        // only Nippon's rows after visiting Nippon; the async read repopulates it.
+        // Render from the CLOUD fetch's RETURN VALUE (unioned with the local
+        // cache), NOT only the localStorage cache. The cache write can silently
+        // fail/corrupt under localStorage quota pressure (heavy product-image +
+        // quotation-drawing JSONB), which left this tab empty even though the
+        // cloud holds the orders. getQuotations() returns the cloud rows
+        // regardless of whether the localStorage write succeeded, so the tab is
+        // reliable; the union also keeps any just-approved local-only order.
+        let cloudQuotes: Quotation[] | null = null;
+        let cloudClients: Client[] | null = null;
         try {
-            await Promise.all([
+            [cloudQuotes, cloudClients] = await Promise.all([
                 AsyncSalesService.getQuotations(),
                 AsyncSalesService.getClients(),
             ]);
@@ -139,12 +141,21 @@ const SalesOrders: React.FC = () => {
         } catch {
             setAllPieces(ProductionService.getProductionPieces());   // offline — local pieces
         }
-        setApprovedOrders(SalesService.getQuotations().filter(q => {
+
+        const quotesById = new Map<string, Quotation>();
+        for (const q of SalesService.getQuotations()) if (q?.id) quotesById.set(q.id, q);
+        if (cloudQuotes) for (const q of cloudQuotes) if (q?.id) quotesById.set(q.id, q); // cloud authoritative
+        setApprovedOrders([...quotesById.values()].filter(q => {
             const qCompany = q.company || (q as any).data?.company;
             const qStatus = q.status || (q as any).data?.status;
             return qCompany === company && (qStatus || '').toUpperCase() === 'APPROVED';
         }));
-        setClients(SalesService.getClients().filter(c => c.company === company));
+
+        const clientsById = new Map<string, Client>();
+        for (const c of SalesService.getClients()) if (c?.id) clientsById.set(c.id, c);
+        if (cloudClients) for (const c of cloudClients) if (c?.id) clientsById.set(c.id, c);
+        setClients([...clientsById.values()].filter(c => c.company === company));
+
         setChallans(ProductionService.getTemperingDispatches().filter(d => d.company === company || d.company === 'Factory'));
         setVendors(SalesService.getVendors());
     };
