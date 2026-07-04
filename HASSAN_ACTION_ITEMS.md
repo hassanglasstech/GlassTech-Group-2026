@@ -5,7 +5,8 @@ _Last updated: 2026-07-04 · sirf AAP ke karne wale kaam. (Claude ke dev-fixes n
 
 ## 🔴 Ab karne wale (priority)
 
-- [ ] **⚡ Migration `093_PERF_rls_subquery_wrap.sql` apply karo** (Supabase SQL editor) — **URGENT, sabse pehle**. 086 strict RLS ke baad quotations/accounts queries **timeout** ho rahi hain (console: `canceling statement due to statement timeout`) → quotations cache load hi nahi hoti → **Sales Order tab + kai list-pages khali**. 093 RLS ko per-row ki jagah **per-query** evaluate karta hai (`(SELECT auth_user_is_super())` wrap) — security bilkul same, sirf 10-100x tez. Idempotent. **Iske baghair SO tab theek NAHI hoga.**
+- [x] **Migration `093_PERF_rls_subquery_wrap.sql`** apply — RLS timeout theek, SO tab load hone laga. (2026-07-04) ✅
+- [ ] **Migration `094_cn_atomic_live_balance_recheck.sql` apply karo** (SQL editor) — credit-note approval ab server-side pe invoice ki LIVE balance re-check karega (amount > balance ho to reject) + balance server se derive karega. Concurrent-device race band. Idempotent. **Staging-first test recommend** (issue CN → receipt post → approve → reject hona chahiye).
 
 - [ ] **Functional fixes test karo** (aaj ke 13 P1 fixes). Checklist Claude ne chat mein di hai — Priority 1 pehle:
   - [ ] Quotation save → refresh → gayab na ho (Glassco + Nippon)
