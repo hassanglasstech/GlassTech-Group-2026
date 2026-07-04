@@ -193,6 +193,28 @@ export const useGlasscoQuotations = () => {
         }
     }
 
+    // P1-10: guarantee the minted Sales Order id is GLOBALLY UNIQUE. The two
+    // approve paths draw GT-SO ids from overlapping serial sources — a
+    // direct-approved Draft allocates a FRESH GT-SO serial (seed 2523) while a
+    // converted GT-QUT KEEPS its QUT serial (also seeded 2523) — so both can mint
+    // GT-SO-GLS-<mmyy>-2523 in the same month, and the quotations upsert
+    // (onConflict:'id') would then SILENTLY OVERWRITE the earlier sales order (a
+    // lost financial document). Keep the QUT->SO number when it is free
+    // (traceability); if the minted id already belongs to a DIFFERENT document,
+    // allocate a fresh GT-SO serial until it is unique.
+    if (action === 'approve' && finalId && finalId.startsWith('GT-SO-')) {
+        try {
+            const _existingQuos = await AsyncSalesService.getQuotations();
+            const _clashes = (id: string) => _existingQuos.some(q => q.id === id && q.id !== originalId);
+            let _guard = 0;
+            while (_clashes(finalId!) && _guard < 50) {
+                const _seq = await allocateSerial(company, 'GT-SO', year, 2523);
+                finalId = `GT-SO-GLS-${mmyy}-${String(_seq).padStart(4, '0')}`;
+                _guard++;
+            }
+        } catch { /* offline / read failed — keep finalId (best-effort uniqueness) */ }
+    }
+
     let finalOrderNo = dataToSave.orderNo;
     if (action === 'approve') {
         const today = new Date().toISOString().split('T')[0];
