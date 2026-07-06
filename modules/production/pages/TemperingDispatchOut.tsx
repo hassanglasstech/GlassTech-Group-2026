@@ -27,6 +27,7 @@ import { SalesService } from '@/modules/sales/services/salesService';
 import { AppService } from '@/modules/shared/services/appService';
 import { getVendorRatesByMm, computeTemperingCharges } from '@/modules/procurement/services/glasscoGLHelpers';
 import { TemperingCommitmentService } from '@/modules/finance/services/temperingCommitmentService';
+import { DispatchService } from '@/modules/procurement/services/dispatchService';
 import { ServiceOrderPrint } from '@/modules/sales/components/prints/ServiceOrderPrint';
 import { GatePassPrint } from '@/modules/procurement/components/prints/GatePassPrint';
 
@@ -149,6 +150,13 @@ const TemperingContent: React.FC = () => {
 
       // Step 2 — NON-GL commitment for finance cash-forecast.
       TemperingCommitmentService.createFromDispatch(row);
+
+      // Populate the dispatch_events log (best-effort, non-blocking) so the
+      // single-window Dispatch Cockpit reflects this trip's real lifecycle
+      // (CREATED → PIECES_LOADED). The event log is advisory — never block dispatch.
+      void DispatchService.markCreated(id, { pieceCount: selectedIds.length, vendor: vendorName, totalSqFt })
+        .then(() => DispatchService.markPiecesLoaded(id, selectedIds))
+        .catch(() => { /* advisory event log — swallow */ });
 
       // Prints filter pieces by dispatchId; stamp it optimistically so the
       // service order + gate pass render immediately (before the cloud refresh).
