@@ -82,6 +82,8 @@ const Workbench        = React.lazy(() => import('./modules/production/companies
 const DispatchWorkbench = React.lazy(() => import('./modules/production/companies/glassco/pages/DispatchWorkbench'));
 // One-Window Dispatch — Phase 1 read-only cockpit (dark route; nav wiring is Phase 4)
 const DispatchCockpit   = React.lazy(() => import('./modules/dispatch/pages/DispatchCockpit'));
+// Tempering Dispatch-OUT — one-window pool → vendor → dispatch + Service Order/Gate Pass print
+const TemperingDispatchOut = React.lazy(() => import('./modules/production/pages/TemperingDispatchOut'));
 // Sprint 21 — Global UX foundations
 const CommandPalette    = React.lazy(() => import('./modules/shared/components/CommandPalette'));
 const Breadcrumbs       = React.lazy(() => import('./modules/shared/components/Breadcrumbs'));
@@ -833,6 +835,8 @@ const App: React.FC = () => {
                   <Route path="/dispatch"            element={<ModuleErrorBoundary moduleName="Dispatch"><DispatchWorkbench /></ModuleErrorBoundary>} />
                   {/* One-Window Dispatch — Phase 1 read-only cockpit (unified board; dark route until Phase 4 cutover) */}
                   <Route path="/dispatch-cockpit"    element={<ModuleErrorBoundary moduleName="Dispatch Cockpit"><DispatchCockpit /></ModuleErrorBoundary>} />
+                  {/* Tempering Dispatch-OUT — one-window pool → vendor → dispatch (GL-neutral) + prints */}
+                  <Route path="/production/tempering-dispatch" element={<ModuleErrorBoundary moduleName="Tempering Dispatch"><TemperingDispatchOut /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />
                 </Routes>
                 </RouteAccessGuard>

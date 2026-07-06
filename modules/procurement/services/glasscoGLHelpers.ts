@@ -64,6 +64,66 @@ export function getVendorRatesByMm(vendorName: string): Record<string, number> {
   return ratesByMm;
 }
 
+// ── Shared tempering-charge calculator ──────────────────────────────
+// SINGLE per-piece formula: cost = round(piece sqft × per-mm rate). mm is read
+// from the order item's glassSize, falling back to the piece specs thickness,
+// then '6'. This mirrors postTemperingInwardGL's inward calc exactly so the
+// Step-2 commitment ESTIMATE matches the Step-3 AP that posts at inward (broken
+// pieces aside). Missing rate → 0 here (estimate, never throws); the inward path
+// loud-fails on a missing rate.
+
+export interface TemperingChargeLine {
+  pieceId: string;
+  orderId: string;
+  sqft: number;
+  mm: string;
+  rate: number;
+  cost: number;
+}
+
+export interface TemperingChargeResult {
+  total: number;
+  lines: TemperingChargeLine[];
+  missingRateMm: string[];
+}
+
+export function computeTemperingCharges(
+  pieceIds: string[],
+  effectiveRates: Record<string, number>,
+): TemperingChargeResult {
+  const idSet = new Set(pieceIds);
+  const pieces = ProductionService.getProductionPieces().filter((p: any) => idSet.has(p.id));
+  const orders = ProductionService.getJobOrders();
+  const lines: TemperingChargeLine[] = [];
+  const missing = new Set<string>();
+
+  pieces.forEach((piece: any) => {
+    const order = orders.find((j: any) => j.orderNo === piece.orderId || j.id === piece.orderId);
+    const item = order ? (order.items || [])[piece.itemIndex ?? 0] : undefined;
+    const sqft = Number(item?.totalSqFt) || Number(piece.sqft) || 0;
+    if (sqft <= 0) return;
+
+    let specsThickness = '';
+    try { specsThickness = JSON.parse(piece.specs || '{}').thickness || ''; } catch { specsThickness = ''; }
+    const mm = String(item?.glassSize || specsThickness || '').replace(/[^0-9.]/g, '').trim() || '6';
+
+    const rate = effectiveRates[mm] ?? 0;
+    if (rate === 0) missing.add(mm);
+    lines.push({
+      pieceId: piece.id,
+      orderId: String(piece.orderId ?? ''),
+      sqft, mm, rate,
+      cost: Math.round(sqft * rate),
+    });
+  });
+
+  return {
+    total: lines.reduce((s, l) => s + l.cost, 0),
+    lines,
+    missingRateMm: Array.from(missing),
+  };
+}
+
 // ── Account builder helpers ────────────────────────────────────────
 
 export function glassAccounts(company: Company) {
