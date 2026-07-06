@@ -2,16 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { GatePass, TemperingDispatch, ProductionPiece, Quotation, Client, Vendor, Company } from '@/modules/shared/types';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { SalesService } from '@/modules/sales/services/salesService';
-import { Truck, ShieldCheck, ClipboardList, LayoutGrid, MapPin, Zap } from 'lucide-react';
+import { Truck, ShieldCheck, ClipboardList } from 'lucide-react';
 import GateControl from '@/modules/procurement/components/logistics/GateControl';
 import SecurityAudit from '@/modules/procurement/components/logistics/SecurityAudit';
 import DispatchPlanner from '@/modules/procurement/components/logistics/DispatchPlanner';
 import VehicleTripManager from '@/modules/procurement/components/logistics/VehicleTripManager';
-import GroupFleetBoard from '@/modules/procurement/components/logistics/GroupFleetBoard';
-import RouteVisualizer from '@/modules/procurement/components/logistics/RouteVisualizer';
-import TripBatchAdvisor from '@/modules/procurement/components/logistics/TripBatchAdvisor';
 
-type LogisticsTab = 'gate' | 'security' | 'dispatches' | 'vehicles' | 'fleet' | 'routes' | 'batching';
+type LogisticsTab = 'gate' | 'security' | 'dispatches' | 'vehicles';
 
 const CompanyLogistics: React.FC<{ company: Company }> = ({ company }) => {
   const [activeTab, setActiveTab] = useState<LogisticsTab>('gate');
@@ -39,9 +36,6 @@ const CompanyLogistics: React.FC<{ company: Company }> = ({ company }) => {
     { id: 'security',  label: 'Security',         icon: <ShieldCheck size={14}/>, activeClass: 'bg-emerald-600 text-white' },
     { id: 'dispatches',label: 'Dispatches',       icon: <ClipboardList size={14}/>,activeClass: 'bg-blue-600 text-white' },
     { id: 'vehicles',  label: 'Vehicle Trips',    icon: <Truck size={14}/>,       activeClass: 'bg-indigo-600 text-white' },
-    { id: 'fleet',     label: 'Fleet Board',      icon: <LayoutGrid size={14}/>,  activeClass: 'bg-slate-800 text-white' },
-    { id: 'routes',    label: 'Route Map',        icon: <MapPin size={14}/>,      activeClass: 'bg-blue-700 text-white' },
-    { id: 'batching',  label: 'Batch Advisor',    icon: <Zap size={14}/>,         activeClass: 'bg-violet-600 text-white' },
   ];
 
   return (
@@ -90,15 +84,6 @@ const CompanyLogistics: React.FC<{ company: Company }> = ({ company }) => {
       )}
       {activeTab === 'vehicles' && (
         <VehicleTripManager company={company} />
-      )}
-      {activeTab === 'fleet' && (
-        <GroupFleetBoard />
-      )}
-      {activeTab === 'routes' && (
-        <RouteVisualizer />
-      )}
-      {activeTab === 'batching' && (
-        <TripBatchAdvisor />
       )}
     </div>
   );
