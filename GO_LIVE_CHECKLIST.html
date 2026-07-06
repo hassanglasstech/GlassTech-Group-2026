@@ -1,0 +1,324 @@
+<meta charset="utf-8">
+<title>GlassTech ERP — Go-Live Punch List</title>
+<style>
+  :root{
+    --navy:#1A3A6B; --navy-2:#12305c; --gold:#B8893A; --gold-soft:#f3e6cf;
+    --cream:#FAF8F5; --ink:#1f2937; --muted:#64748b; --line:#e7e2da;
+    --p1:#c0392b; --p1-bg:#fbe9e7; --p2:#b9770e; --p2-bg:#fdf3e2; --p3:#5b6b7c; --p3-bg:#eef2f6;
+    --done-bg:#eef7f0; --done-line:#bfe3c6; --green:#2e7d43;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink); background:var(--cream); line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1000px;margin:0 auto;padding:0 20px 80px}
+
+  header.top{
+    position:sticky;top:0;z-index:20;background:var(--navy);color:#fff;
+    box-shadow:0 2px 14px rgba(0,0,0,.18);
+  }
+  .top-inner{max-width:1000px;margin:0 auto;padding:16px 20px}
+  .top h1{margin:0;font-size:18px;font-weight:800;letter-spacing:.2px;display:flex;align-items:center;gap:10px}
+  .top h1 .dot{width:10px;height:10px;border-radius:50%;background:var(--gold)}
+  .top .sub{margin:3px 0 0;font-size:12.5px;color:#c7d3e6}
+  .barrow{display:flex;align-items:center;gap:14px;margin-top:12px;flex-wrap:wrap}
+  .progress{flex:1;min-width:200px;height:12px;border-radius:8px;background:#0d2650;overflow:hidden;border:1px solid #2b4a7d}
+  .progress > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--gold),#d9ad63);transition:width .35s ease}
+  .pct{font-size:13px;font-weight:800;min-width:120px}
+  .pct b{color:var(--gold);font-size:15px}
+
+  .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+  .controls input[type=search]{
+    flex:1;min-width:180px;padding:8px 11px;border-radius:8px;border:1px solid #2b4a7d;
+    background:#0d2650;color:#fff;font-size:13px;
+  }
+  .controls input[type=search]::placeholder{color:#7f93b5}
+  .seg{display:inline-flex;border:1px solid #2b4a7d;border-radius:8px;overflow:hidden}
+  .seg button{background:#0d2650;color:#c7d3e6;border:0;padding:8px 12px;font-size:12.5px;font-weight:700;cursor:pointer}
+  .seg button.on{background:var(--gold);color:#3a2a0c}
+  .btn{background:#0d2650;color:#fff;border:1px solid #2b4a7d;border-radius:8px;padding:8px 12px;font-size:12.5px;font-weight:700;cursor:pointer}
+  .btn:hover{background:#17386b}
+
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin:18px 0 4px;font-size:12px;color:var(--muted)}
+  .legend .sv{display:inline-flex;align-items:center;gap:6px}
+  .chip{font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:20px;letter-spacing:.3px;white-space:nowrap}
+  .P1{color:var(--p1);background:var(--p1-bg)} .P2{color:var(--p2);background:var(--p2-bg)} .P3{color:var(--p3);background:var(--p3-bg)}
+  .ef{font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:6px;background:#eef2f6;color:#475569;border:1px solid #dfe6ee}
+
+  section.grp{margin-top:26px}
+  section.grp > h2{
+    font-size:14px;font-weight:800;color:var(--navy);margin:0 0 2px;
+    display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;
+    padding:10px 12px;background:#fff;border:1px solid var(--line);border-radius:10px 10px 0 0;border-bottom:0;
+  }
+  section.grp > h2 .count{margin-left:auto;font-size:11.5px;font-weight:700;color:var(--muted)}
+  section.grp > h2 .caret{transition:transform .2s;color:var(--gold)}
+  section.grp.collapsed > h2 .caret{transform:rotate(-90deg)}
+  section.grp.collapsed .items{display:none}
+  .items{background:#fff;border:1px solid var(--line);border-radius:0 0 10px 10px;overflow:hidden}
+
+  .item{display:grid;grid-template-columns:26px 1fr;gap:12px;padding:14px 14px;border-top:1px solid var(--line)}
+  .item:first-child{border-top:0}
+  .item.done{background:var(--done-bg)}
+  .item.done .title{text-decoration:line-through;color:var(--muted)}
+  .cbwrap{padding-top:2px}
+  .cb{appearance:none;-webkit-appearance:none;width:20px;height:20px;border:2px solid #cbd3dd;border-radius:6px;cursor:pointer;position:relative;background:#fff;transition:.15s}
+  .cb:checked{background:var(--green);border-color:var(--green)}
+  .cb:checked::after{content:"";position:absolute;left:6px;top:2px;width:5px;height:10px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
+  .body .row1{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .title{font-weight:700;font-size:14px}
+  .idtag{font-size:11px;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums}
+  .why{font-size:12.5px;color:#475569;margin:5px 0 0}
+  .ev{font-size:11px;color:#8a94a3;margin:5px 0 0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-word}
+  .notes{margin-top:9px;width:100%;min-height:0;height:34px;resize:vertical;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:12.5px;color:var(--ink);background:#fcfbf9;transition:height .1s}
+  .notes:focus{outline:2px solid var(--gold-soft);border-color:var(--gold);background:#fff}
+  .notes.has{background:#fff8ec;border-color:#e6cf9f}
+  .notelbl{font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:9px}
+
+  footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .saved{color:var(--green);font-weight:700}
+
+  @media print{
+    header.top{position:static;color:#000;background:#fff;box-shadow:none;border-bottom:2px solid var(--navy)}
+    .controls,.seg,.btn,.legend{display:none}
+    .top h1,.top .sub,.pct{color:#000}
+    .progress{border-color:#999}
+    body{background:#fff}
+    .item.done{background:#f4f4f4}
+    section.grp.collapsed .items{display:block}
+    .notes{border:1px solid #bbb;background:#fff}
+  }
+</style>
+
+<header class="top">
+  <div class="top-inner">
+    <h1><span class="dot"></span> GlassTech ERP — Go-Live Punch List</h1>
+    <p class="sub">Har item tick karo jab done ho. Notes/error box mein jo bhi test result ya problem ho likh do — sab is browser mein khud save hota hai.</p>
+    <div class="barrow">
+      <div class="progress"><i id="bar"></i></div>
+      <div class="pct"><b id="doneN">0</b>/<span id="totN">0</span> done &nbsp;·&nbsp; <span id="p1open">0</span> P1 open</div>
+    </div>
+    <div class="controls">
+      <input id="search" type="search" placeholder="Search title / notes / file…">
+      <div class="seg" id="filter">
+        <button data-f="all" class="on">All</button>
+        <button data-f="open">Open</button>
+        <button data-f="done">Done</button>
+      </div>
+      <button class="btn" id="expand">Expand all</button>
+      <button class="btn" id="export">Export</button>
+      <button class="btn" id="print">Print</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="legend">
+    <span class="sv"><span class="chip P1">P1</span> go-live / high</span>
+    <span class="sv"><span class="chip P2">P2</span> important, workaround exists</span>
+    <span class="sv"><span class="chip P3">P3</span> minor / cleanup</span>
+    <span class="sv"><span class="ef">S</span> hours &nbsp; <span class="ef">M</span> ~a day &nbsp; <span class="ef">L</span> multi-day</span>
+  </div>
+  <div id="list"></div>
+  <footer>
+    <span>Auto-saved locally · <span id="savedAt" class="saved">not yet edited</span></span>
+    <span>Reset karna ho to browser ka localStorage clear karo, ya Export se backup rakho.</span>
+  </footer>
+</div>
+
+<script>
+const GROUPS = [
+  {id:"A", name:"A · Go-live blockers (real users se pehle)"},
+  {id:"B", name:"B · Financial correctness / data integrity"},
+  {id:"C", name:"C · Security"},
+  {id:"D", name:"D · Per-company completeness"},
+  {id:"E", name:"E · Scale & multi-user"},
+  {id:"F", name:"F · Tech-debt / code quality"},
+];
+
+const ITEMS = [
+  // A
+  {id:"A1",g:"A",sev:"P1",ef:"S",t:"Apply/verify migration 094 on live Supabase",why:"Credit-note server-side FOR-UPDATE lock; without it a CN after a receipt (or 2nd device) can over-credit AR past zero + double-count receipt. Client half already live.",ev:"094_cn_atomic_live_balance_recheck.sql · HASSAN_ACTION_ITEMS.md:9 (unchecked)"},
+  {id:"A2",g:"A",sev:"P1",ef:"S",t:"Run founder UAT — 6 browser scenarios",why:"Acceptance proof: quotation save-persist (Glassco+Nippon), company-switch isolation, multi-qty COGS≠5x, Service-Only toggle, GL-Posted tab locked, finance report re-scope on switch.",ev:"HASSAN_ACTION_ITEMS.md:11-18"},
+  {id:"A3",g:"A",sev:"P1",ef:"M",t:"Nippon Phase-5 full-cycle smoke test",why:"GRN→quote→SO→issue→invoice→receipt; Trial Balance closes at every step. Trading go-live confidence check.",ev:"RESUME_HERE.md:130-144"},
+  {id:"A4",g:"A",sev:"P1",ef:"S",t:"Custom SMTP for OTP emails (or hide OTP login)",why:"OTP relies on Supabase built-in sender (~2-4/hr, no deliverability) → users lock out under load. Email+password path exists, so hiding OTP button is an OK shortcut.",ev:"supabase/config.toml (no smtp) · LoginPage.tsx:161,510"},
+  {id:"A5",g:"A",sev:"P1",ef:"M",t:"Schedule + monitor off-site backup + one restore drill",why:"Live financials, bus-factor 1. Silent backup failure is found only when you need a restore. Test it once.",ev:"GODMODE P1 #15 · scripts/nightly-export.js"},
+  {id:"A6",g:"A",sev:"P3",ef:"S",t:"Tag release v1.0.0-nippon-go-live after smoke+deploy",why:"Named rollback point once smoke test is green.",ev:"RESUME_HERE.md:154"},
+  // B
+  {id:"B1",g:"B",sev:"P1",ef:"M",t:"Double-invoice: post_invoice_atomic patch flat status/items + unique index on invoices(order_id)",why:"getQuotations rebuilds status from flat r.status, so cloud 'Approved' beats data.status 'Invoiced' → invoiced order re-appears invoiceable, can invoice twice → double revenue + COGS. Most dangerous open money bug.",ev:"042_atomic_rpcs.sql:188 · asyncSalesService.ts:355"},
+  {id:"B2",g:"B",sev:"P1",ef:"S",t:"Decide costing rule for Nippon stock sold before received (un-costed COGS=0)",why:"Unreceived item MAP 0 → delivery COGS 0 → margin overstated, 11514 can go negative. Founder decision: cost 0 / flag / Service-Only.",ev:"deliveryInvoiceService.ts:138 · HASSAN_ACTION_ITEMS.md:24"},
+  {id:"B3",g:"B",sev:"P2",ef:"M",t:"GTKStoreReceipt GL imbalance (credit total, debit OK-only) — also mounted for Glassco",why:"Any damaged/short line → voucher fails LedgerImbalanceError forever & damaged value vanishes. Blocks live Glassco receipts too. Add double-click guard on Post.",ev:"GTKStoreReceipt.tsx:270,324 · InventoryModule.tsx:355"},
+  {id:"B4",g:"B",sev:"P2",ef:"S",t:"Nippon trading COGS never reduces store_items.totalValue (storeUpdates empty)",why:"Stock sub-ledger totalValue overstates GL 11514 by cumulative COGS; MAP inflates over time. Breaks stock↔GL reconciliation.",ev:"deliveryInvoiceService.ts:559,642"},
+  {id:"B5",g:"B",sev:"P2",ef:"M",t:"reverseDeliveryCOGS is glass-only → Nippon CN never restores store subledger",why:"Match keyed to glass inventory acct + category 'Raw'; Nippon uses 11514 + hardware cats. Each Nippon CN drifts stock↔GL.",ev:"glasscoGLDelivery.ts:390"},
+  {id:"B6",g:"B",sev:"P2",ef:"M",t:"3-way-match Override pays PO total, skips MIRO AP entry",why:">2% mismatch: Override sets Matched, pays PO total (not invoice amt), no GL → GR/IR open forever, AP negative, vendor overpaid. The exact bypass 3-way match prevents.",ev:"ThreeWayMatching.tsx:306"},
+  {id:"B7",g:"B",sev:"P2",ef:"M",t:"Tempering inward double-counts cost (RAW MAP bump + WIP debit)",why:"Tempering charge added to raw store MAP AND Dr WIP 11513 → cost hits P&L via inflated MAP-COGS and sits in WIP forever.",ev:"glasscoGLService.ts:262"},
+  {id:"B8",g:"B",sev:"P2",ef:"M",t:"Per-client AR all share code 12210 → ensureAccount merges into one",why:"2nd client's AR debits post to 1st client's account. Total AR right, per-client statements meaningless.",ev:"deliveryInvoiceService.ts:357 · financeService.ts:907"},
+  {id:"B9",g:"B",sev:"P2",ef:"M",t:"Purchase-return credits Inventory at user rate×qty; stock clamps at MAP; no movement row",why:"Return over on-hand / non-MAP rate desyncs inventory GL vs subledger, no stock_ledger audit trail.",ev:"PurchaseReturnModule.tsx:250"},
+  {id:"B10",g:"B",sev:"P2",ef:"M",t:"GRN MIGO rollback restores only localStorage; cloud stock rows remain",why:"Async upserts fire before GL validation; 'rolled back' GRN leaves 101 receipt + qty in Supabase. Needs post_grn_atomic RPC or explicit cloud DELETEs.",ev:"GoodsReceiptMIGO.tsx:746"},
+  {id:"B11",g:"B",sev:"P2",ef:"S",t:"isTaxEnabled treats fetch error as tax-OFF → GST-free (illegal) invoice",why:"Transient RLS/network blip forces gst=0, understates Sales Tax Payable, legally wrong invoice.",ev:"taxSettingsService.ts · deliveryInvoiceService.ts:288"},
+  {id:"B12",g:"B",sev:"P2",ef:"S",t:"Add PeriodService.assertOpen guards + fix period fail-open",why:"Nippon GRN never checks isPeriodOpen; and isPeriodOpen returns true when 0 periods configured → fiscal lock inert, back-dated postings possible.",ev:"periodService.ts:71 · NipponGoodsReceipt.tsx"},
+  {id:"B13",g:"B",sev:"P2",ef:"S",t:"Dashboard/Insights GL loop skips whole line on unresolved account",why:"'if(!a) continue' before accumulating → balanced entry counts one side → false 'GL off'; both unresolved → imbalance shows 'Balanced'.",ev:"dashboardMetricsService.ts:198"},
+  {id:"B14",g:"B",sev:"P2",ef:"S",t:"Insights revenue/DSO/collection include Voided invoices",why:"rev90/clientRev iterate invoices unfiltered; voided large invoice inflates revenue trend, disagrees with GL.",ev:"dashboardMetricsService.ts:241"},
+  {id:"B15",g:"B",sev:"P2",ef:"M",t:"ReportsHub GST/Sales selects nonexistent grand_total → blank; no reload on switch",why:"Live table uses total_amount → query blank (swallowed). Report useEffects empty-deps → wrong company after switch.",ev:"ReportsHub.tsx:743,900 · ProjectProfitability.tsx:58"},
+  {id:"B16",g:"B",sev:"P2",ef:"S",t:"AR-aging filters status 'Void' but app writes 'Voided'",why:"JS fallback (production path) misses 'Voided' → voided invoices inflate aging buckets.",ev:"financeService.ts:1264"},
+  {id:"B17",g:"B",sev:"P2",ef:"M",t:"Ledger sync drops data JSONB (req_id) → paid reqs/advances read outstanding forever",why:"TABLE_COLUMNS.ledger omits data/req_id, no pull mapper → postParkedPV can't flip req to Paid, advances unmatched after sync.",ev:"SyncService.ts:189"},
+  {id:"B18",g:"B",sev:"P2",ef:"M",t:"Requisitions two cloud writers + pull mapper ignores r.data → double GRN/advance-settle",why:"Pull reads req un-received → can GRN + advance-settle twice, double-posting AP.",ev:"SyncService.ts:1056"},
+  {id:"B19",g:"B",sev:"P2",ef:"S",t:"Invoice GL mirror writes localStorage only; _cache.ledger stale → same-session void loses COGS",why:"getLedger returns _cache; post invoice then void same session → reverseDeliveryCOGS can't find COGS → revenue reversed, COGS not.",ev:"deliveryInvoiceService.ts:626"},
+  {id:"B20",g:"B",sev:"P2",ef:"M",t:"Super-admin PERMANENT DELETE of a sales order deletes nothing in Supabase",why:"saveQuotations/saveProductionPieces are upsert-only → order + pieces resurrect on next pull, contradicting the confirm dialog.",ev:"SalesOrders.tsx:222 · productionService.ts:256"},
+  {id:"B21",g:"B",sev:"P2",ef:"S",t:"Nippon/generic quotation delete is a no-op",why:"filtered upsert never deletes; toast says deleted but quote survives & re-lists. Route via AsyncSalesService.deleteQuotation.",ev:"useNipponQuotations.ts:427 · useQuotations.ts:221"},
+  {id:"B22",g:"B",sev:"P2",ef:"L",t:"Intercompany invoice mirror heuristic + strict-RLS-hostile",why:"Name-substring auto-purchase can misfire; getAccounts filtered to active company (mirror no-ops); target-company insert rejected by 086 → whole invoice aborts.",ev:"deliveryInvoiceService.ts:446-458"},
+  {id:"B23",g:"B",sev:"P2",ef:"M",t:"Factory Desk MIS hardcodes 'Glassco', includes Parked/Draft, 0.65 GP heuristic",why:"Management screen: 0 for non-Glassco, counts unposted vouchers, shows fabricated 0.65× gross profit.",ev:"FinancialStatementsMobile.tsx:86,87,121"},
+  {id:"B24",g:"B",sev:"P2",ef:"S",t:"Legacy CN approve path has no GL-<cnId> duplicate guard",why:"Two rapid Approve clicks both post GL-<cnId>, doubling AR/revenue reversal until next cloud pull.",ev:"creditNoteService.ts:328 · financeService.ts:941"},
+  {id:"B25",g:"B",sev:"P2",ef:"M",t:"CN reject/void validates local status then unconditional cloud upsert",why:"No conditional UPDATE on status, no realtime on credit_notes → one device rejects a CN another approved; register vs ledger disagree.",ev:"creditNoteService.ts:410,509"},
+  {id:"B26",g:"B",sev:"P2",ef:"M",t:"GeneralLedger edit/post of server-only doc = silent no-op but alerts 'Success'",why:"Maps over boot-company cache; cold/other-device/post-switch doc matches nothing, return unchecked → user thinks it posted.",ev:"GeneralLedger.tsx:194,214"},
+  {id:"B27",g:"B",sev:"P2",ef:"S",t:"Atomic CN/void RPC bypasses fiscal-period-close gate",why:"approveCreditNote/voidInvoice have no PeriodService check → CN/void into closed period corrupts finalized statements.",ev:"creditNoteService.ts:305"},
+  {id:"B28",g:"B",sev:"P3",ef:"S",t:"Voucher can Post with amount lines that have no G/L account",why:"isBalanced only checks Σdr===Σcr>0; accountId '' passes → one-sided posting; TB drops empty line → permanent imbalance.",ev:"GeneralLedger.tsx:175"},
+  {id:"B29",g:"B",sev:"P3",ef:"S",t:"Thickness/material match by name.includes (6 matches 16mm; fallback store[0])",why:"Substring + first-item fallback prices tempering/COGS at wrong material's MAP.",ev:"glasscoGLService.ts:143 · glasscoGLHelpers.ts:155"},
+  {id:"B30",g:"B",sev:"P3",ef:"S",t:"Nippon manual-serial uniqueness read-then-write, no DB constraint",why:"No partial unique index on (company, manual_serial); two devices mint same serial, upsert overwrites one quote.",ev:"useNipponQuotations.ts:332"},
+  {id:"B31",g:"B",sev:"P2",ef:"M",t:"Write 6 Nippon inventory SIT tests",why:"Nippon inventory GL chain (GRN/GoodsIssue/OpeningBalance) has no automated GL-balance proof — only sales side does.",ev:"missing nippon_inventory_sit.test.ts"},
+  // C
+  {id:"C1",g:"C",sev:"P2",ef:"S",t:"Verify 068 anon-write REVOKE is live (COUNT=0 check)",why:"Anon key ships in public JS bundle. If not revoked, anyone can wipe products/store_items/ledger via REST.",ev:"RESUME_HERE.md:185-188 · task #56"},
+  {id:"C2",g:"C",sev:"P3",ef:"S",t:"Fix MIGRATION_GUIDE / APPLY_MIGRATION_NOW (they end with GRANT ALL TO anon)",why:"Re-running these guides re-opens the exact anon holes 085/086/092 closed. Drop the block or mark superseded.",ev:"MIGRATION_GUIDE.md:147-154 · APPLY_MIGRATION_NOW.md:103-110"},
+  {id:"C3",g:"C",sev:"P3",ef:"M",t:"Maker-checker identity enforced server-side (not client string)",why:"actor = fullName||email; 090 checks only status, not createdBy vs auth.uid() → maker can approve own CN. SoD bypassable.",ev:"CreditNoteModule.tsx:30 · 090_...sql:75-84"},
+  {id:"C4",g:"C",sev:"P3",ef:"S",t:"090 CN/void RPCs need company predicate (super-admin cross-company hazard)",why:"UPDATE WHERE id=... with no AND company=...; super-admin bypasses RLS → company switch between load & click can void another company's doc. Fix before applying 090/094.",ev:"090_...sql:99,174,213"},
+  // D
+  {id:"D1",g:"D",sev:"P2",ef:"L",t:"GTK production is a 15-line placeholder",why:"GTK (aluminium fabrication) declared live but core production page only says 'ready for workflow configuration'. No fabrication flow.",ev:"modules/system/pages/GTKProduction.tsx · task #54"},
+  {id:"D2",g:"D",sev:"P2",ef:"L",t:"GTI is a pure stub (COA aliases GTK)",why:"coa.gti.ts re-exports GTK_COA, no companies/gti dir. GTI would post to GTK's chart. Build its COA or remove from switcher.",ev:"coa.gti.ts · coa.index.ts:18"},
+  {id:"D3",g:"D",sev:"P2",ef:"M",t:"Factory hub dashboard renders hardcoded mock metrics",why:"Literal {expenses:500000,...} fed to an ops command view — fabricated, not real GL/cash.",ev:"FactoryProduction.tsx:54"},
+  {id:"D4",g:"D",sev:"P2",ef:"M",t:"Generic (GTK/GTI) approve flow still has pre-Phase-2 hazards",why:"Pieces saved before quote persist (ghost pieces), serial-only piece filter, generateSequenceID from LS snapshot. Blocks safe GTK/GTI go-live.",ev:"useQuotations.ts:210"},
+  {id:"D5",g:"D",sev:"P2",ef:"S",t:"getQuotations empty-cloud fallback returns full unfiltered local cache",why:"On 0 cloud rows falls back to unfiltered cache → Nippon sees cached Glassco rows; can block first Nippon quote or overwrite cross-company.",ev:"asyncSalesService.ts:377"},
+  {id:"D6",g:"D",sev:"P3",ef:"S",t:"Nippon image URL fix + dedup duplicate product rows (DB data)",why:"Some image_url carry stale '/products/' prefix (404s); a few profile_codes entered twice; one spec missing '& Zinc alloy'.",ev:"RESUME_HERE.md:69-101"},
+  {id:"D7",g:"D",sev:"P3",ef:"S",t:"Optional: finer per-brand Nippon inventory routing",why:"Only KIN LONG→11511; others commingle in 11514. Not a bug — accounting-granularity call.",ev:"grnGLService.ts nipponInventoryAcc"},
+  // E
+  {id:"E1",g:"E",sev:"P2",ef:"M",t:"Company-scope the SyncService boot/full-table pull",why:"Every boot pulls all 5 companies' rows into one company's cache then filters client-side — the cold-boot latency source; grows with data; leans on RLS only. Needs company-scoped pull + switch→re-pull.",ev:"SyncService.ts:1601"},
+  {id:"E2",g:"E",sev:"P1",ef:"L",t:"Row-level dirty-set + delete propagation on PO/requisitions/store_items/production_pieces",why:"These still whole-array upsert with no delete propagation → 2nd concurrent user resurrects deleted rows & clobbers edits. (Root of the resurrection bugs.)",ev:"GODMODE P0 #3/#5 · SyncService whole-array upsert"},
+  {id:"E3",g:"E",sev:"P2",ef:"L",t:"Wire optimistic locking to the 5 unprotected tables",why:"043 version columns + update_with_version exist but only production pieces use it; quotation/invoice/client/store_item saves last-write-wins with no conflict error.",ev:"043_...sql · versionedUpdate.ts importers = 2"},
+  {id:"E4",g:"E",sev:"P2",ef:"L",t:"Replace full-table loads / all-time LS mirror with pagination + server aggregation",why:"088 RPCs are only a fallback; JS-reduce over full tables + full-array upserts remain. Perf collapses at volume; LS quota finite.",ev:"GODMODE P0 #6 · financeService.ts:203 · hrService.ts:232"},
+  // F
+  {id:"F1",g:"F",sev:"P2",ef:"L",t:"Tenant registry + consolidate 3 quotation impls (~189 company-string branches)",why:"Every new company = editing ~189 scattered branches; duplicate Glassco/Nippon/generic hooks are why fixes land in one, not others. Consolidate before GTK/GTI/Factory triple it.",ev:"GODMODE:9,14 · useGlasscoQuotations/useNipponQuotations/useQuotations"},
+  {id:"F2",g:"F",sev:"P2",ef:"L",t:"Replace inline-copy tests with real-logic tests + add E2E smoke",why:"~75% of tests assert against inline copies; no Playwright E2E → multi-step money flows (approve→invoice→CN→void) have no automated net.",ev:"GODMODE P1 #13"},
+  {id:"F3",g:"F",sev:"P3",ef:"S",t:"Delete dead GoodsReceiptMIGO.tsx",why:"Legacy, replaced by GRN wizard; still carries live bugs (B10,B28). Confirm no importers first.",ev:"GoodsReceiptMIGO.tsx (1582 lines)"},
+  {id:"F4",g:"F",sev:"P3",ef:"L",t:"Decompose god-files (TestSuite 1897, Requisitions 1837, financeService 1628, MIGO 1582, UserAccessManager 1532)",why:"financeService + UserAccessManager concentrate money-path & RBAC risk in oversized files, slowing careful review of code that must never regress.",ev:"wc -l verified"},
+  {id:"F5",g:"F",sev:"P3",ef:"M",t:"Finish logging discipline — 21 console.log left",why:"CLAUDE.md bans console.log in prod; risk of leaking data to browser console + dilutes Logger audit trail.",ev:"grep console.log modules = 21 across 49 files"},
+  {id:"F6",g:"F",sev:"P3",ef:"S",t:"Orphaned desktop FinancialStatements.tsx wrong COA prefixes",why:"Unmounted (low risk) but P&L/BS/CF structurally wrong (parked entries, fictitious asset outflow) if re-wired.",ev:"FinancialStatements.tsx:10,72"},
+  {id:"F7",g:"F",sev:"P3",ef:"M",t:"Unify Vendor Hub chrome + hide zombie pages for Nippon",why:"Inconsistent vendor-hub chrome; dead analytics pages (StockAging, VendorScorecard, SupplyChainDashboard) surfaced to Nippon with no data.",ev:"RESUME_HERE.md:150-151"},
+];
+
+const KEY = "glasstech_golive_v1";
+let state = {};
+try { state = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch(e){ state = {}; }
+
+let filter = "all", query = "";
+const $ = s => document.querySelector(s);
+
+function save(){
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){}
+  const d = new Date();
+  $("#savedAt").textContent = "saved " + d.toLocaleTimeString();
+}
+
+function itemState(id){ return state[id] || (state[id] = {done:false, notes:""}); }
+
+function matches(it){
+  const st = itemState(it.id);
+  if (filter==="open" && st.done) return false;
+  if (filter==="done" && !st.done) return false;
+  if (query){
+    const hay = (it.id+" "+it.t+" "+it.why+" "+it.ev+" "+(st.notes||"")).toLowerCase();
+    if (!hay.includes(query)) return false;
+  }
+  return true;
+}
+
+function render(){
+  const list = $("#list");
+  list.innerHTML = "";
+  let shownTotal = 0;
+  for (const g of GROUPS){
+    const groupItems = ITEMS.filter(i => i.g===g.id && matches(i));
+    const allInGroup = ITEMS.filter(i => i.g===g.id);
+    const doneInGroup = allInGroup.filter(i => itemState(i.id).done).length;
+    if (groupItems.length===0 && (filter!=="all" || query)) continue;
+    shownTotal += groupItems.length;
+
+    const sec = document.createElement("section");
+    sec.className = "grp";
+    const h2 = document.createElement("h2");
+    h2.innerHTML = '<span class="caret">▾</span>'+g.name+'<span class="count">'+doneInGroup+'/'+allInGroup.length+' done</span>';
+    h2.addEventListener("click", ()=> sec.classList.toggle("collapsed"));
+    sec.appendChild(h2);
+
+    const box = document.createElement("div");
+    box.className = "items";
+    for (const it of groupItems){
+      const st = itemState(it.id);
+      const row = document.createElement("div");
+      row.className = "item" + (st.done?" done":"");
+      row.innerHTML =
+        '<div class="cbwrap"><input type="checkbox" class="cb" '+(st.done?"checked":"")+'></div>'+
+        '<div class="body">'+
+          '<div class="row1"><span class="idtag">'+it.id+'</span>'+
+            '<span class="chip '+it.sev+'">'+it.sev+'</span>'+
+            '<span class="ef">'+it.ef+'</span>'+
+            '<span class="title">'+esc(it.t)+'</span></div>'+
+          '<div class="why">'+esc(it.why)+'</div>'+
+          '<div class="ev">'+esc(it.ev)+'</div>'+
+          '<div class="notelbl">Notes / error / test result</div>'+
+          '<textarea class="notes'+(st.notes?" has":"")+'" placeholder="e.g. tested OK · or: error XYZ on step 3…">'+esc(st.notes||"")+'</textarea>'+
+        '</div>';
+      const cb = row.querySelector(".cb");
+      cb.addEventListener("change", ()=>{ st.done = cb.checked; save(); render(); refreshProgress(); });
+      const ta = row.querySelector(".notes");
+      ta.addEventListener("input", ()=>{ st.notes = ta.value; ta.classList.toggle("has", !!ta.value); save(); });
+      ta.addEventListener("focus", ()=>{ if(ta.style.height==="34px"||!ta.style.height) ta.style.height="70px"; });
+      box.appendChild(row);
+    }
+    sec.appendChild(box);
+    list.appendChild(sec);
+  }
+  if (shownTotal===0){
+    list.innerHTML = '<p style="text-align:center;color:var(--muted);padding:40px">No items match.</p>';
+  }
+}
+
+function refreshProgress(){
+  const tot = ITEMS.length;
+  const done = ITEMS.filter(i => itemState(i.id).done).length;
+  const p1open = ITEMS.filter(i => i.sev==="P1" && !itemState(i.id).done).length;
+  $("#bar").style.width = (tot? (done/tot*100):0) + "%";
+  $("#doneN").textContent = done;
+  $("#totN").textContent = tot;
+  $("#p1open").textContent = p1open;
+}
+
+function esc(s){ return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+$("#search").addEventListener("input", e=>{ query = e.target.value.trim().toLowerCase(); render(); });
+$("#filter").addEventListener("click", e=>{
+  const b = e.target.closest("button"); if(!b) return;
+  filter = b.dataset.f;
+  [...$("#filter").children].forEach(x=>x.classList.toggle("on", x===b));
+  render();
+});
+let expanded = true;
+$("#expand").addEventListener("click", ()=>{
+  expanded = !expanded;
+  document.querySelectorAll("section.grp").forEach(s=> s.classList.toggle("collapsed", !expanded));
+  $("#expand").textContent = expanded ? "Collapse all" : "Expand all";
+});
+$("#print").addEventListener("click", ()=> window.print());
+$("#export").addEventListener("click", ()=>{
+  const rows = ITEMS.map(i=>{ const st=itemState(i.id); return {id:i.id, group:i.g, sev:i.sev, effort:i.ef, title:i.t, done:!!st.done, notes:st.notes||""}; });
+  const blob = new Blob([JSON.stringify({exportedAt:new Date().toISOString(), items:rows}, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "golive-checklist-"+new Date().toISOString().slice(0,10)+".json";
+  a.click();
+});
+
+render();
+refreshProgress();
+</script>
