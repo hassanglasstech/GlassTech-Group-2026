@@ -119,6 +119,8 @@ const QCWorkbench: React.FC = () => {
   const [selectedFor, setSelectedFor] = useState<string | null>(null);   // piece id whose Fail form is expanded
   const [defect, setDefect] = useState<QCDefectSelection>({ code: null });
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());   // bulk QC-pass selection
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const t = T[lang];
   useEffect(() => { localStorage.setItem('qc_lang', lang); }, [lang]);
@@ -263,6 +265,51 @@ const QCWorkbench: React.FC = () => {
     if (ok) toast.success(`${it.piece.id} → ${t.passed}`);
   };
 
+  // ── Bulk QC-pass — reuses the per-piece atomic RPC, mirrors once ──────
+  const toggleSelect = (id: string) => setSelected(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const selectAllOnPage = () => setSelected(prev => {
+    const next = new Set(prev);
+    const allSel = paged.length > 0 && paged.every(it => next.has(it.piece.id));
+    paged.forEach(it => { if (allSel) next.delete(it.piece.id); else next.add(it.piece.id); });
+    return next;
+  });
+
+  const handleBulkPass = async () => {
+    const ids = [...selected].filter(id => allPieces.some(p => p.id === id && p.status === 'QC-Pending'));
+    if (ids.length === 0) { toast.error('No valid QC-Pending pieces selected.'); return; }
+    setBulkBusy(true);
+    try {
+      const results = await Promise.all(ids.map(async (id) => {
+        try {
+          const { error } = await supabase.rpc('update_piece_status_atomic', {
+            p_piece_id: id, p_new_status: 'QC-Passed', p_changed_by: qcUser, p_reason: null, p_extra: {},
+          });
+          return { id, ok: !error };
+        } catch { return { id, ok: false }; }
+      }));
+      const passed = new Set(results.filter(r => r.ok).map(r => r.id));
+      const failedCount = results.length - passed.size;
+      // one local mirror for every passed piece (avoids per-call re-save races)
+      const all = ProductionService.getProductionPieces();
+      ProductionService.saveProductionPiecesBg(
+        all.map(p => passed.has(p.id)
+          ? { ...p, status: 'QC-Passed' as PieceStatus, lastUpdated: new Date().toISOString() }
+          : p),
+      );
+      setSelected(new Set());
+      refreshKey();
+      if (passed.size) toast.success(`${passed.size} pieces → ${t.passed}${failedCount ? ` · ${failedCount} rejected` : ''}`);
+      else toast.error(`Bulk pass rejected for all ${failedCount} pieces.`);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   const openFailFor = (it: QCItem) => {
     setSelectedFor(it.piece.id);
     setDefect({ code: null });
@@ -374,6 +421,21 @@ const QCWorkbench: React.FC = () => {
           </div>
         ) : (
           <>
+          {/* Bulk select-all on the current page */}
+          <div className="flex items-center justify-between bg-white border-2 border-slate-200 rounded-xl px-3 py-2">
+            <label className="flex items-center gap-2.5 text-xs font-black text-slate-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={paged.length > 0 && paged.every(it => selected.has(it.piece.id))}
+                onChange={selectAllOnPage}
+                className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              Select all on page ({paged.length})
+            </label>
+            {selected.size > 0 && (
+              <button onClick={() => setSelected(new Set())} className="text-xs font-black text-slate-400 hover:text-slate-600 uppercase">Clear</button>
+            )}
+          </div>
           <div className="space-y-3">
             {paged.map(it => {
               const isExpanded = selectedFor === it.piece.id;
@@ -383,7 +445,16 @@ const QCWorkbench: React.FC = () => {
                   {/* Header */}
                   <div className={`px-4 py-3 border-b ${it.isMandatory ? 'bg-amber-50' : 'bg-slate-50'}`}>
                     <div className="flex items-center justify-between gap-2">
-                      <p className="font-mono font-black text-sm text-slate-800 truncate">{it.piece.id}</p>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(it.piece.id)}
+                          onChange={() => toggleSelect(it.piece.id)}
+                          className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 shrink-0"
+                          aria-label={`Select ${it.piece.id}`}
+                        />
+                        <p className="font-mono font-black text-sm text-slate-800 truncate">{it.piece.id}</p>
+                      </div>
                       {it.isMandatory && <span className="text-2xs font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase">{t.mandatory}</span>}
                     </div>
                     <p className="text-label text-slate-500 font-bold mt-0.5 truncate">{it.size} · {it.thickness} · {it.piece.orderId}</p>
@@ -444,6 +515,25 @@ const QCWorkbench: React.FC = () => {
           </>
         )}
       </div>
+
+      {/* Sticky bulk-pass action bar — appears when pieces are selected */}
+      {selected.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t-2 border-emerald-200 shadow-2xl px-4 py-3 no-print">
+          <div className="flex items-center gap-3 max-w-3xl mx-auto">
+            <span className="text-sm font-black text-slate-700">
+              <span className="text-emerald-600">{selected.size}</span> selected
+            </span>
+            <button onClick={() => setSelected(new Set())} className="text-xs font-black text-slate-400 hover:text-slate-600 uppercase">Clear</button>
+            <button
+              onClick={handleBulkPass}
+              disabled={bulkBusy}
+              className="ml-auto min-h-[48px] px-6 bg-emerald-600 active:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-black uppercase text-sm tracking-wider flex items-center gap-2 shadow"
+            >
+              <CheckCircle2 size={18}/> {bulkBusy ? '…' : `${t.pass} ${selected.size}`}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
