@@ -350,6 +350,11 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     status: d.status||'Pending',
     charges_per_sq_ft: d.chargesPerSqFt||d.charges_per_sq_ft||0,
     total_charges: d.totalCharges||d.total_charges||0,
+    // Forward-compat blob so the trip-grouping + link fields the flat columns
+    // drop (tripId, gatePassId, receivedPieceIds, ratesByMm, vendorInvoiceNo,
+    // threeWayMatchStatus, brokenPieceIds) round-trip — this is what desynced
+    // the Production / Dispatch-cockpit / Logistics surfaces.
+    data: d,
   }),
   cutter_daily_logs: (l: any) => ({
     id: l.id, company: l.company||'',
@@ -1092,13 +1097,24 @@ const TABLE_PULL: Record<string, (row: any) => any> = {
     vehicleId: r.vehicle_id, paidBy: r.paid_by,
     paidStatus: r.paid_status, glTxId: r.gl_tx_id,
   }),
-  tempering_dispatches: (r: any) => ({
-    ...r,
-    plantName: r.plant_name, vehicleNo: r.vehicle_no,
-    driverName: r.driver_name, serviceType: r.service_type,
-    pieceIds: r.piece_ids||[], totalSqFt: r.total_sq_ft,
-    chargesPerSqFt: r.charges_per_sq_ft, totalCharges: r.total_charges,
-  }),
+  tempering_dispatches: (r: any) => {
+    // Unwrap the forward-compat data blob so its rich fields (tripId, gatePassId,
+    // receivedPieceIds, ratesByMm, vendorInvoiceNo, 3-way-match) survive; the flat
+    // columns then override with server-authoritative values. Strip the nested
+    // `data` key so a later push doesn't re-nest it (data.data...).
+    const blob = (r.data && typeof r.data === 'object') ? r.data : {};
+    const { data: _drop, ...flat } = r;
+    return {
+      ...blob,
+      ...flat,
+      plantName: r.plant_name, vehicleNo: r.vehicle_no,
+      driverName: r.driver_name, serviceType: r.service_type,
+      // prefer the RPC-patched data.pieceIds, fall back to the flat column
+      pieceIds: blob.pieceIds || r.piece_ids || [],
+      totalSqFt: r.total_sq_ft,
+      chargesPerSqFt: r.charges_per_sq_ft, totalCharges: r.total_charges,
+    };
+  },
   cutter_daily_logs: (r: any) => ({
     ...r,
     logDate: r.log_date, cutterName: r.cutter_name,

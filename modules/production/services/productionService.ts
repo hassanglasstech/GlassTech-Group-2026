@@ -103,7 +103,12 @@ export const ProductionService = {
     }
   },
   getGatePasses: (): GatePass[] => safeParse(KEYS.GATE_PASS),
-  saveGatePasses: (data: GatePass[]) => safeSave(KEYS.GATE_PASS, data),
+  // markDirty: a locally-issued gate pass must reach the cloud gate_passes table,
+  // otherwise the server authorize_dispatch RPC raises gate_pass_not_found_for_company.
+  saveGatePasses: (data: GatePass[]) => {
+    safeSave(KEYS.GATE_PASS, data);
+    try { SyncService.markDirty('gate_passes'); } catch { /* SyncService not yet init */ }
+  },
   getJobOrders: (): JobOrder[] => safeParse(KEYS.JOB_ORDERS),
   saveJobOrders: (data: JobOrder[]) => safeSave(KEYS.JOB_ORDERS, data),
   getTargetCompanyJobOrders: (targetCompany: Company): JobOrder[] => {
@@ -305,7 +310,16 @@ export const ProductionService = {
     });
   },
   getTemperingDispatches: (): TemperingDispatch[] => safeParse(KEYS.TEMPERING_DISPATCHES),
-  saveTemperingDispatches: (data: TemperingDispatch[]) => safeSave(KEYS.TEMPERING_DISPATCHES, data),
+  // safeSave alone left every dispatch mutation (trip create, status change,
+  // gatePassId, receivedPieceIds, 3-way-match) in localStorage only — it never
+  // reached the tempering_dispatches table, so the Production / Dispatch-cockpit /
+  // Logistics surfaces went split-brain and the next authoritative pull wiped the
+  // local rows. markDirty queues + pushes it (mappers now carry the full row via
+  // the data jsonb blob so trip-link fields round-trip).
+  saveTemperingDispatches: (data: TemperingDispatch[]) => {
+    safeSave(KEYS.TEMPERING_DISPATCHES, data);
+    try { SyncService.markDirty('tempering_dispatches'); } catch { /* SyncService not yet init */ }
+  },
 
   // ── Floor Staff — production workers with role assignments ─────────
   // Used by ServiceFloorView and DailyFloorPlan for role-filtered dropdowns.
