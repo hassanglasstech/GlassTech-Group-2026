@@ -37,6 +37,7 @@ import LensesSidebar, { LensId, LENS_PREDICATES, LENSES } from '../components/wo
 import KanbanBoard  from '../components/workbench/KanbanBoard';     // Sprint 16
 import PieceDetailPanel from '../components/workbench/PieceDetailPanel'; // Sprint 17
 import AgingAlertsBanner from '../components/workbench/AgingAlertsBanner'; // Sprint 18
+import CockpitHeader from '../components/workbench/CockpitHeader'; // Production Cockpit — funnel + KPI strip
 import ShortcutSheet   from '../components/workbench/ShortcutSheet';   // Sprint 20
 import FilterPresets   from '../components/workbench/FilterPresets';   // Sprint 20
 import OnboardingTour  from '../components/workbench/OnboardingTour';  // Sprint 20
@@ -212,6 +213,14 @@ const WorkbenchContent: React.FC = () => {
     <div className="flex flex-col h-full bg-slate-50">
       {/* Sprint 18: Aging + SLA alert banner (hidden when all clear) */}
       <AgingAlertsBanner pieces={pieces} hideWhenClear/>
+
+      {/* Production Cockpit (Phase 1): always-on funnel + today throughput +
+          per-vendor tempering load. Click a stage to filter the board. */}
+      <CockpitHeader
+        pieces={pieces}
+        dispatches={dispatches}
+        onStageClick={(status) => setFilters(f => ({ ...f, status }))}
+      />
 
       {/* Sticky header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-20 no-print">
