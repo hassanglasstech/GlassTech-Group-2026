@@ -80,6 +80,8 @@ const CutterPerformance= React.lazy(() => import('./modules/production/companies
 const Workbench        = React.lazy(() => import('./modules/production/companies/glassco/pages/Workbench'));
 // Sprint 18 — Role-based mini-apps
 const DispatchWorkbench = React.lazy(() => import('./modules/production/companies/glassco/pages/DispatchWorkbench'));
+// One-Window Dispatch — Phase 1 read-only cockpit (dark route; nav wiring is Phase 4)
+const DispatchCockpit   = React.lazy(() => import('./modules/dispatch/pages/DispatchCockpit'));
 // Sprint 21 — Global UX foundations
 const CommandPalette    = React.lazy(() => import('./modules/shared/components/CommandPalette'));
 const Breadcrumbs       = React.lazy(() => import('./modules/shared/components/Breadcrumbs'));
@@ -829,6 +831,8 @@ const App: React.FC = () => {
                   <Route path="/production/ncr-claims" element={<ModuleErrorBoundary moduleName="NCR / Claims"><NCRModule /></ModuleErrorBoundary>} />
                   {/* Sprint 18 — Dispatch mini-app for dispatch_staff role */}
                   <Route path="/dispatch"            element={<ModuleErrorBoundary moduleName="Dispatch"><DispatchWorkbench /></ModuleErrorBoundary>} />
+                  {/* One-Window Dispatch — Phase 1 read-only cockpit (unified board; dark route until Phase 4 cutover) */}
+                  <Route path="/dispatch-cockpit"    element={<ModuleErrorBoundary moduleName="Dispatch Cockpit"><DispatchCockpit /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />
                 </Routes>
                 </RouteAccessGuard>

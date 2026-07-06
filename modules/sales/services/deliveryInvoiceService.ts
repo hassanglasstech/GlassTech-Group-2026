@@ -215,10 +215,23 @@ const getNextInvoiceNumber = async (company: Company): Promise<string> => {
   return buildInvoiceNumber(company, seq);
 };
 
+/**
+ * IFRS 15 §31 / IAS 1 cut-off: revenue and COGS must be recognized in the
+ * period CONTROL transferred to the customer (delivery), not on the
+ * invoice-entry clock. Returns a valid YYYY-MM-DD delivery date when available,
+ * else today; never future-dates recognition (data-entry guard).
+ */
+function resolveRecognitionDate(raw: string | undefined, today: string): string {
+  const candidate = (raw ?? '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(candidate)) return today;
+  return candidate > today ? today : candidate;
+}
+
 export async function generateDeliveryInvoice(
   order: Quotation,
   company: Company,
-  gstPercent: number = 0
+  gstPercent: number = 0,
+  deliveryDate?: string
 ): Promise<InvoiceResult> {
   // ── Validation guards (P1) ────────────────────────────────────────
   if (!order || !order.id) {
@@ -397,6 +410,11 @@ export async function generateDeliveryInvoice(
   const invoiceId = await getNextInvoiceNumber(company);
   const txId      = 'GL-' + invoiceId;
   const today     = new Date().toISOString().split('T')[0];
+  // Recognize revenue + COGS at delivery (control transfer), not the
+  // invoice-entry date — IFRS 15 §31 / IAS 1 cut-off fix. Both GL legs (and
+  // the inter-company mirror) post on this date; invoice.date stays = today
+  // (issuance) for AR aging / due-date terms.
+  const glDate    = resolveRecognitionDate(deliveryDate ?? order.actualDeliveryDate, today);
 
   // ── GL Entry — Posted directly ────────────────────────────────────
   const details: { accountId: string; debit: number; credit: number; text: string }[] = [
@@ -424,7 +442,7 @@ export async function generateDeliveryInvoice(
 
   const glTx: LedgerTransaction = {
     id: txId, company, docType: 'DR',
-    docDate: today, date: today,
+    docDate: glDate, date: glDate,
     description: 'INVOICE ' + invoiceId + ': ' + clientName + ' — ' + (order.orderNo || order.id),
     referenceId: invoiceId,
     status: 'Posted',
@@ -474,7 +492,7 @@ export async function generateDeliveryInvoice(
     if (costAcc && payableAcc) {
       mirrorTx = {
         id: 'BILL-' + txId, company: targetCompany, docType: 'KR',
-        docDate: today, date: today,
+        docDate: glDate, date: glDate,
         description: 'AUTO-PURCHASE: From ' + company + ' — ' + invoiceId,
         referenceId: txId, status: 'Posted',
         createdBy: 'system-auto',
@@ -552,7 +570,7 @@ export async function generateDeliveryInvoice(
       company, invoiceId,
       orderId: order.orderNo || order.id,
       items: effectiveItems,
-      date: today, clientName,
+      date: glDate, clientName,
     });
     cogsPlan = {
       ledgerTx: tradingPlan.ledgerTx,
@@ -568,7 +586,7 @@ export async function generateDeliveryInvoice(
       company, invoiceId,
       orderId: order.orderNo || order.id,
       pieceIds: linkedPieceIds,
-      date: today, clientName,
+      date: glDate, clientName,
     });
   }
 

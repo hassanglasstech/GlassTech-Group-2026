@@ -276,6 +276,47 @@ describe('SIT F3 · generateDeliveryInvoice — GL posting', () => {
     expect(sumDebit(details)).toBe(sumCredit(details));    // balanced
   });
 
+  it('SIT-F3-CUTOFF-01 · revenue + COGS GL post at the DELIVERY date, not invoice-entry date (IFRS 15 §31)', async () => {
+    seedClient();
+    // Delivered in a prior period; invoice keyed today.
+    const order = makeQuotation({ actualDeliveryDate: '2026-04-30' });
+    seedQuotation(order);
+    seedProductionPieces(order.id, 2);
+
+    const today = new Date().toISOString().split('T')[0];
+    const { generateDeliveryInvoice } = await import('@/modules/sales/services/deliveryInvoiceService');
+    await generateDeliveryInvoice(order as any, 'Glassco', 0);
+
+    const payload = _rpcCalls[0].payload as {
+      p_payload: {
+        main_ledger_row: { data: { date: string; docDate: string; details: Array<{ debit: number; credit: number }> } };
+        invoice_row: { date: string };
+      };
+    };
+    // GL revenue leg is recognized at delivery…
+    expect(payload.p_payload.main_ledger_row.data.date).toBe('2026-04-30');
+    expect(payload.p_payload.main_ledger_row.data.docDate).toBe('2026-04-30');
+    // …while the invoice document date stays issuance (today) for AR aging.
+    expect(payload.p_payload.invoice_row.date).toBe(today);
+    // Still balanced after the date change.
+    const d = payload.p_payload.main_ledger_row.data.details;
+    expect(sumDebit(d)).toBe(sumCredit(d));
+  });
+
+  it('SIT-F3-CUTOFF-02 · with no delivery date, GL falls back to today (backward compatible)', async () => {
+    seedClient();
+    const order = makeQuotation();           // no actualDeliveryDate
+    seedQuotation(order);
+    seedProductionPieces(order.id, 2);
+
+    const today = new Date().toISOString().split('T')[0];
+    const { generateDeliveryInvoice } = await import('@/modules/sales/services/deliveryInvoiceService');
+    await generateDeliveryInvoice(order as any, 'Glassco', 0);
+
+    const payload = _rpcCalls[0].payload as { p_payload: { main_ledger_row: { data: { date: string } } } };
+    expect(payload.p_payload.main_ledger_row.data.date).toBe(today);
+  });
+
   it('SIT-F3-02 · invoice with 17% GST adds a 3rd line and is still balanced', async () => {
     seedClient();
     const order = makeQuotation();

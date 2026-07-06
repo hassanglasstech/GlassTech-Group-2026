@@ -3,6 +3,8 @@ import { toast } from 'sonner';
 import { Company, GatePass, TemperingDispatch } from '@/modules/shared/types';
 import { AppService } from '@/modules/shared/services/appService';
 import { ProductionService } from '@/modules/production/services/productionService';
+import { DispatchService } from '@/modules/procurement/services/dispatchService';
+import { Logger } from '@/modules/shared/services/logger';
 import { Truck, MoveRight, Printer, X, ShieldCheck, Wallet } from 'lucide-react';
 import { isInternal } from '@/modules/procurement/components/logistics/LogisticsUtils';
 
@@ -117,6 +119,29 @@ export const GateControl: React.FC<GateControlProps> = ({ company, gatePasses, d
 
             ProductionService.saveTemperingDispatches(updatedDispatches);
             if(piecesUpdated) ProductionService.saveProductionPieces(allPieces);
+
+            // CHANGE 3 — route the gate transition through the event-sourced
+            // DispatchService so dispatch_events carries the authoritative
+            // lifecycle trail (single dispatch path). Best-effort + non-blocking:
+            // the optimistic localStorage write above stays the source of truth,
+            // so an offline/cloud failure here never blocks the gate flow. No GL
+            // impact — these are status/audit events only.
+            const emitLifecycleEvents = (targetId: string) => {
+                if (gateForm.type === 'Outward') {
+                    void DispatchService.markGateOut(targetId, gpId).then(r => {
+                        if (r.error) { Logger.error('GateControl', 'GATE_OUT event failed', r.error); return; }
+                        return DispatchService.markInTransit(targetId).then(r2 => {
+                            if (r2.error) Logger.error('GateControl', 'IN_TRANSIT event failed', r2.error);
+                        });
+                    });
+                } else if (gateForm.type === 'Inward') {
+                    void DispatchService.recordReceiving({ dispatchId: targetId, receivedPieceIds: [], brokenPieceIds: [] }).then(r => {
+                        if (r.error) Logger.error('GateControl', 'RECEIVING event failed', r.error);
+                    });
+                }
+            };
+            if (gateForm.linkedDispatchId) emitLifecycleEvents(gateForm.linkedDispatchId);
+            if (secondaryDispatchId) emitLifecycleEvents(secondaryDispatchId);
         }
 
         setIsGateModalOpen(false);
