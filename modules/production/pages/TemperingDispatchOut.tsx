@@ -12,7 +12,7 @@
  * GL-NEUTRAL: sending our own glass out for a service posts no journal. The GL
  * fires only at pay-&-collect inward (Step 3).
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { toast, Toaster } from 'sonner';
 import { Truck, Printer, Loader2, Search as SearchIcon, RefreshCw, PackageCheck, FileText } from 'lucide-react';
@@ -49,6 +49,7 @@ const TemperingContent: React.FC = () => {
   const bulk = useBulkSelection<string>();
 
   const [query, setQuery] = useState('');
+  const [mmFilter, setMmFilter] = useState<string>('all');
   const [vendorName, setVendorName] = useState('');
   const [vehicleNo, setVehicleNo] = useState('');
   const [driverName, setDriverName] = useState('');
@@ -64,13 +65,36 @@ const TemperingContent: React.FC = () => {
   const ratesByMm = useMemo(() => (vendorName ? getVendorRatesByMm(vendorName) : {}), [vendorName]);
 
   // ── Ready-for-tempering pool: QC-Passed, not already on a dispatch ─
-  const pool = useMemo(() => {
+  // mm (thickness) comes off the piece's order item — the one thing this
+  // screen couldn't filter by, forcing operators to eyeball 6mm rows.
+  const mmOf = useCallback((p: ProductionPiece): string => {
+    const order = jobOrders.find(j => j.orderNo === p.orderId || j.id === p.orderId);
+    const item = order?.items?.[p.itemIndex] as { glassSize?: string } | undefined;
+    return String(item?.glassSize ?? '').replace(/[^0-9.]/g, '') || '?';
+  }, [jobOrders]);
+
+  const basePool = useMemo(() => {
     const q = query.trim().toLowerCase();
     return pieces
       .filter(p => p.status === PieceStatus.QC_PASSED && !p.dispatchId)
       .filter(p => !q || `${p.id} ${p.orderId} ${p.specs ?? ''}`.toLowerCase().includes(q))
       .sort((a, b) => a.orderId.localeCompare(b.orderId));
   }, [pieces, query]);
+
+  const mmOptions = useMemo(() => {
+    const set = new Set<string>();
+    basePool.forEach(p => set.add(mmOf(p)));
+    return Array.from(set).filter(x => x !== '?').sort((a, b) => Number(a) - Number(b));
+  }, [basePool, mmOf]);
+
+  const pool = useMemo(
+    () => (mmFilter === 'all' ? basePool : basePool.filter(p => mmOf(p) === mmFilter)),
+    [basePool, mmFilter, mmOf],
+  );
+
+  // Select every piece currently shown (after the mm/search filter) — the
+  // "all 6mm of this job" action in one click.
+  const selectAllShown = () => pool.forEach(p => { if (!bulk.selected.has(p.id)) bulk.toggle(p.id); });
 
   const grouped = useMemo(() => {
     const m = new Map<string, ProductionPiece[]>();
@@ -261,6 +285,21 @@ const TemperingContent: React.FC = () => {
               className="w-full rounded-lg border border-slate-200 py-1.5 pl-8 pr-3 text-sm focus:border-blue-500 focus:outline-none"
             />
           </div>
+
+          {mmOptions.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-2xs font-bold uppercase text-slate-400">mm</span>
+              <button type="button" onClick={() => setMmFilter('all')} className={`rounded-full px-2.5 py-0.5 text-2xs font-bold ${mmFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>All</button>
+              {mmOptions.map(mm => (
+                <button key={mm} type="button" onClick={() => setMmFilter(mm)} className={`rounded-full px-2.5 py-0.5 text-2xs font-bold ${mmFilter === mm ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{mm}</button>
+              ))}
+              {pool.length > 0 && (
+                <button type="button" onClick={selectAllShown} className="ml-auto text-2xs font-bold text-blue-600 hover:underline">
+                  Select all shown ({pool.length})
+                </button>
+              )}
+            </div>
+          )}
 
           {pool.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 py-16 text-center text-sm text-slate-400">
