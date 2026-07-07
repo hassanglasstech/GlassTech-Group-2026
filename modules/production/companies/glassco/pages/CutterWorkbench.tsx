@@ -30,6 +30,7 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { useAppStore } from '@/modules/shared/store/appStore';
+import { deriveServiceBuckets } from '../serviceRouting';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
@@ -335,6 +336,28 @@ const CutterWorkbench: React.FC = () => {
       }
       setPieces(prev => prev.map(p => p.id === piece.id ? { ...p, status: 'Cut' as const, cutBy: cutterName, cutAt: nowIso } : p));
       toast.success(`Piece ${piece.id} cut`);
+
+      // Auto-route the freshly-cut piece into the workflow so it does not sit at
+      // 'Cut': to the Service Floor (Service-Pending + pendingServices) if the
+      // order line needs services, else straight to QC-Pending. Best-effort — if
+      // this second hop fails the piece stays 'Cut' and can be advanced later.
+      const order = jobs.find(j => j.orderNo === piece.orderId || j.id === piece.orderId);
+      const buckets = deriveServiceBuckets(order?.items?.[piece.itemIndex]);
+      const routed = buckets.length > 0 ? 'Service-Pending' : 'QC-Pending';
+      try {
+        const { error: routeErr } = await supabase.rpc('update_piece_status_atomic', {
+          p_piece_id:   piece.id,
+          p_new_status: routed,
+          p_changed_by: actorName,
+          p_reason:     'auto-route after cut',
+          p_extra:      buckets.length > 0 ? { pendingServices: buckets } : {},
+        });
+        if (!routeErr) {
+          setPieces(prev => prev.map(p => p.id === piece.id
+            ? { ...p, status: routed as ProductionPiece['status'], ...(buckets.length > 0 ? { pendingServices: buckets } : {}) }
+            : p));
+        }
+      } catch { /* stays 'Cut' — advance from QC/board later */ }
     } catch (e) {
       toast.error(`Cut error: ${e instanceof Error ? e.message : 'unknown'}`, { duration: 7000 });
     }

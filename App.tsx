@@ -84,6 +84,8 @@ const DispatchWorkbench = React.lazy(() => import('./modules/production/companie
 const DispatchCockpit   = React.lazy(() => import('./modules/dispatch/pages/DispatchCockpit'));
 // Tempering Dispatch-OUT — one-window pool → vendor → dispatch + Service Order/Gate Pass print
 const TemperingDispatchOut = React.lazy(() => import('./modules/production/pages/TemperingDispatchOut'));
+// Service Floor — routed module home for per-piece service marking (revives ServiceFloorView)
+const ServiceFloorPage = React.lazy(() => import('./modules/production/companies/glassco/pages/ServiceFloorPage'));
 // Sprint 21 — Global UX foundations
 const CommandPalette    = React.lazy(() => import('./modules/shared/components/CommandPalette'));
 const Breadcrumbs       = React.lazy(() => import('./modules/shared/components/Breadcrumbs'));
@@ -837,6 +839,8 @@ const App: React.FC = () => {
                   <Route path="/dispatch-cockpit"    element={<ModuleErrorBoundary moduleName="Dispatch Cockpit"><DispatchCockpit /></ModuleErrorBoundary>} />
                   {/* Tempering Dispatch-OUT — one-window pool → vendor → dispatch (GL-neutral) + prints */}
                   <Route path="/production/tempering-dispatch" element={<ModuleErrorBoundary moduleName="Tempering Dispatch"><TemperingDispatchOut /></ModuleErrorBoundary>} />
+                  {/* Service Floor — per-piece service marking (Polishing/Grinding/Notching/Holes) */}
+                  <Route path="/production/service-floor" element={<ModuleErrorBoundary moduleName="Service Floor"><ServiceFloorPage /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />
                 </Routes>
                 </RouteAccessGuard>

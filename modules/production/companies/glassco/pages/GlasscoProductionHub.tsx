@@ -18,6 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import {
   ScanLine, ShieldCheck, Truck, Clock, BarChart3, AlertTriangle, ArrowRight, ClipboardList,
+  Sparkles, Flame,
 } from 'lucide-react';
 
 type Tone = 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'neutral';
@@ -59,9 +60,11 @@ const SECTIONS: ModuleSection[] = [
     title: 'Floor Stations',
     blurb: 'Shop-floor data entry',
     cards: [
-      { key: 'cutter',   title: 'Cutter Workbench', desc: 'Cutting sessions & sheet scan',           path: '/cutter',   icon: <ScanLine size={20} />,    tone: 'info' },
-      { key: 'qc',       title: 'QC Workbench',     desc: 'Quality control — pass / fail pieces',    path: '/qc',       icon: <ShieldCheck size={20} />, tone: 'success' },
-      { key: 'dispatch', title: 'Dispatch',         desc: 'Ready-to-dispatch pieces & loading',      path: '/dispatch', icon: <Truck size={20} />,       tone: 'info' },
+      { key: 'cutter',    title: 'Cutter Workbench',   desc: 'Cutting sessions & sheet scan',             path: '/cutter',                     icon: <ScanLine size={20} />,    tone: 'info' },
+      { key: 'service',   title: 'Service Floor',      desc: 'Mark polishing / grinding / notch / holes', path: '/production/service-floor',    icon: <Sparkles size={20} />,    tone: 'primary' },
+      { key: 'qc',        title: 'QC Workbench',       desc: 'Quality control — pass / fail pieces',      path: '/qc',                         icon: <ShieldCheck size={20} />, tone: 'success' },
+      { key: 'tempering', title: 'Tempering Dispatch', desc: 'Send QC-passed glass out to vendors',       path: '/production/tempering-dispatch', icon: <Flame size={20} />,       tone: 'warning' },
+      { key: 'dispatch',  title: 'Dispatch',           desc: 'Ready-to-dispatch pieces & loading',        path: '/dispatch',                   icon: <Truck size={20} />,       tone: 'info' },
     ],
   },
   {
