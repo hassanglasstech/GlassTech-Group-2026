@@ -202,6 +202,39 @@ const TemperingContent: React.FC = () => {
     }
   };
 
+  // Skip-tempering path: glass that needs no tempering goes QC-Passed → Ready to
+  // Dispatch directly (the module owner for this transition, so the Board no
+  // longer has to). Status-only, no GL — reuses the atomic RPC, mirrors once.
+  const handleSkipTempering = async () => {
+    const ids = Array.from(bulk.selected);
+    if (ids.length === 0) { toast.error('Pehle pieces select karein.'); return; }
+    setBusy(true);
+    try {
+      const results = await Promise.all(ids.map(async (id) => {
+        try {
+          const { error } = await supabase.rpc('update_piece_status_atomic', {
+            p_piece_id: id, p_new_status: 'Ready to Dispatch',
+            p_changed_by: user?.email ?? 'system', p_reason: 'skip tempering', p_extra: {},
+          });
+          return { id, ok: !error };
+        } catch { return { id, ok: false }; }
+      }));
+      const done = new Set(results.filter(r => r.ok).map(r => r.id));
+      const all = ProductionService.getProductionPieces();
+      ProductionService.saveProductionPiecesBg(
+        all.map(p => done.has(p.id)
+          ? { ...p, status: 'Ready to Dispatch' as ProductionPiece['status'], lastUpdated: new Date().toISOString() }
+          : p),
+      );
+      bulk.clear();
+      refreshData();
+      if (done.size) toast.success(`${done.size} pcs → Ready to Dispatch (tempering skipped)`);
+      else toast.error('Skip failed for all selected pieces.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // ── Print-only render (one at a time to keep .print-only isolation) ─
   if (printMode === 'service' && created) {
     return <ServiceOrderPrint dispatch={created.dispatch} pieces={created.pieces} jobOrders={jobOrders} />;
@@ -402,6 +435,18 @@ const TemperingContent: React.FC = () => {
             {busy ? 'Dispatching…' : 'Dispatch + Print'}
           </button>
           <p className="text-center text-2xs text-slate-400">GL touch nahi hoti — sirf payment commitment note hoti hai.</p>
+
+          <div className="border-t border-slate-100 pt-3">
+            <button
+              type="button"
+              onClick={handleSkipTempering}
+              disabled={busy || bulk.count === 0}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Skip tempering → Ready to Dispatch
+            </button>
+            <p className="mt-1 text-center text-2xs text-slate-400">Jo glass temper nahi honi — seedha dispatch-ready.</p>
+          </div>
         </aside>
       </div>
     </div>
