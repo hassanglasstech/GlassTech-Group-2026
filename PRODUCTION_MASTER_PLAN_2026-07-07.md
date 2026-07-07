@@ -38,7 +38,7 @@ So **3 of the 4** Workbench-only transitions now have module homes (Cut→QC ✓
 ### TRACK 2 — Data-model truth (prerequisite for the floor board)
 | Phase | Scope | Status |
 |---|---|---|
-| 2.1 | Add nullable piece fields (ride existing `p_extra`): `assignedCutter`, `prevCutters[]`, `assignedAt`, `assignedBy`, `faultHistory[]`, `fault.origin`, `commitmentType`, `blockedReason`. Without per-piece assignment the board's "ghosted reassigned piece on both lanes" headline is fiction. No GL, no new table, `piece.id` untouched. | ⬜ |
+| 2.1 | Add nullable piece fields (ride existing `p_extra`): `assignedCutter`, `prevCutters[]`, `assignedAt`, `assignedBy`, `faultHistory[]`, `fault.origin`, `commitmentType`, `blockedReason`. Without per-piece assignment the board's "ghosted reassigned piece on both lanes" headline is fiction. No GL, no new table, `piece.id` untouched. | ✅ `d06f617` — types + both pull mappers lift from `data` jsonb; push mappers untouched (RPC owns `data`). **Data-model only — no write flow yet** (that's D1/D2). tsc 0 · 369 tests · build clean. |
 
 ### TRACK 3 — Floor overview board (the God-mode vision, on the now read-only Workbench)
 | Phase | Scope | Status |
