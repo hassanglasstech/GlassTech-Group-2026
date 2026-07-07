@@ -41,7 +41,7 @@ import { toast } from 'sonner';
 import { EmptyState } from '@/modules/shared/components/EmptyState';
 import {
   ScanLine, Plus, Square, Search, X, CheckCircle2, AlertTriangle,
-  Globe, Undo2, Play, Hash, Clock, Target, Loader2, Eye,
+  Globe, Undo2, Play, Hash, Clock, Target, Loader2, Eye, History,
 } from 'lucide-react';
 import { ProductionPiece } from '@/modules/shared/types';
 import { supabase } from '@/src/services/supabaseClient';
@@ -290,6 +290,18 @@ const CutterWorkbench: React.FC = () => {
     return [...m.entries()];
   }, [cutQueue]);
 
+  // ── My cuts today (D1) — pieces this cutter is CREDITED for today (cutBy),
+  //    regardless of who keyed them. So even while the supervisor records on the
+  //    cutter's behalf, the cutter sees their own work; `assignedBy` (when ≠ the
+  //    cutter) tells them it was logged by someone else. Recent-first. ──
+  const myCutsToday = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return pieces
+      .filter(p => p.cutBy === cutterName && (p.cutAt || '').startsWith(today))
+      .sort((a, b) => (b.cutAt || '').localeCompare(a.cutAt || ''))
+      .slice(0, 20);
+  }, [pieces, cutterName]);
+
   // ── Allotment roster (privileged) — every cutter + their still-to-cut count ─
   // Lets the recorder see ALL cutters and how many Pending-Cut pieces are
   // allotted to each (jobs assigned to them). Unassigned Pending-Cut pieces are
@@ -318,24 +330,30 @@ const CutterWorkbench: React.FC = () => {
   }, [jobs, pieces, hrCutters]);
 
   // Cut one piece: Pending-Cut → Cut + cutBy/cutAt, via the atomic RPC.
+  // D1 (supervisor-logs-on-behalf): the piece is CREDITED to cutterName (cutBy),
+  // while assignedBy records the actual operator who keyed it — so the entry
+  // surfaces on the cutter's own account, and the board can show "logged by X"
+  // for anything the cutter did not enter themselves.
   const cutPiece = async (piece: ProductionPiece): Promise<void> => {
     setCutting(piece.id);
     const nowIso = new Date().toISOString();
+    const onBehalf = actorName !== cutterName;
+    const attribution = onBehalf ? { assignedBy: actorName, assignedAt: nowIso } : {};
     try {
       const { error } = await supabase.rpc('update_piece_status_atomic', {
         p_piece_id:   piece.id,
         p_new_status: 'Cut',
         p_changed_by: actorName,
-        p_reason:     actorName !== cutterName ? `recorded by ${actorName}` : null,
-        p_extra:      { cutBy: cutterName, cutAt: nowIso },
+        p_reason:     onBehalf ? `recorded by ${actorName}` : null,
+        p_extra:      { cutBy: cutterName, cutAt: nowIso, ...attribution },
       });
       if (error) {
         toast.error(`Cut failed: ${error.message}`, { duration: 7000 });
         setCutting(null);
         return;
       }
-      setPieces(prev => prev.map(p => p.id === piece.id ? { ...p, status: 'Cut' as const, cutBy: cutterName, cutAt: nowIso } : p));
-      toast.success(`Piece ${piece.id} cut`);
+      setPieces(prev => prev.map(p => p.id === piece.id ? { ...p, status: 'Cut' as const, cutBy: cutterName, cutAt: nowIso, ...attribution } : p));
+      toast.success(onBehalf ? `Piece ${piece.id} cut — credited to ${cutterName}` : `Piece ${piece.id} cut`);
 
       // Auto-route the freshly-cut piece into the workflow so it does not sit at
       // 'Cut': to the Service Floor (Service-Pending + pendingServices) if the
@@ -704,6 +722,11 @@ const CutterWorkbench: React.FC = () => {
                           <div className="min-w-0 flex-1">
                             <p className="text-label font-black text-slate-800 font-mono truncate">{p.id}</p>
                             <p className="text-2xs text-slate-500 truncate">{p.specs}</p>
+                            {(p.prevCutters?.length ?? 0) > 0 && (
+                              <p className="text-2xs font-bold text-indigo-600 truncate inline-flex items-center gap-1">
+                                <History size={9}/> reassigned to you from {p.prevCutters![p.prevCutters!.length - 1]}
+                              </p>
+                            )}
                           </div>
                           <button
                             onClick={() => cutPiece(p)}
@@ -722,6 +745,41 @@ const CutterWorkbench: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* My Cuts Today (D1) — the cutter's credited completed work. Visible even
+          when the supervisor recorded on their behalf; "logged by X" marks those. */}
+      {myCutsToday.length > 0 && (
+        <div className="px-4 pb-1 mt-3">
+          <div className="bg-white rounded-card border-2 border-slate-200 shadow p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-2xs font-black uppercase tracking-widest text-slate-600 flex items-center gap-1.5">
+                <CheckCircle2 size={14}/> {actAsCutter ? `${cutterName}'s Cuts Today` : 'My Cuts Today'}
+              </p>
+              <span className="text-2xs font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">{myCutsToday.length}</span>
+            </div>
+            <div className="space-y-2 max-h-[40vh] overflow-y-auto">
+              {myCutsToday.map(p => {
+                const loggedByOther = p.assignedBy && p.assignedBy !== cutterName;
+                return (
+                  <div key={p.id} className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2">
+                    <CheckCircle2 size={15} className="text-emerald-500 shrink-0"/>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-label font-black text-slate-800 font-mono truncate">{p.id}</p>
+                      <p className="text-2xs text-slate-500 truncate">{p.specs}</p>
+                      {loggedByOther && (
+                        <p className="text-2xs font-bold text-indigo-600 truncate inline-flex items-center gap-1">
+                          <Eye size={9}/> logged by {p.assignedBy}
+                        </p>
+                      )}
+                    </div>
+                    {p.cutAt && <span className="text-2xs font-bold text-slate-400 shrink-0 tabular-nums">{new Date(p.cutAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 3 main action buttons — 60×60+ , single-thumb */}
       <div className="px-4 space-y-3">
