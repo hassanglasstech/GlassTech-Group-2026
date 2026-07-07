@@ -114,6 +114,61 @@ export const ProductionService = {
       return safeParse(KEYS.PRODUCTION_PIECES);
     }
   },
+  /**
+   * D2 — Reassign a job's remaining (un-cut) pieces to a new cutter.
+   *
+   * Already-cut pieces are NOT touched — they keep their `cutBy` credit, so a
+   * previous cutter's completed work stays theirs. Each moved (Pending-Cut)
+   * piece gets a per-piece `assignedCutter = toCutter`, the outgoing cutter
+   * appended to `prevCutters[]`, and `assignedAt`/`assignedBy` stamped. These
+   * ride the production_pieces.data jsonb via a SAME-STATUS
+   * update_piece_status_atomic call (p_from = p_to → allowed no-op, 046 line 37)
+   * — no status change, no GL, atomic + audit-logged server-side. Returns how
+   * many pieces moved / failed. Caller owns the job-level Quotation.assignedCutter
+   * update (which drives the Cutter Workbench cut queue).
+   */
+  reassignRemainingPieces: async (
+    remaining: ProductionPiece[],
+    fromCutter: string | undefined,
+    toCutter: string,
+    actor: string,
+  ): Promise<{ moved: number; failed: number }> => {
+    const nowIso = new Date().toISOString();
+    const okById = new Map<string, Partial<ProductionPiece>>();
+    let failed = 0;
+    await Promise.all(remaining.map(async (p) => {
+      const outgoing = p.assignedCutter || fromCutter;   // who held the piece before
+      const prev = [...(p.prevCutters || [])];
+      if (outgoing && outgoing !== toCutter && prev[prev.length - 1] !== outgoing) prev.push(outgoing);
+      const patch: Partial<ProductionPiece> = {
+        assignedCutter: toCutter,
+        prevCutters: prev,
+        assignedAt: nowIso,
+        assignedBy: actor,
+      };
+      try {
+        const { error } = await supabase.rpc('update_piece_status_atomic', {
+          p_piece_id:   p.id,
+          p_new_status: p.status,                          // same-status no-op — carries p_extra only
+          p_changed_by: actor,
+          p_reason:     `reassigned to ${toCutter}`,
+          p_extra:      patch as any,
+        });
+        if (error) { failed++; Logger.error('ProductionService', `reassign piece ${p.id} failed`, error); return; }
+        okById.set(p.id, patch);
+      } catch (e) {
+        failed++;
+        Logger.error('ProductionService', `reassign piece ${p.id} exception`, e);
+      }
+    }));
+    // Mirror successful moves into the local cache so reads are immediately consistent.
+    if (okById.size > 0) {
+      const all = safeParse(KEYS.PRODUCTION_PIECES) as ProductionPiece[];
+      const next = all.map(p => okById.has(p.id) ? { ...p, ...okById.get(p.id) } : p);
+      safeSave(KEYS.PRODUCTION_PIECES, next);
+    }
+    return { moved: okById.size, failed };
+  },
   getGatePasses: (): GatePass[] => safeParse(KEYS.GATE_PASS),
   // markDirty: a locally-issued gate pass must reach the cloud gate_passes table,
   // otherwise the server authorize_dispatch RPC raises gate_pass_not_found_for_company.

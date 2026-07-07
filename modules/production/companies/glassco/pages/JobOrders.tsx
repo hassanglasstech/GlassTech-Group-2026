@@ -25,12 +25,13 @@ import { PieceStatus } from '@/modules/shared/constants';
 import { StatusBadge } from '@/modules/shared/components/StatusBadge';
 import { KpiTile, KpiRow } from '@/modules/shared/components/KpiTile';
 import { EmptyState } from '@/modules/shared/components/EmptyState';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import Pagination from '@/components/Pagination';
 import { formatPKR, formatNumber, formatDate } from '@/modules/shared/utils/format';
 import { toast } from 'sonner';
 import {
   ClipboardList, RefreshCw, Search, ChevronDown, ChevronRight,
-  Package, CheckCircle2, Loader2, FileText, Scissors,
+  Package, CheckCircle2, Loader2, FileText, Scissors, History,
 } from 'lucide-react';
 
 type ProdStatus = 'awaiting' | 'inprod' | 'completed';
@@ -56,6 +57,7 @@ interface JobOrderRow {
   broken: number;
   pendingCut: number;
   cutByBreakdown: { name: string; count: number }[];
+  reassignedFrom: string[];
   progress: number;
   sqft: number;
   value: number;
@@ -162,6 +164,10 @@ const JobOrders: React.FC = () => {
       const cutByBreakdown = [...cutByMap.entries()]
         .map(([name, count]) => ({ name, count }))
         .sort((a, b) => b.count - a.count);
+      // D2 — cutters this job was reassigned away from (per-piece prevCutters).
+      const prevSet = new Set<string>();
+      own.forEach(p => (p.prevCutters || []).forEach(c => c && prevSet.add(c)));
+      const reassignedFrom = [...prevSet];
       const prodStatus: ProdStatus = totalPieces === 0 ? 'awaiting' : delivered === totalPieces ? 'completed' : 'inprod';
       const counts = new Map<string, number>();
       own.forEach(p => counts.set(p.status, (counts.get(p.status) || 0) + 1));
@@ -169,7 +175,7 @@ const JobOrders: React.FC = () => {
       const overdue = !!order.dueDate && new Date(order.dueDate).getTime() < Date.now() && prodStatus !== 'completed';
 
       out.push({
-        order, clientName: clientName(order.clientId), totalPieces, delivered, broken, pendingCut, cutByBreakdown,
+        order, clientName: clientName(order.clientId), totalPieces, delivered, broken, pendingCut, cutByBreakdown, reassignedFrom,
         progress: totalPieces > 0 ? Math.round((delivered / totalPieces) * 100) : 0,
         sqft: orderSqft(order), value: orderValue(order), prodStatus, stages, overdue,
       });
@@ -215,6 +221,57 @@ const JobOrders: React.FC = () => {
   }, [hrCutters, orders, pieces]);
 
   const assignCutter = async (order: Quotation, name: string): Promise<void> => {
+    const from = order.assignedCutter;
+    if (name === (from || '')) return;                       // no change
+
+    // ── Reassign path (D2): an existing cutter → a different cutter. Move only
+    //    the remaining un-cut pool to the new cutter; already-cut pieces keep
+    //    their cutBy credit so the previous cutter's work stays theirs. ──
+    if (from && name) {
+      const own = [...(piecesByOrderKey.get(order.orderNo || '') || []), ...(piecesByOrderKey.get(order.id) || [])];
+      const remaining = own.filter(p => p.status === PieceStatus.PENDING_CUT);
+      const cutCount = own.filter(p => !!p.cutBy).length;
+      const ok = await confirmModal(
+        `Reassign this job from ${from} to ${name}?\n\n` +
+        `${remaining.length} remaining un-cut piece(s) will move to ${name}.\n` +
+        (cutCount > 0
+          ? `${cutCount} already-cut piece(s) stay credited to their original cutter(s).`
+          : `No pieces have been cut yet — the whole job moves.`)
+      );
+      if (!ok) return;
+
+      setSavingCutter(order.id);
+      const actor = useAuthStore.getState().profile?.email
+                  ?? useAuthStore.getState().user?.email
+                  ?? 'supervisor';
+      try {
+        const updated: Quotation = { ...order, assignedCutter: name };
+        await AsyncSalesService.saveQuotations([updated]);
+        let movedNote = '';
+        if (remaining.length > 0) {
+          const { moved, failed } = await ProductionService.reassignRemainingPieces(remaining, from, name, actor);
+          movedNote = ` · ${moved} piece(s) moved${failed ? `, ${failed} failed` : ''}`;
+        }
+        setOrders(prev => prev.map(o => o.id === order.id ? updated : o));
+        // Optimistic per-piece mirror so the history chip appears without a refresh flash.
+        if (remaining.length > 0) {
+          const movedIds = new Set(remaining.map(p => p.id));
+          setPieces(prev => prev.map(p => {
+            if (!movedIds.has(p.id)) return p;
+            const prevC = p.prevCutters || [];
+            const withOld = prevC[prevC.length - 1] !== from ? [...prevC, from] : prevC;
+            return { ...p, assignedCutter: name, prevCutters: withOld };
+          }));
+        }
+        toast.success(`Job reassigned to ${name}${movedNote}`);
+      } catch {
+        toast.error('Could not reassign the job');
+      }
+      setSavingCutter(null);
+      return;
+    }
+
+    // ── First-assign / unassign: job-level only (unchanged behaviour). ──
     setSavingCutter(order.id);
     const updated: Quotation = { ...order, assignedCutter: name || undefined };
     try {
@@ -347,7 +404,7 @@ const JobOrders: React.FC = () => {
                             {r.order.delayReason && <Detail label="Delay" value={`${r.order.delayCategory || ''} ${r.order.delayReason}`.trim()} tone="warning" />}
                           </div>
                           <div className="flex items-center gap-2 flex-wrap mb-3">
-                            <span className="text-2xs font-black uppercase tracking-widest text-slate-400 inline-flex items-center gap-1"><Scissors size={11} /> Assign Cutter</span>
+                            <span className="text-2xs font-black uppercase tracking-widest text-slate-400 inline-flex items-center gap-1"><Scissors size={11} /> {r.order.assignedCutter ? 'Reassign Cutter' : 'Assign Cutter'}</span>
                             <select
                               value={r.order.assignedCutter || ''}
                               onChange={e => assignCutter(r.order, e.target.value)}
@@ -359,7 +416,13 @@ const JobOrders: React.FC = () => {
                             </select>
                             {savingCutter === r.order.id && <Loader2 size={14} className="animate-spin text-slate-400" />}
                             {r.pendingCut > 0 && <span className="text-2xs font-bold text-slate-500">{r.pendingCut} piece(s) in pool to cut</span>}
+                            {r.order.assignedCutter && r.pendingCut > 0 && <span className="text-2xs text-slate-400">— reassigning moves only the {r.pendingCut} un-cut piece(s)</span>}
                           </div>
+                          {r.reassignedFrom.length > 0 && (
+                            <p className="text-2xs font-bold text-indigo-600 mb-3 inline-flex items-center gap-1">
+                              <History size={11} /> Reassigned from {r.reassignedFrom.join(', ')}{r.order.assignedCutter ? ` → ${r.order.assignedCutter}` : ''} — already-cut pieces stay with their original cutter
+                            </p>
+                          )}
                           {/* Partial-cut provision: a cutter may cut only part of an order.
                               Cutting is per-piece, so this shows who cut how many and how many
                               remain — reassign above to hand the remaining pool to another cutter
