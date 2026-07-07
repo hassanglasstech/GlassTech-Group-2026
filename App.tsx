@@ -84,6 +84,8 @@ const DispatchWorkbench = React.lazy(() => import('./modules/production/companie
 const DispatchCockpit   = React.lazy(() => import('./modules/dispatch/pages/DispatchCockpit'));
 // Tempering Dispatch-OUT — one-window pool → vendor → dispatch + Service Order/Gate Pass print
 const TemperingDispatchOut = React.lazy(() => import('./modules/production/pages/TemperingDispatchOut'));
+// Inward / Receive — A3 money-path: receive-back (tempering AP) + direct delivery (COGS). Dark route until preview-tested.
+const InwardReceivePage = React.lazy(() => import('./modules/production/pages/InwardReceivePage'));
 // Service Floor — routed module home for per-piece service marking (revives ServiceFloorView)
 const ServiceFloorPage = React.lazy(() => import('./modules/production/companies/glassco/pages/ServiceFloorPage'));
 // Sprint 21 — Global UX foundations
@@ -839,6 +841,8 @@ const App: React.FC = () => {
                   <Route path="/dispatch-cockpit"    element={<ModuleErrorBoundary moduleName="Dispatch Cockpit"><DispatchCockpit /></ModuleErrorBoundary>} />
                   {/* Tempering Dispatch-OUT — one-window pool → vendor → dispatch (GL-neutral) + prints */}
                   <Route path="/production/tempering-dispatch" element={<ModuleErrorBoundary moduleName="Tempering Dispatch"><TemperingDispatchOut /></ModuleErrorBoundary>} />
+                  {/* Inward / Receive — A3 money-path (tempering AP + delivery COGS). Dark route until preview-tested. */}
+                  <Route path="/production/inward" element={<ModuleErrorBoundary moduleName="Inward / Receive"><InwardReceivePage /></ModuleErrorBoundary>} />
                   {/* Service Floor — per-piece service marking (Polishing/Grinding/Notching/Holes) */}
                   <Route path="/production/service-floor" element={<ModuleErrorBoundary moduleName="Service Floor"><ServiceFloorPage /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />

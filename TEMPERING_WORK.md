@@ -17,7 +17,7 @@ IFRS accounting and minimal screen-hopping.
 |------|------|-----|--------|
 | **1. Dispatch-OUT** | One screen: ready-for-tempering pool → order-wise partial pick → vendor + vehicle/driver → dispatch → auto Service Order + Gate Pass print | **No GL** (own glass out for a service) | ✅ Done |
 | **2. Commitment memo** | Non-GL "Expected Tempering Payment" created at dispatch-out → finance cash-forecast | **No GL** (IAS 37 commitment, disclosed only) | ✅ Done |
-| **3. Pay & Collect (inward)** | Cash-on-collection: `Dr WIP / Cr AP` then `Dr AP / Cr Cash`, settle commitment | **GL** (IFRS-correct) | ⏳ Pending |
+| **3. Pay & Collect (inward)** | Cash-on-collection: `Dr WIP / Cr AP` then `Dr AP / Cr Cash` (Cash **or** Bank), settle commitment | **GL** (IFRS-correct) | ✅ Wired (preview-test pending) |
 
 ---
 
@@ -59,28 +59,28 @@ IFRS accounting and minimal screen-hopping.
 
 ---
 
-## Step 3 — remaining work (finance-critical)
+## Step 3 — DONE (wired 2026-07-07, preview-test pending)
 
-Wire pay-&-collect into `ProductionContext.handleInwardPiece` (~line 473, where
-`postTemperingInwardGL` is already called on last-piece-received):
+Wired into `ProductionContext.handleInwardPiece` (last-piece-received branch):
+1. `const apAmount = postTemperingInwardGL({...})` (was discarding the return).
+2. Settlement: `FinanceService.postVendorPaymentGL({ company, vendorName, amount: apAmount, paymentDate, paidBy: temperingPayMethod, apAccountCode: '22113', invoiceRef: dispatchId, createdBy: <operator> })` → `Dr AP 22113 / Cr Cash 11111` (or `Bank 1112`).
+3. `TemperingCommitmentService.settle(dispatchId, pv.id)`.
 
-1. Capture the AP amount: `const apAmount = postTemperingInwardGL({...})`.
-2. Settle in cash: `FinanceService.postVendorPaymentGL({ company, vendorName: dispatch.plantName, amount: apAmount, apAccountCode: '22113', paidBy: 'Cash', invoiceRef: dispatchId, ... })`.
-3. `TemperingCommitmentService.settle(dispatchId, ref)`.
+**Cash/Bank:** owner confirmed BOTH → `temperingPayMethod` state (Cash|Bank) on ProductionContext + a toggle in the Inward page header.
 
-### ⚠ Two P1 guards (do NOT ship without these)
-- **`apAccountCode: '22113'` is mandatory** — the default is `21113` (Other
-  Vendors), which would leave the tempering AP unsettled (dangling 21113/22113).
-- **Idempotency guard `PV-TEMP-{dispatchId}`** — `postVendorPaymentGL` builds a
-  non-deterministic PV id, so a double inward would post a **duplicate cash
-  payment**. Guard on a deterministic ref before posting.
+### Two P1 guards (implemented)
+- ✅ **`apAccountCode: '22113'`** passed explicitly (default 21113 would settle the wrong payable).
+- ✅ **Idempotency** — gated on `apAmount > 0` (inward GL is idempotent on `GL-TEMP-{id}`) **plus** a deterministic ledger check `docType==='PV' && referenceId===dispatchId` before posting.
 
-### Open question for owner
-- Pay-&-collect is usually **Cash** (11111). Is it ever **Bank** (1112)? If yes,
-  add a Cash/Bank choice in the inward UI.
+### A3 Inward page (this session)
+- `modules/production/pages/InwardReceivePage.tsx` — route `/#/production/inward` (dark). Revives `InwardAuditView` + built the two missing modals (Direct Delivery → `executeDirectDelivery`/COGS, Putaway → `assignSpot`). GL reused unchanged.
 
-### Step-3 tests to add (`glassco_tempering_sit.test.ts`)
-- Full inward → two balanced txns (`GL-TEMP-{id}` Dr 11513/Cr 22113; settlement
-  Dr 22113/Cr 11111), vendor AP nets to 0, commitment `Settled`.
-- Idempotency: inward twice → exactly one settlement PV.
-- Partial/broken pieces → broken loss posted, settlement = received-good AP only.
+### ⚠️ Preview-test (money-path — before promoting to main)
+- [ ] `/#/production/inward`: select a Dispatched tempering trip → receive its pieces → on the LAST piece: AP posts AND payment settles (Cash/Bank per toggle); vendor AP nets to 0; commitment → Settled.
+- [ ] Double-click last piece → exactly ONE settlement PV (no duplicate cash).
+- [ ] Direct Site Delivery modal → COGS posts, pieces → Delivered.
+
+### Still to do
+- Hub card "Receive / Inward" in GlasscoProductionHub (after preview-test).
+- Automated `glassco_tempering_sit.test.ts` (handleInwardPiece is provider-coupled — needs a mounted-provider harness; deferred to after preview-test).
+- Broken/lost pieces at inward: current flow only completes when ALL pieces received (pre-existing gap; brokenPieceIds path not wired in InwardAuditView).

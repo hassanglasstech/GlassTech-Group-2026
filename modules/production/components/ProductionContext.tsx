@@ -5,6 +5,8 @@ import { ProductionService } from '@/modules/production/services/productionServi
 import { SalesService } from '@/modules/sales/services/salesService';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { postTemperingInwardGL, postDeliveryCOGS } from '@/modules/procurement/services/glasscoGLService';
+import { FinanceService } from '@/modules/finance/services/financeService';                    // Step 3 — pay-on-collection settlement
+import { TemperingCommitmentService } from '@/modules/finance/services/temperingCommitmentService'; // Step 3 — settle commitment
 import { supabase } from '@/src/services/supabaseClient';                       // Sprint 5
 import { useAuthStore } from '@/modules/auth/authStore';                       // Sprint 5
 import { dispatchPieceStatusEvent } from '@/modules/production/hooks/useProductionRealtime'; // Sprint 10
@@ -70,6 +72,9 @@ interface ProductionContextType {
   setActiveDispatchIdForLoading: (id: string) => void;
   activeInwardDispatchId: string;
   setActiveInwardDispatchId: (id: string) => void;
+  // Step 3 — pay-on-collection: how the tempering AP is settled at receive.
+  temperingPayMethod: 'Cash' | 'Bank';
+  setTemperingPayMethod: (m: 'Cash' | 'Bank') => void;
 
   handleUpdatePieceStatus: (id: string, status: PieceStatus, extra?: Partial<ProductionPiece>) => Promise<void>;
   handleCuttingOutput: (piece: ProductionPiece) => void;
@@ -121,6 +126,7 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
 
   const [activeDispatchIdForLoading, setActiveDispatchIdForLoading] = useState<string>('');
   const [activeInwardDispatchId, setActiveInwardDispatchId] = useState<string>('');
+  const [temperingPayMethod, setTemperingPayMethod] = useState<'Cash' | 'Bank'>('Cash');
 
   const [isBinModalOpen, setIsBinModalOpen] = useState(false);
   const [selectedPieceForBin, setSelectedPieceForBin] = useState<ProductionPiece | null>(null);
@@ -470,17 +476,59 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
             const allPieceIds = inwardDispatch.pieceIds || [];
             const isComplete  = allPieceIds.every(id => allReceived.includes(id));
             if (isComplete) {
-              postTemperingInwardGL({
+              const payDate = new Date().toISOString().split('T')[0];
+              const apAmount = postTemperingInwardGL({
                 company:       company as any,
                 dispatchId:    activeInwardDispatchId,
                 vendorName:    inwardDispatch.plantName || 'Tempering Vendor',
-                date:          new Date().toISOString().split('T')[0],
+                date:          payDate,
                 pieceIds:      allPieceIds,
                 // Use rates snapshotted at dispatch creation (dispatch.ratesByMm).
                 // Falls back to {} — getVendorRatesByMm() in GL service will then
                 // read the vendor's current live rates as fallback.
                 rateOverrides: inwardDispatch.ratesByMm ?? {},
               });
+
+              // ── Step 3: pay-on-collection settlement ────────────────────
+              // Owner-confirmed CASH-ON-COLLECTION (not an advance, not credit):
+              // immediately settle the tempering AP just posted —
+              //   Dr AP-Tempering 22113 / Cr Cash 11111 (or Bank 1112).
+              // Idempotency: apAmount>0 only on the FIRST post (postTemperingInwardGL
+              // is idempotent on GL-TEMP-{id}); plus a deterministic ledger check on
+              // referenceId===dispatchId (belt-and-suspenders vs a double settlement).
+              if (apAmount > 0) {
+                const dispId = activeInwardDispatchId;
+                const alreadySettled = FinanceService.getLedger().some(
+                  (t: any) => t.docType === 'PV' && t.referenceId === dispId,
+                );
+                if (!alreadySettled) {
+                  try {
+                    const actor = useAuthStore.getState().profile?.email
+                      ?? useAuthStore.getState().user?.email ?? 'system';
+                    const pv = FinanceService.postVendorPaymentGL({
+                      company:       company as any,
+                      vendorName:    inwardDispatch.plantName || 'Tempering Vendor',
+                      amount:        apAmount,
+                      paymentDate:   payDate,
+                      paidBy:        temperingPayMethod,
+                      apAccountCode: '22113',          // P1 — MUST match the inward AP, else settles the wrong payable
+                      invoiceRef:    dispId,
+                      createdBy:     actor,
+                    });
+                    TemperingCommitmentService.settle(dispId, pv.id);
+                    toast.success(
+                      `Tempering paid (${temperingPayMethod}) — ${inwardDispatch.plantName}: PKR ${apAmount.toLocaleString('en-PK')}`,
+                      { duration: 5000 },
+                    );
+                  } catch (e) {
+                    const msg = e instanceof Error ? e.message : String(e);
+                    toast.error(
+                      `AP posted but payment settlement failed (${msg}). Vendor payment manually settle karein.`,
+                      { duration: 9000 },
+                    );
+                  }
+                }
+              }
             }
         }
     }
@@ -633,6 +681,7 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
       company, pieces, jobOrders, clients, dispatches, gatePasses, spots, refreshData, isLoading,
       selectedJobId, setSelectedJobId, selectedClientFilter, setSelectedClientFilter, filterDate, setFilterDate,
       activeDispatchIdForLoading, setActiveDispatchIdForLoading, activeInwardDispatchId, setActiveInwardDispatchId,
+      temperingPayMethod, setTemperingPayMethod,
       handleUpdatePieceStatus, handleCuttingOutput, handleInwardPiece, togglePieceToDispatch, loadAllPiecesToDispatch, togglePieceForDelivery, executeDirectDelivery, handleRecordFault,
       isBinModalOpen, setIsBinModalOpen, openBinModal, selectedPieceForBin, assignSpot, selectedSpotId, setSelectedSpotId,
       isDirectDeliveryModalOpen, setIsDirectDeliveryModalOpen, directDeliveryForm, setDirectDeliveryForm, selectedPiecesForDelivery,
