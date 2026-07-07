@@ -50,10 +50,17 @@ So **3 of the 4** Workbench-only transitions now have module homes (Cut→QC ✓
 
 ---
 
-## Founder decisions (gate Track 3.3 / 3.4)
-1. **Cutter terminal:** one shared floor touchscreen (cutters self-log at shift-end) OR supervisor records everyone's routine? *(Drives the freshness/staleness design.)*
-2. **Reassignment lifetime:** partial job Imran→Bilal — stays on Imran's lane until (a) Bilal's first cut, (b) whole job cut, or (c) forever (audit)?
-3. **Recut default cutter:** back to original cutter, to the supervisor's uncut pool, or always a senior cutter?
+## Founder decisions — ANSWERED (2026-07-07)
+1. **Cutter data entry = DUAL model + transition.**
+   - **Now (transition):** the supervisor enters piece updates in the ERP (time-to-time / evening batch), **each stamped with a timestamp**. When the supervisor logs a piece **on behalf of a cutter**, it is **attributed to that cutter and appears in that cutter's own account/screen** — so each cutter sees their own work even before self-logging.
+   - **Later (once the supervisor has run + tested it):** a **separate cutter login screen (smartphone-first)** where each cutter updates their own pieces directly. Both paths write the same per-piece cutter attribution; the cutter screen is a filtered "my pieces" view.
+2. **Reassignment = a "Reassign" option on the job order** (just like the existing assign). The system **offers the remaining (un-cut) pieces** of that job to the new cutter. The **previous cutter keeps the job in their screen/history with their partial cuts** — their completed portion stays theirs; only the remainder moves.
+3. **Recut / rejected piece → the supervisor's pool** (supervisor redistributes; NOT auto-back to the original cutter).
+
+### Resulting work items (mapped to tracks)
+- **D1 →** cutter data entry: (a) **supervisor logs-on-behalf** — attribute the piece to the chosen cutter + stamp `assignedBy`/timestamp so it surfaces on that cutter's account (near-term); (b) **cutter self-login screen** (smartphone; CutterWorkbench already exists as the cutter mobile screen — gate it behind cutter login + the "my pieces" filter) for the later cutover. Needs Track 2.1 (`assignedCutter`, `assignedBy`, `assignedAt`).
+- **D2 →** **Reassign job** flow: on the job order, a Reassign action that computes remaining (un-cut) pieces and moves ONLY those to the new cutter; append the old cutter to `prevCutters[]` and keep the job + partial cuts on the previous cutter's screen/history. Needs Track 2.1 (`assignedCutter` + `prevCutters[]`).
+- **D3 →** **Recut → supervisor pool:** a recut/rejected piece is routed to the supervisor's uncut/redistribute pool (a pool bucket keyed off unassigned/`assignedCutter=null` or a `blockedReason`), from where the supervisor reassigns.
 
 ## Honest caveat (from the God-mode self-review — keep it truthful)
 Cutters have **no tablets**; they batch-key at shift-end, so `cutAt`/`lastUpdated` are **record-time, not physical-event time**. Therefore the board can honestly report **delivery, backlog, aging, and recorded throughput WITH visible staleness** — but it will NOT certify "who is actively cutting right now", true at-risk, or a starved/absent cutter until tablets + Phase 2.1 data exist. **The board must say `as of HH:MM` on its face, never "Live".**
