@@ -144,6 +144,10 @@ export interface PieceFault {
   reportedAt: string;
   disposal: 'None' | 'Recut' | 'Accepted';
   costImpact?: number;
+  /** Track 2.1 — where the defect originated, for quality attribution on the
+   *  floor board. Distinguishes a cutter miscut from tempering breakage or
+   *  in-house handling damage so the board can say WHY a piece failed. */
+  origin?: 'Cutting' | 'Service' | 'Tempering' | 'Handling' | 'QC' | 'Client' | 'Unknown';
 }
 
 // ── Service Log — one entry per service performed on a piece ────────
@@ -192,6 +196,33 @@ export interface ProductionPiece {
   cutAt?: string;
   /** Total sqft alias used by dispatch/logistics screens (mirrors `sqft`). */
   totalSqFt?: number;
+  // ── Track 2.1 — per-piece assignment & fault overlay ────────────────
+  //   All nullable. These ride the production_pieces.data jsonb via the
+  //   update_piece_status_atomic p_extra merge (046/083) — NO new columns,
+  //   NO GL, piece.id untouched. Job-level assignment (Quotation.assignedCutter)
+  //   stays the source of truth until a piece is individually (re)assigned;
+  //   then these piece-level fields take precedence and let the floor board
+  //   show per-piece ownership + a reassigned piece on both cutters' lanes.
+  /** Cutter this specific piece is (re)assigned to. Overrides the job-level
+   *  Quotation.assignedCutter once set (D2 reassign / D1 supervisor-logs). */
+  assignedCutter?: string;
+  /** Cutters who previously held this piece before a reassign, oldest→newest —
+   *  keeps the piece visible in a previous cutter's history/lane. */
+  prevCutters?: string[];
+  /** ISO timestamp of the current assignment. */
+  assignedAt?: string;
+  /** Who performed the assignment (supervisor email) — the "logged on behalf"
+   *  actor for D1 attribution, distinct from assignedCutter (the credited cutter). */
+  assignedBy?: string;
+  /** Full defect history (`fault` is the latest) — enables recut/rework audit and
+   *  quality-rate attribution without losing prior faults. */
+  faultHistory?: PieceFault[];
+  /** Why this piece is currently blocked/held — surfaced on the board's blocked
+   *  lane so a pile-up shows its cause. */
+  blockedReason?: string;
+  /** Delivery-commitment basis of the parent order — drives the AT-RISK gate.
+   *  Firm = promised date, Estimate = soft, Flexible = no committed date. */
+  commitmentType?: 'Firm' | 'Estimate' | 'Flexible';
   // ── Barcode / QR (Task 4 — Phase 9) ─────────────────────────────
   /**
    * Barcode / QR string printed on the job card and the physical glass sticker.

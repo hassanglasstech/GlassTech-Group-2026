@@ -1024,12 +1024,28 @@ const TABLE_PULL: Record<string, (row: any) => any> = {
       status: r.status ?? base.status,
     };
   },
-  production_pieces: (r: any) => ({
-    ...r,
-    orderId: r.order_id,
-    itemIndex: Number(r.item_index||0),
-    lastUpdated: r.last_updated,
-  }),
+  production_pieces: (r: any) => {
+    // Cutter attribution (083) + Track-2.1 assignment/fault overlay live inside
+    // the data jsonb (RPC p_extra merge). Lift them to top level so the floor
+    // board reads them off the boot-pulled cache too (mirrors
+    // ProductionService.getProductionPiecesAsync).
+    const d = r.data && typeof r.data === 'object' ? r.data : {};
+    return {
+      ...r,
+      orderId: r.order_id,
+      itemIndex: Number(r.item_index||0),
+      lastUpdated: r.last_updated,
+      cutBy: r.cut_by ?? d.cutBy,
+      cutAt: r.cut_at ?? d.cutAt,
+      assignedCutter: d.assignedCutter,
+      prevCutters: d.prevCutters,
+      assignedAt: d.assignedAt,
+      assignedBy: d.assignedBy,
+      faultHistory: d.faultHistory,
+      blockedReason: d.blockedReason,
+      commitmentType: d.commitmentType,
+    };
+  },
   clients: (r: any) => {
     const base = r.data && typeof r.data === 'object' ? r.data : {};
     return {

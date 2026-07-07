@@ -64,23 +64,35 @@ export const ProductionService = {
         return ls;
       }
       // Map snake_case → camelCase
-      const mapped = data.map((r: any) => ({
-        id: r.id,
-        orderId: r.order_id,
-        itemIndex: Number(r.item_index || 0),
-        specs: r.specs || '',
-        status: r.status || 'Cut',
-        lastUpdated: r.last_updated || r.created_at || new Date().toISOString(),
-        fault: r.fault,
-        pendingServices: r.pending_services,
-        spotId: r.spot_id,
-        dispatchId: r.dispatch_id,
-        // Cutter attribution (083_cutter_workflow) — carried in the data jsonb by
-        // the RPC's p_extra merge; the flat cut_by/cut_at columns are the
-        // SQL-reporting mirror. Read either so attribution shows once 083 is live.
-        cutBy: r.cut_by ?? (r.data && typeof r.data === 'object' ? r.data.cutBy : undefined),
-        cutAt: r.cut_at ?? (r.data && typeof r.data === 'object' ? r.data.cutAt : undefined),
-      })) as ProductionPiece[];
+      const mapped = data.map((r: any) => {
+        // Cutter attribution (083) + the Track-2.1 assignment/fault overlay are
+        // carried INSIDE the data jsonb by the RPC's p_extra merge (046/083).
+        // The flat cut_by/cut_at columns are the SQL-reporting mirror — read
+        // either so attribution shows once 083 is live.
+        const d = r.data && typeof r.data === 'object' ? r.data : {};
+        return {
+          id: r.id,
+          orderId: r.order_id,
+          itemIndex: Number(r.item_index || 0),
+          specs: r.specs || '',
+          status: r.status || 'Cut',
+          lastUpdated: r.last_updated || r.created_at || new Date().toISOString(),
+          fault: r.fault,
+          pendingServices: r.pending_services,
+          spotId: r.spot_id,
+          dispatchId: r.dispatch_id,
+          cutBy: r.cut_by ?? d.cutBy,
+          cutAt: r.cut_at ?? d.cutAt,
+          // Track 2.1 — per-piece assignment & fault overlay (data-jsonb only).
+          assignedCutter: d.assignedCutter,
+          prevCutters: d.prevCutters,
+          assignedAt: d.assignedAt,
+          assignedBy: d.assignedBy,
+          faultHistory: d.faultHistory,
+          blockedReason: d.blockedReason,
+          commitmentType: d.commitmentType,
+        };
+      }) as ProductionPiece[];
 
       // Filter by company via order_id pattern (no company column in Supabase)
       if (filterCompany) {
