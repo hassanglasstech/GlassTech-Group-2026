@@ -196,6 +196,7 @@ const CutterWorkbench: React.FC = () => {
   const [jobs, setJobs] = useState<JobOrder[]>([]);
   const [pieces, setPieces] = useState<ProductionPiece[]>([]);
   const [cutting, setCutting] = useState<string | null>(null);
+  const [assigningRecut, setAssigningRecut] = useState<string | null>(null);
   const [hrCutters, setHrCutters] = useState<string[]>([]);
   useEffect(() => {
     let alive = true;
@@ -272,7 +273,11 @@ const CutterWorkbench: React.FC = () => {
     return [...(activeSession.sheetsScanned || [])].reverse().slice(0, 5);
   }, [activeSession, tick]);
 
-  // ── Cut Queue — Pending-Cut pieces from jobs assigned to this cutter ──
+  // ── Cut Queue — pieces this cutter must cut ──
+  //   Pending-Cut: explicit per-piece assignedCutter wins; '' = supervisor pool
+  //   (not mine); undefined = inherit the job-level assignment. Plus recut pieces
+  //   (QC-Failed + Recut) that the supervisor has EXPLICITLY re-assigned to me
+  //   from the pool (D3) — recuts never inherit the job-level cutter.
   const cutQueue = useMemo(() => {
     const refs = new Set<string>();
     jobs.forEach(j => {
@@ -281,7 +286,13 @@ const CutterWorkbench: React.FC = () => {
         if (j.id) refs.add(j.id);
       }
     });
-    return pieces.filter(p => p.status === 'Pending-Cut' && refs.has(p.orderId));
+    return pieces.filter(p => {
+      if (p.status === 'QC-Failed' && p.fault?.disposal === 'Recut') return p.assignedCutter === cutterName;
+      if (p.status !== 'Pending-Cut') return false;
+      if (p.assignedCutter) return p.assignedCutter === cutterName;   // explicit per-piece
+      if (p.assignedCutter === '') return false;                       // explicit pool
+      return refs.has(p.orderId);                                      // inherit job-level
+    });
   }, [jobs, pieces, cutterName]);
 
   const cutQueueByJob = useMemo(() => {
@@ -301,6 +312,13 @@ const CutterWorkbench: React.FC = () => {
       .sort((a, b) => (b.cutAt || '').localeCompare(a.cutAt || ''))
       .slice(0, 20);
   }, [pieces, cutterName]);
+
+  // ── Recut pool (D3) — QC-Failed pieces marked Recut that are NOT yet assigned
+  //    to a cutter. The supervisor redistributes these; a recut never auto-returns
+  //    to the cutter who made it (its per-piece cutter was cleared on QC-fail). ──
+  const recutPool = useMemo(() =>
+    pieces.filter(p => p.status === 'QC-Failed' && p.fault?.disposal === 'Recut' && !p.assignedCutter),
+  [pieces]);
 
   // ── Allotment roster (privileged) — every cutter + their still-to-cut count ─
   // Lets the recorder see ALL cutters and how many Pending-Cut pieces are
@@ -380,6 +398,26 @@ const CutterWorkbench: React.FC = () => {
       toast.error(`Cut error: ${e instanceof Error ? e.message : 'unknown'}`, { duration: 7000 });
     }
     setCutting(null);
+  };
+
+  // D3 — supervisor redistributes a recut-pool piece to a cutter. Reuses the
+  // same-status reassign (QC-Failed → QC-Failed no-op carries the per-piece
+  // assignedCutter in data); the cutter then re-cuts it via the normal Cut path.
+  const assignRecut = async (piece: ProductionPiece, toCutter: string): Promise<void> => {
+    if (!toCutter) return;
+    setAssigningRecut(piece.id);
+    try {
+      const { moved, failed } = await ProductionService.reassignRemainingPieces([piece], undefined, toCutter, actorName);
+      if (moved > 0) {
+        setPieces(prev => prev.map(p => p.id === piece.id ? { ...p, assignedCutter: toCutter } : p));
+        toast.success(`Recut ${piece.id} → ${toCutter}`);
+      } else {
+        toast.error(`Could not assign recut${failed ? ` (${failed} failed)` : ''}`);
+      }
+    } catch {
+      toast.error('Recut assignment failed');
+    }
+    setAssigningRecut(null);
   };
 
   // Role gate — placed AFTER all hooks so hook order stays stable across renders
@@ -659,6 +697,42 @@ const CutterWorkbench: React.FC = () => {
         </div>
       )}
 
+      {/* Recut pool (D3) — supervisor redistributes QC-rejected pieces to a cutter */}
+      {isPrivileged && recutPool.length > 0 && (
+        <div className="px-4 pt-3">
+          <div className="bg-rose-50 border border-rose-200 rounded-card p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-2xs font-black uppercase tracking-widest text-rose-700 inline-flex items-center gap-1"><AlertTriangle size={12}/> Recut Pool — reassign rejected pieces</span>
+              <span className="text-2xs font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">{recutPool.length}</span>
+            </div>
+            <div className="space-y-2 max-h-[40vh] overflow-y-auto">
+              {recutPool.map(p => {
+                const prev = p.prevCutters?.[p.prevCutters.length - 1];
+                return (
+                  <div key={p.id} className="flex items-center gap-2 bg-white rounded-xl px-3 py-2 border border-rose-100">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-label font-black text-slate-800 font-mono truncate">{p.id}</p>
+                      <p className="text-2xs text-slate-500 truncate">{p.specs}</p>
+                      <p className="text-2xs font-bold text-rose-600 truncate">{p.fault?.description || 'Recut'}{prev ? ` · was ${prev}` : ''}</p>
+                    </div>
+                    <select
+                      defaultValue=""
+                      disabled={assigningRecut === p.id}
+                      onChange={e => assignRecut(p, e.target.value)}
+                      className="sap-input px-2 py-1 text-2xs rounded-control border border-rose-200 w-32 shrink-0 disabled:opacity-50"
+                    >
+                      <option value="">Assign to…</option>
+                      {hrCutters.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    {assigningRecut === p.id && <Loader2 size={14} className="animate-spin text-rose-400 shrink-0"/>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Active session card */}
       <div className="px-4 py-4">
         {activeSession ? (
@@ -718,11 +792,15 @@ const CutterWorkbench: React.FC = () => {
                     </div>
                     <div className="space-y-2">
                       {list.map(p => (
-                        <div key={p.id} className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2">
+                        <div key={p.id} className={`flex items-center gap-2 rounded-xl px-3 py-2 ${p.status === 'QC-Failed' ? 'bg-rose-50 border border-rose-200' : 'bg-slate-50'}`}>
                           <div className="min-w-0 flex-1">
                             <p className="text-label font-black text-slate-800 font-mono truncate">{p.id}</p>
                             <p className="text-2xs text-slate-500 truncate">{p.specs}</p>
-                            {(p.prevCutters?.length ?? 0) > 0 && (
+                            {p.status === 'QC-Failed' ? (
+                              <p className="text-2xs font-black text-rose-600 truncate inline-flex items-center gap-1">
+                                <AlertTriangle size={9}/> RECUT{p.fault?.description ? ` · ${p.fault.description}` : ''}
+                              </p>
+                            ) : (p.prevCutters?.length ?? 0) > 0 && (
                               <p className="text-2xs font-bold text-indigo-600 truncate inline-flex items-center gap-1">
                                 <History size={9}/> reassigned to you from {p.prevCutters![p.prevCutters!.length - 1]}
                               </p>
@@ -731,9 +809,9 @@ const CutterWorkbench: React.FC = () => {
                           <button
                             onClick={() => cutPiece(p)}
                             disabled={cutting === p.id}
-                            className="shrink-0 min-h-[44px] bg-emerald-600 active:bg-emerald-700 disabled:opacity-50 text-white rounded-xl px-4 py-2 text-label font-black uppercase flex items-center gap-1.5"
+                            className={`shrink-0 min-h-[44px] disabled:opacity-50 text-white rounded-xl px-4 py-2 text-label font-black uppercase flex items-center gap-1.5 ${p.status === 'QC-Failed' ? 'bg-rose-600 active:bg-rose-700' : 'bg-emerald-600 active:bg-emerald-700'}`}
                           >
-                            {cutting === p.id ? <Loader2 size={16} className="animate-spin"/> : <CheckCircle2 size={16}/>} Cut
+                            {cutting === p.id ? <Loader2 size={16} className="animate-spin"/> : <CheckCircle2 size={16}/>} {p.status === 'QC-Failed' ? 'Recut' : 'Cut'}
                           </button>
                         </div>
                       ))}

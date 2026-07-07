@@ -326,13 +326,26 @@ const QCWorkbench: React.FC = () => {
     if (meta?.requiresComment && !(defect.comment || '').trim()) { toast.error(t.needsComment); return; }
     if (meta?.needsMeasurement && !(defect.measurement || '').trim()) { toast.error(t.needsMeas); return; }
 
+    const fault = {
+      id: `F-${Date.now()}`,
+      description: `${defect.code} — ${meta?.label || ''}${defect.comment ? ': ' + defect.comment : ''}${defect.measurement ? ' · Measured: ' + defect.measurement : ''}`,
+      reportedAt: new Date().toISOString(),
+      disposal: 'Recut' as const,
+    };
+    // D3 — a recut/rejected piece goes to the SUPERVISOR POOL, never auto-back to
+    // the cutter who made it: clear the per-piece cutter (''), keep the failing
+    // cutter in prevCutters (history), append the fault to faultHistory, flag why.
+    const failedCutter = it.piece.cutBy;
+    const prevCutters = [...(it.piece.prevCutters || [])];
+    if (failedCutter && prevCutters[prevCutters.length - 1] !== failedCutter) prevCutters.push(failedCutter);
+    const faultHistory = [...(it.piece.faultHistory || []), fault];
+
     const ok = await updateStatusAtomic(it.piece.id, 'QC-Failed' as PieceStatus, {
-      fault: {
-        id: `F-${Date.now()}`,
-        description: `${defect.code} — ${meta?.label || ''}${defect.comment ? ': ' + defect.comment : ''}${defect.measurement ? ' · Measured: ' + defect.measurement : ''}`,
-        reportedAt: new Date().toISOString(),
-        disposal: 'Recut',
-      },
+      fault,
+      assignedCutter: '',                    // → supervisor recut pool (not the original cutter)
+      prevCutters,
+      faultHistory,
+      blockedReason: `Recut — QC fail ${defect.code}`,
     });
     if (!ok) return;
 
