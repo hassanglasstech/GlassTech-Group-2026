@@ -5,7 +5,7 @@ import { SharedQuotationList } from '@/modules/sales/components/SharedQuotationL
 import { getBrandNick } from '@/modules/shared/utils/brandUtils';
 import {
   Printer, X, Plus, Trash2, FileSignature,
-  Search, Calendar, Edit2, FileCheck, Eye, Save, ArrowLeft, Layers, Copy
+  Search, Calendar, Edit2, FileCheck, Eye, Save, ArrowLeft, Layers, Copy, Gift
 } from 'lucide-react';
 import { useNipponQuotations } from './useNipponQuotations';
 
@@ -35,6 +35,7 @@ const NipponQuotationManager: React.FC = () => {
     setPendingSetSuggestion,
     addFullSet,
     updateItem,
+    toggleItemSample,
     handleRemoveItem,
     handleDuplicateItem,
     handleSave,
@@ -50,6 +51,44 @@ const NipponQuotationManager: React.FC = () => {
   const [docTab, setDocTab] = React.useState<'quotations' | 'orders'>('quotations');
   const [reviseMode, setReviseMode] = React.useState(false);
   const ORDER_STATUSES = ['Approved', 'Invoiced', 'Partial Payment', 'Paid', 'Void'];
+
+  // Unsaved-changes guard. Snapshot the doc when the editor opens; if formData
+  // diverges, warn before leaving. Snapshot is taken in openEditor().
+  const editSnapshotRef = React.useRef<string>('');
+  const isDirty = view === 'edit' && JSON.stringify(formData) !== editSnapshotRef.current;
+
+  const openEditor = (q: Partial<Quotation>, revise: boolean) => {
+    setReviseMode(revise);
+    setFormData(q);
+    editSnapshotRef.current = JSON.stringify(q);
+    setView('edit');
+  };
+
+  const leaveEditor = () => {
+    if (isDirty && !window.confirm('Discard unsaved changes? Your edits will be lost.')) return;
+    setView('list');
+  };
+
+  // "<Client> <Project> <QUT|SO>-<serial4>" — used as the print/PDF filename.
+  const pdfFileName = (q: Quotation): string => {
+    const client = clients.find(c => c.id === q.clientId);
+    const clientName = (client?.name || 'Client').trim();
+    const project = (q.projectName || '').trim();
+    const docType = ORDER_STATUSES.includes(q.status as string) ? 'SO' : 'QUT';
+    const digits = (q.manualSerial || q.orderNo || q.id || '').replace(/\D/g, '');
+    const last4 = digits.slice(-4) || (q.manualSerial || '');
+    const raw = [clientName, project, `${docType}-${last4}`].filter(Boolean).join(' ');
+    // Drop characters illegal in filenames, collapse whitespace.
+    return raw.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+  };
+
+  // Warn on browser close / refresh / hard-nav while there are unsaved edits.
+  React.useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
 
   // Focus mode: while the Nippon editor view is open, add `erp-focus-mode` to
   // <body> so index.css hides the app shell header (.sap-shell) + Sales tab bar
@@ -185,15 +224,16 @@ const NipponQuotationManager: React.FC = () => {
           clients={clients}
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
-          onNew={() => { setReviseMode(false); setFormData(initialQuotation); setView('edit'); }}
-          onEdit={(q) => { setReviseMode(docTab === 'orders' && q.status !== 'Void'); setFormData(q); setView('edit'); }}
+          onNew={() => openEditor(initialQuotation, false)}
+          onEdit={(q) => openEditor(q, docTab === 'orders' && q.status !== 'Void')}
           onPrint={(q) => {
             setPrintingQuote(q);
             setTimeout(() => {
-              // Blank the document title during print so the browser's print header
-              // doesn't show "Glasstech ERP 2026" above the document. Restored after.
+              // The browser's "Save as PDF" filename comes from document.title, so
+              // set it to a meaningful name: "<Client> <Project> <QUT|SO>-<serial4>".
+              // This also becomes the (small) print header — better than the app name.
               const prevTitle = document.title;
-              document.title = ' ';
+              document.title = pdfFileName(q);
               window.print();
               document.title = prevTitle;
               setPrintingQuote(null);
@@ -209,7 +249,7 @@ const NipponQuotationManager: React.FC = () => {
             {/* Editor Header — compact so the items table gets more vertical room */}
             <div className="bg-slate-900 text-white px-4 py-2 flex justify-between items-center shrink-0">
                 <div className="flex items-center space-x-3">
-                  <button onClick={() => setView('list')} className="p-1.5 hover:bg-slate-800 rounded-full transition-colors">
+                  <button onClick={leaveEditor} className="p-1.5 hover:bg-slate-800 rounded-full transition-colors">
                     <ArrowLeft size={16} />
                   </button>
                   <h2 className="text-sm font-bold flex items-center gap-1.5">
@@ -318,6 +358,8 @@ const NipponQuotationManager: React.FC = () => {
                           ? "bg-amber-50/30 pl-4"
                           : item.isSection
                           ? "bg-slate-100/80"
+                          : item.isSample
+                          ? "bg-amber-50/60 hover:bg-amber-50"
                           : "hover:bg-slate-50"
                       }>
                         <td className="text-center text-slate-300 font-bold">
@@ -458,7 +500,9 @@ const NipponQuotationManager: React.FC = () => {
                                     value={item.pricePerUnit || ''} />
                             </td>
                             <td className="w-28 text-right font-black text-slate-800 pr-4">
-                                {(item.amount || 0).toLocaleString()}
+                                {item.isSample
+                                  ? <span className="text-amber-600 text-[10px] font-black uppercase tracking-widest">Sample</span>
+                                  : (item.amount || 0).toLocaleString()}
                             </td>
                           </>
                         )}
@@ -470,6 +514,7 @@ const NipponQuotationManager: React.FC = () => {
                                   if (title !== null) handleAddSection(title, idx);
                                 }} className="text-slate-400 hover:text-emerald-600" title="Add Section Below"><Layers size={14}/></button>
                                 <button onClick={() => handleDuplicateItem(idx)} className="text-slate-400 hover:text-blue-600" title="Duplicate Row"><Copy size={14}/></button>
+                                <button onClick={() => toggleItemSample(idx)} className={item.isSample ? "text-amber-600" : "text-slate-400 hover:text-amber-600"} title={item.isSample ? "Unmark free sample" : "Give this item as a free sample"}><Gift size={14}/></button>
                                 <button onClick={() => handleRemoveItem(idx)} className="text-slate-400 hover:text-red-500" title="Remove Row"><Trash2 size={14}/></button>
                               </div>
                             )}

@@ -128,8 +128,9 @@ export const useNipponQuotations = () => {
       
       if (!item.isSection) {
         // If description is updated, we might be selecting a product
-        // But we handle explicit selection in the UI for better control
-        item.amount = (Number(item.qty) || 0) * (Number(item.pricePerUnit) || 0);
+        // But we handle explicit selection in the UI for better control.
+        // A per-line sample is free → amount forced to 0.
+        item.amount = item.isSample ? 0 : (Number(item.qty) || 0) * (Number(item.pricePerUnit) || 0);
       }
       
       next[index] = item;
@@ -242,6 +243,23 @@ export const useNipponQuotations = () => {
       item.attachedImage = prod.imageUrl || prod.image || nipponImageUrl(prod.modelNo || prod.profileCode);
       
       next[index] = item;
+      return { ...prev, items: next };
+    });
+  };
+
+  // Mark/unmark a single line as a free sample. When on, amount → 0 (given free)
+  // while the price stays visible; when off, amount recomputes from qty × price.
+  const toggleItemSample = (index: number) => {
+    setFormData(prev => {
+      const next = [...(prev.items || [])];
+      const cur = next[index];
+      if (!cur || cur.isSection) return prev;
+      const isSample = !cur.isSample;
+      next[index] = {
+        ...cur,
+        isSample,
+        amount: isSample ? 0 : (Number(cur.qty) || 0) * (Number(cur.pricePerUnit) || 0),
+      };
       return { ...prev, items: next };
     });
   };
@@ -529,6 +547,7 @@ export const useNipponQuotations = () => {
     setPendingSetSuggestion,
     addFullSet,
     updateItem,
+    toggleItemSample,
     handleRemoveItem,
     handleDuplicateItem,
     handleSave,

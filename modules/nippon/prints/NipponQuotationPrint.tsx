@@ -304,6 +304,7 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                                                                             )}
                                                                             <p className="font-black text-slate-800 uppercase leading-tight text-[10px] whitespace-pre-wrap">
                                                                                 {cleanName}
+                                                                                {item.isSample && <span className="ml-1.5 text-[7px] font-black uppercase tracking-widest bg-amber-100 text-amber-700 px-1 py-0.5 rounded align-middle">Free Sample</span>}
                                                                             </p>
                                                                         </>
                                                                     );
@@ -312,7 +313,7 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                                                             <td className="py-2 px-2 text-center font-bold text-slate-500 uppercase text-[9px]">{item.glassSize || 'PCS'}</td>
                                                             <td className="py-2 px-2 text-center font-black text-slate-900 text-[10px]">{item.qty}</td>
                                                             <td className="py-2 px-2 text-right font-bold text-slate-600 text-[9px]">{item.pricePerUnit.toLocaleString()}</td>
-                                                            <td className="py-2 px-2 text-right font-black text-slate-900 text-[10px]">{item.amount.toLocaleString()}</td>
+                                                            <td className="py-2 px-2 text-right font-black text-slate-900 text-[10px]">{item.isSample ? 'FREE' : item.amount.toLocaleString()}</td>
                                                         </tr>
                                                     );
                                                 })}

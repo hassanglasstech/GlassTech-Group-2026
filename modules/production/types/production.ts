@@ -74,6 +74,10 @@ export interface QuotationItem {
   isSetHeader?: boolean;
   isSetMember?: boolean;
   setId?: string;
+  /** Nippon: this single line is given as a sample (free) — amount forced to 0,
+   *  stock still moves, printed with a SAMPLE tag. Separate from the whole-quote
+   *  Sample toggle (Quotation.isSample). */
+  isSample?: boolean;
 }
 
 export interface GlassServiceCharge {
