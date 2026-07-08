@@ -270,7 +270,7 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                                                                     resolves the image even when the product master isn't loaded. */}
                                                                 <div className="w-[60px] h-[60px] border border-slate-200 rounded overflow-hidden mx-auto bg-white flex items-center justify-center">
                                                                     <ProductImage id={item.productRef} code={item.locationCode}
-                                                                        url={item.attachedImage || prodFor(item)?.imageUrl}
+                                                                        url={prodFor(item)?.imageUrl || item.attachedImage}
                                                                         eager className="w-full h-full object-contain" iconSize={18} />
                                                                 </div>
                                                             </td>

@@ -174,7 +174,7 @@ const NipponQuotationManager: React.FC = () => {
           onDelete={handleDelete}
         />
       ) : (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col flex-1 min-h-[600px]">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[560px] h-[calc(100dvh-170px)]">
             {/* Editor Header — compact so the items table gets more vertical room */}
             <div className="bg-slate-900 text-white px-4 py-2 flex justify-between items-center shrink-0">
                 <div className="flex items-center space-x-3">

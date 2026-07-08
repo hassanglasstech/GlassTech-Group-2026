@@ -271,7 +271,7 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                                                                     (e.g. the Sales-Order print path). */}
                                                                 <div className="w-[60px] h-[60px] border border-slate-200 rounded overflow-hidden mx-auto bg-white flex items-center justify-center">
                                                                     <ProductImage id={item.productRef} code={item.locationCode}
-                                                                        url={item.attachedImage || prodFor(item)?.imageUrl}
+                                                                        url={prodFor(item)?.imageUrl || item.attachedImage}
                                                                         eager className="w-full h-full object-contain" iconSize={18} />
                                                                 </div>
                                                             </td>

@@ -92,7 +92,7 @@ export const SharedQuotationList: React.FC<SharedQuotationListProps> = ({
               <th>Client</th>
               <th>Date</th>
               <th className="text-right">Total Value</th>
-              <th className="text-right w-48">Action</th>
+              <th className="text-right w-48 sticky right-0 bg-white z-10">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -110,7 +110,7 @@ export const SharedQuotationList: React.FC<SharedQuotationListProps> = ({
                   <td className="font-bold text-slate-700">{client?.name || 'Unknown'}</td>
                   <td className="font-medium text-slate-500 text-xs">{q.date}</td>
                   <td className="font-black text-right">PKR {(Number(total) || 0).toLocaleString()}</td>
-                  <td className="text-right">
+                  <td className="text-right sticky right-0 bg-white">
                     <div className="flex items-center justify-end space-x-1">
                       {q.status !== 'Approved' && (
                         <button onClick={() => onEdit(q)} className="p-1.5 text-blue-600 bg-blue-50 rounded hover:bg-blue-100" title="Edit">

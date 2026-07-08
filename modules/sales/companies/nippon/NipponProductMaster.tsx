@@ -735,8 +735,8 @@ const NipponProductMaster: React.FC = () => {
       </div>
 
       {(
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-[500px] no-print">
-              <table className="w-full text-left sap-table">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-x-auto min-h-[500px] no-print">
+              <table className="w-full min-w-[1200px] text-left sap-table">
                   <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400 tracking-widest">
                     <tr>
                         <th className="px-6 py-4 cursor-pointer select-none hover:text-slate-600" onClick={() => requestSort('profileCode')} title="Sort by KinLong Code">
@@ -756,7 +756,7 @@ const NipponProductMaster: React.FC = () => {
                         <Th label="Category" />
                         <Th label="Unit Price" k="basePrice" right />
                         <Th label="Stock" k="stock" right />
-                        <th className="text-right pr-6">Action</th>
+                        <th className="text-right pr-6 sticky right-0 bg-slate-50 z-10">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -822,8 +822,8 @@ const NipponProductMaster: React.FC = () => {
                                         );
                                     })()}
                                 </td>
-                                <td className="pr-6 text-right">
-                                    <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <td className="pr-6 text-right sticky right-0 bg-white group-hover:bg-slate-50 transition-colors">
+                                    <div className="flex items-center justify-end space-x-1">
                                         <button onClick={() => handleAddVariant(p)} title="Add colour/direction variant" className="p-1.5 text-slate-400 hover:text-amber-600 bg-white border border-slate-200 rounded transition-all"><Layers size={12}/></button>
                                         <button onClick={() => handleEdit(p)} title="Edit" className="p-1.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded transition-all"><Edit2 size={12}/></button>
                                         <button onClick={() => handleDelete(p.id)} title="Delete" className="p-1.5 text-slate-400 hover:text-red-600 bg-white border border-slate-200 rounded transition-all"><Trash2 size={12}/></button>

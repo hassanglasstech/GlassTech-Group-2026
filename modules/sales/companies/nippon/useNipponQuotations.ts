@@ -440,8 +440,10 @@ export const useNipponQuotations = () => {
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this quotation?")) return;
     try {
-      const all = await AsyncSalesService.getQuotations();
-      await AsyncSalesService.saveQuotations(all.filter(x => x.id !== id));
+      // Use the real per-row delete (cloud + local). Previously this upserted the
+      // filtered array, which never removed the row from the cloud table, so the
+      // deleted quotation reappeared on the next refresh (cloud read).
+      await AsyncSalesService.deleteQuotation(id);
       Logger.action('SALES', 'NIPPON_QUOTE_DELETED', `${id} (${company})`,
         { referenceId: id, extra: { company } });
       toast.success('Quotation deleted.');
