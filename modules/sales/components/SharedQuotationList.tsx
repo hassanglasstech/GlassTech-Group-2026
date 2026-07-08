@@ -1,6 +1,6 @@
 import React from 'react';
 import { Quotation, Client } from '../../shared/types';
-import { Plus, Search, Edit2, Trash2, Printer, FileCheck, Eye, Download, FileJson } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Printer, FileCheck, Eye, Download, FileJson, Ban } from 'lucide-react';
 
 interface SharedQuotationListProps {
   companyName: string;
@@ -14,6 +14,7 @@ interface SharedQuotationListProps {
   onPrintJobCard?: (q: Quotation) => void;
   onApprove?: (q: Quotation) => void;
   onDelete?: (id: string) => void;
+  onVoid?: (id: string) => void;
   onExportExcel?: (q: Quotation) => void;
   onExportJson?: (q: Quotation) => void;
   onBulkExportExcel?: () => void;
@@ -34,6 +35,7 @@ export const SharedQuotationList: React.FC<SharedQuotationListProps> = ({
   onPrintJobCard,
   onApprove,
   onDelete,
+  onVoid,
   onExportExcel,
   onExportJson,
   onBulkExportExcel,
@@ -99,10 +101,17 @@ export const SharedQuotationList: React.FC<SharedQuotationListProps> = ({
             {quotations.map(q => {
               const client = clients.find(c => c.id === q.clientId);
               const total = q.items.reduce((s, i) => s + (i.amount || 0), 0);
+              // Order statuses (approved-and-beyond) are locked from Edit/Approve/Delete.
+              const isOrder = ['Approved', 'Invoiced', 'Partial Payment', 'Paid', 'Void'].includes(q.status as string);
+              const isVoid = q.status === 'Void';
+              const statusCls = isVoid ? 'bg-slate-200 text-slate-500 line-through'
+                : (q.status === 'Approved' || q.status === 'Paid' || q.status === 'Invoiced') ? 'bg-emerald-100 text-emerald-700'
+                : q.status === 'Partial Payment' ? 'bg-blue-100 text-blue-700'
+                : 'bg-amber-100 text-amber-700';
               return (
                 <tr key={q.id} className="hover:bg-slate-50">
                   <td>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${q.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${statusCls}`}>
                       {q.status}
                     </span>
                   </td>
@@ -112,7 +121,7 @@ export const SharedQuotationList: React.FC<SharedQuotationListProps> = ({
                   <td className="font-black text-right">PKR {(Number(total) || 0).toLocaleString()}</td>
                   <td className="text-right sticky right-0 bg-white">
                     <div className="flex items-center justify-end space-x-1">
-                      {q.status !== 'Approved' && (
+                      {!isOrder && (
                         <button onClick={() => onEdit(q)} className="p-1.5 text-blue-600 bg-blue-50 rounded hover:bg-blue-100" title="Edit">
                           <Edit2 size={14}/>
                         </button>
@@ -125,12 +134,22 @@ export const SharedQuotationList: React.FC<SharedQuotationListProps> = ({
                           <Printer size={14}/>
                         </button>
                       )}
-                      {q.status !== 'Approved' && onApprove && (
+                      {!isOrder && onApprove && (
                         <button onClick={() => onApprove(q)} className="p-1.5 text-emerald-600 bg-emerald-50 rounded hover:bg-emerald-100" title="Approve">
                           <FileCheck size={14}/>
                         </button>
                       )}
-                      {q.status === 'Approved' && (
+                      {/* Approved order + void capability → Revise + Void. */}
+                      {q.status === 'Approved' && onVoid ? (
+                        <>
+                          <button onClick={() => onEdit(q)} className="p-1.5 text-blue-600 bg-blue-50 rounded hover:bg-blue-100" title="Edit / Revise (adds -R tag)">
+                            <Edit2 size={14}/>
+                          </button>
+                          <button onClick={() => onVoid(q.id)} className="p-1.5 text-rose-600 bg-rose-50 rounded hover:bg-rose-100" title="Void Order">
+                            <Ban size={14}/>
+                          </button>
+                        </>
+                      ) : isOrder && (
                         <button onClick={() => onEdit(q)} className="p-1.5 text-slate-400 hover:text-blue-600" title="View">
                           <Eye size={14}/>
                         </button>
@@ -145,7 +164,7 @@ export const SharedQuotationList: React.FC<SharedQuotationListProps> = ({
                           <FileJson size={14}/>
                         </button>
                       )}
-                      {q.status !== 'Approved' && onDelete && (
+                      {!isOrder && onDelete && (
                         <button onClick={() => onDelete(q.id)} className="p-1.5 text-red-600 bg-red-50 rounded hover:bg-red-100" title="Delete">
                           <Trash2 size={14}/>
                         </button>

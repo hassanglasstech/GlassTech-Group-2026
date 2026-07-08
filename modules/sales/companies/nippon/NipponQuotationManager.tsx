@@ -39,10 +39,17 @@ const NipponQuotationManager: React.FC = () => {
     handleDuplicateItem,
     handleSave,
     handleDelete,
+    handleVoid,
     selectProduct,
     initialQuotation,
     isSaving,
   } = useNipponQuotations();
+
+  // Quotations vs Sales Orders tab. Orders = approved-and-beyond (+ voided, kept
+  // for audit). Revise mode unlocks an approved order for editing.
+  const [docTab, setDocTab] = React.useState<'quotations' | 'orders'>('quotations');
+  const [reviseMode, setReviseMode] = React.useState(false);
+  const ORDER_STATUSES = ['Approved', 'Invoiced', 'Partial Payment', 'Paid', 'Void'];
 
   // Focus mode: while the Nippon editor view is open, add `erp-focus-mode` to
   // <body> so index.css hides the app shell header (.sap-shell) + Sales tab bar
@@ -53,7 +60,7 @@ const NipponQuotationManager: React.FC = () => {
     return () => document.body.classList.remove('erp-focus-mode');
   }, [view]);
 
-  const isLocked = formData.status === 'Approved';
+  const isLocked = formData.status === 'Approved' && !reviseMode;
 
   // Free samples: keep the net at 0 by mirroring a 100% discount to the running
   // subtotal (so stock still moves + it's tracked, but revenue is 0).
@@ -64,7 +71,9 @@ const NipponQuotationManager: React.FC = () => {
   }, [subTotal, formData.isSample, formData.sampleType, formData.discountAmount, setFormData]);
 
   const filteredQuotations = useMemo(() => {
-    let result = [...quotations];
+    let result = quotations.filter(q => docTab === 'orders'
+      ? ORDER_STATUSES.includes(q.status as string)
+      : !ORDER_STATUSES.includes(q.status as string));
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
       result = result.filter(q =>
@@ -74,7 +83,7 @@ const NipponQuotationManager: React.FC = () => {
       );
     }
     return result;
-  }, [quotations, searchTerm, clients]);
+  }, [quotations, searchTerm, clients, docTab]);
 
   const getProductSpecs = (p: Product) => {
     const specs = [
@@ -158,14 +167,26 @@ const NipponQuotationManager: React.FC = () => {
       </div>
 
       {view === 'list' ? (
-        <SharedQuotationList 
+        <>
+        <div className="no-print flex items-center gap-2">
+          {([['quotations', 'Quotations'], ['orders', 'Sales Orders']] as const).map(([key, label]) => (
+            <button key={key} onClick={() => setDocTab(key)}
+              className={`px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest border transition-all flex items-center ${docTab === key ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300'}`}>
+              {label}
+              <span className={`ml-2 text-[9px] px-1.5 py-0.5 rounded-full ${docTab === key ? 'bg-white/20' : 'bg-slate-100 text-slate-500'}`}>
+                {quotations.filter(q => key === 'orders' ? ORDER_STATUSES.includes(q.status as string) : !ORDER_STATUSES.includes(q.status as string)).length}
+              </span>
+            </button>
+          ))}
+        </div>
+        <SharedQuotationList
           companyName="Nippon"
-          quotations={filteredQuotations} 
-          clients={clients} 
-          searchTerm={searchTerm} 
-          setSearchTerm={setSearchTerm} 
-          onNew={() => { setFormData(initialQuotation); setView('edit'); }} 
-          onEdit={(q) => { setFormData(q); setView('edit'); }} 
+          quotations={filteredQuotations}
+          clients={clients}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          onNew={() => { setReviseMode(false); setFormData(initialQuotation); setView('edit'); }}
+          onEdit={(q) => { setReviseMode(docTab === 'orders' && q.status !== 'Void'); setFormData(q); setView('edit'); }}
           onPrint={(q) => {
             setPrintingQuote(q);
             setTimeout(() => {
@@ -180,7 +201,9 @@ const NipponQuotationManager: React.FC = () => {
           }}
           onApprove={(q) => handleSave(true, q)}
           onDelete={handleDelete}
+          onVoid={docTab === 'orders' ? handleVoid : undefined}
         />
+        </>
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[560px] h-[calc(100dvh-170px)]">
             {/* Editor Header — compact so the items table gets more vertical room */}
@@ -503,6 +526,17 @@ const NipponQuotationManager: React.FC = () => {
                       </button>
                     </div>
 
+                    {reviseMode ? (
+                    <div className="flex items-center space-x-3">
+                      <button
+                        disabled={isSaving}
+                        onClick={() => handleSave(false, formData, true)}
+                        className={`text-[10px] py-2.5 px-8 flex items-center space-x-2 shadow-xl font-black uppercase tracking-widest transition-all rounded-lg ${isSaving ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-100'}`}
+                      >
+                        <FileCheck size={16}/> <span>{isSaving ? 'Saving…' : 'Save Revision (R)'}</span>
+                      </button>
+                    </div>
+                    ) : (
                     <div className="flex items-center space-x-3">
                       <button
                         disabled={isLocked || isSaving}
@@ -526,6 +560,7 @@ const NipponQuotationManager: React.FC = () => {
                         <FileCheck size={16}/> <span>{isSaving ? 'Approving…' : 'Approve Order'}</span>
                       </button>
                     </div>
+                    )}
                   </div>
                 </div>
               </div>

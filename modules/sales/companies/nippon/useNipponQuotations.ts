@@ -264,7 +264,7 @@ export const useNipponQuotations = () => {
     });
   };
 
-  const handleSave = async (approve: boolean, quoteOverride?: Quotation) => {
+  const handleSave = async (approve: boolean, quoteOverride?: Partial<Quotation>, revise = false) => {
     if (isSaving) return;
 
     // Approve-from-list passes the row explicitly via quoteOverride. Without it,
@@ -287,8 +287,8 @@ export const useNipponQuotations = () => {
     // block edit-after-approval to prevent inventory double-decrement.
     // Once approved, the quote becomes a Sales Order — edits must go through
     // credit notes / amendments, not direct re-save.
-    if (src.status === 'Approved') {
-      return toast.error("This quote is already approved. Use a Credit Note to amend.");
+    if (src.status === 'Approved' && !revise) {
+      return toast.error("This is a Sales Order — use Edit / Revise on the Sales Orders tab to amend it.");
     }
 
     setIsSaving(true);
@@ -342,12 +342,19 @@ export const useNipponQuotations = () => {
       let finalId = src.id;
       if (!finalId) finalId = `QT-${mmyy}-${src.manualSerial}`;
 
+      // Revision: editing an existing Sales Order keeps its Approved status and
+      // stamps an -R<n> marker on the ref so a revised order is identifiable at a
+      // glance. No stock re-decrement (that happened at first approval).
+      const baseRef = (src.orderNo || `SO-${mmyy}-${src.manualSerial}`).replace(/-R\d+$/, '');
+      const prevRev = (src.orderNo || '').match(/-R(\d+)$/);
+      const revisedRef = `${baseRef}-R${prevRev ? Number(prevRev[1]) + 1 : 1}`;
+
       const finalQuo: Quotation = {
         ...(src as Quotation),
         id: finalId!,
         company,
-        status: approve ? 'Approved' : 'Draft',
-        orderNo: approve ? `SO-${mmyy}-${src.manualSerial}` : undefined
+        status: (revise || approve) ? 'Approved' : 'Draft',
+        orderNo: revise ? revisedRef : (approve ? `SO-${mmyy}-${src.manualSerial}` : undefined),
       };
 
       // persist quote FIRST, then decrement inventory only on success.
@@ -422,10 +429,10 @@ export const useNipponQuotations = () => {
         InventoryService.saveStore(updatedStore);
       }
 
-      Logger.action('SALES', approve ? 'NIPPON_QUOTE_APPROVED' : 'NIPPON_QUOTE_SAVED',
-        `${finalQuo.id} (${company}) total=${itemsSubtotal}`,
+      Logger.action('SALES', revise ? 'NIPPON_ORDER_REVISED' : approve ? 'NIPPON_QUOTE_APPROVED' : 'NIPPON_QUOTE_SAVED',
+        `${finalQuo.id} → ${finalQuo.orderNo || '-'} (${company}) total=${itemsSubtotal}`,
         { referenceId: finalQuo.id, amount: itemsSubtotal, extra: { company } });
-      toast.success(approve ? `Sales Order ${finalQuo.orderNo} created.` : 'Quotation saved.');
+      toast.success(revise ? `Sales Order revised → ${finalQuo.orderNo}` : approve ? `Sales Order ${finalQuo.orderNo} created.` : 'Quotation saved.');
 
       await refreshData();
       setView('list');
@@ -451,6 +458,50 @@ export const useNipponQuotations = () => {
     } catch (err) {
       Logger.error('NipponQuotations', 'handleDelete failed', err);
       toast.error(`Delete failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  };
+
+  // Void a Sales Order: return the stock it consumed at approval, then mark the
+  // order 'Void' (kept for audit — not deleted). Blocked once invoiced/paid (use a
+  // Credit Note there). Idempotent-ish: guarded against re-voiding.
+  const handleVoid = async (id: string) => {
+    const order = quotations.find(q => q.id === id);
+    if (!order) return;
+    if (order.status === 'Void') return toast.error('Order is already void.');
+    if (['Invoiced', 'Partial Payment', 'Paid'].includes(order.status as string)) {
+      return toast.error('This order is already invoiced/paid — reverse it with a Credit Note, not Void.');
+    }
+    if (!confirm(`Void Sales Order ${order.orderNo || id}? The stock it consumed will be returned to inventory.`)) return;
+    try {
+      // Reverse the approval stock decrement (add each line's qty back).
+      const store = InventoryService.getStore();
+      (order.items || []).forEach(item => {
+        if (item.isSection) return;
+        const matched = products.find(p =>
+          (item.productRef && p.id === item.productRef) ||
+          (item.locationCode && (p.id === item.locationCode || p.modelNo === item.locationCode || p.profileCode === item.locationCode)));
+        const refId = matched?.id || item.productRef || item.locationCode;
+        if (!refId) return;
+        const idx = store.findIndex(s => s.id === refId);
+        if (idx === -1) return;
+        const qty = Number(item.qty) || 0;
+        store[idx] = {
+          ...store[idx],
+          unrestrictedQty: (store[idx].unrestrictedQty || 0) + qty,
+          quantity: (store[idx].quantity || 0) + qty,
+          lastMovementDate: new Date().toISOString(),
+        };
+      });
+      InventoryService.saveStore(store);
+      // Mark Void (upsert the single row — kept for audit).
+      await AsyncSalesService.saveQuotations([{ ...order, status: 'Void' as const }]);
+      Logger.action('SALES', 'NIPPON_ORDER_VOIDED', `${order.orderNo || id} (${company})`,
+        { referenceId: id, extra: { company } });
+      toast.success('Sales Order voided · stock returned to inventory.');
+      await refreshData();
+    } catch (err) {
+      Logger.error('NipponQuotations', 'handleVoid failed', err);
+      toast.error(`Void failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
@@ -482,6 +533,7 @@ export const useNipponQuotations = () => {
     handleDuplicateItem,
     handleSave,
     handleDelete,
+    handleVoid,
     selectProduct,
     initialQuotation,
     isSaving,

@@ -37,6 +37,7 @@ export const QuotationStatus = {
   PAID: 'Paid',
   LOST: 'Lost',
   EXPIRED: 'Expired',
+  VOID: 'Void',
 } as const;
 export type QuotationStatus = typeof QuotationStatus[keyof typeof QuotationStatus];
 
