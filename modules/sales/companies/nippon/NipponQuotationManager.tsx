@@ -227,8 +227,8 @@ const NipponQuotationManager: React.FC = () => {
 
               {/* Items Grid */}
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
-                <div className="flex-1 overflow-y-auto">
-                  <table className="w-full text-left sap-table relative">
+                <div className="flex-1 overflow-auto">
+                  <table className="w-full min-w-[760px] text-left sap-table relative">
                     <thead className="sticky top-0 bg-white z-10 shadow-sm">
                     <tr>
                       <th className="w-10 text-center">#</th>

@@ -249,7 +249,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[400]">
-        <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in duration-200 border border-slate-300">
+        <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in duration-200 border border-slate-300 flex flex-col max-h-[92vh]">
             <div className="px-8 py-6 bg-red-700 text-white flex justify-between items-center shrink-0">
                 <div>
                     <h3 className="text-xl font-black uppercase tracking-tight">{editingProduct ? 'Edit Component' : variantOf ? 'New Variant' : 'New Hardware Item'}</h3>
@@ -258,7 +258,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                 <button onClick={onClose} className="hover:bg-white/10 p-2 rounded-full transition-all"><X size={24}/></button>
             </div>
             
-            <div className="p-8 space-y-6 bg-slate-50 overflow-y-auto max-h-[70vh]">
+            <div className="p-8 space-y-6 bg-slate-50 overflow-y-auto flex-1 min-h-0">
                 {/* IMAGE UPLOAD SECTION */}
                 <div 
                     className={`flex items-center space-x-6 bg-white p-4 rounded-2xl border-2 border-dashed transition-all group ${isDragging ? 'border-red-500 bg-red-50' : 'border-slate-200 hover:border-red-300'}`}
@@ -652,7 +652,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                 </div>
             </div>
 
-            <div className="px-8 py-6 bg-white border-t flex justify-end space-x-3">
+            <div className="px-8 py-6 bg-white border-t flex justify-end space-x-3 shrink-0">
                 <button onClick={onClose} className="px-6 py-2 text-slate-400 font-bold uppercase text-xs hover:text-slate-600">Cancel</button>
                 <button onClick={handleSave} disabled={isSaving} className="bg-red-600 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-red-700 transition-all flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
                     <Box size={16}/> <span>{isSaving ? 'Saving…' : 'Save Hardware'}</span>

@@ -16,13 +16,13 @@ export function bucketImageUrl(id?: string, ext: 'png' | 'jpg' = 'png'): string 
   return `${SUPA}/storage/v1/object/public/product-images/${encodeURIComponent(String(id).trim())}.${ext}`;
 }
 
-interface Props { id?: string; code?: string; url?: string; alt?: string; className?: string; iconSize?: number; }
+interface Props { id?: string; code?: string; url?: string; alt?: string; className?: string; iconSize?: number; eager?: boolean; }
 
 /** Tries, in order: the stored image_url → the bucket file by product **id**
  *  (id.png, id.jpg) → the legacy NIP-KL-<code> file (.png, .jpg) → a placeholder.
  *  The id path means prints resolve the image straight from item.productRef
  *  without needing the product master loaded (the Sales-Order print bug). */
-export const ProductImage: React.FC<Props> = ({ id, code, url, alt, className, iconSize = 18 }) => {
+export const ProductImage: React.FC<Props> = ({ id, code, url, alt, className, iconSize = 18, eager = false }) => {
   const candidates = [...new Set([
     (url && url.trim()) ? url.trim() : '',
     bucketImageUrl(id, 'png'),
@@ -33,7 +33,7 @@ export const ProductImage: React.FC<Props> = ({ id, code, url, alt, className, i
   const [idx, setIdx] = useState(0);
   if (idx >= candidates.length) return <Package size={iconSize} className="text-slate-300" />;
   return (
-    <img src={candidates[idx]} alt={alt || code || ''} className={className} loading="lazy" referrerPolicy="no-referrer"
+    <img src={candidates[idx]} alt={alt || code || ''} className={className} loading={eager ? 'eager' : 'lazy'} referrerPolicy="no-referrer"
       onError={() => setIdx(i => i + 1)} />
   );
 };

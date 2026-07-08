@@ -271,7 +271,7 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                                                                 <div className="w-[60px] h-[60px] border border-slate-200 rounded overflow-hidden mx-auto bg-white flex items-center justify-center">
                                                                     <ProductImage id={item.productRef} code={item.locationCode}
                                                                         url={item.attachedImage || prodFor(item)?.imageUrl}
-                                                                        className="w-full h-full object-contain" iconSize={18} />
+                                                                        eager className="w-full h-full object-contain" iconSize={18} />
                                                                 </div>
                                                             </td>
                                                             <td className="py-2 px-2">
