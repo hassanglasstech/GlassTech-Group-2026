@@ -6,6 +6,7 @@
 const WEBAUTHN_KEY = 'gt_webauthn_cred';  // credential id stored locally
 const REMEMBER_KEY = 'gt_remember_token';  // fallback 30-day token
 const REMEMBER_EXP = 'gt_remember_exp';
+const DEVICE_PIN_KEY = 'gt_device_pin';    // hashed device PIN (no-biometric fallback)
 
 // ── Check WebAuthn support ────────────────────────────────────────────
 export const isWebAuthnSupported = (): boolean => {
@@ -113,7 +114,43 @@ export const clearDeviceAuth = () => {
   localStorage.removeItem(WEBAUTHN_KEY);
   localStorage.removeItem(REMEMBER_KEY);
   localStorage.removeItem(REMEMBER_EXP);
+  localStorage.removeItem(DEVICE_PIN_KEY);
 };
+
+// ── Device PIN (no-biometric fallback) ────────────────────────────────
+// A device-local unlock gate over the already-persisted Supabase session —
+// same threat model as the remember token (trusted device), but the secret is
+// SHA-256 hashed with a per-device salt instead of stored in the clear. It does
+// NOT replace Supabase auth; if the session has expired the caller still falls
+// back to a fresh email login. A worker sets it once (after the magic-link
+// login) so they unlock with a PIN instead of re-doing the email round-trip.
+const sha256Hex = async (s: string): Promise<string> => {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
+export const saveDevicePin = async (userId: string, pin: string): Promise<boolean> => {
+  if (!/^\d{4,6}$/.test(pin)) return false;                       // 4–6 digit PIN
+  const saltBytes = crypto.getRandomValues(new Uint8Array(12));
+  const salt = btoa(String.fromCharCode(...saltBytes));
+  const hash = await sha256Hex(salt + ':' + pin);
+  localStorage.setItem(DEVICE_PIN_KEY, JSON.stringify({ userId, salt, hash }));
+  return true;
+};
+
+export const verifyDevicePin = async (pin: string): Promise<{ valid: boolean; userId?: string }> => {
+  const raw = localStorage.getItem(DEVICE_PIN_KEY);
+  if (!raw) return { valid: false };
+  try {
+    const { userId, salt, hash } = JSON.parse(raw);
+    const check = await sha256Hex(salt + ':' + pin);
+    return check === hash ? { valid: true, userId } : { valid: false };
+  } catch {
+    return { valid: false };
+  }
+};
+
+export const hasDevicePin = (): boolean => !!localStorage.getItem(DEVICE_PIN_KEY);
 
 // ── Remember Device fallback (30 days) ───────────────────────────────
 export const saveRememberToken = (userId: string) => {

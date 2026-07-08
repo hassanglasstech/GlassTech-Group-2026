@@ -150,6 +150,7 @@ export type AuthStep =
   | 'device_setup'   // registering WebAuthn
   | 'biometric'      // authenticate with device
   | 'pin'            // PIN fallback login (Phase 4)
+  | 'set_pin'        // set a device PIN after first login
   | 'done';          // fully authenticated
 
 interface AuthState {

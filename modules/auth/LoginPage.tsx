@@ -10,6 +10,7 @@ import {
   isPlatformAuthenticatorAvailable,
   saveRememberToken, checkRememberToken,
   hasDeviceRegistered, hasRememberToken, clearDeviceAuth,
+  hasDevicePin, saveDevicePin, verifyDevicePin,
 } from './useWebAuthn';
 import {
   Mail, Shield, Fingerprint, Smartphone,
@@ -115,6 +116,8 @@ const LoginPage: React.FC = () => {
   const [error,      setError]      = useState('');
   const [hasBiometric, setHasBiometric] = useState(false);
   const [step,       setStep]       = useState<AuthStep>('idle');
+  const [pin,        setPin]        = useState('');
+  const [pinAttempts, setPinAttempts] = useState(0);
 
   // ── On mount: check if device is already remembered ─────────────────
   useEffect(() => {
@@ -140,7 +143,12 @@ const LoginPage: React.FC = () => {
         setStep('biometric'); // reuse same screen, will use token
         return;
       }
-      // 3. Fresh login
+      // 3. Try device PIN (no-biometric fallback)
+      if (hasDevicePin()) {
+        setStep('pin');
+        return;
+      }
+      // 4. Fresh login
       setStep('google');
     };
 
@@ -337,6 +345,62 @@ const LoginPage: React.FC = () => {
       setError('Something went wrong. Please sign in again.');
       setStep('google');
     }
+  };
+
+  // ── STEP: Set a device PIN (after first login) ───────────────────────
+  const handleSetupPin = async () => {
+    if (!/^\d{4,6}$/.test(pin)) { setError('PIN 4-6 digits ka hona chahiye.'); return; }
+    setBusy(true);
+    try {
+      const profile = await resolveSessionProfile();
+      if (!profile) { setError('Session expired. Please sign in again.'); setStep('google'); setBusy(false); return; }
+      const ok = await saveDevicePin(profile.id, pin);
+      if (!ok) { setError('PIN save nahi hua. Dobara koshish karo.'); setBusy(false); return; }
+      setPin('');
+      await completeLogin(profile);
+    } catch (err) {
+      console.error('handleSetupPin error:', err);
+      setError('Setup failed. Please sign in again.');
+      setStep('google');
+    }
+    setBusy(false);
+  };
+
+  // ── STEP: PIN login (returning device, no biometric) ─────────────────
+  // Mirrors handleBiometricLogin: the PIN is a LOCAL gate; the actual auth is
+  // the persisted Supabase session. If it has expired, fall back to email.
+  const handlePinLogin = async () => {
+    if (pin.length < 4) return setError('Enter your PIN.');
+    setBusy(true);
+    setError('');
+    const { valid } = await verifyDevicePin(pin);
+    if (!valid) {
+      const n = pinAttempts + 1;
+      setPinAttempts(n);
+      setPin('');
+      if (n >= 5) { setError('Too many wrong PINs. Sign in with email.'); clearDeviceAuth(); setStep('google'); }
+      else setError(`Wrong PIN (${n}/5). Try again.`);
+      setBusy(false);
+      return;
+    }
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      const profile = await fetchProfile(session.user.id, session.user.email || '');
+      if (profile) {
+        if (profile.timeRestricted && !isOfficeHours()) {
+          setError('Access restricted to office hours (Mon-Sat 9am-6pm PKT).');
+          clearDeviceAuth(); setStep('google'); setBusy(false); return;
+        }
+        setPin(''); setPinAttempts(0);
+        completeLogin(profile);
+        setBusy(false);
+        return;
+      }
+    }
+    // Session expired — a PIN can't mint a Supabase session; do a fresh email login.
+    setError('Session expired - sign in with email to refresh.');
+    setStep('google');
+    setBusy(false);
   };
 
   // ── STEP: Biometric login (returning user) ───────────────────────────
@@ -613,6 +677,18 @@ const LoginPage: React.FC = () => {
                 </div>
               </button>
 
+              {/* Set a PIN option (no-biometric devices) */}
+              <button onClick={() => { setError(''); setPin(''); setStep('set_pin'); }} disabled={busy}
+                className="w-full flex items-center space-x-4 bg-slate-700/50 hover:bg-slate-700 border border-white/10 rounded-xl p-4 transition-all text-left">
+                <div className="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center shrink-0">
+                  <Key size={20} className="text-amber-400" />
+                </div>
+                <div>
+                  <p className="text-white font-black text-sm">Set a PIN</p>
+                  <p className="text-slate-400 text-[11px] mt-0.5">Unlock with a 4–6 digit PIN on this device</p>
+                </div>
+              </button>
+
               {/* Skip */}
               <button onClick={handleSkipDevice}
                 className="w-full text-slate-500 hover:text-slate-300 text-xs font-bold uppercase transition-colors py-1">
@@ -651,6 +727,56 @@ const LoginPage: React.FC = () => {
                 className="w-full text-slate-500 hover:text-slate-300 text-xs font-bold uppercase transition-colors">
                 Sign in with different account
               </button>
+            </div>
+          </Card>
+        )}
+
+        {/* ── STEP: Set a device PIN ────────────────────────────────── */}
+        {step === 'set_pin' && (
+          <Card>
+            <div className="space-y-5">
+              <div className="text-center">
+                <div className="w-12 h-12 bg-amber-500/20 rounded-xl flex items-center justify-center mx-auto mb-3"><Key size={24} className="text-amber-400" /></div>
+                <p className="text-white font-black text-base">Set a device PIN</p>
+                <p className="text-slate-400 text-xs mt-1">4–6 digits — you'll unlock with this on this device (no email next time)</p>
+              </div>
+              {error && <ErrBox msg={error} />}
+              <input type="password" inputMode="numeric" pattern="[0-9]*" maxLength={6} value={pin}
+                onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onKeyDown={e => e.key === 'Enter' && handleSetupPin()}
+                placeholder="••••" autoFocus
+                className="w-full bg-[#0f1923] border border-white/10 rounded-xl py-3 px-4 text-white text-center text-2xl font-mono tracking-[0.5em] focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 transition-all" />
+              <button onClick={handleSetupPin} disabled={busy || pin.length < 4}
+                className="w-full bg-amber-600 hover:bg-amber-500 disabled:bg-amber-600/30 text-white font-black uppercase tracking-widest py-3 rounded-xl transition-all flex items-center justify-center gap-2">
+                {busy ? <Loader2 size={18} className="animate-spin" /> : <><Key size={16} /> Save PIN</>}
+              </button>
+              <button onClick={() => { setPin(''); setError(''); setStep('device_choice'); }}
+                className="w-full text-slate-500 hover:text-slate-300 text-xs font-bold uppercase transition-colors">← Back</button>
+            </div>
+          </Card>
+        )}
+
+        {/* ── STEP: PIN login (returning device) ────────────────────── */}
+        {step === 'pin' && (
+          <Card>
+            <div className="space-y-5">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-amber-500/10 border-2 border-amber-500/30 rounded-full flex items-center justify-center mx-auto mb-3"><Key size={30} className="text-amber-400" /></div>
+                <p className="text-white font-black text-base">Enter your PIN</p>
+                <p className="text-slate-400 text-xs mt-1">Unlock this device</p>
+              </div>
+              {error && <ErrBox msg={error} />}
+              <input type="password" inputMode="numeric" pattern="[0-9]*" maxLength={6} value={pin}
+                onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onKeyDown={e => e.key === 'Enter' && handlePinLogin()}
+                placeholder="••••" autoFocus
+                className="w-full bg-[#0f1923] border border-white/10 rounded-xl py-3 px-4 text-white text-center text-2xl font-mono tracking-[0.5em] focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 transition-all" />
+              <button onClick={handlePinLogin} disabled={busy || pin.length < 4}
+                className="w-full bg-amber-600 hover:bg-amber-500 disabled:bg-amber-600/30 text-white font-black uppercase tracking-widest py-3 rounded-xl transition-all flex items-center justify-center gap-2">
+                {busy ? <Loader2 size={18} className="animate-spin" /> : <><Key size={16} /> Unlock</>}
+              </button>
+              <button onClick={() => { clearDeviceAuth(); setPin(''); setError(''); setStep('google'); }}
+                className="w-full text-slate-500 hover:text-slate-300 text-xs font-bold uppercase transition-colors">Sign in with email instead</button>
             </div>
           </Card>
         )}
