@@ -103,8 +103,15 @@ export interface StoreItem {
   reorderPoint: number; 
   movingAveragePrice: number; 
   totalValue: number; 
-  storageBin: string; 
+  storageBin: string;
   lastMovementDate: string;
+
+  // ── Opening balance (stock-take bootstrap) — stamped for audit ─────
+  // Set when a physical count is recorded. Presence of openingBalanceAt means
+  // "counted" — the quotation→negative reconciliation then leaves this row alone.
+  openingBalance?: number;        // the counted opening qty
+  openingBalanceAt?: string;      // ISO timestamp of the count
+  openingBalanceBy?: string;      // user who recorded it
 
   // ── Glass Defect Tracking ─────────────────────────────────────────
   defectiveSheets?: number;       // count of defective/broken sheets in stock

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Product, StoreItem } from '@/modules/shared/types';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
+import { useAuthStore } from '@/modules/auth/authStore';
 import { getBrandNick } from '@/modules/shared/utils/brandUtils';
 import { ProductImage } from '@/modules/shared/components/ProductImage';
 import {
@@ -19,6 +20,7 @@ import * as XLSX from 'xlsx';
 
 const NipponProductMaster: React.FC = () => {
   const company = 'Nippon';
+  const stampUser = useAuthStore(s => s.profile?.fullName || s.profile?.email || s.user?.email || 'user');
   const [products, setProducts] = useState<Product[]>([]);
   const [storeItems, setStoreItems] = useState<StoreItem[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -209,6 +211,85 @@ const NipponProductMaster: React.FC = () => {
       } catch (err) {
           toast.error(`Dedupe failed: ${(err as Error)?.message || 'unknown'}`);
       }
+  };
+
+  // #4 — record a physical opening-balance count for a product, stamped with
+  // date/time/user. Corrects the bootstrap negative once the item is stock-taken.
+  const handleSetOpeningBalance = async (p: Product) => {
+    const cur = storeItems.find(s => s.id === p.id);
+    const entry = window.prompt(`Opening balance (counted qty) for ${p.description}:`, String(Math.max(0, cur?.unrestrictedQty ?? 0)));
+    if (entry === null) return;
+    const qty = Number(entry);
+    if (!isFinite(qty)) { toast.error('Enter a valid number'); return; }
+    const nowIso = new Date().toISOString();
+    const store = InventoryService.getStore();
+    const idx = store.findIndex(s => s.id === p.id);
+    if (idx !== -1) {
+      store[idx] = { ...store[idx], quantity: qty, unrestrictedQty: qty,
+        openingBalance: qty, openingBalanceAt: nowIso, openingBalanceBy: stampUser, lastMovementDate: nowIso };
+    } else {
+      store.push({ id: p.id, company, name: p.description, category: (p.category as any) || 'Hardware',
+        quantity: qty, unrestrictedQty: qty, qiQty: 0, blockedQty: 0, reservedQty: 0, consignmentQty: 0,
+        unit: p.unit, minLevel: 10, reorderPoint: 5, movingAveragePrice: p.costPrice || 0, totalValue: 0,
+        storageBin: 'Opening', lastMovementDate: nowIso,
+        openingBalance: qty, openingBalanceAt: nowIso, openingBalanceBy: stampUser } as StoreItem);
+    }
+    try {
+      InventoryService.saveStore(store);
+      await refreshData();
+      toast.success(`Opening balance ${qty} recorded for ${p.description} · ${stampUser}`);
+    } catch (err) {
+      toast.error(`Save failed: ${(err as Error)?.message || 'unknown'}`);
+    }
+  };
+
+  // #6 — build negative inventory from committed Nippon quotations (bootstrap
+  // before stock-taking). Idempotent: SETS each un-counted item's position to the
+  // quotation-derived negative; NEVER touches rows already stock-taken
+  // (openingBalanceAt set) or holding real received stock (qty > 0).
+  const handleBuildStockFromQuotations = async () => {
+    const quotes = (await AsyncSalesService.getQuotations())
+      .filter(q => q.company === company && ['Approved', 'Invoiced', 'Partial Payment', 'Paid'].includes(q.status as string));
+    const soldById = new Map<string, number>();
+    quotes.forEach(q => (q.items || []).forEach(item => {
+      if (item.isSection) return;
+      const matched = products.find(p =>
+        (item.productRef && p.id === item.productRef) ||
+        (item.locationCode && (p.id === item.locationCode || p.modelNo === item.locationCode || p.profileCode === item.locationCode)));
+      const refId = matched?.id || item.productRef || item.locationCode;
+      if (!refId) return;
+      soldById.set(refId, (soldById.get(refId) || 0) + (Number(item.qty) || 0));
+    }));
+    if (soldById.size === 0) { toast.info('No sold items found in Nippon quotations.'); return; }
+
+    const store = InventoryService.getStore();
+    let applied = 0, skipped = 0;
+    soldById.forEach((sold, id) => {
+      const idx = store.findIndex(s => s.id === id);
+      const row = idx !== -1 ? store[idx] : undefined;
+      if (row?.openingBalanceAt) { skipped++; return; }                 // already stock-taken → respect it
+      if (row && (row.unrestrictedQty || 0) > 0) { skipped++; return; } // has real received stock → don't wipe
+      const prod = products.find(p => p.id === id);
+      const nowIso = new Date().toISOString();
+      if (idx !== -1) {
+        store[idx] = { ...store[idx], quantity: -sold, unrestrictedQty: -sold, lastMovementDate: nowIso };
+      } else {
+        store.push({ id, company, name: prod?.description || id, category: (prod?.category as any) || 'Hardware',
+          quantity: -sold, unrestrictedQty: -sold, qiQty: 0, blockedQty: 0, reservedQty: 0, consignmentQty: 0,
+          unit: (prod?.unit || 'PCS') as any, minLevel: 10, reorderPoint: 5,
+          movingAveragePrice: prod?.costPrice || 0, totalValue: 0, storageBin: 'Bootstrap', lastMovementDate: nowIso } as StoreItem);
+      }
+      applied++;
+    });
+    if (applied === 0) { toast.info(`Nothing to set — ${skipped} item(s) already counted or in stock.`); return; }
+    if (!confirm(`Set ${applied} product(s) to negative stock from ${quotes.length} committed quotation(s)?\n(${skipped} skipped — already counted / in stock.)\nThey will show "opening balance pending" until you stock-take.`)) return;
+    try {
+      InventoryService.saveStore(store);
+      await refreshData();
+      toast.success(`Set ${applied} product(s) to quotation-derived negative stock. Enter opening balances to correct.`);
+    } catch (err) {
+      toast.error(`Build failed: ${(err as Error)?.message || 'unknown'}`);
+    }
   };
 
   // --- DATA TOOLS ---
@@ -566,6 +647,7 @@ const NipponProductMaster: React.FC = () => {
                            { label: 'Restore (JSON)',         icon: UploadCloud,     on: () => jsonInputRef.current?.click() },
                            { label: 'Import Excel',           icon: FileUp,          on: () => excelInputRef.current?.click() },
                            { label: 'Remove Duplicates',      icon: Wrench,          on: handleDedupe },
+                           { label: 'Build Stock from Quotations', icon: Layers,     on: handleBuildStockFromQuotations },
                          ].map(({ label, icon: Icon, on }) => (
                            <button key={label} onClick={() => { setShowTools(false); on(); }} className="w-full flex items-center gap-2.5 px-4 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 transition-all">
                                <Icon size={14} className="text-slate-400"/> {label}
@@ -726,6 +808,19 @@ const NipponProductMaster: React.FC = () => {
                                 <td className="text-right">
                                     <span className={`text-sm font-black ${stock > 0 ? 'text-emerald-600' : 'text-rose-400'}`}>{(Number(stock) || 0).toLocaleString()}</span>
                                     <span className="text-[9px] text-slate-400 ml-1 uppercase">{p.unit}</span>
+                                    {(() => {
+                                        const row = storeItems.find(s => s.id === p.id);
+                                        const obPending = (Number(stock) || 0) < 0 && !row?.openingBalanceAt;
+                                        if (!obPending) return null;
+                                        return (
+                                            <div className="mt-1">
+                                                <button onClick={() => handleSetOpeningBalance(p)} title="No stock-take yet — enter opening balance (stamped)"
+                                                    className="text-[8px] font-black uppercase text-rose-600 bg-rose-50 border border-rose-200 rounded px-1.5 py-0.5 hover:bg-rose-100 transition-all">
+                                                    ⚠ OB pending · set
+                                                </button>
+                                            </div>
+                                        );
+                                    })()}
                                 </td>
                                 <td className="pr-6 text-right">
                                     <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
