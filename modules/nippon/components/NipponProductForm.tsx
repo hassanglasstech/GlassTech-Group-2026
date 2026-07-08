@@ -11,10 +11,14 @@ interface NipponProductFormProps {
   onClose: () => void;
   onSave: (product: Product, storeItem?: Partial<StoreItem>) => void;
   editingProduct: Product | null;
+  /** When set (and editingProduct is null): open a NEW product pre-filled from
+   *  this parent — an "Add variant" (colour/direction/size). Saved as a new
+   *  stockable product linked back via variantOf = parent.id. */
+  variantOf?: Product | null;
 }
 
-const NipponProductForm: React.FC<NipponProductFormProps> = ({ 
-  isOpen, onClose, onSave, editingProduct
+const NipponProductForm: React.FC<NipponProductFormProps> = ({
+  isOpen, onClose, onSave, editingProduct, variantOf
 }) => {
   const [nipponVendors, setNipponVendors] = useState<Vendor[]>([]);
   const [formData, setFormData] = useState({
@@ -58,35 +62,37 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
         const allVendors = SalesService.getVendors();
         setNipponVendors(allVendors.filter(v => v.company === 'Nippon'));
 
-        if (editingProduct) {
+        // Prefill from the product being edited OR the parent when adding a variant.
+        const src = editingProduct || variantOf;
+        if (src) {
             setFormData({
-                internalId: editingProduct.profileCode || '',
-                modelNo: editingProduct.modelNo || '',
-                description: editingProduct.description,
-                brand: editingProduct.brand || '',
-                mainCategory: editingProduct.mainCategory || '',
-                subCategory: editingProduct.subCategory || '',
-                category: (editingProduct.category as any) || 'Hardware',
-                unit: editingProduct.unit as string,
-                costPrice: editingProduct.costPrice || 0,
-                basePrice: editingProduct.basePrice || 0,
-                finishColor: editingProduct.finishColor || '',
-                material: editingProduct.material || '',
-                direction: editingProduct.direction || '',
-                tongueLength: editingProduct.tongueLength || '',
-                spindleLength: editingProduct.spindleLength || '',
+                internalId: src.profileCode || '',
+                modelNo: src.modelNo || '',
+                description: src.description,
+                brand: src.brand || '',
+                mainCategory: src.mainCategory || '',
+                subCategory: src.subCategory || '',
+                category: (src.category as any) || 'Hardware',
+                unit: src.unit as string,
+                costPrice: src.costPrice || 0,
+                basePrice: src.basePrice || 0,
+                finishColor: src.finishColor || '',
+                material: src.material || '',
+                direction: src.direction || '',
+                tongueLength: src.tongueLength || '',
+                spindleLength: src.spindleLength || '',
                 minLevel: 10,
-                image: editingProduct.imageUrl || '',
-                technicalSpecs: editingProduct.technicalSpecs || {},
-                width: editingProduct.width || 0,
-                height: editingProduct.height || 0,
-                frameColor: editingProduct.frameColor || '',
-                meshColor: editingProduct.meshColor || '',
-                isSet: editingProduct.isSet || false,
-                setComponents: editingProduct.setComponents || [],
-                hsCode: editingProduct.hsCode || '',
-                subDescription: (editingProduct as any).subDescription || '',
-                nickName: (editingProduct as any).nickName || ''
+                image: editingProduct ? (src.imageUrl || '') : '',
+                technicalSpecs: src.technicalSpecs || {},
+                width: src.width || 0,
+                height: src.height || 0,
+                frameColor: src.frameColor || '',
+                meshColor: src.meshColor || '',
+                isSet: src.isSet || false,
+                setComponents: src.setComponents || [],
+                hsCode: src.hsCode || '',
+                subDescription: (src as any).subDescription || '',
+                nickName: (src as any).nickName || ''
             });
         } else {
             setFormData({
@@ -99,7 +105,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
             });
         }
     }
-  }, [isOpen, editingProduct]);
+  }, [isOpen, editingProduct, variantOf]);
 
   const processFile = (file: File) => {
     const reader = new FileReader();
@@ -213,6 +219,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
           spindleLength: formData.spindleLength,
           imageUrl: finalImageUrl,
           variants: [],
+          variantOf: editingProduct ? editingProduct.variantOf : (variantOf?.id || undefined),
           technicalSpecs: formData.technicalSpecs,
           width: Number(formData.width),
           height: Number(formData.height),
@@ -245,8 +252,8 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
         <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in duration-200 border border-slate-300">
             <div className="px-8 py-6 bg-red-700 text-white flex justify-between items-center shrink-0">
                 <div>
-                    <h3 className="text-xl font-black uppercase tracking-tight">{editingProduct ? 'Edit Component' : 'New Hardware Item'}</h3>
-                    <p className="text-[10px] font-bold text-red-200 uppercase tracking-widest mt-1">Nippon Catalog Entry</p>
+                    <h3 className="text-xl font-black uppercase tracking-tight">{editingProduct ? 'Edit Component' : variantOf ? 'New Variant' : 'New Hardware Item'}</h3>
+                    <p className="text-[10px] font-bold text-red-200 uppercase tracking-widest mt-1">{variantOf && !editingProduct ? `Variant of ${variantOf.modelNo || variantOf.description}` : 'Nippon Catalog Entry'}</p>
                 </div>
                 <button onClick={onClose} className="hover:bg-white/10 p-2 rounded-full transition-all"><X size={24}/></button>
             </div>

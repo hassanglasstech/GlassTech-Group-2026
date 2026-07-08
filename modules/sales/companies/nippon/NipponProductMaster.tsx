@@ -27,6 +27,7 @@ const NipponProductMaster: React.FC = () => {
   const [subFilter, setSubFilter] = useState('All');
   const [imageFilter, setImageFilter] = useState<'all' | 'has' | 'missing'>('all');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [variantParent, setVariantParent] = useState<Product | null>(null);   // "Add variant" source
   const [activeTab, setActiveTab] = useState<'list' | 'import' | 'direct'>('list');
   // Sorting — click any column header to sort; click again to flip direction.
   type SortKey = 'profileCode' | 'modelNo' | 'description' | 'mainCategory' | 'basePrice' | 'stock';
@@ -153,11 +154,21 @@ const NipponProductMaster: React.FC = () => {
 
   const openAddModal = () => {
     setEditingProduct(null);
+    setVariantParent(null);
     setIsModalOpen(true);
   };
 
   const handleEdit = (p: Product) => {
+    setVariantParent(null);
     setEditingProduct(p);
+    setIsModalOpen(true);
+  };
+
+  // Add a colour/direction/size variant: open a NEW product pre-filled from this
+  // parent (form sets variantOf = parent.id on save). Variant is its own stockable row.
+  const handleAddVariant = (p: Product) => {
+    setEditingProduct(null);
+    setVariantParent(p);
     setIsModalOpen(true);
   };
 
@@ -166,6 +177,37 @@ const NipponProductMaster: React.FC = () => {
           const updated = (await AsyncSalesService.getProducts()).filter(p => p.id !== id);
           await AsyncSalesService.saveProducts(updated);
           await refreshData();
+      }
+  };
+
+  // Remove duplicate products (grouped by model no, else description|brand). Keeps
+  // the most complete of each group (has image + most non-empty fields); removes the
+  // rest. Stock rows are left untouched. Variants (distinct modelNo) are NOT merged.
+  const handleDedupe = async () => {
+      const allProducts = await AsyncSalesService.getProducts();
+      const mine = allProducts.filter(p => p.company === company);
+      const rest = allProducts.filter(p => p.company !== company);
+      const norm = (s?: string) => (s || '').trim().toUpperCase();
+      const keyOf = (p: Product) => norm(p.modelNo) || `${norm(p.description)}|${norm(p.brand)}`;
+      const score = (p: Product) => (p.imageUrl ? 1000 : 0) + Object.values(p).filter(v => v !== '' && v != null).length;
+      const groups = new Map<string, Product[]>();
+      mine.forEach(p => { const k = keyOf(p); const g = groups.get(k) || []; g.push(p); groups.set(k, g); });
+      const keep: Product[] = [];
+      let removed = 0;
+      groups.forEach(g => {
+          if (g.length === 1) { keep.push(g[0]); return; }
+          const best = g.slice().sort((a, b) => score(b) - score(a))[0];
+          keep.push(best);
+          removed += g.length - 1;
+      });
+      if (removed === 0) { toast.info('No duplicate products found.'); return; }
+      if (!confirm(`Found ${removed} duplicate product(s) (same model no / description). Keep the most complete of each and remove the rest? Stock rows are preserved.`)) return;
+      try {
+          await AsyncSalesService.saveProducts([...rest, ...keep]);
+          await refreshData();
+          toast.success(`Removed ${removed} duplicate product(s).`);
+      } catch (err) {
+          toast.error(`Dedupe failed: ${(err as Error)?.message || 'unknown'}`);
       }
   };
 
@@ -523,6 +565,7 @@ const NipponProductMaster: React.FC = () => {
                            { label: 'Export by Category',     icon: Layers,          on: handleExportCategoryWise },
                            { label: 'Restore (JSON)',         icon: UploadCloud,     on: () => jsonInputRef.current?.click() },
                            { label: 'Import Excel',           icon: FileUp,          on: () => excelInputRef.current?.click() },
+                           { label: 'Remove Duplicates',      icon: Wrench,          on: handleDedupe },
                          ].map(({ label, icon: Icon, on }) => (
                            <button key={label} onClick={() => { setShowTools(false); on(); }} className="w-full flex items-center gap-2.5 px-4 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 transition-all">
                                <Icon size={14} className="text-slate-400"/> {label}
@@ -686,8 +729,9 @@ const NipponProductMaster: React.FC = () => {
                                 </td>
                                 <td className="pr-6 text-right">
                                     <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => handleEdit(p)} className="p-1.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded transition-all"><Edit2 size={12}/></button>
-                                        <button onClick={() => handleDelete(p.id)} className="p-1.5 text-slate-400 hover:text-red-600 bg-white border border-slate-200 rounded transition-all"><Trash2 size={12}/></button>
+                                        <button onClick={() => handleAddVariant(p)} title="Add colour/direction variant" className="p-1.5 text-slate-400 hover:text-amber-600 bg-white border border-slate-200 rounded transition-all"><Layers size={12}/></button>
+                                        <button onClick={() => handleEdit(p)} title="Edit" className="p-1.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded transition-all"><Edit2 size={12}/></button>
+                                        <button onClick={() => handleDelete(p.id)} title="Delete" className="p-1.5 text-slate-400 hover:text-red-600 bg-white border border-slate-200 rounded transition-all"><Trash2 size={12}/></button>
                                     </div>
                                 </td>
                             </tr>
@@ -721,11 +765,12 @@ const NipponProductMaster: React.FC = () => {
       </>
     )}
 
-    <NipponProductForm 
+    <NipponProductForm
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => { setIsModalOpen(false); setVariantParent(null); }}
         onSave={handleSaveProduct}
         editingProduct={editingProduct}
+        variantOf={variantParent}
       />
     </div>
   );

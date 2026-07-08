@@ -15,6 +15,10 @@ export interface Product {
   costPrice?: number; 
   unit: 'SqFt' | 'Unit' | 'RunningFt' | 'Inch' | 'KG' | 'Mtr' | 'Sheet' | 'PCS' | 'Set' | 'Pair' | 'Roll' | 'Pkt' | 'Box' | 'Ltr' | 'Tube';
   variants: string[];
+  /** When this product is a colour/direction/size variant of another, the parent
+   *  product id. Variants are their own stockable rows (own qty/price/image) but
+   *  link back here for grouping/traceability. */
+  variantOf?: string;
   glassType?: 'Clear' | 'Plain' | 'Color' | 'Fluted' | 'Mirror' | 'Tinted' | 'Reflective' | 'Frosted' | 'Tempered' | 'Annealed' | 'Laminated' | 'Double Glazed' | 'One Side';
   mainCategory?: string; 
   subCategory?: string; 
