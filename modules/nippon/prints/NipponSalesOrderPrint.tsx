@@ -1,7 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { Quotation, Product } from '../../shared/types';
-import { nipponImageUrl } from '../../shared/components/ProductImage';
+import { ProductImage } from '../../shared/components/ProductImage';
 
 interface Props {
     quote: Quotation;
@@ -265,19 +265,14 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                                                         <tr key={idx}>
                                                             <td className="py-2 px-2 text-center text-slate-400 font-bold">{serialNum}</td>
                                                             <td className="py-2 px-2 text-center">
-                                                                {(() => {
-                                                                    // Use the stored snapshot, else derive the bucket URL from the
-                                                                    // item code (NIP-KL-<code>.png). onError hides the box so a
-                                                                    // missing file leaves no broken icon — same as no image.
-                                                                    const imgSrc = item.attachedImage || prodFor(item)?.imageUrl || nipponImageUrl(item.locationCode);
-                                                                    if (!imgSrc) return null;
-                                                                    return (
-                                                                        <div className="w-[60px] h-[60px] border border-slate-200 rounded overflow-hidden mx-auto bg-white">
-                                                                            <img src={imgSrc} alt="" className="w-full h-full object-contain" referrerPolicy="no-referrer"
-                                                                                onError={(e) => { const box = e.currentTarget.parentElement as HTMLElement | null; if (box) box.style.display = 'none'; }} />
-                                                                        </div>
-                                                                    );
-                                                                })()}
+                                                                {/* Robust: stored url → bucket by product id (productRef →
+                                                                    <id>.png/.jpg) → legacy NIP-KL-<code> → placeholder. The id path
+                                                                    resolves the image even when the product master isn't loaded. */}
+                                                                <div className="w-[60px] h-[60px] border border-slate-200 rounded overflow-hidden mx-auto bg-white flex items-center justify-center">
+                                                                    <ProductImage id={item.productRef} code={item.locationCode}
+                                                                        url={item.attachedImage || prodFor(item)?.imageUrl}
+                                                                        className="w-full h-full object-contain" iconSize={18} />
+                                                                </div>
                                                             </td>
                                                             <td className="py-2 px-2">
                                                                 {(() => {

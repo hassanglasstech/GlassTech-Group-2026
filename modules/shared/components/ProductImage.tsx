@@ -9,22 +9,31 @@ export function nipponImageUrl(code?: string, ext: 'png' | 'jpg' = 'png'): strin
   return `${SUPA}/storage/v1/object/public/product-images/NIP-KL-${encodeURIComponent(String(code).trim())}.${ext}`;
 }
 
-interface Props { code?: string; url?: string; alt?: string; className?: string; iconSize?: number; }
+// Files are named EXACTLY by product id (e.g. NIP-KL-CZS133-L55-W.png), so the
+// image is resolvable from the id alone — no product-master lookup required.
+export function bucketImageUrl(id?: string, ext: 'png' | 'jpg' = 'png'): string {
+  if (!SUPA || !id) return '';
+  return `${SUPA}/storage/v1/object/public/product-images/${encodeURIComponent(String(id).trim())}.${ext}`;
+}
 
-/** Tries the stored image_url first, then the bucket file by code as .png, then
- *  .jpg, then a placeholder. So an image shows whether it was uploaded via the
- *  form (.jpg, url stored) or dropped into the bucket in bulk (.png), and the
- *  Master no longer shows "sometimes yes, sometimes no" based on a stored url. */
-export const ProductImage: React.FC<Props> = ({ code, url, alt, className, iconSize = 18 }) => {
-  const candidates = [
+interface Props { id?: string; code?: string; url?: string; alt?: string; className?: string; iconSize?: number; }
+
+/** Tries, in order: the stored image_url → the bucket file by product **id**
+ *  (id.png, id.jpg) → the legacy NIP-KL-<code> file (.png, .jpg) → a placeholder.
+ *  The id path means prints resolve the image straight from item.productRef
+ *  without needing the product master loaded (the Sales-Order print bug). */
+export const ProductImage: React.FC<Props> = ({ id, code, url, alt, className, iconSize = 18 }) => {
+  const candidates = [...new Set([
     (url && url.trim()) ? url.trim() : '',
+    bucketImageUrl(id, 'png'),
+    bucketImageUrl(id, 'jpg'),
     nipponImageUrl(code, 'png'),
     nipponImageUrl(code, 'jpg'),
-  ].filter(Boolean);
+  ].filter(Boolean))];
   const [idx, setIdx] = useState(0);
   if (idx >= candidates.length) return <Package size={iconSize} className="text-slate-300" />;
   return (
-    <img src={candidates[idx]} alt={alt || code || ''} className={className} loading="lazy"
+    <img src={candidates[idx]} alt={alt || code || ''} className={className} loading="lazy" referrerPolicy="no-referrer"
       onError={() => setIdx(i => i + 1)} />
   );
 };
