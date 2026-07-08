@@ -18,7 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import {
   ScanLine, ShieldCheck, Truck, Clock, BarChart3, AlertTriangle, ArrowRight, ClipboardList,
-  Sparkles, Flame, Hammer, Drill,
+  Sparkles, Flame, Hammer, Drill, Users,
 } from 'lucide-react';
 
 type Tone = 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'neutral';
@@ -60,6 +60,7 @@ const SECTIONS: ModuleSection[] = [
     title: 'Floor Stations',
     blurb: 'Shop-floor data entry',
     cards: [
+      { key: 'cut-sup',   title: 'Cutting Supervisor', desc: 'All benches · assign the pool & recuts',     path: '/production/cutting-supervisor', icon: <Users size={20} />,    tone: 'primary' },
       { key: 'cutter',    title: 'Cutter Workbench',   desc: 'Cutting sessions & sheet scan',             path: '/cutter',                     icon: <ScanLine size={20} />,    tone: 'info' },
       { key: 'service',   title: 'Service Floor',      desc: 'Mark polishing / grinding / notch / holes', path: '/production/service-floor',    icon: <Sparkles size={20} />,    tone: 'primary' },
       { key: 'qc',        title: 'QC Workbench',       desc: 'Quality control — pass / fail pieces',      path: '/qc',                         icon: <ShieldCheck size={20} />, tone: 'success' },

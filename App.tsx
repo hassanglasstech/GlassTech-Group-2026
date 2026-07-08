@@ -90,6 +90,8 @@ const InwardReceivePage = React.lazy(() => import('./modules/production/pages/In
 const ServiceFloorPage = React.lazy(() => import('./modules/production/companies/glassco/pages/ServiceFloorPage'));
 // Per-operator service station screens (polish / grinding / hole-notch) — mobile-first, magic-linkable
 const ServiceStationScreen = React.lazy(() => import('./modules/production/companies/glassco/pages/ServiceStationScreen'));
+// Cutting Supervisor — all-benches overview + assign the pool & recuts
+const CuttingSupervisorScreen = React.lazy(() => import('./modules/production/companies/glassco/pages/CuttingSupervisorScreen'));
 // Sprint 21 — Global UX foundations
 const CommandPalette    = React.lazy(() => import('./modules/shared/components/CommandPalette'));
 const Breadcrumbs       = React.lazy(() => import('./modules/shared/components/Breadcrumbs'));
@@ -851,6 +853,8 @@ const App: React.FC = () => {
                   <Route path="/station/polish"    element={<ModuleErrorBoundary moduleName="Polish Station"><ServiceStationScreen station="polish" /></ModuleErrorBoundary>} />
                   <Route path="/station/grinding"  element={<ModuleErrorBoundary moduleName="Grinding Station"><ServiceStationScreen station="grinding" /></ModuleErrorBoundary>} />
                   <Route path="/station/holenotch" element={<ModuleErrorBoundary moduleName="Hole & Notch Station"><ServiceStationScreen station="holenotch" /></ModuleErrorBoundary>} />
+                  {/* Cutting Supervisor — all-benches overview + pool/recut distribution */}
+                  <Route path="/production/cutting-supervisor" element={<ModuleErrorBoundary moduleName="Cutting Supervisor"><CuttingSupervisorScreen /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />
                 </Routes>
                 </RouteAccessGuard>
