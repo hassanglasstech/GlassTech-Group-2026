@@ -186,6 +186,13 @@ export const AsyncSalesService = {
     await _deleteRow('clients', KEYS.CLIENTS, id);
   },
 
+  // Real per-row product delete (cloud + local). Was missing — product "delete"
+  // used to upsert the filtered array, which never removed the row from the cloud
+  // table, so a deleted product reappeared on the next refresh.
+  deleteProduct: async (id: string): Promise<void> => {
+    await _deleteRow('products', KEYS.PRODUCTS, id);
+  },
+
   getProducts: async (): Promise<Product[]> => {
     const company = activeCompany();
     // God Mode audit (Phase 3): NEVER silently fall back to GTK.

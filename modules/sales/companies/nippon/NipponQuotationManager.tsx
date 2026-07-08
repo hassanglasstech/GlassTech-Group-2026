@@ -55,6 +55,14 @@ const NipponQuotationManager: React.FC = () => {
 
   const isLocked = formData.status === 'Approved';
 
+  // Free samples: keep the net at 0 by mirroring a 100% discount to the running
+  // subtotal (so stock still moves + it's tracked, but revenue is 0).
+  React.useEffect(() => {
+    if (formData.isSample && formData.sampleType === 'Free' && (formData.discountAmount || 0) !== subTotal) {
+      setFormData(prev => ({ ...prev, discountPercent: 100, discountAmount: subTotal }));
+    }
+  }, [subTotal, formData.isSample, formData.sampleType, formData.discountAmount, setFormData]);
+
   const filteredQuotations = useMemo(() => {
     let result = [...quotations];
     if (searchTerm) {
@@ -225,6 +233,42 @@ const NipponQuotationManager: React.FC = () => {
                 </div>
               </div>
 
+              {/* Sample toggle — record a sample given to a client (charged or free) */}
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3 flex-wrap shrink-0">
+                <label className="flex items-center gap-2 text-[11px] font-black uppercase text-slate-600 cursor-pointer">
+                  <input type="checkbox" disabled={isLocked} checked={!!formData.isSample}
+                    onChange={e => {
+                      const on = e.target.checked;
+                      setFormData(prev => ({
+                        ...prev,
+                        isSample: on,
+                        sampleType: on ? (prev.sampleType || 'Free') : undefined,
+                        ...(on && (prev.sampleType || 'Free') === 'Free' ? { discountPercent: 100, discountAmount: subTotal } : {}),
+                        ...(!on ? { discountPercent: 0, discountAmount: 0 } : {}),
+                      }));
+                    }}
+                    className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500" />
+                  Sample
+                </label>
+                {formData.isSample && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {(['Free', 'Paid'] as const).map(t => (
+                      <button key={t} type="button" disabled={isLocked}
+                        onClick={() => setFormData(prev => ({
+                          ...prev, sampleType: t,
+                          ...(t === 'Free' ? { discountPercent: 100, discountAmount: subTotal } : { discountPercent: 0, discountAmount: 0 }),
+                        }))}
+                        className={`text-[10px] font-black uppercase px-3 py-1 rounded-lg border transition-all ${formData.sampleType === t ? (t === 'Free' ? 'bg-amber-600 text-white border-amber-600' : 'bg-blue-600 text-white border-blue-600') : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
+                        {t} sample
+                      </button>
+                    ))}
+                    <span className="text-[10px] text-slate-400 font-bold">
+                      {formData.sampleType === 'Free' ? 'Net 0 · stock still moves · tracked per client' : 'Charged at price · tracked per client'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
               {/* Items Grid */}
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
                 <div className="flex-1 overflow-auto">
@@ -383,7 +427,12 @@ const NipponQuotationManager: React.FC = () => {
                                 <input readOnly={isLocked} type="number" className="sap-input w-full py-1 text-center text-xs font-bold" value={item.qty || ''} onChange={e => updateItem(idx, 'qty', Number(e.target.value))} />
                             </td>
                             <td className="w-28">
-                                <input readOnly={isLocked} type="number" className="sap-input w-full py-1 text-right text-xs font-bold text-blue-600" value={item.pricePerUnit || ''} onChange={e => updateItem(idx, 'pricePerUnit', Number(e.target.value))} />
+                                {/* Price is LOCKED to the product-master sale price — not hand-editable
+                                    on the quote (prevents accidental price changes). A Free sample
+                                    zeroes it via the Sample toggle. */}
+                                <input readOnly type="number" title="Price is set from the product master — not editable here"
+                                    className="sap-input w-full py-1 text-right text-xs font-bold text-blue-600 bg-slate-50 cursor-not-allowed"
+                                    value={item.pricePerUnit || ''} />
                             </td>
                             <td className="w-28 text-right font-black text-slate-800 pr-4">
                                 {(item.amount || 0).toLocaleString()}

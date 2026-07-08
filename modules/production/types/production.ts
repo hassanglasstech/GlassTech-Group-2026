@@ -115,6 +115,11 @@ export interface Quotation {
   assignedCutter?: string;
   delayReason?: string;
   delayCategory?: 'Internal' | 'Outsourcing' | 'Client' | '';
+  // Sample tracking (Nippon): a sample sent to a client, either charged or free.
+  // Free samples ride the discount mechanism (100% → net 0) so stock still moves
+  // but revenue is 0. Kept as a flag so samples-per-client can be reported.
+  isSample?: boolean;
+  sampleType?: 'Paid' | 'Free';
   // Replacement order fields (post-delivery customer breakage)
   orderType?: 'Standard' | 'Replacement';
   originalOrderRef?: string;       // original quotation/SO ID

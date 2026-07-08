@@ -176,9 +176,16 @@ const NipponProductMaster: React.FC = () => {
 
   const handleDelete = async (id: string) => {
       if(confirm("Delete this hardware item? Stock history will be preserved but item will be hidden.")) {
-          const updated = (await AsyncSalesService.getProducts()).filter(p => p.id !== id);
-          await AsyncSalesService.saveProducts(updated);
-          await refreshData();
+          try {
+              // Real cloud+local delete. Previously this upserted the filtered array,
+              // which never removed the row from the cloud table → the product came
+              // back on the next refresh.
+              await AsyncSalesService.deleteProduct(id);
+              await refreshData();
+              toast.success('Product deleted.');
+          } catch (err) {
+              toast.error(`Delete failed: ${(err as Error)?.message || 'unknown'}`);
+          }
       }
   };
 

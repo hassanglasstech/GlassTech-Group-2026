@@ -186,6 +186,13 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                             <span className="text-slate-400 font-bold uppercase">REF NO:</span>
                             <span className="text-blue-700 font-black">{displayId}</span>
                         </div>
+                        {quote.isSample && (
+                            <div className="flex justify-end">
+                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${quote.sampleType === 'Free' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>
+                                    {quote.sampleType === 'Free' ? 'FREE SAMPLE' : 'PAID SAMPLE'}
+                                </span>
+                            </div>
+                        )}
                         <div className="flex justify-end space-x-2">
                             <span className="text-slate-400 font-bold uppercase">DATE:</span>
                             <span className="font-black text-slate-700">{quote.date}</span>
