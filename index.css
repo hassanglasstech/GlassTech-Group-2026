@@ -199,8 +199,16 @@ input[type=number] { -moz-appearance: textfield; }
 .sap-table tbody tr:hover { background: #f8fafc; }
 
 /* Dense variant — packs the quotation-editor grid so ~10 rows fit before scroll. */
-.sap-table.sap-table-dense thead th { padding: 0.35rem 0.5rem; }
-.sap-table.sap-table-dense tbody td { padding: 0.2rem 0.5rem; }
+.sap-table.sap-table-dense thead th { padding: 0.3rem 0.5rem; }
+.sap-table.sap-table-dense tbody td { padding: 0.15rem 0.5rem; }
+/* Kill the .sap-input min-height:44px + 0.75rem padding that made each grid row
+   ~50px tall. Higher specificity (0,2,0) so it wins regardless of load order. */
+.sap-table.sap-table-dense .sap-input {
+  min-height: 0;
+  padding-top: 0.15rem;
+  padding-bottom: 0.15rem;
+  line-height: 1.15;
+}
 
 /* Mobile table: smaller padding */
 @media (max-width: 640px) {
