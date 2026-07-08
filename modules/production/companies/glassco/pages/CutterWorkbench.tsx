@@ -155,6 +155,16 @@ const CutterWorkbench: React.FC = () => {
   // this; the audit actor (p_changed_by) stays the real logged-in user.
   const cutterName = isPrivileged && actAsCutter ? actAsCutter : actorName;
 
+  // Cutter identity is cross-source: a job's assignedCutter is the HR employee
+  // name (employees.personal.name) while cutterName is the auth profile.fullName
+  // / email. Normalize (trim + case-insensitive) so a trivial spelling/whitespace
+  // difference doesn't hide a cutter's own queue. Empty never matches a name.
+  const sameName = (a?: string, b?: string): boolean => {
+    const x = (a || '').trim().toLowerCase();
+    const y = (b || '').trim().toLowerCase();
+    return x !== '' && x === y;
+  };
+
   // ── State ────────────────────────────────────────────────────────────
   const [lang, setLang]   = useState<Lang>(() => (localStorage.getItem('cutter_lang') as Lang) || 'en');
   const [tick, setTick]   = useState(0);                           // re-render every 5 s for duration + undo countdown
@@ -281,16 +291,16 @@ const CutterWorkbench: React.FC = () => {
   const cutQueue = useMemo(() => {
     const refs = new Set<string>();
     jobs.forEach(j => {
-      if (j.assignedCutter && j.assignedCutter === cutterName) {
+      if (sameName(j.assignedCutter, cutterName)) {
         if (j.orderNo) refs.add(j.orderNo);
         if (j.id) refs.add(j.id);
       }
     });
     return pieces.filter(p => {
-      if (p.status === 'QC-Failed' && p.fault?.disposal === 'Recut') return p.assignedCutter === cutterName;
+      if (p.status === 'QC-Failed' && p.fault?.disposal === 'Recut') return sameName(p.assignedCutter, cutterName);
       if (p.status !== 'Pending-Cut') return false;
-      if (p.assignedCutter) return p.assignedCutter === cutterName;   // explicit per-piece
-      if (p.assignedCutter === '') return false;                       // explicit pool
+      if (p.assignedCutter === '') return false;                       // explicit pool (recut cleared)
+      if (p.assignedCutter) return sameName(p.assignedCutter, cutterName);   // explicit per-piece
       return refs.has(p.orderId);                                      // inherit job-level
     });
   }, [jobs, pieces, cutterName]);
@@ -308,7 +318,7 @@ const CutterWorkbench: React.FC = () => {
   const myCutsToday = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
     return pieces
-      .filter(p => p.cutBy === cutterName && (p.cutAt || '').startsWith(today))
+      .filter(p => sameName(p.cutBy, cutterName) && (p.cutAt || '').startsWith(today))
       .sort((a, b) => (b.cutAt || '').localeCompare(a.cutAt || ''))
       .slice(0, 20);
   }, [pieces, cutterName]);
@@ -639,7 +649,7 @@ const CutterWorkbench: React.FC = () => {
   // ── Render ────────────────────────────────────────────────────────────
   // Mobile-first; all interactive surfaces ≥ 60×60 px; font ≥ 16 px.
   return (
-    <div className="min-h-screen bg-slate-50 pb-32" style={{ fontSize: 16 }}>
+    <div className="min-h-screen bg-slate-50 pb-32 max-w-3xl md:max-w-4xl mx-auto md:border-x md:border-slate-200 md:shadow-sm" style={{ fontSize: 16 }}>
       {/* Sticky header */}
       <header className="sticky top-0 z-30 bg-slate-900 text-white px-4 py-3 shadow">
         <div className="flex items-center justify-between gap-2">
@@ -779,7 +789,11 @@ const CutterWorkbench: React.FC = () => {
             <span className="text-2xs font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{cutQueue.length} pieces</span>
           </div>
           {cutQueue.length === 0 ? (
-            <p className="text-label text-slate-400 font-bold py-3 text-center">No pieces assigned to cut. Jobs are assigned to you from the Production module.</p>
+            <p className="text-label text-slate-400 font-bold py-3 text-center">
+              {isPrivileged && !actAsCutter
+                ? "Pick a cutter in 'Act as cutter' above to see the jobs assigned to them."
+                : 'No pieces assigned to cut. Jobs are assigned to you from the Production module (Job Orders).'}
+            </p>
           ) : (
             <div className="space-y-4 max-h-[55vh] overflow-y-auto">
               {cutQueueByJob.map(([orderId, list]) => {
