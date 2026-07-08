@@ -267,7 +267,7 @@ const NipponQuotationManager: React.FC = () => {
             
             <div className="flex-1 overflow-hidden p-3 bg-slate-50/50 flex flex-col space-y-2">
               {/* Header Fields — tighter padding so items table gets more room */}
-              <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0">
+              <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-2 shrink-0">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase text-slate-400">Client</label>
                   <select disabled={isLocked} className="sap-input w-full font-bold" value={formData.clientId} onChange={e => setFormData({...formData, clientId: e.target.value})}>
@@ -297,7 +297,7 @@ const NipponQuotationManager: React.FC = () => {
               </div>
 
               {/* Sample toggle — record a sample given to a client (charged or free) */}
-              <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3 flex-wrap shrink-0">
+              <div className="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3 flex-wrap shrink-0">
                 <label className="flex items-center gap-2 text-[11px] font-black uppercase text-slate-600 cursor-pointer">
                   <input type="checkbox" disabled={isLocked} checked={!!formData.isSample}
                     onChange={e => {
@@ -335,7 +335,7 @@ const NipponQuotationManager: React.FC = () => {
               {/* Items Grid */}
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
                 <div className="flex-1 overflow-auto">
-                  <table className="w-full min-w-[760px] text-left sap-table relative">
+                  <table className="w-full min-w-[760px] text-left sap-table sap-table-dense relative">
                     <thead className="sticky top-0 bg-white z-10 shadow-sm">
                     <tr>
                       <th className="w-10 text-center">#</th>
@@ -400,14 +400,14 @@ const NipponQuotationManager: React.FC = () => {
                         ) : (
                           <>
                             <td className="w-32">
-                                <input readOnly={isLocked} type="text" placeholder="Code" className="sap-input w-full py-1 text-xs font-mono font-bold text-blue-600 uppercase" value={item.locationCode || ''} onChange={e => updateItem(idx, 'locationCode', e.target.value)} />
+                                <input readOnly={isLocked} type="text" placeholder="Code" className="sap-input w-full py-0.5 text-xs font-mono font-bold text-blue-600 uppercase" value={item.locationCode || ''} onChange={e => updateItem(idx, 'locationCode', e.target.value)} />
                             </td>
                             <td className="relative w-[300px]">
-                               <textarea 
-                                 readOnly={isLocked} 
-                                 placeholder="Search Product..." 
-                                 className="sap-input w-full py-1 text-xs font-bold uppercase resize-none" 
-                                 rows={2}
+                               <textarea
+                                 readOnly={isLocked}
+                                 placeholder="Search Product..."
+                                 className="sap-input w-full py-0.5 text-xs font-bold uppercase resize-none leading-tight"
+                                 rows={1}
                                  value={item.description} 
                                  onChange={e => {
                                    updateItem(idx, 'description', e.target.value);
@@ -483,20 +483,20 @@ const NipponQuotationManager: React.FC = () => {
                                })()}
                             </td>
                             <td className="w-32">
-                                <input readOnly={isLocked} type="text" placeholder="Brand" className="sap-input w-full py-1 text-xs font-bold uppercase" value={item.glazingSpecs || ''} onChange={e => updateItem(idx, 'glazingSpecs', e.target.value)} />
+                                <input readOnly={isLocked} type="text" placeholder="Brand" className="sap-input w-full py-0.5 text-xs font-bold uppercase" value={item.glazingSpecs || ''} onChange={e => updateItem(idx, 'glazingSpecs', e.target.value)} />
                             </td>
                             <td className="w-20">
-                                <input readOnly={isLocked} type="text" placeholder="Unit" className="sap-input w-full py-1 text-center text-xs font-bold uppercase" value={item.glassSize || ''} onChange={e => updateItem(idx, 'glassSize', e.target.value)} />
+                                <input readOnly={isLocked} type="text" placeholder="Unit" className="sap-input w-full py-0.5 text-center text-xs font-bold uppercase" value={item.glassSize || ''} onChange={e => updateItem(idx, 'glassSize', e.target.value)} />
                             </td>
                             <td className="w-20">
-                                <input readOnly={isLocked} type="number" className="sap-input w-full py-1 text-center text-xs font-bold" value={item.qty || ''} onChange={e => updateItem(idx, 'qty', Number(e.target.value))} />
+                                <input readOnly={isLocked} type="number" className="sap-input w-full py-0.5 text-center text-xs font-bold" value={item.qty || ''} onChange={e => updateItem(idx, 'qty', Number(e.target.value))} />
                             </td>
                             <td className="w-28">
                                 {/* Price is LOCKED to the product-master sale price — not hand-editable
                                     on the quote (prevents accidental price changes). A Free sample
                                     zeroes it via the Sample toggle. */}
                                 <input readOnly type="number" title="Price is set from the product master — not editable here"
-                                    className="sap-input w-full py-1 text-right text-xs font-bold text-blue-600 bg-slate-50 cursor-not-allowed"
+                                    className="sap-input w-full py-0.5 text-right text-xs font-bold text-blue-600 bg-slate-50 cursor-not-allowed"
                                     value={item.pricePerUnit || ''} />
                             </td>
                             <td className="w-28 text-right font-black text-slate-800 pr-4">
