@@ -28,7 +28,7 @@ import {
   UserPlus, Shield, Users, RefreshCw, Search, X, Check,
   UserCheck, UserX, Key, LogOut, Clock, Smartphone,
   AlertCircle, CheckCircle2, Loader2, Eye, EyeOff,
-  Copy, Mail, ChevronDown, Activity, Trash2
+  Copy, Mail, ChevronDown, Activity, Trash2, Edit2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -171,8 +171,12 @@ export default function UserAccessManager() {
   const [showPIN, setShowPIN]           = useState(false);
   const [empSearch, setEmpSearch]       = useState('');
 
-  // Edit modal
-  const [editUser, setEditUser]         = useState<ManagedUser | null>(null);
+  // Edit modal — change an existing user's role / companies / modules / hours.
+  const [editUser, setEditUser]             = useState<ManagedUser | null>(null);
+  const [editRole, setEditRole]             = useState<string>('');
+  const [editCompanies, setEditCompanies]   = useState<string[]>([]);
+  const [editModules, setEditModules]       = useState<string[]>([]);
+  const [editTimeRestrict, setEditTimeRestrict] = useState(false);
 
   // ── Invite-by-email modal (Quick Add — no HR employee required) ───
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -635,6 +639,68 @@ export default function UserAccessManager() {
   const toggleInList = (list: string[], val: string): string[] =>
     list.includes(val) ? list.filter(x => x !== val) : [...list, val];
 
+  // ── Edit an existing user's access (role / companies / modules / hours) ─
+  const openEditUser = (u: ManagedUser) => {
+    setEditUser(u);
+    setEditRole(u.role);
+    setEditCompanies(u.allowedCompanies || []);
+    setEditModules(u.allowedModules || []);
+    setEditTimeRestrict(u.timeRestricted);
+  };
+
+  // Picking a role in the edit modal resets companies to the role's defaults
+  // (mirrors invite). Modules are left as-is so the admin can fine-tune.
+  const applyEditRolePreset = (role: string) => {
+    setEditRole(role);
+    const d = ROLE_DEFAULTS[role];
+    if (d) setEditCompanies(d.companies);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editUser) return;
+    if (!editRole) { toast.error('Role required'); return; }
+    if (editCompanies.length === 0) { toast.error('At least one company required'); return; }
+    setBusy(true);
+    try {
+      // Role / companies / modules / hours all live on the profile row — no auth
+      // change needed. Update by id; .select() confirms RLS actually let it write.
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update({
+          role: editRole,
+          allowed_companies: editCompanies,
+          allowed_modules: editModules,
+          time_restricted: editTimeRestrict,
+        })
+        .eq('id', editUser.id)
+        .select();
+
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        toast.error('No rows updated — check RLS policy (super_admin only).');
+        return;
+      }
+
+      try {
+        await supabase.from('access_logs').insert({
+          user_id: me?.id,
+          email: me?.email,
+          action: `edit_access:${editUser.email}:${editRole}`,
+          user_agent: navigator.userAgent,
+        });
+      } catch { /* table may not exist */ }
+
+      Logger.action('UserAccess', 'EDIT', `Access updated: ${editUser.email} → ${editRole}`);
+      toast.success(`${editUser.fullName} updated. User must sign out / back in for it to take effect.`);
+      setEditUser(null);
+      await loadUsers();
+    } catch (err: any) {
+      Logger.error('UserAccess', 'EDIT_FAILED', err);
+      toast.error(`Update failed: ${err?.message || err}`);
+    }
+    setBusy(false);
+  };
+
   // Strong, human-readable password — 12 chars, mixed-case + digits.
   // Avoids ambiguous chars (0/O, 1/l/I) so WhatsApp / SMS recipients can
   // type it without confusion.
@@ -929,6 +995,11 @@ export default function UserAccessManager() {
 
                     {u.status !== 'revoked' && (
                       <>
+                        <button onClick={() => openEditUser(u)}
+                          title="Edit role / access"
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                          <Edit2 size={14} />
+                        </button>
                         <button onClick={() => openLoginHistory(u)}
                           title="View login history"
                           className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
@@ -1343,6 +1414,122 @@ export default function UserAccessManager() {
                   ? <><Loader2 size={14} className="animate-spin" /> Creating...</>
                   : <><UserPlus size={14} /> Create User</>
                 }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          EDIT USER MODAL — change an existing user's role / companies /
+          modules / office-hours. Profile-only update (no auth change).
+          ═══════════════════════════════════════════════════════════════ */}
+      {editUser && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-start justify-center p-4 z-[600] overflow-y-auto">
+          <div className="bg-white w-full max-w-lg my-6 rounded-2xl shadow-2xl border border-slate-200 flex flex-col">
+            {/* Header */}
+            <div className="bg-indigo-700 text-white px-6 py-5 rounded-t-2xl flex justify-between items-center">
+              <div>
+                <h3 className="font-black uppercase tracking-tight text-base flex items-center gap-2">
+                  <Shield size={18} /> Edit Access
+                </h3>
+                <p className="text-[10px] text-indigo-200 mt-0.5 font-bold">{editUser.fullName} · {editUser.email}</p>
+              </div>
+              <button onClick={() => setEditUser(null)} className="hover:bg-white/10 p-2 rounded-lg transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-5 overflow-y-auto max-h-[75vh]">
+              {/* Role */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Role <span className="text-rose-500">*</span></label>
+                <div className="grid grid-cols-1 gap-1.5 max-h-56 overflow-y-auto border border-slate-100 rounded-xl p-2">
+                  {ROLES_LIST.map(r => (
+                    <button key={r.value}
+                      onClick={() => applyEditRolePreset(r.value)}
+                      className={`flex items-center justify-between px-3 py-2 rounded-lg border text-left transition-all ${editRole === r.value ? 'bg-indigo-50 border-indigo-400' : 'bg-white border-slate-200 hover:border-indigo-200'}`}>
+                      <div>
+                        <p className={`font-black text-xs uppercase ${editRole === r.value ? 'text-indigo-800' : 'text-slate-700'}`}>{r.label}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{r.desc}</p>
+                      </div>
+                      {editRole === r.value && <CheckCircle2 size={14} className="text-indigo-600 shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Companies */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Allowed Companies <span className="text-rose-500">*</span></label>
+                <div className="flex flex-wrap gap-2">
+                  {['GTK', 'GTI', 'Glassco', 'Nippon', 'Factory'].map(c => (
+                    <button key={c}
+                      onClick={() => setEditCompanies(prev => toggleInList(prev, c))}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${editCompanies.includes(c) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'}`}>
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Modules */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Module Access</label>
+                  <span className="text-[10px] font-bold text-rose-600">
+                    {editModules.length === 0 ? '⚠ NO MODULES (Dashboard only)' : `${editModules.length} modules`}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400">Sirf woh modules tick karen jo is user ko chahiye. Empty = sirf Dashboard.</p>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
+                  {[
+                    { key: 'sales',           label: 'Sales' },
+                    { key: 'hr',              label: 'HR / HCM' },
+                    { key: 'inventory',       label: 'Inventory' },
+                    { key: 'requisitions',    label: 'Procurement' },
+                    { key: 'production',      label: 'Production' },
+                    { key: 'accounts',        label: 'Finance / FICO' },
+                    { key: 'logistics',       label: 'Logistics' },
+                    { key: 'vendors',         label: 'Vendors' },
+                    { key: 'projects',        label: 'Projects' },
+                    { key: 'hub',             label: 'Supply Hub' },
+                    { key: 'md-dashboard',    label: 'MD Dashboard' },
+                    { key: 'factory-incharge',label: 'Factory Desk' },
+                    { key: 'admin',           label: 'Admin / Basis' },
+                  ].map(m => (
+                    <button key={m.key}
+                      onClick={() => setEditModules(prev => toggleInList(prev, m.key))}
+                      className={`text-left px-3 py-2 rounded-lg text-[11px] font-bold border transition-all ${editModules.includes(m.key) ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Time restriction */}
+              <div className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+                <div>
+                  <p className="text-xs font-black text-slate-800">Office Hours Only</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Mon–Sat 9am–6pm PKT only</p>
+                </div>
+                <button onClick={() => setEditTimeRestrict(v => !v)}
+                  className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${editTimeRestrict ? 'bg-amber-500' : 'bg-slate-300'}`}>
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${editTimeRestrict ? 'translate-x-5' : ''}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t bg-slate-50 rounded-b-2xl flex justify-end gap-3">
+              <button onClick={() => setEditUser(null)}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleSaveEdit} disabled={busy}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest flex items-center gap-2 transition-all shadow-md disabled:opacity-50">
+                {busy ? <><Loader2 size={14} className="animate-spin" /><span>Saving...</span></> : <><Check size={14} /><span>Save Changes</span></>}
               </button>
             </div>
           </div>
