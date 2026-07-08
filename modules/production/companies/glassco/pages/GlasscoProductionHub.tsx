@@ -18,7 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import {
   ScanLine, ShieldCheck, Truck, Clock, BarChart3, AlertTriangle, ArrowRight, ClipboardList,
-  Sparkles, Flame,
+  Sparkles, Flame, Hammer, Drill,
 } from 'lucide-react';
 
 type Tone = 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'neutral';
@@ -65,6 +65,15 @@ const SECTIONS: ModuleSection[] = [
       { key: 'qc',        title: 'QC Workbench',       desc: 'Quality control — pass / fail pieces',      path: '/qc',                         icon: <ShieldCheck size={20} />, tone: 'success' },
       { key: 'tempering', title: 'Tempering Dispatch', desc: 'Send QC-passed glass out to vendors',       path: '/production/tempering-dispatch', icon: <Flame size={20} />,       tone: 'warning' },
       { key: 'dispatch',  title: 'Dispatch',           desc: 'Ready-to-dispatch pieces & loading',        path: '/dispatch',                   icon: <Truck size={20} />,       tone: 'info' },
+    ],
+  },
+  {
+    title: 'Operator Stations',
+    blurb: 'One screen per worker (magic-link them straight here)',
+    cards: [
+      { key: 'st-polish',    title: 'Polish Station',      desc: 'Polishing operator — mark polish done per piece', path: '/station/polish',    icon: <Sparkles size={20} />, tone: 'primary' },
+      { key: 'st-grinding',  title: 'Grinding Station',    desc: 'Rough-dhar / R-D operator — mark grinding done',   path: '/station/grinding',  icon: <Hammer size={20} />,   tone: 'warning' },
+      { key: 'st-holenotch', title: 'Hole & Notch Station', desc: 'Hole + notch operator — mark each done',           path: '/station/holenotch', icon: <Drill size={20} />,    tone: 'danger' },
     ],
   },
   {

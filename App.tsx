@@ -88,6 +88,8 @@ const TemperingDispatchOut = React.lazy(() => import('./modules/production/pages
 const InwardReceivePage = React.lazy(() => import('./modules/production/pages/InwardReceivePage'));
 // Service Floor — routed module home for per-piece service marking (revives ServiceFloorView)
 const ServiceFloorPage = React.lazy(() => import('./modules/production/companies/glassco/pages/ServiceFloorPage'));
+// Per-operator service station screens (polish / grinding / hole-notch) — mobile-first, magic-linkable
+const ServiceStationScreen = React.lazy(() => import('./modules/production/companies/glassco/pages/ServiceStationScreen'));
 // Sprint 21 — Global UX foundations
 const CommandPalette    = React.lazy(() => import('./modules/shared/components/CommandPalette'));
 const Breadcrumbs       = React.lazy(() => import('./modules/shared/components/Breadcrumbs'));
@@ -845,6 +847,10 @@ const App: React.FC = () => {
                   <Route path="/production/inward" element={<ModuleErrorBoundary moduleName="Inward / Receive"><InwardReceivePage /></ModuleErrorBoundary>} />
                   {/* Service Floor — per-piece service marking (Polishing/Grinding/Notching/Holes) */}
                   <Route path="/production/service-floor" element={<ModuleErrorBoundary moduleName="Service Floor"><ServiceFloorPage /></ModuleErrorBoundary>} />
+                  {/* Per-operator service station screens (mobile-first, magic-linkable) */}
+                  <Route path="/station/polish"    element={<ModuleErrorBoundary moduleName="Polish Station"><ServiceStationScreen station="polish" /></ModuleErrorBoundary>} />
+                  <Route path="/station/grinding"  element={<ModuleErrorBoundary moduleName="Grinding Station"><ServiceStationScreen station="grinding" /></ModuleErrorBoundary>} />
+                  <Route path="/station/holenotch" element={<ModuleErrorBoundary moduleName="Hole & Notch Station"><ServiceStationScreen station="holenotch" /></ModuleErrorBoundary>} />
                   <Route path="*"              element={<Navigate to="/" replace />} />
                 </Routes>
                 </RouteAccessGuard>
