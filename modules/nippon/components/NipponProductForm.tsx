@@ -3,32 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { Product, StoreItem, Vendor } from '../../shared/types';
 import { SalesService } from '../../sales/services/salesService';
 import { toast } from 'sonner';
-import { supabase } from '@/src/services/supabaseClient';
 import { X, Box, Tag, Building2, Hash, Layout, ListFilter, UploadCloud } from 'lucide-react';
-
-const PRODUCT_IMAGE_BUCKET = 'product-images';
-
-// Bucket filename convention — matches nipponImageUrl()/<ProductImage> so the
-// Material Master, catalogue and prints all resolve it by code automatically:
-//   product-images/NIP-KL-<code>.png
-function bucketImageName(code: string): string {
-  const clean = String(code || '').trim().replace(/^NIP-KL-/i, '').replace(/^NIP-/i, '');
-  return `NIP-KL-${clean}.png`;
-}
-
-// Upload a base64 data-URL to the product-images bucket, named NIP-KL-<code>.png.
-// Returns the public URL. Storing a short URL (not a ~50KB base64 blob) in
-// products.image_url keeps the row small enough to persist on batch upsert.
-async function uploadProductImage(code: string, dataUrl: string): Promise<string> {
-  const blob = await (await fetch(dataUrl)).blob();
-  const path = bucketImageName(code);
-  const { error } = await supabase.storage
-    .from(PRODUCT_IMAGE_BUCKET)
-    .upload(path, blob, { upsert: true, contentType: 'image/png' });
-  if (error) throw error;
-  const { data } = supabase.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(path);
-  return data.publicUrl;
-}
+import { uploadProductImage, deleteProductImage } from '@/modules/sales/companies/nippon/nipponProductImageService';
 
 interface NipponProductFormProps {
   isOpen: boolean;
@@ -201,15 +177,20 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
       // so the Master / catalogue / prints resolve it by code automatically.
       // Keep only the public URL on the product. Already-uploaded images (http
       // URL) pass through untouched.
-      const imgCode = formData.modelNo || formData.internalId || prodId;
+      // Upload a freshly-picked image (base64 data-URL) to the bucket named by the
+      // PRODUCT ID, so it is traceable by code and resolves everywhere (Master /
+      // catalogue / prints via <ProductImage id=…>). The service deletes any prior
+      // file for this id first, so replace works cleanly. Already-uploaded http(s)
+      // URLs pass through untouched.
       let finalImageUrl = formData.image;
       if (formData.image && formData.image.startsWith('data:')) {
-        try {
-          finalImageUrl = await uploadProductImage(imgCode, formData.image);
-        } catch (err) {
+        const blob = await (await fetch(formData.image)).blob();
+        const { url, error } = await uploadProductImage(prodId, blob);
+        if (error || !url) {
           setIsSaving(false);
-          return toast.error(`Image upload failed: ${(err as Error)?.message || 'unknown'}. Product not saved.`);
+          return toast.error(`Image upload failed: ${error || 'unknown'}. Product not saved.`);
         }
+        finalImageUrl = url;
       }
 
       const newProduct: Product = {
@@ -293,8 +274,16 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                         <h4 className="text-xs font-black uppercase text-slate-700">Product Image</h4>
                         <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Upload a clear photo for the catalog and invoices.</p>
                         {formData.image && (
-                            <button 
-                                onClick={() => setFormData({ ...formData, image: '' })}
+                            <button
+                                onClick={async () => {
+                                    setFormData(prev => ({ ...prev, image: '' }));
+                                    // Editing an existing product → also delete the file from the
+                                    // bucket so it's genuinely gone (not just cleared from the form).
+                                    if (editingProduct?.id) {
+                                        const { error } = await deleteProductImage(editingProduct.id);
+                                        if (error) toast.error(`Delete failed: ${error}`); else toast.success('Image deleted');
+                                    }
+                                }}
                                 className="text-[10px] font-black text-rose-500 uppercase mt-2 hover:underline"
                             >
                                 Remove Image

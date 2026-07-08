@@ -643,7 +643,7 @@ const NipponProductMaster: React.FC = () => {
                                 <td className="px-6 py-3 font-mono font-bold text-slate-400 uppercase">{p.profileCode || '-'}</td>
                                 <td className="py-3">
                                     <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center">
-                                        <ProductImage code={p.modelNo || p.profileCode} url={p.imageUrl} alt={p.description} className="w-full h-full object-cover" iconSize={16} />
+                                        <ProductImage id={p.id} code={p.modelNo || p.profileCode} url={p.imageUrl} alt={p.description} className="w-full h-full object-cover" iconSize={16} />
                                     </div>
                                 </td>
                                 <td className="font-black text-slate-500 uppercase">

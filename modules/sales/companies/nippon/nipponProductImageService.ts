@@ -15,8 +15,9 @@ import { Logger } from '@/modules/shared/services/logger';
 const BUCKET = 'product-images';
 const EXTS = ['png', 'jpg', 'jpeg', 'webp'] as const;
 
-const extOf = (file: File): string => {
-  const fromName = (file.name.split('.').pop() || '').toLowerCase();
+const extOf = (file: File | Blob): string => {
+  const name = 'name' in file ? (file as File).name : '';
+  const fromName = (name.split('.').pop() || '').toLowerCase();
   if (fromName && (EXTS as readonly string[]).includes(fromName)) return fromName === 'jpeg' ? 'jpg' : fromName;
   const fromType = (file.type.split('/').pop() || '').toLowerCase();
   return fromType === 'jpeg' ? 'jpg' : (EXTS as readonly string[]).includes(fromType) ? fromType : 'png';
@@ -30,12 +31,12 @@ const extOf = (file: File): string => {
  */
 export async function uploadProductImage(
   productId: string,
-  file: File,
+  file: File | Blob,
 ): Promise<{ url: string | null; error: string | null }> {
   const id = (productId || '').trim();
   if (!id) return { url: null, error: 'Missing product id' };
   if (!file) return { url: null, error: 'No file' };
-  if (!file.type.startsWith('image/')) return { url: null, error: 'File is not an image' };
+  if (file.type && !file.type.startsWith('image/')) return { url: null, error: 'File is not an image' };
   if (file.size > 5 * 1024 * 1024) return { url: null, error: 'Image too large (max 5 MB)' };
 
   const ext = extOf(file);
