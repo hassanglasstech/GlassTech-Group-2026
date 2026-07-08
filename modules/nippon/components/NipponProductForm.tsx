@@ -5,6 +5,20 @@ import { SalesService } from '../../sales/services/salesService';
 import { toast } from 'sonner';
 import { X, Box, Tag, Building2, Hash, Layout, ListFilter, UploadCloud } from 'lucide-react';
 import { uploadProductImage, deleteProductImage } from '@/modules/sales/companies/nippon/nipponProductImageService';
+import { safeParse, safeSave } from '../../shared/services/utils';
+
+// Unit options. Defaults ship with the app; user-added units are persisted to
+// localStorage so they show in the dropdown on every future product.
+const DEFAULT_UNITS: { value: string; label: string }[] = [
+  { value: 'PCS', label: 'Piece (PCS)' },
+  { value: 'Set', label: 'Set' },
+  { value: 'Pair', label: 'Pair' },
+  { value: 'Box', label: 'Box' },
+  { value: 'Roll', label: 'Roll' },
+  { value: 'Kg', label: 'Kg' },
+];
+const DEFAULT_UNIT_VALUES = DEFAULT_UNITS.map(u => u.value);
+const CUSTOM_UNITS_KEY = 'nippon_custom_units';
 
 interface NipponProductFormProps {
   isOpen: boolean;
@@ -56,6 +70,27 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
   const [isSetModalOpen, setIsSetModalOpen] = useState(false);
   const [newComponent, setNewComponent] = useState({ description: '', unit: 'PCS', qtyPerSet: 1 });
   const [isSaving, setIsSaving] = useState(false);
+  const [customUnits, setCustomUnits] = useState<string[]>(() => {
+    const stored = safeParse(CUSTOM_UNITS_KEY, '[]');
+    return Array.isArray(stored) ? (stored as string[]).filter(u => typeof u === 'string') : [];
+  });
+
+  // Unit dropdown change: the "+ Add new unit…" sentinel prompts for a custom
+  // unit, persists it, and selects it. Anything else selects normally.
+  const handleUnitChange = (val: string): void => {
+    if (val !== '__ADD_NEW__') {
+      setFormData(prev => ({ ...prev, unit: val }));
+      return;
+    }
+    const custom = (window.prompt('Enter new unit (e.g. Meter, Feet, Dozen, Bag):') || '').trim();
+    if (!custom) return; // cancelled / blank → keep current unit
+    setFormData(prev => ({ ...prev, unit: custom }));
+    if (!DEFAULT_UNIT_VALUES.includes(custom) && !customUnits.includes(custom)) {
+      const next = [...customUnits, custom];
+      setCustomUnits(next);
+      safeSave(CUSTOM_UNITS_KEY, next);
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -437,13 +472,14 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
 
                 <div className="space-y-1">
                     <label className="text-[10px] font-bold uppercase text-slate-400">Unit</label>
-                    <select className="sap-input w-full font-bold" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})}>
-                        <option value="PCS">Piece (PCS)</option>
-                        <option value="Set">Set</option>
-                        <option value="Pair">Pair</option>
-                        <option value="Box">Box</option>
-                        <option value="Roll">Roll</option>
-                        <option value="Kg">Kg</option>
+                    <select className="sap-input w-full font-bold" value={formData.unit} onChange={e => handleUnitChange(e.target.value)}>
+                        {DEFAULT_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+                        {/* user-added units + the current unit if it isn't a known one */}
+                        {[
+                          ...customUnits.filter(u => !DEFAULT_UNIT_VALUES.includes(u)),
+                          ...(formData.unit && !DEFAULT_UNIT_VALUES.includes(formData.unit) && !customUnits.includes(formData.unit) ? [formData.unit] : []),
+                        ].map(u => <option key={u} value={u}>{u}</option>)}
+                        <option value="__ADD_NEW__">+ Add new unit…</option>
                     </select>
                 </div>
 
