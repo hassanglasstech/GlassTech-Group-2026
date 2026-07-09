@@ -836,13 +836,22 @@ const CutterWorkbench: React.FC = () => {
               </div>
             </div>
           )}
-          {cutQueue.length === 0 ? (
-            <p className="text-label text-slate-400 font-bold py-3 text-center">
-              {isPrivileged && !actAsCutter
-                ? "Pick a cutter in 'Act as cutter' above to see the jobs assigned to them."
-                : 'No pieces assigned to cut. Jobs are assigned to you from the Production module (Job Orders).'}
-            </p>
-          ) : (
+          {cutQueue.length === 0 ? (() => {
+            const totalPC = pieces.filter(p => p.status === 'Pending-Cut').length;
+            const assignedOther = pieces.filter(p => p.status === 'Pending-Cut' && p.assignedCutter && !sameName(p.assignedCutter, cutterName)).length;
+            return (
+              <div className="py-4 text-center space-y-1.5">
+                {isPrivileged && !actAsCutter ? (
+                  <p className="text-label text-slate-500 font-bold">Pick a cutter in &ldquo;Act as cutter&rdquo; above to see their queue.</p>
+                ) : totalPC === 0 ? (
+                  <p className="text-label text-slate-400 font-bold">No orders are pending cut yet. Approve an order (that creates the cut pieces), then the <span className="text-slate-600">Cutting Supervisor</span> assigns them.</p>
+                ) : (
+                  <p className="text-label text-slate-400 font-bold">Nothing assigned to you. <span className="text-slate-600 font-black">{totalPC}</span> piece(s) are pending cut{assignedOther > 0 ? ` (${assignedOther} assigned to others)` : ''} — the <span className="text-slate-600">Cutting Supervisor</span> assigns cutting work.</p>
+                )}
+                <p className="text-2xs text-slate-300 font-bold">data loaded — pieces: {pieces.length} · orders: {jobs.length}{cutterName ? ` · you: ${cutterName}` : ''}</p>
+              </div>
+            );
+          })() : (
             <div className="space-y-4 max-h-[55vh] overflow-y-auto">
               {cutQueueByJob.map(([orderId, list]) => {
                 const job = jobs.find(j => j.orderNo === orderId || j.id === orderId);
