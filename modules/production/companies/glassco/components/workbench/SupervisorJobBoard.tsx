@@ -15,8 +15,9 @@
  * the parent runs through ProductionService.reassignRemainingPieces.
  */
 import React, { useMemo, useState } from 'react';
-import { ProductionPiece } from '@/modules/shared/types';
+import { ProductionPiece, QuotationItem } from '@/modules/shared/types';
 import { EmptyState } from '@/modules/shared/components/EmptyState';
+import { CutPlanTab } from '@/modules/production/companies/glassco/components/workbench/CutPlanTab';
 import { Layers, Image as ImageIcon, Grid3x3, Clock, Scissors, ChevronRight, ArrowLeft, Loader2 } from 'lucide-react';
 
 // Decoupled shape of a job order (really a Glassco quotation).
@@ -203,10 +204,10 @@ export const SupervisorJobBoard: React.FC<Props> = ({ pieces, jobs, clientName, 
               </div>
         )}
 
-        {/* Cut Plan tab — Phase D wires binPacking + CuttingDiagram here */}
+        {/* Cut Plan tab — thickness + sheet picker + optimised diagram + sheets required */}
         {tab === 'plan' && (
-          <div className="bg-white rounded-card border-2 border-dashed border-slate-200 py-8">
-            <EmptyState icon={<Scissors size={22} />} title="Cut plan — coming next" description="Select a sheet size (material master) → optimised cutting diagram + sheets required. Wiring the existing binPacking engine." compact />
+          <div className="bg-white rounded-card border-2 border-slate-200 shadow-sm p-4">
+            <CutPlanTab items={(job?.items || []) as unknown as QuotationItem[]} />
           </div>
         )}
       </div>
