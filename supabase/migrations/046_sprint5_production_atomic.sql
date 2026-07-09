@@ -179,7 +179,7 @@ BEGIN
      SET data       = v_new_data,
          status     = p_new_status,
          updated_at = v_now,
-         last_updated = v_now_iso
+         last_updated = v_now          -- TIMESTAMPTZ column takes the TIMESTAMPTZ value (see 094)
    WHERE id = p_piece_id;
 
   RETURN jsonb_build_object(
@@ -190,8 +190,8 @@ BEGIN
     'hold_from', v_new_data->>'holdFrom'
   );
 EXCEPTION
-  -- last_updated column may not exist on older deployments — retry without it.
-  WHEN undefined_column THEN
+  -- last_updated may not exist (older deploy) OR be a divergent type — retry without it.
+  WHEN undefined_column OR datatype_mismatch THEN
     UPDATE production_pieces
        SET data       = v_new_data,
            status     = p_new_status,
