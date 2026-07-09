@@ -399,13 +399,18 @@ export const ProductionService = {
     }
     bgSaveToIDB('productionPieces', data);
     // Push to Supabase in background
-    // NOTE: cost_center_id is intentionally NOT sent — the LIVE production_pieces
-    // table never got that column (Migration 018 diverged on this instance), so
-    // including it made EVERY upsert 400 ("Could not find the 'cost_center_id'
-    // column") → pieces never synced to the cloud + repeated console warnings.
-    // costCenterId still persists in localStorage (safeSave above) for local cost
-    // attribution; to sync it to the cloud, add the column via a migration and
-    // restore the field in the mapper below.
+    // NOTE: cost_center_id, sqft, and service_log are intentionally NOT sent —
+    // the LIVE production_pieces table never got those columns (the schema
+    // diverged from the repo migrations on this instance). Sending ANY of them
+    // makes the WHOLE upsert 400 ("Could not find the 'service_log' column of
+    // 'production_pieces' in the schema cache") → the entire batch is rejected,
+    // so pieces created by the approve flow / cutter cut / dispatch / QC never
+    // reach the cloud (only rows written via generatePiecesForOrders, which
+    // already used this minimal set, ever synced). The column set below is the
+    // exact one that generatePiecesForOrders (line ~234) writes and is proven
+    // to upsert cleanly. costCenterId / sqft / serviceLog still persist in
+    // localStorage (safeSave above); to sync any of them to the cloud, add the
+    // column via a migration and restore the field in the mapper below.
     // production_pieces has a `company` column (used by every
     // company-filtered read like getProductionPiecesPage + strict-RLS WITH
     // CHECK), but the upsert row never set it — so rows either FAILED the RLS
@@ -434,8 +439,6 @@ export const ProductionService = {
         specs: p.specs || '',
         status: p.status || 'Cut',
         last_updated: (p as any).lastUpdated || new Date().toISOString(),
-        sqft: (p as any).sqft ?? null,
-        service_log: (p as any).serviceLog ?? null,  // JSONB — worker-to-service history
       }));
     if (mapped.length > 0) {
       supabase.from('production_pieces').upsert(mapped, { onConflict: 'id' })
