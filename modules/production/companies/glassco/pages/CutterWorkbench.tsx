@@ -311,6 +311,36 @@ const CutterWorkbench: React.FC = () => {
     return [...m.entries()];
   }, [cutQueue]);
 
+  // ── Queue summary + per-piece size + per-job due (so the cutter's LIST says
+  //    at a glance: how much work, how much glass, how much time is left) ──
+  type JobDueLike = { dueDate?: string; items?: Array<{ width?: number | string; height?: number | string }> };
+  const jobFor = useCallback((orderId: string): (JobOrder & JobDueLike) | undefined =>
+    jobs.find(j => (j as JobOrder & { orderNo?: string }).orderNo === orderId || j.id === orderId) as (JobOrder & JobDueLike) | undefined,
+  [jobs]);
+  const daysLeftOf = (orderId: string): number | null => {
+    const due = jobFor(orderId)?.dueDate; if (!due) return null;
+    const d = new Date(due).getTime(); if (isNaN(d)) return null;
+    return Math.round((d - Date.now()) / 86400000);
+  };
+  const sizeOf = (p: ProductionPiece): string => {
+    const it = jobFor(p.orderId)?.items?.[p.itemIndex];
+    const w = Number(it?.width) || 0, h = Number(it?.height) || 0;
+    return (w || h) ? `${w}" × ${h}"` : '';
+  };
+  const queueStats = useMemo(() => {
+    const sqft = Math.round(cutQueue.reduce((s, p) => s + (Number(p.sqft ?? p.totalSqFt) || 0), 0));
+    let nextDue: number | null = null;
+    cutQueueByJob.forEach(([orderId]) => {
+      const dl = daysLeftOf(orderId);
+      if (dl !== null && (nextDue === null || dl < nextDue)) nextDue = dl;
+    });
+    return { pcs: cutQueue.length, sqft, nextDue };
+  }, [cutQueue, cutQueueByJob, jobs]);
+  const dueTone = (dl: number | null): string =>
+    dl === null ? 'text-slate-400' : dl < 0 ? 'text-rose-600' : dl <= 1 ? 'text-amber-600' : 'text-slate-500';
+  const dueText = (dl: number | null): string =>
+    dl === null ? 'no due' : dl < 0 ? `${-dl}d late` : dl === 0 ? 'due today' : `${dl}d left`;
+
   // ── My cuts today (D1) — pieces this cutter is CREDITED for today (cutBy),
   //    regardless of who keyed them. So even while the supervisor records on the
   //    cutter's behalf, the cutter sees their own work; `assignedBy` (when ≠ the
@@ -786,8 +816,24 @@ const CutterWorkbench: React.FC = () => {
         <div className="bg-white rounded-card border-2 border-slate-200 shadow p-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-2xs font-black uppercase tracking-widest text-slate-600 flex items-center gap-1.5"><ScanLine size={14}/> My Cut Queue</p>
-            <span className="text-2xs font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{cutQueue.length} pieces</span>
           </div>
+          {/* At-a-glance: how many pieces, how much glass, how much time is left */}
+          {cutQueue.length > 0 && (
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              <div className="bg-slate-50 rounded-xl py-2 text-center">
+                <p className="text-xl font-black text-slate-800 tabular-nums leading-none">{queueStats.pcs}</p>
+                <p className="text-2xs font-bold text-slate-400 uppercase mt-1">pcs to cut</p>
+              </div>
+              <div className="bg-slate-50 rounded-xl py-2 text-center">
+                <p className="text-xl font-black text-slate-800 tabular-nums leading-none">{queueStats.sqft}</p>
+                <p className="text-2xs font-bold text-slate-400 uppercase mt-1">sqft</p>
+              </div>
+              <div className={`rounded-xl py-2 text-center ${queueStats.nextDue !== null && queueStats.nextDue < 0 ? 'bg-rose-50' : queueStats.nextDue !== null && queueStats.nextDue <= 1 ? 'bg-amber-50' : 'bg-slate-50'}`}>
+                <p className={`text-sm font-black tabular-nums leading-none mt-1 ${dueTone(queueStats.nextDue)}`}>{dueText(queueStats.nextDue)}</p>
+                <p className="text-2xs font-bold text-slate-400 uppercase mt-1.5">next due</p>
+              </div>
+            </div>
+          )}
           {cutQueue.length === 0 ? (
             <p className="text-label text-slate-400 font-bold py-3 text-center">
               {isPrivileged && !actAsCutter
@@ -800,16 +846,19 @@ const CutterWorkbench: React.FC = () => {
                 const job = jobs.find(j => j.orderNo === orderId || j.id === orderId);
                 return (
                   <div key={orderId}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <p className="text-label font-black text-slate-700 truncate">{job?.orderNo || orderId}{job?.projectName ? ` · ${job.projectName}` : ''}</p>
-                      <span className="text-2xs font-bold text-slate-400 shrink-0">{list.length} to cut</span>
+                    <div className="flex items-center justify-between mb-1.5 gap-2">
+                      <p className="text-label font-black text-slate-700 truncate">#{(job?.orderNo || orderId).replace(/\s+/g, '').slice(-4)}{job?.projectName ? ` · ${job.projectName}` : ''}</p>
+                      <span className="text-2xs font-bold shrink-0 flex items-center gap-2">
+                        <span className="text-slate-400">{list.length} to cut</span>
+                        <span className={dueTone(daysLeftOf(orderId))}>· {dueText(daysLeftOf(orderId))}</span>
+                      </span>
                     </div>
                     <div className="space-y-2">
                       {list.map(p => (
                         <div key={p.id} className={`flex items-center gap-2 rounded-xl px-3 py-2 ${p.status === 'QC-Failed' ? 'bg-rose-50 border border-rose-200' : 'bg-slate-50'}`}>
                           <div className="min-w-0 flex-1">
                             <p className="text-label font-black text-slate-800 font-mono truncate">{p.id}</p>
-                            <p className="text-2xs text-slate-500 truncate">{p.specs}</p>
+                            <p className="text-2xs text-slate-500 truncate">{p.specs}{sizeOf(p) ? ` · ${sizeOf(p)}` : ''}</p>
                             {p.status === 'QC-Failed' ? (
                               <p className="text-2xs font-black text-rose-600 truncate inline-flex items-center gap-1">
                                 <AlertTriangle size={9}/> RECUT{p.fault?.description ? ` · ${p.fault.description}` : ''}
