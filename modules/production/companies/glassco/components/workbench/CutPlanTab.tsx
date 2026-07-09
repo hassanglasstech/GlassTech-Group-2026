@@ -12,29 +12,61 @@
  * The sheet catalogue is a constant for now; Phase E moves it to the admin
  * "cutting settings" so the shop can maintain its real sheet sizes.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import CuttingDiagram, { buildPackingPiecesFromQuotation } from '@/modules/glassco/core/CuttingDiagram';
 import { packPieces } from '@/modules/glassco/core/binPacking';
-import { QuotationItem } from '@/modules/shared/types';
+import { QuotationItem, Product } from '@/modules/shared/types';
+import { useAppStore } from '@/modules/shared/store/appStore';
+import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
+import { SalesService } from '@/modules/sales/services/salesService';
 
-// Standard Glassco sheet catalogue (inches). Phase E → admin-configurable.
-export const STD_SHEETS: { w: number; h: number; label: string }[] = [
+type Sheet = { w: number; h: number; label: string };
+
+// Fallback catalogue only if the material master has no sheet sizes yet.
+export const STD_SHEETS: Sheet[] = [
   { w: 84, h: 144, label: '84" × 144"' },
   { w: 96, h: 144, label: '96" × 144"' },
-  { w: 84, h: 120, label: '84" × 120"' },
-  { w: 60, h: 96,  label: '60" × 96"' },
 ];
+
+// Parse a material-master sheetSize string ("84x144", "84 X 144", …) → WxH.
+const parseSheet = (sz?: string): Sheet | null => {
+  const m = String(sz || '').match(/(\d+(?:\.\d+)?)\s*[xX]\s*(\d+(?:\.\d+)?)/);
+  if (!m) return null;
+  const w = Number(m[1]), h = Number(m[2]);
+  return (w && h) ? { w, h, label: `${w}" × ${h}"` } : null;
+};
 
 interface Props {
   items: QuotationItem[];
-  /** Optional sheet catalogue override (e.g. from material master / settings). */
-  sheets?: { w: number; h: number; label: string }[];
 }
 
 const thkOf = (it: QuotationItem): string => String(it.glassSize || it.glassThickness || '—');
 
-export const CutPlanTab: React.FC<Props> = ({ items, sheets = STD_SHEETS }) => {
+export const CutPlanTab: React.FC<Props> = ({ items }) => {
+  const company = (useAppStore(s => s.selectedCompany) as string) || 'Glassco';
   const cutItems = useMemo(() => (items || []).filter(i => !i.isSection), [items]);
+
+  // Sheet sizes come from the MATERIAL MASTER (product master's sheetSize),
+  // NOT from stock/availability. Distinct WxH sizes only.
+  const [masterSheets, setMasterSheets] = useState<Sheet[]>([]);
+  useEffect(() => {
+    let alive = true;
+    const derive = (prods: Product[]): Sheet[] => {
+      const seen = new Set<string>(); const out: Sheet[] = [];
+      (prods || []).forEach(p => {
+        if (p.company && p.company !== company) return;
+        const s = parseSheet(p.sheetSize);
+        if (s && !seen.has(`${s.w}x${s.h}`)) { seen.add(`${s.w}x${s.h}`); out.push(s); }
+      });
+      return out.sort((a, b) => a.w - b.w || a.h - b.h);
+    };
+    (async () => {
+      try { const p = await AsyncSalesService.getProducts(); if (alive) setMasterSheets(derive(p)); }
+      catch { if (alive) setMasterSheets(derive(SalesService.getProducts())); }
+    })();
+    return () => { alive = false; };
+  }, [company]);
+  const sheets = masterSheets.length ? masterSheets : STD_SHEETS;
   const thicknesses = useMemo(() => [...new Set(cutItems.map(thkOf))], [cutItems]);
 
   const [thk, setThk] = useState<string>('');
