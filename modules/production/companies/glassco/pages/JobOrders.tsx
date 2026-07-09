@@ -265,8 +265,8 @@ const JobOrders: React.FC = () => {
         await AsyncSalesService.saveQuotations([updated]);
         let movedNote = '';
         if (remaining.length > 0) {
-          const { moved, failed } = await ProductionService.reassignRemainingPieces(remaining, from, name, actor);
-          movedNote = ` · ${moved} piece(s) moved${failed ? `, ${failed} failed` : ''}`;
+          const { moved, failed, error } = await ProductionService.reassignRemainingPieces(remaining, from, name, actor);
+          movedNote = ` · ${moved} piece(s) moved${failed ? `, ${failed} failed${error ? ` (${error})` : ''}` : ''}`;
         }
         setOrders(prev => prev.map(o => o.id === order.id ? updated : o));
         // Optimistic per-piece mirror so the history chip appears without a refresh flash.

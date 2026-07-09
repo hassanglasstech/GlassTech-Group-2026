@@ -449,15 +449,15 @@ const CutterWorkbench: React.FC = () => {
     if (!toCutter) return;
     setAssigningRecut(piece.id);
     try {
-      const { moved, failed } = await ProductionService.reassignRemainingPieces([piece], undefined, toCutter, actorName);
+      const { moved, failed, error } = await ProductionService.reassignRemainingPieces([piece], undefined, toCutter, actorName);
       if (moved > 0) {
         setPieces(prev => prev.map(p => p.id === piece.id ? { ...p, assignedCutter: toCutter } : p));
         toast.success(`Recut ${piece.id} → ${toCutter}`);
       } else {
-        toast.error(`Could not assign recut${failed ? ` (${failed} failed)` : ''}`);
+        toast.error(`Could not assign recut${error ? `: ${error}` : failed ? ` (${failed} failed)` : ''}`, { duration: 9000 });
       }
-    } catch {
-      toast.error('Recut assignment failed');
+    } catch (e) {
+      toast.error(`Recut assignment failed: ${e instanceof Error ? e.message : 'unknown error'}`, { duration: 9000 });
     }
     setAssigningRecut(null);
   };

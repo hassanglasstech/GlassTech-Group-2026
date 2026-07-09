@@ -111,14 +111,14 @@ const SupervisorContent: React.FC = () => {
     if (!toCutter) return;
     setAssigning(piece.id);
     try {
-      const { moved, failed } = await ProductionService.reassignRemainingPieces([piece], undefined, toCutter, actor);
+      const { moved, failed, error } = await ProductionService.reassignRemainingPieces([piece], undefined, toCutter, actor);
       if (moved > 0) {
         setPieces(prev => prev.map(p => p.id === piece.id ? { ...p, assignedCutter: toCutter } : p));
         toast.success(`${piece.id} → ${toCutter}`);
       } else {
-        toast.error(`Could not assign${failed ? ` (${failed} failed)` : ''}`);
+        toast.error(`Could not assign${error ? `: ${error}` : failed ? ` (${failed} failed)` : ''}`, { duration: 9000 });
       }
-    } catch { toast.error('Assignment failed'); }
+    } catch (e) { toast.error(`Assignment failed: ${e instanceof Error ? e.message : 'unknown error'}`, { duration: 9000 }); }
     setAssigning(null);
   };
 
@@ -126,13 +126,13 @@ const SupervisorContent: React.FC = () => {
   const bulkAssign = useCallback(async (target: ProductionPiece[], toCutter: string): Promise<void> => {
     if (!toCutter || target.length === 0) return;
     try {
-      const { moved, failed } = await ProductionService.reassignRemainingPieces(target, undefined, toCutter, actor);
+      const { moved, failed, error } = await ProductionService.reassignRemainingPieces(target, undefined, toCutter, actor);
       if (moved > 0) {
         const ids = new Set(target.map(p => p.id));
         setPieces(prev => prev.map(p => ids.has(p.id) ? { ...p, assignedCutter: toCutter } : p));
         toast.success(`${moved} piece(s) → ${toCutter}`);
-      } else { toast.error(`Could not assign${failed ? ` (${failed} failed)` : ''}`); }
-    } catch { toast.error('Assignment failed'); }
+      } else { toast.error(`Could not assign${error ? `: ${error}` : failed ? ` (${failed} failed)` : ''}`, { duration: 9000 }); }
+    } catch (e) { toast.error(`Assignment failed: ${e instanceof Error ? e.message : 'unknown error'}`, { duration: 9000 }); }
   }, [actor]);
 
   const benchTone = (s: string): string =>

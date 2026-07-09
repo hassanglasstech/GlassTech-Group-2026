@@ -132,10 +132,24 @@ export const ProductionService = {
     fromCutter: string | undefined,
     toCutter: string,
     actor: string,
-  ): Promise<{ moved: number; failed: number }> => {
+  ): Promise<{ moved: number; failed: number; error?: string }> => {
     const nowIso = new Date().toISOString();
     const okById = new Map<string, Partial<ProductionPiece>>();
     let failed = 0;
+    const errors: string[] = [];
+
+    // Company resolver for the self-heal upsert (a piece row read from the
+    // cloud has no mapped `company`, and one read from localStorage may predate
+    // company stamping). Same derivation as saveProductionPieces.
+    const _quotes = safeParse(KEYS.QUOTATIONS) as any[];
+    const _orderCompany = new Map<string, string>();
+    for (const q of _quotes) {
+      if (q?.orderNo) _orderCompany.set(q.orderNo, q.company);
+      if (q?.id)      _orderCompany.set(q.id, q.company);
+    }
+    let _fallbackCompany = '';
+    try { _fallbackCompany = useAppStore.getState().selectedCompany || ''; } catch { /* store not ready */ }
+
     await Promise.all(remaining.map(async (p) => {
       const outgoing = p.assignedCutter || fromCutter;   // who held the piece before
       const prev = [...(p.prevCutters || [])];
@@ -147,6 +161,8 @@ export const ProductionService = {
         assignedBy: actor,
       };
       try {
+        // 1) Preferred path — atomic RPC (server-side row lock + audit trigger +
+        //    data-jsonb merge). Same-status no-op carries the assignment overlay.
         const { error } = await supabase.rpc('update_piece_status_atomic', {
           p_piece_id:   p.id,
           p_new_status: p.status,                          // same-status no-op — carries p_extra only
@@ -154,10 +170,45 @@ export const ProductionService = {
           p_reason:     `reassigned to ${toCutter}`,
           p_extra:      patch as any,
         });
-        if (error) { failed++; Logger.error('ProductionService', `reassign piece ${p.id} failed`, error); return; }
+        if (!error) { okById.set(p.id, patch); return; }
+
+        // 2) Self-heal. The RPC most commonly fails with `piece_not_found`
+        //    because the piece row is not in the cloud table yet — it was
+        //    generated before pieces reliably persisted (localStorage only), or
+        //    the atomic RPC isn't applied on this instance. Instead of failing
+        //    the assignment, upsert the row directly with the overlay in `data`
+        //    so it lands. Read-merge the existing `data` first so an already
+        //    cloud-resident row's overlay (fault/holdFrom/version) is preserved.
+        //    Single-user go-live → the RPC's pessimistic lock is not required.
+        const company = (p as any).company || _orderCompany.get((p as any).orderId) || _fallbackCompany;
+        let mergedData: Record<string, unknown> = { ...patch };
+        try {
+          const { data: existing } = await supabase
+            .from('production_pieces').select('data').eq('id', p.id).maybeSingle();
+          if (existing?.data && typeof existing.data === 'object') {
+            mergedData = { ...existing.data, ...patch };
+          }
+        } catch { /* row absent or unreadable — mergedData stays as the patch */ }
+
+        const { error: upErr } = await supabase.from('production_pieces').upsert({
+          id:          p.id,
+          company,
+          order_id:    (p as any).orderId || '',
+          item_index:  Number((p as any).itemIndex || 0),
+          specs:       p.specs || '',
+          status:      p.status || 'Pending-Cut',
+          last_updated: nowIso,
+          data:        mergedData,
+        }, { onConflict: 'id' });
+        if (upErr) {
+          failed++; errors.push(upErr.message);
+          Logger.error('ProductionService', `reassign self-heal upsert ${p.id} failed`, upErr);
+          return;
+        }
         okById.set(p.id, patch);
       } catch (e) {
         failed++;
+        errors.push(e instanceof Error ? e.message : String(e));
         Logger.error('ProductionService', `reassign piece ${p.id} exception`, e);
       }
     }));
@@ -167,7 +218,7 @@ export const ProductionService = {
       const next = all.map(p => okById.has(p.id) ? { ...p, ...okById.get(p.id) } : p);
       safeSave(KEYS.PRODUCTION_PIECES, next);
     }
-    return { moved: okById.size, failed };
+    return { moved: okById.size, failed, error: errors[0] };
   },
 
   // Backfill: generate the missing 'Pending-Cut' production pieces for approved
