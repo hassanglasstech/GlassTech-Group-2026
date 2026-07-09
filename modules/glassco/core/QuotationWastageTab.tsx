@@ -288,13 +288,8 @@ const QuotationWastageTab: React.FC<Props> = ({ items, onSaveDecision }) => {
             ))}
           </select>
         </div>
-        <div className={`px-3 py-2 rounded-xl text-[10px] font-black border ${
-          stockForSize > 5 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-          stockForSize > 0 ? 'bg-amber-50 text-amber-700 border-amber-200' :
-          'bg-red-50 text-red-700 border-red-200'
-        }`}>
-          {stockForSize > 0 ? `${stockForSize} sheets in stock` : 'Out of stock'}
-        </div>
+        {/* Stock is intentionally NOT shown here — the cutting plan is about sheet
+            SIZE + wastage only, independent of what's in stock. */}
         <div className="px-3 py-2 rounded-xl text-[10px] font-black border bg-blue-50 text-blue-700 border-blue-200">
           {totalSqft.toFixed(1)} sqft · {usagePct.toFixed(0)}% of sheet
         </div>

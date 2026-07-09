@@ -402,17 +402,21 @@ export function buildPackingPiecesFromQuotation(items: PackingSourceItem[]): Pac
 
   items.forEach(item => {
     if (item.isSection) return;
-    const isMM = !!(item.mmW || item.mmH);
+    // Dimensions can arrive as STRINGS from the editor (e.g. inchW "39", sootW "7").
+    // Coerce to Number BEFORE any arithmetic — `"39" + 0.7` string-concatenates to
+    // "390.7", which made every piece ~390" and unplaceable ("0 sheets" bug).
+    const mmW = Number(item.mmW) || 0, mmH = Number(item.mmH) || 0;
+    const isMM = mmW > 0 || mmH > 0;
 
     let widthInch: number;
     let heightInch: number;
 
     if (isMM) {
-      widthInch  = (item.mmW || 0) / 25.4;
-      heightInch = (item.mmH || 0) / 25.4;
+      widthInch  = mmW / 25.4;
+      heightInch = mmH / 25.4;
     } else {
-      widthInch  = (item.inchW || 0) + (item.sootW || 0) / 10;
-      heightInch = (item.inchH || 0) + (item.sootH || 0) / 10;
+      widthInch  = Number(item.inchW || 0) + Number(item.sootW || 0) / 10;
+      heightInch = Number(item.inchH || 0) + Number(item.sootH || 0) / 10;
     }
 
     if (widthInch <= 0 || heightInch <= 0) return;
