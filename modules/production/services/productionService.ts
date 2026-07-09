@@ -169,6 +169,66 @@ export const ProductionService = {
     }
     return { moved: okById.size, failed };
   },
+
+  // Backfill: generate the missing 'Pending-Cut' production pieces for approved
+  // orders that have none (or fewer than their item quantities). Mirrors the
+  // approve-time generator (id = GLS-<mmyy>-<seq4>/<n>, specs = WxH thk type),
+  // fills only the shortfall per item, and saves ALL pieces in one batch. Safe
+  // to re-run (idempotent — never duplicates an item's pieces).
+  generatePiecesForOrders: async (
+    orders: Array<{
+      id: string; orderNo?: string; company?: string;
+      items?: Array<{ isSection?: boolean; qty?: number | string; width?: number; height?: number; glassSize?: string; glassType?: string; serviceOnly?: boolean }>;
+    }>,
+  ): Promise<{ created: number; orders: number }> => {
+    const all = await ProductionService.getProductionPiecesAsync();
+    const byOrder = new Map<string, ProductionPiece[]>();
+    all.forEach(p => { const a = byOrder.get(p.orderId) || []; a.push(p); byOrder.set(p.orderId, a); });
+
+    const newPieces: ProductionPiece[] = [];
+    let ordersTouched = 0;
+    for (const order of orders) {
+      const orderNo = order.orderNo || order.id;
+      if (!orderNo) continue;
+      const existing = [...(byOrder.get(orderNo) || []), ...(byOrder.get(order.id) || [])];
+      const haveByIdx = new Map<number, number>();
+      existing.forEach(p => { const k = Number(p.itemIndex ?? 0); haveByIdx.set(k, (haveByIdx.get(k) || 0) + 1); });
+
+      const segMatch = String(orderNo).match(/GLS-(\d{4})-(\d+)$/);
+      const prefix = segMatch
+        ? `GLS-${segMatch[1]}-${segMatch[2].slice(-4)}`
+        : `GLS-${String(orderNo).replace(/[^A-Z0-9]/gi, '-').slice(-12) || '0000'}`;
+      let serial = 1;
+      existing.forEach(p => { const m = (p.id || '').match(/\/(\d+)$/); if (m) { const n = parseInt(m[1], 10); if (Number.isFinite(n) && n >= serial) serial = n + 1; } });
+
+      let added = 0;
+      (order.items || []).forEach((item, idx) => {
+        if (item.isSection) return;
+        const desired = Number(item.qty) || 0;
+        const shortfall = Math.max(0, desired - (haveByIdx.get(idx) || 0));
+        for (let i = 0; i < shortfall; i++) {
+          newPieces.push({
+            id: `${prefix}/${serial}`,
+            orderId: orderNo,
+            itemIndex: idx,
+            specs: `${item.width ?? ''}x${item.height ?? ''} ${item.glassSize || '5mm'} ${item.glassType || 'Plain'}`.trim(),
+            status: 'Pending-Cut' as ProductionPiece['status'],
+            lastUpdated: new Date().toISOString(),
+            isRevised: false,
+            company: (order.company || 'Glassco') as ProductionPiece['company'],
+            serviceOnly: item.serviceOnly || false,
+          });
+          serial++; added++;
+        }
+      });
+      if (added > 0) ordersTouched++;
+    }
+
+    if (newPieces.length === 0) return { created: 0, orders: 0 };
+    await ProductionService.saveProductionPieces([...all, ...newPieces], { validateOrderIds: [] });
+    return { created: newPieces.length, orders: ordersTouched };
+  },
+
   getGatePasses: (): GatePass[] => safeParse(KEYS.GATE_PASS),
   // markDirty: a locally-issued gate pass must reach the cloud gate_passes table,
   // otherwise the server authorize_dispatch RPC raises gate_pass_not_found_for_company.

@@ -87,6 +87,7 @@ const JobOrders: React.FC = () => {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [hrCutters, setHrCutters] = useState<string[]>([]);
   const [savingCutter, setSavingCutter] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
 
   // Load via the async sales API (cloud + cache, scoped to the active company).
   // The sync SalesService.getQuotations() only reads the localStorage cache,
@@ -212,6 +213,21 @@ const JobOrders: React.FC = () => {
 
   const toggle = (id: string): void => setExpanded(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
+  // Backfill cut pieces for approved orders that have none — so they flow into
+  // the Cutting Supervisor pool. Idempotent (fills only the shortfall).
+  const generateMissingPieces = async (): Promise<void> => {
+    const targets = rows.filter(r => r.totalPieces === 0 && JOB_STATUSES.has(r.order.status)).map(r => r.order);
+    if (targets.length === 0) { toast.info('All approved orders already have cut pieces.'); return; }
+    if (!(await confirmModal(`Generate cut pieces for ${targets.length} approved order(s) that have none?\n\nThis creates their Pending-Cut pieces so they appear in the Cutting Supervisor for assignment.`))) return;
+    setGenerating(true);
+    try {
+      const { created, orders: n } = await ProductionService.generatePiecesForOrders(targets);
+      toast.success(created > 0 ? `Generated ${created} piece(s) across ${n} order(s).` : 'No pieces needed.');
+      setTick(x => x + 1);
+    } catch { toast.error('Could not generate pieces.'); }
+    setGenerating(false);
+  };
+
   // Dropdown options: HR cutters + any cutter already assigned/recorded.
   const cutterOptions = useMemo(() => {
     const set = new Set<string>(hrCutters);
@@ -297,9 +313,17 @@ const JobOrders: React.FC = () => {
             <p className="text-2xs text-blue-100 font-bold uppercase tracking-widest mt-0.5">Confirmed orders &amp; live production progress</p>
           </div>
         </div>
-        <button onClick={() => setTick(x => x + 1)} className="bg-white/15 hover:bg-white/25 text-white px-4 py-2 rounded-control text-xs font-black uppercase flex items-center gap-2">
-          <RefreshCw size={14} /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {counts.awaiting > 0 && (
+            <button onClick={generateMissingPieces} disabled={generating}
+              className="bg-amber-400 hover:bg-amber-300 text-slate-900 px-4 py-2 rounded-control text-xs font-black uppercase flex items-center gap-2 disabled:opacity-50">
+              {generating ? <Loader2 size={14} className="animate-spin" /> : <Package size={14} />} Generate pieces ({counts.awaiting})
+            </button>
+          )}
+          <button onClick={() => setTick(x => x + 1)} className="bg-white/15 hover:bg-white/25 text-white px-4 py-2 rounded-control text-xs font-black uppercase flex items-center gap-2">
+            <RefreshCw size={14} /> Refresh
+          </button>
+        </div>
       </div>
 
       {/* KPI strip */}

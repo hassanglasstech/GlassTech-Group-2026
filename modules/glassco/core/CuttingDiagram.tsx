@@ -60,9 +60,10 @@ export const SheetSVG: React.FC<SheetSVGProps> = ({
 
   return (
     <svg
+      viewBox={`0 0 ${svgWidth} ${svgH}`}
       width={svgWidth}
       height={svgH}
-      style={{ border: '2px solid #0f172a', borderRadius: 4, background: 'white', display: 'block' }}
+      style={{ border: '2px solid #0f172a', borderRadius: 4, background: 'white', display: 'block', width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: '68vh' }}
     >
       <defs>
         {/* Scrap hatch */}
