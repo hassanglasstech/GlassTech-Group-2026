@@ -41,9 +41,10 @@ import { toast } from 'sonner';
 import { EmptyState } from '@/modules/shared/components/EmptyState';
 import {
   ScanLine, Plus, Square, Search, X, CheckCircle2, AlertTriangle,
-  Globe, Undo2, Play, Hash, Clock, Target, Loader2, Eye, History,
+  Globe, Undo2, Play, Hash, Clock, Target, Loader2, Eye, History, Scissors,
 } from 'lucide-react';
-import { ProductionPiece } from '@/modules/shared/types';
+import { ProductionPiece, QuotationItem } from '@/modules/shared/types';
+import { CutPlanTab } from '@/modules/production/companies/glassco/components/workbench/CutPlanTab';
 import { supabase } from '@/src/services/supabaseClient';
 
 // ── i18n ─────────────────────────────────────────────────────────────────
@@ -207,6 +208,7 @@ const CutterWorkbench: React.FC = () => {
   const [pieces, setPieces] = useState<ProductionPiece[]>([]);
   const [cutting, setCutting] = useState<string | null>(null);
   const [assigningRecut, setAssigningRecut] = useState<string | null>(null);
+  const [planJob, setPlanJob] = useState<string | null>(null);   // orderId whose cut plan is open
   const [hrCutters, setHrCutters] = useState<string[]>([]);
   useEffect(() => {
     let alive = true;
@@ -848,10 +850,16 @@ const CutterWorkbench: React.FC = () => {
                   <div key={orderId}>
                     <div className="flex items-center justify-between mb-1.5 gap-2">
                       <p className="text-label font-black text-slate-700 truncate">#{(job?.orderNo || orderId).replace(/\s+/g, '').slice(-4)}{job?.projectName ? ` · ${job.projectName}` : ''}</p>
-                      <span className="text-2xs font-bold shrink-0 flex items-center gap-2">
-                        <span className="text-slate-400">{list.length} to cut</span>
-                        <span className={dueTone(daysLeftOf(orderId))}>· {dueText(daysLeftOf(orderId))}</span>
-                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button onClick={() => setPlanJob(orderId)}
+                          className="text-2xs font-black uppercase text-blue-700 bg-blue-50 active:bg-blue-100 rounded-control px-2 py-1 inline-flex items-center gap-1 min-h-[32px]">
+                          <Scissors size={12} /> Plan
+                        </button>
+                        <span className="text-2xs font-bold flex items-center gap-2">
+                          <span className="text-slate-400">{list.length} to cut</span>
+                          <span className={dueTone(daysLeftOf(orderId))}>· {dueText(daysLeftOf(orderId))}</span>
+                        </span>
+                      </div>
                     </div>
                     <div className="space-y-2">
                       {list.map(p => (
@@ -1098,6 +1106,21 @@ const CutterWorkbench: React.FC = () => {
             <div className="flex gap-3 pt-2">
               <button onClick={() => setShowEndForm(false)} className="flex-1 min-h-[56px] border-2 border-slate-200 rounded-xl text-base font-black text-slate-600 uppercase">{t.cancel}</button>
               <button onClick={confirmEndSession} className="flex-1 min-h-[56px] bg-rose-600 text-white rounded-xl text-base font-black uppercase active:bg-rose-700">{t.confirm}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Cut Plan drawer (per job) ── */}
+      {planJob && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 flex items-end" onClick={() => setPlanJob(null)}>
+          <div className="w-full bg-white rounded-t-3xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
+              <p className="text-base font-black uppercase">Cut Plan — #{planJob.replace(/\s+/g, '').slice(-4)}</p>
+              <button onClick={() => setPlanJob(null)} className="p-2 hover:bg-slate-100 rounded-full" aria-label="Close"><X size={20} /></button>
+            </div>
+            <div className="p-4">
+              <CutPlanTab items={(jobFor(planJob)?.items || []) as unknown as QuotationItem[]} />
             </div>
           </div>
         </div>
