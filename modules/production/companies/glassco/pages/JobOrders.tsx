@@ -345,15 +345,14 @@ const JobOrders: React.FC = () => {
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2 w-44">Production Progress</th>
                 <th className="px-3 py-2 text-right">SqFt</th>
-                <th className="px-3 py-2 text-right">Value</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading && (
-                <tr><td colSpan={9} className="px-3 py-10 text-center text-slate-400"><Loader2 size={18} className="animate-spin inline mr-2" /> Loading job orders…</td></tr>
+                <tr><td colSpan={8} className="px-3 py-10 text-center text-slate-400"><Loader2 size={18} className="animate-spin inline mr-2" /> Loading job orders…</td></tr>
               )}
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={9} className="p-0">
+                <tr><td colSpan={8} className="p-0">
                   <EmptyState icon={<ClipboardList size={22} />} title="No job orders" description="Confirmed orders will appear here as they are approved and sent to production." />
                 </td></tr>
               )}
@@ -386,12 +385,11 @@ const JobOrders: React.FC = () => {
                         )}
                       </td>
                       <td className="px-3 py-2 text-right font-bold text-slate-600 tabular-nums">{formatNumber(r.sqft)}</td>
-                      <td className="px-3 py-2 text-right font-bold text-slate-800 tabular-nums">{formatPKR(r.value)}</td>
                     </tr>
                     {isOpen && (
                       <tr className="bg-slate-50/70">
                         <td />
-                        <td colSpan={8} className="px-3 pb-4 pt-1">
+                        <td colSpan={7} className="px-3 pb-4 pt-1">
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-2xs mb-3">
                             <Detail label="Architect" value={r.order.architect} />
                             <Detail label="Site" value={r.order.site} />
@@ -403,26 +401,9 @@ const JobOrders: React.FC = () => {
                             {r.order.actualDeliveryDate && <Detail label="Delivered On" value={formatDate(r.order.actualDeliveryDate)} />}
                             {r.order.delayReason && <Detail label="Delay" value={`${r.order.delayCategory || ''} ${r.order.delayReason}`.trim()} tone="warning" />}
                           </div>
-                          <div className="flex items-center gap-2 flex-wrap mb-3">
-                            <span className="text-2xs font-black uppercase tracking-widest text-slate-400 inline-flex items-center gap-1"><Scissors size={11} /> {r.order.assignedCutter ? 'Reassign Cutter' : 'Assign Cutter'}</span>
-                            <select
-                              value={r.order.assignedCutter || ''}
-                              onChange={e => assignCutter(r.order, e.target.value)}
-                              disabled={savingCutter === r.order.id}
-                              className="sap-input px-2 py-1 text-2xs rounded-control border border-slate-200 w-56 disabled:opacity-50"
-                            >
-                              <option value="">— Unassigned —</option>
-                              {cutterOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                            {savingCutter === r.order.id && <Loader2 size={14} className="animate-spin text-slate-400" />}
-                            {r.pendingCut > 0 && <span className="text-2xs font-bold text-slate-500">{r.pendingCut} piece(s) in pool to cut</span>}
-                            {r.order.assignedCutter && r.pendingCut > 0 && <span className="text-2xs text-slate-400">— reassigning moves only the {r.pendingCut} un-cut piece(s)</span>}
-                          </div>
-                          {r.reassignedFrom.length > 0 && (
-                            <p className="text-2xs font-bold text-indigo-600 mb-3 inline-flex items-center gap-1">
-                              <History size={11} /> Reassigned from {r.reassignedFrom.join(', ')}{r.order.assignedCutter ? ` → ${r.order.assignedCutter}` : ''} — already-cut pieces stay with their original cutter
-                            </p>
-                          )}
+                          <p className="text-2xs font-bold text-slate-400 mb-3 inline-flex items-center gap-1">
+                            <Scissors size={11} /> Cutter assignment is done by the Cutting Supervisor.
+                          </p>
                           {/* Partial-cut provision: a cutter may cut only part of an order.
                               Cutting is per-piece, so this shows who cut how many and how many
                               remain — reassign above to hand the remaining pool to another cutter
