@@ -161,6 +161,9 @@ const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  // Set-your-own-password step (after first OTP login)
+  const [newPw, setNewPw]   = useState('');
+  const [newPw2, setNewPw2] = useState('');
 
   const handleSendOtp = async () => {
     if (!email.includes('@')) return setError('Valid email daalo.');
@@ -288,14 +291,44 @@ const LoginPage: React.FC = () => {
       action: 'login', user_agent: navigator.userAgent,
     });
 
-    // If device not registered yet → ask for device setup
-    if (!hasDeviceRegistered() && !hasRememberToken()) {
-      setStep('device_choice');
-    } else {
-      // Already registered → go to biometric
-      setStep('biometric');
-    }
+    // First login via OTP → let the user set their own password. Next time they
+    // just sign in with email + password (no OTP round-trip). They can skip if
+    // they only wanted a one-time OTP sign-in.
+    setNewPw('');
+    setNewPw2('');
+    setStep('set_password');
 
+    setBusy(false);
+  };
+
+  // ── STEP: Set your own account password (after first OTP login) ──────
+  const handleSetPassword = async () => {
+    if (newPw.length < 6) return setError('Password kam se kam 6 characters ka hona chahiye.');
+    if (newPw !== newPw2)  return setError('Dono passwords match nahi kar rahe.');
+    setBusy(true);
+    setError('');
+    try {
+      // updateUser sets the password of the CURRENTLY signed-in user (the OTP
+      // session we just minted). No admin/service-role needed.
+      const { error: pwErr } = await supabase.auth.updateUser({ password: newPw });
+      if (pwErr) { setError(`Password set nahi hua: ${pwErr.message}`); setBusy(false); return; }
+      const profile = await resolveSessionProfile();
+      if (!profile) { setError('Session expired. Dobara sign in karein.'); setStep('google'); setBusy(false); return; }
+      setNewPw(''); setNewPw2('');
+      await completeLogin(profile);
+    } catch (err) {
+      console.error('handleSetPassword error:', err);
+      setError('Password set karne me masla hua. Dobara koshish karein.');
+    }
+    setBusy(false);
+  };
+
+  // Skip password-setup (one-time OTP sign-in only) → just complete login.
+  const handleSkipSetPassword = async () => {
+    setBusy(true);
+    const profile = await resolveSessionProfile();
+    if (!profile) { setError('Session expired. Dobara sign in karein.'); setStep('google'); setBusy(false); return; }
+    await completeLogin(profile);
     setBusy(false);
   };
 
@@ -633,6 +666,69 @@ const LoginPage: React.FC = () => {
               <button onClick={() => { setStep('google'); setError(''); setOtp(''); }}
                 className="w-full text-slate-500 hover:text-slate-300 text-xs font-bold uppercase transition-colors">
                 ← Back
+              </button>
+            </div>
+          </Card>
+        )}
+
+        {/* ── STEP: Set your own password (after first OTP login) ───── */}
+        {step === 'set_password' && (
+          <Card>
+            <div className="space-y-5">
+              <div className="text-center">
+                <div className="w-14 h-14 bg-emerald-500/20 rounded-xl flex items-center justify-center mx-auto mb-3">
+                  <Key size={26} className="text-emerald-400" />
+                </div>
+                <p className="text-white font-black text-base">Apna Password Set Karein</p>
+                <p className="text-slate-400 text-xs mt-2">
+                  Ab se aap sirf <span className="text-emerald-300 font-semibold">email + password</span> se login karenge — OTP baar-baar ki zarurat nahi.
+                </p>
+              </div>
+              {error && <ErrBox msg={error} />}
+
+              {/* New password */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase text-slate-500 tracking-widest">Naya Password</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={newPw}
+                    onChange={e => setNewPw(e.target.value)}
+                    placeholder="Kam se kam 6 characters"
+                    className="w-full bg-[#0f1923] border border-white/10 rounded-xl py-3 px-4 pr-12 text-white text-sm focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 transition-all"
+                    autoFocus
+                  />
+                  <button type="button" onClick={() => setShowPassword(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                    title={showPassword ? 'Hide password' : 'Show password'}>
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Confirm password */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase text-slate-500 tracking-widest">Password Dobara</label>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={newPw2}
+                  onChange={e => setNewPw2(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSetPassword()}
+                  placeholder="Same password dobara likhein"
+                  className="w-full bg-[#0f1923] border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 transition-all"
+                />
+              </div>
+
+              <button onClick={handleSetPassword} disabled={busy || newPw.length < 6 || newPw !== newPw2}
+                className="w-full flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/30 text-white font-black uppercase tracking-widest py-3 rounded-xl transition-all shadow-lg">
+                {busy ? <Loader2 size={18} className="animate-spin" /> : (
+                  <><CheckCircle2 size={16} /><span>Set Password &amp; Continue</span></>
+                )}
+              </button>
+
+              <button onClick={handleSkipSetPassword} disabled={busy}
+                className="w-full text-slate-500 hover:text-slate-300 text-xs font-bold uppercase transition-colors">
+                Abhi skip karein (sirf is baar OTP login)
               </button>
             </div>
           </Card>

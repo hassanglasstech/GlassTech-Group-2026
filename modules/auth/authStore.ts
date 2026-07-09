@@ -151,6 +151,7 @@ export type AuthStep =
   | 'biometric'      // authenticate with device
   | 'pin'            // PIN fallback login (Phase 4)
   | 'set_pin'        // set a device PIN after first login
+  | 'set_password'   // set your own account password after first OTP login
   | 'done';          // fully authenticated
 
 interface AuthState {
