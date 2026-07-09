@@ -225,7 +225,23 @@ export const ProductionService = {
     }
 
     if (newPieces.length === 0) return { created: 0, orders: 0 };
-    await ProductionService.saveProductionPieces([...all, ...newPieces], { validateOrderIds: [] });
+    // Local cache immediately.
+    try { safeSave(KEYS.PRODUCTION_PIECES, [...all, ...newPieces]); } catch { /* quota */ }
+    // AWAIT the cloud upsert (saveProductionPieces' push is fire-and-forget, so a
+    // race/RLS failure left pieces local-only and invisible to the supervisor /
+    // cutter which read from Supabase). Await + surface the error instead of a
+    // false-green success.
+    const mapped = newPieces.map(p => ({
+      id: p.id,
+      company: (p.company || 'Glassco') as string,
+      order_id: p.orderId,
+      item_index: Number(p.itemIndex || 0),
+      specs: p.specs || '',
+      status: p.status || 'Pending-Cut',
+      last_updated: p.lastUpdated || new Date().toISOString(),
+    }));
+    const { error } = await supabase.from('production_pieces').upsert(mapped, { onConflict: 'id' });
+    if (error) { Logger.error('Production', 'generatePiecesForOrders upsert failed', error); throw new Error(error.message); }
     return { created: newPieces.length, orders: ordersTouched };
   },
 

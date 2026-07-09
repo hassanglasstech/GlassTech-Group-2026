@@ -222,9 +222,9 @@ const JobOrders: React.FC = () => {
     setGenerating(true);
     try {
       const { created, orders: n } = await ProductionService.generatePiecesForOrders(targets);
-      toast.success(created > 0 ? `Generated ${created} piece(s) across ${n} order(s).` : 'No pieces needed.');
+      toast.success(created > 0 ? `Generated ${created} piece(s) across ${n} order(s).` : 'No pieces needed — orders already have pieces or have no quantities.');
       setTick(x => x + 1);
-    } catch { toast.error('Could not generate pieces.'); }
+    } catch (e) { toast.error(`Generate failed: ${e instanceof Error ? e.message : 'unknown error'}`, { duration: 11000 }); }
     setGenerating(false);
   };
 
