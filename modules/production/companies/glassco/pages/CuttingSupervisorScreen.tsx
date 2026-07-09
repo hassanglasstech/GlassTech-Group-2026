@@ -22,7 +22,8 @@ import { ProductionPiece } from '@/modules/shared/types';
 import { JobOrder } from '@/modules/production/types/production';
 import { EmptyState } from '@/modules/shared/components/EmptyState';
 import { toast } from 'sonner';
-import { Scissors, RefreshCw, Loader2, AlertTriangle, Users, Layers, Flame, CheckCircle2 } from 'lucide-react';
+import { Scissors, RefreshCw, Loader2, AlertTriangle, Users, Layers, Flame, CheckCircle2, LayoutGrid, ClipboardList } from 'lucide-react';
+import { SupervisorJobBoard, JobLike } from '@/modules/production/companies/glassco/components/workbench/SupervisorJobBoard';
 
 const ALLOWED = new Set<string>([
   'super_admin', 'owner', 'hassan',
@@ -45,16 +46,20 @@ const SupervisorContent: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const [mode, setMode] = useState<'benches' | 'jobs'>('benches');
+  const [clientNames, setClientNames] = useState<Map<string, string>>(new Map());
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [pcs, ords] = await Promise.all([
+      const [pcs, ords, cls] = await Promise.all([
         ProductionService.getProductionPiecesAsync(),
         AsyncSalesService.getQuotations(),
+        AsyncSalesService.getClients().catch(() => []),
       ]);
       setPieces(pcs || []);
       setJobs((ords as JobOrder[]) || []);
+      setClientNames(new Map((cls || []).map((c: { id: string; name: string }) => [c.id, c.name] as [string, string])));
       try { await HRService.loadCache(); setCutters(HRService.getCutterNames(company)); } catch { /* keep existing */ }
     } catch {
       try { setPieces(ProductionService.getProductionPieces()); } catch { setPieces([]); }
@@ -117,6 +122,19 @@ const SupervisorContent: React.FC = () => {
     setAssigning(null);
   };
 
+  // Bulk assign (whole-JO / whole-mm / one piece) — one atomic call per set.
+  const bulkAssign = useCallback(async (target: ProductionPiece[], toCutter: string): Promise<void> => {
+    if (!toCutter || target.length === 0) return;
+    try {
+      const { moved, failed } = await ProductionService.reassignRemainingPieces(target, undefined, toCutter, actor);
+      if (moved > 0) {
+        const ids = new Set(target.map(p => p.id));
+        setPieces(prev => prev.map(p => ids.has(p.id) ? { ...p, assignedCutter: toCutter } : p));
+        toast.success(`${moved} piece(s) → ${toCutter}`);
+      } else { toast.error(`Could not assign${failed ? ` (${failed} failed)` : ''}`); }
+    } catch { toast.error('Assignment failed'); }
+  }, [actor]);
+
   const benchTone = (s: string): string =>
     s === 'starved' ? 'border-l-slate-300 bg-slate-50' : s === 'heavy' ? 'border-l-amber-500 bg-amber-50' : 'border-l-emerald-500 bg-white';
 
@@ -152,6 +170,16 @@ const SupervisorContent: React.FC = () => {
         </button>
       </div>
 
+      {/* View toggle — Benches (pool) ↔ Job Orders */}
+      <div className="flex gap-2 no-print">
+        {([['benches', 'Benches', LayoutGrid], ['jobs', 'Job Orders', ClipboardList]] as const).map(([k, lbl, Icon]) => (
+          <button key={k} onClick={() => setMode(k)}
+            className={`px-4 py-2 rounded-control text-2xs font-black uppercase tracking-widest flex items-center gap-1.5 border-2 transition-all ${mode === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'}`}>
+            <Icon size={13} /> {lbl}
+          </button>
+        ))}
+      </div>
+
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {([
@@ -170,8 +198,19 @@ const SupervisorContent: React.FC = () => {
 
       {loading && <div className="text-center text-slate-400 py-8"><Loader2 size={18} className="animate-spin inline mr-2" /> Loading…</div>}
 
+      {/* Job Orders view */}
+      {!loading && mode === 'jobs' && (
+        <SupervisorJobBoard
+          pieces={pieces}
+          jobs={jobs as unknown as JobLike[]}
+          clientName={id => clientNames.get(id || '') || id || 'Unknown'}
+          roster={roster}
+          onAssign={bulkAssign}
+        />
+      )}
+
       {/* Benches */}
-      {!loading && (
+      {!loading && mode === 'benches' && (
         <div>
           <p className="text-2xs font-black uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-2"><Scissors size={13} /> Cutter benches</p>
           {benches.length === 0 ? (
@@ -198,7 +237,7 @@ const SupervisorContent: React.FC = () => {
       )}
 
       {/* Unassigned pool */}
-      {!loading && pool.length > 0 && (
+      {!loading && mode === 'benches' && pool.length > 0 && (
         <div className="bg-white rounded-card border-2 border-amber-200 shadow-sm p-4">
           <p className="text-2xs font-black uppercase tracking-widest text-amber-700 mb-3 flex items-center gap-2"><Layers size={13} /> Unassigned pool — {pool.length} piece(s) to distribute</p>
           <div className="space-y-2 max-h-[46vh] overflow-y-auto">
@@ -208,7 +247,7 @@ const SupervisorContent: React.FC = () => {
       )}
 
       {/* Recut pool */}
-      {!loading && recutPool.length > 0 && (
+      {!loading && mode === 'benches' && recutPool.length > 0 && (
         <div className="bg-white rounded-card border-2 border-rose-200 shadow-sm p-4">
           <p className="text-2xs font-black uppercase tracking-widest text-rose-700 mb-3 flex items-center gap-2"><Flame size={13} /> Recut pool — {recutPool.length} rejected piece(s) to redistribute</p>
           <div className="space-y-2 max-h-[46vh] overflow-y-auto">
@@ -217,7 +256,7 @@ const SupervisorContent: React.FC = () => {
         </div>
       )}
 
-      {!loading && pool.length === 0 && recutPool.length === 0 && (
+      {!loading && mode === 'benches' && pool.length === 0 && recutPool.length === 0 && (
         <div className="bg-white rounded-card border-2 border-dashed border-slate-200 py-8">
           <EmptyState icon={<CheckCircle2 size={22} />} title="Nothing to distribute" description="Pool and recut queues are clear." compact />
         </div>
