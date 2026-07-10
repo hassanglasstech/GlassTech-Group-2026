@@ -1,6 +1,15 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ProductionPiece, ServiceLogEntry, FloorStaff, FloorRole } from '@/modules/shared/types';
-import { Sparkles, Hammer, Drill, CheckCircle2, Circle, User, X, ChevronDown } from 'lucide-react';
+import { Sparkles, Hammer, Drill, CheckCircle2, Circle, User, X, ChevronDown, ChevronRight, Clock } from 'lucide-react';
+
+// Decoupled shape of a job order (a Glassco quotation) — for JO grouping labels.
+export interface ServiceJobLike {
+  id: string;
+  orderNo?: string;
+  clientId?: string;
+  projectName?: string;
+  dueDate?: string;
+}
 
 // Standard cost rates PKR/sqft per service (finance can override via prop)
 // These are FALLBACK rates — replaced by monthly pool rate when available.
@@ -24,7 +33,16 @@ interface ServiceFloorViewProps {
     onUpdateStatus: (id: string, status: any, extra?: Partial<ProductionPiece>) => void;
     floorStaff?: FloorStaff[];          // roster from ProductionService.getFloorStaff()
     serviceCostRates?: Record<string, number>; // override standard rates (e.g. monthly pool rate)
+    jobs?: ServiceJobLike[];            // job orders, for JO grouping labels (client/project/due)
+    clientName?: (id?: string) => string;
 }
+
+const last4 = (s?: string): string => (s || '').replace(/\s+/g, '').slice(-4) || '—';
+const daysLeft = (due?: string): number | null => {
+    if (!due) return null;
+    const d = new Date(due).getTime(); if (isNaN(d)) return null;
+    return Math.round((d - Date.now()) / 86400000);
+};
 
 interface CaptureState {
     piece: ProductionPiece;
@@ -34,12 +52,30 @@ interface CaptureState {
     sqft: string;
 }
 
-const ServiceFloorView: React.FC<ServiceFloorViewProps> = ({ pieces, onUpdateStatus, floorStaff, serviceCostRates }) => {
+const ServiceFloorView: React.FC<ServiceFloorViewProps> = ({ pieces, onUpdateStatus, floorStaff, serviceCostRates, jobs, clientName }) => {
     const [activeService, setActiveService] = useState<'Polishing' | 'Grinding' | 'Notching' | 'Holes'>('Polishing');
     const [capture, setCapture] = useState<CaptureState | null>(null);
+    const [openJo, setOpenJo] = useState<Set<string>>(new Set());
 
     const rates = { ...DEFAULT_COST_RATES, ...(serviceCostRates || {}) };
     const filteredPieces = (pieces || []).filter(p => p.status === 'Service-Pending' && p.pendingServices?.includes(activeService));
+
+    // P4 — group the queue by job order (list-wise, like the cutter/supervisor
+    // boards) so an operator opens a JO and clears its pieces for this service.
+    const jobByRef = useMemo(() => {
+        const m = new Map<string, ServiceJobLike>();
+        (jobs || []).forEach(j => { if (j.orderNo) m.set(j.orderNo, j); m.set(j.id, j); });
+        return m;
+    }, [jobs]);
+    const jobGroups = useMemo(() => {
+        const byOrder = new Map<string, ProductionPiece[]>();
+        filteredPieces.forEach(p => { const a = byOrder.get(p.orderId) || []; a.push(p); byOrder.set(p.orderId, a); });
+        return [...byOrder.entries()].map(([orderId, ps]) => {
+            const job = jobByRef.get(orderId);
+            return { orderId, job, pieces: ps, dleft: daysLeft(job?.dueDate) };
+        }).sort((a, b) => (a.dleft ?? 9999) - (b.dleft ?? 9999) || b.pieces.length - a.pieces.length);
+    }, [filteredPieces, jobByRef]);
+    const toggleJo = (id: string) => setOpenJo(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
     // Workers eligible for the active service, filtered by role
     const eligibleWorkers = (floorStaff || []).filter(w =>
@@ -114,50 +150,68 @@ const ServiceFloorView: React.FC<ServiceFloorViewProps> = ({ pieces, onUpdateSta
                 ))}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredPieces.map(p => (
-                    <div key={p.id} className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-lg transition-all group relative">
-                        <div className="flex justify-between items-start mb-4">
-                            <span className="text-xs font-black uppercase text-slate-400">{p.id}</span>
-                            <div className="flex space-x-1">
-                                {(p.pendingServices || []).map(s => (
-                                    <div key={s} className={`p-1.5 rounded-lg ${s === activeService ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-300'}`}>
-                                        {getIcon(s)}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        <h4 className="text-sm font-bold text-slate-800 uppercase mb-2 leading-relaxed">{p.specs}</h4>
-
-                        {/* Prior service log for this piece */}
-                        {(p.serviceLog || []).length > 0 && (
-                            <div className="mb-4 space-y-1">
-                                {p.serviceLog!.map((log, i) => (
-                                    <div key={i} className="flex items-center gap-2 text-[10px] text-slate-500 font-bold">
-                                        <CheckCircle2 size={10} className="text-emerald-500 shrink-0"/>
-                                        <span>{log.serviceNick}</span>
-                                        <span className="text-slate-400">—</span>
-                                        <User size={9}/>
-                                        <span>{log.workerName}</span>
-                                        <span className="ml-auto text-slate-400">{log.sqft.toFixed(1)} sqft</span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        <button
-                            onClick={() => openCapture(p)}
-                            className="w-full py-3 rounded-xl bg-indigo-50 text-indigo-600 font-black uppercase text-[10px] tracking-widest hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center space-x-2"
-                        >
-                            <CheckCircle2 size={14}/> <span>Mark {activeService} Done</span>
-                        </button>
-                    </div>
-                ))}
-                {filteredPieces.length === 0 && (
-                    <div className="col-span-full py-20 text-center text-slate-300 font-bold uppercase text-xs italic border-2 border-dashed rounded-[2rem]">
+            {/* JO-grouped queue — open a job order, clear its pieces for this service */}
+            <div className="space-y-3">
+                {jobGroups.length === 0 && (
+                    <div className="py-20 text-center text-slate-300 font-bold uppercase text-xs italic border-2 border-dashed rounded-[2rem]">
                         No pieces pending for {activeService}.
                     </div>
                 )}
+                {jobGroups.map(g => {
+                    const open = openJo.has(g.orderId);
+                    const due = g.dleft;
+                    return (
+                        <div key={g.orderId} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                            <button onClick={() => toggleJo(g.orderId)}
+                                className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 ${open ? 'border-b border-slate-100' : ''}`}>
+                                {open ? <ChevronDown size={16} className="text-slate-400 shrink-0"/> : <ChevronRight size={16} className="text-slate-400 shrink-0"/>}
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-black text-slate-800 font-mono leading-none">#{last4(g.job?.orderNo || g.orderId)}</p>
+                                    <p className="text-[11px] text-slate-500 font-bold truncate mt-0.5">
+                                        {clientName ? clientName(g.job?.clientId) : ''}{g.job?.projectName ? ` · ${g.job.projectName}` : ''}
+                                    </p>
+                                </div>
+                                <span className="text-[11px] font-black text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full shrink-0">{g.pieces.length} pcs</span>
+                                {due != null && (
+                                    <span className={`text-[11px] font-black inline-flex items-center gap-1 shrink-0 ${due < 0 ? 'text-rose-600' : due <= 1 ? 'text-amber-600' : 'text-slate-400'}`}>
+                                        <Clock size={11}/> {due < 0 ? `${-due}d late` : `${due}d`}
+                                    </span>
+                                )}
+                            </button>
+                            {open && (
+                                <div className="divide-y divide-slate-50">
+                                    {g.pieces.map(p => {
+                                        const other = (p.pendingServices || []).filter(s => s !== activeService);
+                                        return (
+                                            <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-xs font-black text-slate-800 font-mono truncate">{p.id}</p>
+                                                    <p className="text-[11px] text-slate-500 truncate">{p.specs}</p>
+                                                    {(p.serviceLog || []).length > 0 && (
+                                                        <div className="flex flex-wrap gap-1 mt-1">
+                                                            {p.serviceLog!.map((l, i) => (
+                                                                <span key={i} className="text-[10px] font-bold text-emerald-700 bg-emerald-50 rounded-full px-1.5 py-0.5 inline-flex items-center gap-1">
+                                                                    <CheckCircle2 size={9}/> {l.serviceNick} · {l.workerName}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    {other.length > 0 && (
+                                                        <p className="text-[10px] text-slate-400 font-bold mt-0.5">also pending: {other.join(', ')}</p>
+                                                    )}
+                                                </div>
+                                                <button onClick={() => openCapture(p)}
+                                                    className="shrink-0 min-h-[40px] px-4 rounded-xl bg-indigo-50 text-indigo-600 font-black uppercase text-[10px] tracking-widest hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-1.5">
+                                                    <CheckCircle2 size={13}/> Done
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
             </div>
 
             {/* ── Worker Capture Modal ───────────────────────────────── */}

@@ -11,7 +11,7 @@ import { Navigate } from 'react-router-dom';
 import { ProductionProvider, useProductionContext } from '@/modules/production/components/ProductionContext';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { ProductionService } from '@/modules/production/services/productionService';
-import ServiceFloorView from '@/modules/production/components/ServiceFloorView';
+import ServiceFloorView, { ServiceJobLike } from '@/modules/production/components/ServiceFloorView';
 
 const ALLOWED = new Set<string>([
   'super_admin', 'owner', 'hassan',
@@ -19,14 +19,17 @@ const ALLOWED = new Set<string>([
 ]);
 
 const ServiceFloorContent: React.FC = () => {
-  const { pieces, handleUpdatePieceStatus } = useProductionContext();
+  const { pieces, jobOrders, clients, handleUpdatePieceStatus } = useProductionContext();
   const floorStaff = ProductionService.getFloorStaff('Glassco');
+  const clientName = (id?: string): string => clients.find(c => c.id === id)?.name || '—';
   return (
     <div className="p-4">
       <ServiceFloorView
         pieces={pieces}
         onUpdateStatus={handleUpdatePieceStatus}
         floorStaff={floorStaff}
+        jobs={jobOrders as unknown as ServiceJobLike[]}
+        clientName={clientName}
       />
     </div>
   );
