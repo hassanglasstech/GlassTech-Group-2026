@@ -93,6 +93,16 @@ const fetchProfile = async (userId: string, email?: string): Promise<UserProfile
   }
 };
 
+// Race a promise against a timeout so a stuck Supabase call (e.g. a jammed
+// token refresh after a corrupt/expired local session) can NEVER leave the
+// login button spinning forever — it rejects, the caller's catch surfaces a
+// retry message, and the finally clears the busy state.
+const withTimeout = <T,>(p: PromiseLike<T>, ms: number, label: string): Promise<T> =>
+  Promise.race([
+    Promise.resolve(p),
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timed out — check your connection and try again`)), ms)),
+  ]);
+
 // ── Card wrapper ──────────────────────────────────────────────────────
 const Card: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="bg-[#1a2535] border border-white/10 rounded-2xl p-8 shadow-2xl w-full max-w-sm">
@@ -262,43 +272,51 @@ const LoginPage: React.FC = () => {
     setBusy(true);
     setError('');
 
-    const { data, error: verifyErr } = await supabase.auth.verifyOtp({
-      email: pendingEmail,
-      token: otp,
-      type:  'email',
-    });
+    try {
+      const { data, error: verifyErr } = await withTimeout(
+        supabase.auth.verifyOtp({ email: pendingEmail, token: otp, type: 'email' }),
+        20000, 'OTP verification',
+      );
 
-    if (verifyErr || !data.user) {
-      setError('Invalid or expired OTP. Try again.');
+      if (verifyErr || !data.user) {
+        setError('Invalid or expired OTP. Try again.');
+        return;
+      }
+
+      // OTP verified — fetch full profile. Timeout-guarded: if a corrupt/expired
+      // local session jams the Supabase client, this rejects instead of hanging
+      // the spinner forever (the exact "OTP ke baad gol-gol ghoomta rehta" bug).
+      const profile = await withTimeout(
+        fetchProfile(data.user.id, data.user.email || ''),
+        20000, 'Profile load',
+      );
+      if (!profile) {
+        // SECURITY (BUG-4): sign out so they're not stuck in a half-authed state.
+        await supabase.auth.signOut();
+        setError('Aapko abhi tak ERP access nahi mila. Admin se Users → Invite karwayen.');
+        setStep('google');
+        return;
+      }
+
+      // Login telemetry — MUST NOT block login. Fire-and-forget (a missing /
+      // RLS-denied access_logs table previously left the awaited insert able to
+      // stall the whole login).
+      void supabase.from('access_logs').insert({
+        user_id: data.user.id, email: pendingEmail,
+        action: 'login', user_agent: navigator.userAgent,
+      }).then(({ error }) => { if (error) console.warn('[Auth] access_logs insert:', error.message); });
+
+      // First login via OTP → let the user set their own password. Next time they
+      // just sign in with email + password (no OTP round-trip). They can skip if
+      // they only wanted a one-time OTP sign-in.
+      setNewPw('');
+      setNewPw2('');
+      setStep('set_password');
+    } catch (e) {
+      setError(`Login problem: ${e instanceof Error ? e.message : 'unknown error'}. Please try again.`);
+    } finally {
       setBusy(false);
-      return;
     }
-
-    // OTP verified — now fetch full profile and decide device setup
-    const profile = await fetchProfile(data.user.id, data.user.email || '');
-    if (!profile) {
-      // SECURITY (BUG-4): sign out so they're not stuck in a half-authed state.
-      await supabase.auth.signOut();
-      setError('Aapko abhi tak ERP access nahi mila. Admin se Users → Invite karwayen.');
-      setStep('google');
-      setBusy(false);
-      return;
-    }
-
-    // Log login
-    await supabase.from('access_logs').insert({
-      user_id: data.user.id, email: pendingEmail,
-      action: 'login', user_agent: navigator.userAgent,
-    });
-
-    // First login via OTP → let the user set their own password. Next time they
-    // just sign in with email + password (no OTP round-trip). They can skip if
-    // they only wanted a one-time OTP sign-in.
-    setNewPw('');
-    setNewPw2('');
-    setStep('set_password');
-
-    setBusy(false);
   };
 
   // ── STEP: Set your own account password (after first OTP login) ──────
