@@ -28,6 +28,10 @@ export interface JobLike {
   clientId?: string;
   projectName?: string;
   assignedCutter?: string;
+  /** SO status (for Void derivation) + production job status (P1b). Only
+   *  effectively-Active jobs surface in the supervisor assign pool. */
+  status?: string;
+  jobStatus?: 'Active' | 'Pending' | 'Hold' | 'Void';
   items?: Array<{
     width?: number; height?: number;
     inchW?: number | string; sootW?: number | string; inchH?: number | string; sootH?: number | string;
@@ -50,6 +54,14 @@ const thkOf = (p: ProductionPiece): string => {
   return m ? `${m[1]}mm` : (String(p.specs || '').trim() || '—');
 };
 const last4 = (s?: string): string => (s || '').replace(/\s+/g, '').slice(-4) || '—';
+// P2 — only effectively-Active jobs belong in the assign pool. Void is derived
+// from the SO status; Hold/Pending are set on the Job Orders board. Unknown job
+// (piece with no matching order) still surfaces so it can be assigned.
+const isActiveJob = (job?: JobLike): boolean => {
+  if (!job) return true;
+  if (/void|cancel/i.test(String(job.status || ''))) return false;
+  return (job.jobStatus || 'Active') === 'Active';
+};
 const isToday = (iso?: string): boolean => (iso || '').slice(0, 10) === new Date().toISOString().slice(0, 10);
 const daysLeft = (due?: string): number | null => {
   if (!due) return null;
@@ -84,7 +96,7 @@ export const SupervisorJobBoard: React.FC<Props> = ({ pieces, jobs, clientName, 
         mmGroups: [...mm.entries()].sort((a, b) => parseFloat(a[0]) - parseFloat(b[0])),
         totalSqft, due: job?.dueDate, dleft: daysLeft(job?.dueDate),
       };
-    }).filter(c => c.pending.length > 0);
+    }).filter(c => c.pending.length > 0 && isActiveJob(c.job));
     // sort: most overdue / soonest due first, then by pending desc
     out.sort((a, b) => {
       const da = a.dleft ?? 9999, db = b.dleft ?? 9999;

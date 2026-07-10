@@ -39,9 +39,11 @@ import { CuttingSession, GRNSheetEntry } from '@/modules/procurement/types/inven
 import { JobOrder } from '@/modules/production/types/production';
 import { toast } from 'sonner';
 import { EmptyState } from '@/modules/shared/components/EmptyState';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import {
   ScanLine, Plus, Square, Search, X, CheckCircle2, AlertTriangle,
   Globe, Undo2, Play, Hash, Clock, Target, Loader2, Eye, History, Scissors,
+  Ban, Image as ImageIcon,
 } from 'lucide-react';
 import { ProductionPiece, QuotationItem } from '@/modules/shared/types';
 import { CutPlanTab } from '@/modules/production/companies/glassco/components/workbench/CutPlanTab';
@@ -209,6 +211,8 @@ const CutterWorkbench: React.FC = () => {
   const [cutting, setCutting] = useState<string | null>(null);
   const [assigningRecut, setAssigningRecut] = useState<string | null>(null);
   const [planJob, setPlanJob] = useState<string | null>(null);   // orderId whose cut plan is open
+  const [imageJob, setImageJob] = useState<string | null>(null); // orderId whose design images are open
+  const [breaking, setBreaking] = useState<string | null>(null); // piece id being marked broken
   const [hrCutters, setHrCutters] = useState<string[]>([]);
   useEffect(() => {
     let alive = true;
@@ -440,6 +444,31 @@ const CutterWorkbench: React.FC = () => {
       toast.error(`Cut error: ${e instanceof Error ? e.message : 'unknown'}`, { duration: 7000 });
     }
     setCutting(null);
+  };
+
+  // Break a piece during cutting (glass shattered on the table). Pending-Cut →
+  // Broken (universal transition). Records who broke it + the size on the piece
+  // data. A replacement is re-generated for the order (Generate pieces backfills
+  // the shortfall) — Broken is terminal, so the count drops out of the cut queue.
+  const breakPiece = async (piece: ProductionPiece): Promise<void> => {
+    if (!(await confirmModal(`Mark ${piece.id} as BROKEN?\n\n${piece.specs || ''}\n\nIt leaves the cut queue. Re-generate the job's pieces to cut a replacement.`))) return;
+    setBreaking(piece.id);
+    const nowIso = new Date().toISOString();
+    try {
+      const { error } = await supabase.rpc('update_piece_status_atomic', {
+        p_piece_id:   piece.id,
+        p_new_status: 'Broken',
+        p_changed_by: actorName,
+        p_reason:     `broken at cutting by ${cutterName}`,
+        p_extra:      { brokenBy: cutterName, brokenAt: nowIso, brokenSpecs: piece.specs || '' },
+      });
+      if (error) { toast.error(`Break failed: ${error.message}`, { duration: 8000 }); setBreaking(null); return; }
+      setPieces(prev => prev.map(p => p.id === piece.id ? { ...p, status: 'Broken' as const } : p));
+      toast.success(`${piece.id} marked broken`);
+    } catch (e) {
+      toast.error(`Break error: ${e instanceof Error ? e.message : 'unknown'}`, { duration: 8000 });
+    }
+    setBreaking(null);
   };
 
   // D3 — supervisor redistributes a recut-pool piece to a cutter. Reuses the
@@ -860,6 +889,12 @@ const CutterWorkbench: React.FC = () => {
                     <div className="flex items-center justify-between mb-1.5 gap-2">
                       <p className="text-label font-black text-slate-700 truncate">#{(job?.orderNo || orderId).replace(/\s+/g, '').slice(-4)}{job?.projectName ? ` · ${job.projectName}` : ''}</p>
                       <div className="flex items-center gap-2 shrink-0">
+                        {(job?.items || []).some(it => !it.isSection && (it.designFile || it.attachedImage)) && (
+                          <button onClick={() => setImageJob(orderId)}
+                            className="text-2xs font-black uppercase text-violet-700 bg-violet-50 active:bg-violet-100 rounded-control px-2 py-1 inline-flex items-center gap-1 min-h-[32px]">
+                            <ImageIcon size={12} /> Image
+                          </button>
+                        )}
                         <button onClick={() => setPlanJob(orderId)}
                           className="text-2xs font-black uppercase text-blue-700 bg-blue-50 active:bg-blue-100 rounded-control px-2 py-1 inline-flex items-center gap-1 min-h-[32px]">
                           <Scissors size={12} /> Plan
@@ -886,13 +921,23 @@ const CutterWorkbench: React.FC = () => {
                               </p>
                             )}
                           </div>
-                          <button
-                            onClick={() => cutPiece(p)}
-                            disabled={cutting === p.id}
-                            className={`shrink-0 min-h-[44px] disabled:opacity-50 text-white rounded-xl px-4 py-2 text-label font-black uppercase flex items-center gap-1.5 ${p.status === 'QC-Failed' ? 'bg-rose-600 active:bg-rose-700' : 'bg-emerald-600 active:bg-emerald-700'}`}
-                          >
-                            {cutting === p.id ? <Loader2 size={16} className="animate-spin"/> : <CheckCircle2 size={16}/>} {p.status === 'QC-Failed' ? 'Recut' : 'Cut'}
-                          </button>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              onClick={() => cutPiece(p)}
+                              disabled={cutting === p.id || breaking === p.id}
+                              className={`min-h-[44px] disabled:opacity-50 text-white rounded-xl px-4 py-2 text-label font-black uppercase flex items-center gap-1.5 ${p.status === 'QC-Failed' ? 'bg-rose-600 active:bg-rose-700' : 'bg-emerald-600 active:bg-emerald-700'}`}
+                            >
+                              {cutting === p.id ? <Loader2 size={16} className="animate-spin"/> : <CheckCircle2 size={16}/>} {p.status === 'QC-Failed' ? 'Recut' : 'Cut'}
+                            </button>
+                            <button
+                              onClick={() => breakPiece(p)}
+                              disabled={breaking === p.id || cutting === p.id}
+                              title="Mark broken (glass shattered while cutting)"
+                              className="min-h-[44px] w-11 disabled:opacity-50 text-rose-600 bg-rose-50 active:bg-rose-100 border border-rose-200 rounded-xl flex items-center justify-center"
+                            >
+                              {breaking === p.id ? <Loader2 size={16} className="animate-spin"/> : <Ban size={16}/>}
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1130,6 +1175,36 @@ const CutterWorkbench: React.FC = () => {
             </div>
             <div className="p-4">
               <CutPlanTab items={(jobFor(planJob)?.items || []) as unknown as QuotationItem[]} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Design images drawer (per job) — the cutter sees what to cut ── */}
+      {imageJob && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 flex items-end" onClick={() => setImageJob(null)}>
+          <div className="w-full bg-white rounded-t-3xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
+              <p className="text-base font-black uppercase">Design Images — #{imageJob.replace(/\s+/g, '').slice(-4)}</p>
+              <button onClick={() => setImageJob(null)} className="p-2 hover:bg-slate-100 rounded-full" aria-label="Close"><X size={20} /></button>
+            </div>
+            <div className="p-4">
+              {(() => {
+                const imgs = (jobFor(imageJob)?.items || [])
+                  .filter(it => !it.isSection && (it.designFile || it.attachedImage))
+                  .map((it, i) => ({ src: (it.designFile || it.attachedImage) as string, label: it.description || `Item ${i + 1}` }));
+                if (imgs.length === 0) return <EmptyState icon={<ImageIcon size={22} />} title="No images on this job" description="Design images attached to the order appear here." compact />;
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {imgs.map((im, i) => (
+                      <figure key={i} className="bg-white rounded-card border-2 border-slate-200 shadow-sm overflow-hidden">
+                        <img src={im.src} alt={im.label} className="w-full max-h-[70vh] object-contain bg-slate-50" />
+                        <figcaption className="text-2xs font-bold text-slate-500 px-3 py-2 truncate">{im.label}</figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

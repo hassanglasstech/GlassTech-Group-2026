@@ -18,6 +18,7 @@ import { ProductionService } from '@/modules/production/services/productionServi
 import { SalesService } from '@/modules/sales/services/salesService';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { HRService } from '@/modules/hr/services/hrService';
+import { Logger } from '@/modules/shared/services/logger';
 import { ProductionPiece } from '@/modules/shared/types';
 import { Quotation } from '@/modules/production/types/production';
 import { Client } from '@/modules/sales/types/crm';
@@ -70,6 +71,19 @@ const orderValue = (o: Quotation): number => (o.items || []).reduce((s, i) => s 
 const orderSqft = (o: Quotation): number => (o.items || []).reduce((s, i) => s + (i.totalSqFt || 0), 0);
 const JOB_STATUSES = new Set(['Approved', 'Invoiced', 'Partial Payment', 'Paid']);
 
+// P1b — production job-order status. 'Void' is derived from the SO itself being
+// voided/cancelled; Active/Pending/Hold are set here and gate the supervisor pool.
+type JobStatus = 'Active' | 'Pending' | 'Hold' | 'Void';
+const SO_VOID = (o: Quotation): boolean => /void|cancel/i.test(String(o.status || ''));
+const effectiveJobStatus = (o: Quotation): JobStatus =>
+  SO_VOID(o) ? 'Void' : ((o.jobStatus as JobStatus) || 'Active');
+const JOB_STATUS_TONE: Record<JobStatus, string> = {
+  Active:  'bg-emerald-50 text-emerald-700 border-emerald-200',
+  Pending: 'bg-slate-100 text-slate-600 border-slate-200',
+  Hold:    'bg-amber-50 text-amber-700 border-amber-200',
+  Void:    'bg-rose-50 text-rose-700 border-rose-200',
+};
+
 const PAGE_SIZE = 25;
 
 const JobOrders: React.FC = () => {
@@ -88,6 +102,7 @@ const JobOrders: React.FC = () => {
   const [hrCutters, setHrCutters] = useState<string[]>([]);
   const [savingCutter, setSavingCutter] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [savingJobStatus, setSavingJobStatus] = useState<string | null>(null);
 
   // Load via the async sales API (cloud + cache, scoped to the active company).
   // The sync SalesService.getQuotations() only reads the localStorage cache,
@@ -226,6 +241,28 @@ const JobOrders: React.FC = () => {
       setTick(x => x + 1);
     } catch (e) { toast.error(`Generate failed: ${e instanceof Error ? e.message : 'unknown error'}`, { duration: 11000 }); }
     setGenerating(false);
+  };
+
+  // P1b — set the production job-order status (Active / Pending / Hold). Persisted
+  // on the quotation's data jsonb (same channel as assignedCutter). Void is not
+  // set here — it is derived from the SO status. Optimistic with rollback.
+  const setJobStatus = async (order: Quotation, next: JobStatus): Promise<void> => {
+    const cur = effectiveJobStatus(order);
+    if (next === cur || cur === 'Void') return;
+    setSavingJobStatus(order.id);
+    const snapshot = orders;
+    const updated: Quotation = { ...order, jobStatus: next };
+    setOrders(list => list.map(o => o.id === order.id ? updated : o));
+    try {
+      await AsyncSalesService.saveQuotations([updated]);
+      const actor = useAuthStore.getState().profile?.email ?? useAuthStore.getState().user?.email ?? 'production';
+      Logger.action(actor, 'PRODUCTION', 'JO_STATUS', { referenceId: order.orderNo || order.id, extra: { from: cur, to: next } });
+      toast.success(`Job ${order.orderNo || ''} → ${next}`);
+    } catch (e) {
+      setOrders(snapshot);
+      toast.error(`Could not update: ${e instanceof Error ? e.message : 'unknown error'}`, { duration: 9000 });
+    }
+    setSavingJobStatus(null);
   };
 
   // Dropdown options: HR cutters + any cutter already assigned/recorded.
@@ -367,16 +404,17 @@ const JobOrders: React.FC = () => {
                 <th className="px-3 py-2">Order Date</th>
                 <th className="px-3 py-2">Due</th>
                 <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">JO</th>
                 <th className="px-3 py-2 w-44">Production Progress</th>
                 <th className="px-3 py-2 text-right">SqFt</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading && (
-                <tr><td colSpan={8} className="px-3 py-10 text-center text-slate-400"><Loader2 size={18} className="animate-spin inline mr-2" /> Loading job orders…</td></tr>
+                <tr><td colSpan={9} className="px-3 py-10 text-center text-slate-400"><Loader2 size={18} className="animate-spin inline mr-2" /> Loading job orders…</td></tr>
               )}
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={8} className="p-0">
+                <tr><td colSpan={9} className="p-0">
                   <EmptyState icon={<ClipboardList size={22} />} title="No job orders" description="Confirmed orders will appear here as they are approved and sent to production." />
                 </td></tr>
               )}
@@ -396,6 +434,25 @@ const JobOrders: React.FC = () => {
                       <td className="px-3 py-2 text-slate-500 font-bold">{formatDate(r.order.date)}</td>
                       <td className={`px-3 py-2 font-bold ${r.overdue ? 'text-rose-600' : 'text-slate-500'}`}>{r.order.dueDate ? formatDate(r.order.dueDate) : '—'}</td>
                       <td className="px-3 py-2"><StatusBadge status={r.order.status} size="sm" /></td>
+                      <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                        {(() => {
+                          const js = effectiveJobStatus(r.order);
+                          if (js === 'Void') return <span className={`text-2xs font-black px-2 py-0.5 rounded border uppercase ${JOB_STATUS_TONE.Void}`}>Void</span>;
+                          return (
+                            <span className="inline-flex items-center gap-1">
+                              <select value={js} disabled={savingJobStatus === r.order.id}
+                                onChange={e => setJobStatus(r.order, e.target.value as JobStatus)}
+                                className={`sap-input text-2xs font-black uppercase rounded-control border px-1.5 py-0.5 cursor-pointer ${JOB_STATUS_TONE[js]} disabled:opacity-50`}
+                                title="Set production job-order status">
+                                <option value="Active">Active</option>
+                                <option value="Pending">Pending</option>
+                                <option value="Hold">Hold</option>
+                              </select>
+                              {savingJobStatus === r.order.id && <Loader2 size={11} className="animate-spin text-slate-400" />}
+                            </span>
+                          );
+                        })()}
+                      </td>
                       <td className="px-3 py-2">
                         {r.totalPieces === 0 ? (
                           <span className={`text-2xs font-black px-2 py-0.5 rounded uppercase ${PROD_TONE[r.prodStatus]}`}>{PROD_LABEL[r.prodStatus]}</span>
@@ -413,7 +470,7 @@ const JobOrders: React.FC = () => {
                     {isOpen && (
                       <tr className="bg-slate-50/70">
                         <td />
-                        <td colSpan={7} className="px-3 pb-4 pt-1">
+                        <td colSpan={8} className="px-3 pb-4 pt-1">
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-2xs mb-3">
                             <Detail label="Architect" value={r.order.architect} />
                             <Detail label="Site" value={r.order.site} />

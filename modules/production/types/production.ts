@@ -117,6 +117,10 @@ export interface Quotation {
   actualDeliveryDate?: string;
   /** Cutter assigned to this job order (consolidated-branch cutter-tracking overlay). */
   assignedCutter?: string;
+  /** Production job-order status, set on the Job Orders board (P1b). 'Void' is
+   *  auto-derived when the SO itself is voided; Active/Pending/Hold are set in
+   *  production. Undefined is treated as 'Active' (default in-production). */
+  jobStatus?: 'Active' | 'Pending' | 'Hold' | 'Void';
   delayReason?: string;
   delayCategory?: 'Internal' | 'Outsourcing' | 'Client' | '';
   // Sample tracking (Nippon): a sample sent to a client, either charged or free.
