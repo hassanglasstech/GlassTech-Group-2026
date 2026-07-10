@@ -77,10 +77,18 @@ export const ProductionService = {
           specs: r.specs || '',
           status: r.status || 'Cut',
           lastUpdated: r.last_updated || r.created_at || new Date().toISOString(),
-          fault: r.fault,
-          pendingServices: r.pending_services,
-          spotId: r.spot_id,
-          dispatchId: r.dispatch_id,
+          // These ride the `data` jsonb via the update_piece_status_atomic
+          // p_extra merge (the live table has no flat pending_services/fault/
+          // spot_id/dispatch_id/service_log columns). Read flat-first, then fall
+          // back to data — WITHOUT this, a freshly-cut piece routed to
+          // Service-Pending carried its pendingServices only in `data`, so every
+          // service-floor filter (pendingServices.includes(station)) saw null and
+          // the piece appeared on NO station. Same for fault/spot/dispatch.
+          fault: r.fault ?? d.fault,
+          pendingServices: r.pending_services ?? d.pendingServices,
+          spotId: r.spot_id ?? d.spotId,
+          dispatchId: r.dispatch_id ?? d.dispatchId,
+          serviceLog: r.service_log ?? d.serviceLog,
           cutBy: r.cut_by ?? d.cutBy,
           cutAt: r.cut_at ?? d.cutAt,
           // Track 2.1 — per-piece assignment & fault overlay (data-jsonb only).
