@@ -140,7 +140,16 @@ export const AsyncSalesService = {
           };
         });
         _mergeIntoLocal(KEYS.CLIENTS, mapped);   // merge, don't overwrite shared cache
-        return mapped as Client[];
+        // Surface local-only clients not yet in the cloud set. A client saved
+        // while the session was stale (upsert denied → _queueRetry) lives only
+        // in localStorage; without this it is invisible — "Unknown" on its
+        // quotations and missing from the Business-Partner list — even though it
+        // exists locally and is pending sync. Company-scoped; deletes remove from
+        // local too (_deleteRow) so this cannot resurrect a deleted client.
+        const cloudIds = new Set(mapped.map(c => c.id));
+        const pendingLocal = (safeParse(KEYS.CLIENTS) as Client[])
+          .filter(c => c && c.company === company && c.id && !cloudIds.has(c.id));
+        return [...(mapped as Client[]), ...pendingLocal];
       }
       // Supabase empty — fall back to localStorage
       return safeParse(KEYS.CLIENTS);
