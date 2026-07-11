@@ -4,7 +4,7 @@ import { Company, Quotation, Client, ProductionPiece, TemperingDispatch, Purchas
 import { PaymentReceipt } from '../../finance/types/finance';
 import { SalesService } from '../services/salesService';
 import { AsyncSalesService } from '../services/asyncSalesService';
-import { FinanceService } from '../../finance/services/financeService';
+import { FinanceService, ledgerToRow } from '../../finance/services/financeService';
 import { generateDeliveryInvoice } from '../services/deliveryInvoiceService';
 import { ProductionService } from '../../production/services/productionService';
 import { InventoryService } from '../../procurement/services/inventoryService';
@@ -479,13 +479,18 @@ const SalesOrders: React.FC = () => {
                 ]);
             }
 
-            // ── Persist PaymentReceipt + update invoice (atomic via RPC) ──
+            // ── Persist PaymentReceipt + update invoice (+ GL, atomic via RPC) ──
+            // glPostedByRpc = true when process_payment_receipt_v2 posted the GL leg
+            // in the SAME DB txn as the receipt/invoice (God-mode P0 #9); then we
+            // must NOT post the GL again app-side.
+            let glPostedByRpc = false;
             if (existingInvoice) {
                 const payment: PaymentReceipt = {
                     id: receiptId, invoiceId: existingInvoice.id, date: today,
                     amount: newPayment, method: paymentMethod, reference: paymentReference, glTxId: txId,
                 };
-                await AsyncSalesService.savePaymentReceipts([payment]);
+                const rcptRes = await AsyncSalesService.savePaymentReceipts([payment], ledgerToRow(glTx));
+                glPostedByRpc = rcptRes?.glPosted ?? false;
 
                 // Mirror invoice balance/status locally so UI reflects immediately
                 const newReceived = Number(existingInvoice.receivedAmount || 0) + newPayment;
@@ -500,16 +505,15 @@ const SalesOrders: React.FC = () => {
                 }]);
             }
 
-            // ── Post the GL leg AFTER the receipt/invoice (God-mode P0 #9 torn-write) ──
-            // The invoice balance + receipt (process_payment_receipt runs both in ONE
-            // serialisable DB txn) is the authoritative money-movement record, so it is
-            // persisted FIRST. Posting the GL after it means the worst-case failure is a
-            // GL leg queued for retry (saveLedger's own retry queue) — a recoverable,
-            // self-healing state — instead of the ledger showing cash-received / AR-settled
-            // while the invoice still reads outstanding (the dangerous direction the old
-            // GL-first order produced). True single-DB-txn atomicity (GL folded into the
-            // RPC) is the follow-up migration.
-            FinanceService.saveLedger([...FinanceService.getLedger(), glTx]);
+            // ── Post the GL leg app-side ONLY if the atomic RPC didn't (God-mode P0 #9) ──
+            // When process_payment_receipt_v2 posted the GL in the SAME txn as the
+            // receipt/invoice (glPostedByRpc), skip it here to avoid a double-post.
+            // App-side posting still covers advance receipts (no invoice) and instances
+            // where v2 isn't applied — and saveLedger's own retry queue keeps a failed
+            // cloud push recoverable rather than a ledger/invoice mismatch.
+            if (!glPostedByRpc) {
+                FinanceService.saveLedger([...FinanceService.getLedger(), glTx]);
+            }
 
             // ── Financial Event registry entry ──
             FinanceService.saveFinancialEvents([

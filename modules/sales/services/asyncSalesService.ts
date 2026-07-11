@@ -677,14 +677,20 @@ export const AsyncSalesService = {
       return _localByCompany('gtk_erp_payment_receipts');
     }
   },
-  savePaymentReceipts: async (data: PaymentReceipt[]): Promise<void> => {
+  savePaymentReceipts: async (
+    data: PaymentReceipt[],
+    glRow?: Record<string, unknown> | null,
+  ): Promise<{ glPosted: boolean }> => {
     // Phase-2 (2.6): per-row merge save (preserves siblings)
     _mergeIntoLocal<PaymentReceipt>(KEYS.PAYMENT_RECEIPTS, data);
+    // God-mode P0 #9: when a GL row (ledgerToRow(glTx)) is supplied, use the
+    // atomic process_payment_receipt_v2 — it inserts the receipt, updates the
+    // invoice balance AND posts the balanced GL leg in ONE serialisable DB txn,
+    // so the three can never tear apart. glPosted tells the caller whether the
+    // GL was posted here (true) so it must NOT post it again app-side; false
+    // (no GL row, or v2 not applied on this instance) → caller posts via saveLedger.
+    let glPosted = false;
     try {
-      // Use atomic RPC (process_payment_receipt) so that receipt
-      // insertion and invoice balance/status update occur in a single
-      // serialisable DB transaction. Eliminates the TOCTOU race where
-      // two concurrent payments both read the same stale balance.
       for (const r of data) {
         const receiptPayload = {
           id:         r.id,
@@ -696,12 +702,26 @@ export const AsyncSalesService = {
           gl_tx_id:   r.glTxId,
           created_by: (r as PaymentReceipt & { createdBy?: string }).createdBy ?? null,
         };
+
+        // Atomic path (receipt + invoice + GL) when a GL row is provided.
+        if (glRow) {
+          const { error: v2Err } = await supabase.rpc('process_payment_receipt_v2', {
+            receipt_data: receiptPayload,
+            p_invoice_id: r.invoiceId,
+            p_gl_row:     glRow,
+          });
+          if (!v2Err) { glPosted = true; continue; }
+          // v2 not applied on this instance → fall through to the legacy RPC;
+          // glPosted stays false so the caller posts the GL app-side.
+          Logger.warn('Sales', `process_payment_receipt_v2 unavailable for ${r.id} — legacy path (GL stays app-side): ${v2Err.message}`);
+        }
+
         const { error } = await supabase.rpc('process_payment_receipt', {
           receipt_data: receiptPayload,
           p_invoice_id: r.invoiceId,
         });
         if (error) {
-          // Graceful degradation: fall back to direct upsert if Migration 017/032
+          // Graceful degradation: fall back to direct upsert if the RPC
           // has not yet been applied (e.g. local dev against older schema).
           Logger.warn('Sales', `process_payment_receipt RPC unavailable for ${r.id} — falling back to direct upsert: ${error.message}`);
           const { error: upsertErr } = await supabase.from('payment_receipts').upsert({
@@ -718,6 +738,7 @@ export const AsyncSalesService = {
       Logger.error('Sales', 'savePaymentReceipts exception', err);
       _queueRetry('payment_receipts');
     }
+    return { glPosted };
   },
 
   saveProjects: async (data: Project[]): Promise<void> => {

@@ -81,7 +81,7 @@ export const SalesService = {
   getPaymentReceipts: (): PaymentReceipt[] => safeParse(KEYS.PAYMENT_RECEIPTS),
   savePaymentReceipts: (data: PaymentReceipt[]): void => {
     safeSave(KEYS.PAYMENT_RECEIPTS, data);
-    _push('payment_receipts', () => AsyncSalesService.savePaymentReceipts(data));
+    _push('payment_receipts', async () => { await AsyncSalesService.savePaymentReceipts(data); });
   },
 
   // ── Warm Cache (app start — pull latest from Supabase) ─────────────
