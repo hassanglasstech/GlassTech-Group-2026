@@ -671,26 +671,33 @@ export const executeTool = async (
 
     // ── CREATE INVOICE ────────────────────────────────────────────
     else if (toolName === 'create_invoice') {
-      const quotations = ls('gtk_erp_quotations');
-      const q = quotations.find((qt: any) => qt.id === params.quotation_id);
-      if (!q) { result = { error: `Quotation ${params.quotation_id} nahi mili` }; }
-      else {
-        const invId = `INV-AGENT-${Date.now()}`;
-        const inv = { id: invId, company: q.company || 'Glassco', orderId: q.id, orderNo: q.orderNo || q.id, clientId: q.clientId, clientName: q.clientName, date: new Date().toISOString().split('T')[0], dueDate: new Date(Date.now() + 30*86400000).toISOString().split('T')[0], totalAmount: q.totalAmount, receivedAmount: 0, balance: q.totalAmount, status: 'Outstanding', notes: params.notes || `Invoice by Agent — ${approvedBy}`, createdAt: new Date().toISOString() };
-        const allInv = ls('gtk_erp_invoices'); allInv.push(inv); lsSet('gtk_erp_invoices', allInv);
-        await supabase.from('invoices').insert({ id: invId, company: inv.company, order_id: q.id, client_name: q.clientName, date: inv.date, due_date: inv.dueDate, total_amount: q.totalAmount, status: 'Outstanding', created_by: `Agent (${approvedBy})`, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }).then(() => {}, () => {});
-        result = { invoice_id: invId, client: q.clientName, amount: q.totalAmount, status: 'Outstanding' };
-      }
+      // SAFETY (God-mode P0 #6): this path wrote an invoice straight to the
+      // invoices table with NO GL journal (no Dr Accounts Receivable / Cr Revenue),
+      // and for Glassco it also skipped the delivery/COGS pieces gate — silently
+      // breaking the trial balance. Refuse: a real invoice must be raised from
+      // Sales → Orders (deliveryInvoiceService), which posts the balanced GL
+      // atomically via post_invoice_atomic.
+      result = {
+        error: 'Invoice creation via the assistant is disabled — it would bypass the ' +
+          'GL journal (Dr Accounts Receivable / Cr Revenue) and break the trial balance. ' +
+          'Please raise the delivery invoice from Sales → Orders so the GL posts correctly.',
+        action: 'open_sales_orders',
+      };
     }
 
     // ── CREATE PAYMENT RECEIPT ─────────────────────────────────────
     else if (toolName === 'create_payment_receipt') {
-      const rcptId = `RCPT-AGENT-${Date.now()}`;
-      const today = new Date().toISOString().split('T')[0];
-      const rcpt = { id: rcptId, invoiceId: params.invoice_id, date: today, amount: params.amount, method: params.method, reference: params.reference || '', createdAt: new Date().toISOString() };
-      const allRcpt = ls('gtk_erp_payment_receipts'); allRcpt.push(rcpt); lsSet('gtk_erp_payment_receipts', allRcpt);
-      await supabase.from('payment_receipts').insert({ id: rcptId, invoice_id: params.invoice_id, date: today, amount: params.amount, method: params.method, reference: params.reference || '', created_by: `Agent (${approvedBy})`, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }).then(() => {}, () => {});
-      result = { receipt_id: rcptId, invoice: params.invoice_id, amount: params.amount, method: params.method };
+      // SAFETY (God-mode P0 #6): this path inserted a receipt with NO GL
+      // (no Dr Cash/Bank / Cr Accounts Receivable) and no invoice-balance update —
+      // AR silently drifted from the ledger. Refuse: record receipts from
+      // Sales → Receipts (process_payment_receipt), which updates the balance and
+      // posts the balanced GL.
+      result = {
+        error: 'Payment-receipt entry via the assistant is disabled — it would bypass the ' +
+          'GL (Dr Cash/Bank / Cr Accounts Receivable) and the invoice-balance update. ' +
+          'Please record the receipt from Sales → Receipts.',
+        action: 'open_sales_receipts',
+      };
     }
 
     // ── EMPLOYEE ATTENDANCE ────────────────────────────────────────

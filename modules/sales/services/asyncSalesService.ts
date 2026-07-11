@@ -26,6 +26,25 @@ const activeCompany = (): string => {
   } catch { /* appStore not initialised yet */ }
   return useAuthStore.getState().profile?.company ?? '';
 };
+
+// ── Company-scoped localStorage fallback (God-mode P0 #5) ─────────────
+// The shared gtk_erp_* caches hold every company the RLS-scoped pull returned
+// (SyncService.pullTable does select('*') with no company filter), so returning
+// the RAW cache on a Supabase error/timeout showed a multi-company user the
+// wrong company's rows. Filter the fallback by the active company. Unstamped
+// local-only rows (created this session, no `company` yet) are kept so nothing
+// legitimately mine disappears offline; only another company's clearly-stamped
+// rows are excluded. (Single-company users are unaffected — their cache is
+// already one company, but this makes the guarantee explicit.)
+const _localByCompany = <T,>(key: string): T[] => {
+  const co = activeCompany();
+  const all = safeParse(key) as T[];
+  if (!co) return all;
+  return all.filter((r) => {
+    const c = (r as { company?: string })?.company;
+    return !c || c === co;
+  });
+};
 // Phase 0 Round 2 — typed Supabase row interfaces (replaces (r: any) callbacks)
 import {
   SbBaseRow, SbClientRow, SbProductRow, SbQuotationRow, SbInvoiceRow,
@@ -118,7 +137,7 @@ export const AsyncSalesService = {
       const { data, error } = await supabase.from('clients').select('*').eq('company', company);
       if (error) {
         console.error('[AsyncSalesService] getClients:', error.message);
-        return safeParse(KEYS.CLIENTS);
+        return _localByCompany(KEYS.CLIENTS);
       }
       if (data && data.length > 0) {
         const mapped = (data as SbClientRow[]).map((r) => {
@@ -152,10 +171,10 @@ export const AsyncSalesService = {
         return [...(mapped as Client[]), ...pendingLocal];
       }
       // Supabase empty — fall back to localStorage
-      return safeParse(KEYS.CLIENTS);
+      return _localByCompany(KEYS.CLIENTS);
     } catch (err: unknown) {
       console.error('[AsyncSalesService] getClients exception:', errMsg(err));
-      return safeParse(KEYS.CLIENTS);
+      return _localByCompany(KEYS.CLIENTS);
     }
   },
   saveClients: async (data: Client[]): Promise<void> => {
@@ -211,14 +230,14 @@ export const AsyncSalesService = {
     // it hydrates GTK products into a Nippon-scoped UI state.
     if (!company) {
       console.warn('[AsyncSalesService] getProducts called before company resolved — returning local cache');
-      return safeParse('gtk_erp_products');
+      return _localByCompany('gtk_erp_products');
     }
     try {
       const { data, error } = await supabase.from('products').select('*').eq('company', company);
       if (error) {
         console.error('[AsyncSalesService] getProducts:', error.message);
         toast.error('Cloud sync failed — using local products.', { id: 'get-products', duration: 3000 });
-        return safeParse('gtk_erp_products');
+        return _localByCompany('gtk_erp_products');
       }
       return ((data ?? []) as SbProductRow[]).map((r): Product => ({
       id: r.id, company: r.company, category: r.category ?? '', description: r.description ?? '',
@@ -243,7 +262,7 @@ export const AsyncSalesService = {
     } catch (err: unknown) {
       console.error('[AsyncSalesService] getProducts exception:', errMsg(err));
       toast.error('Failed to load products.', { id: 'get-products-err', duration: 3000 });
-      return safeParse('gtk_erp_products');
+      return _localByCompany('gtk_erp_products');
     }
   },
   saveProducts: async (data: Product[]): Promise<void> => {
@@ -356,7 +375,7 @@ export const AsyncSalesService = {
       const { data, error } = await supabase.from('quotations').select('*').eq('company', company);
       if (error) {
         console.error('[AsyncSalesService] getQuotations:', error.message);
-        return safeParse(KEYS.QUOTATIONS);
+        return _localByCompany(KEYS.QUOTATIONS);
       }
       if (data && data.length > 0) {
         // Restore full object: JSONB `data` blob first, then flat columns override.
@@ -398,10 +417,10 @@ export const AsyncSalesService = {
         _mergeIntoLocal(KEYS.QUOTATIONS, mapped);   // merge, don't overwrite shared cache
         return mapped as unknown as Quotation[];
       }
-      return safeParse(KEYS.QUOTATIONS);
+      return _localByCompany(KEYS.QUOTATIONS);
     } catch (err: unknown) {
       console.error('[AsyncSalesService] getQuotations exception:', errMsg(err));
-      return safeParse(KEYS.QUOTATIONS);
+      return _localByCompany(KEYS.QUOTATIONS);
     }
   },
   saveQuotations: async (data: Quotation[]): Promise<void> => {
@@ -481,15 +500,15 @@ export const AsyncSalesService = {
       const { data, error } = await supabase.from('projects').select('*').eq('company', company);
       if (error) {
         console.error('[AsyncSalesService] getProjects:', error.message);
-        return safeParse(KEYS.PROJECTS);
+        return _localByCompany(KEYS.PROJECTS);
       }
       if (data && data.length > 0) {
         _mergeIntoLocal(KEYS.PROJECTS, data as unknown as Array<{ id: string }>);   // merge, don't overwrite
         return data as Project[];
       }
-      return safeParse(KEYS.PROJECTS);
+      return _localByCompany(KEYS.PROJECTS);
     } catch (err: unknown) {
-      return safeParse(KEYS.PROJECTS);
+      return _localByCompany(KEYS.PROJECTS);
     }
   },
 
@@ -498,12 +517,12 @@ export const AsyncSalesService = {
     const company = activeCompany();
     try {
       const { data, error } = await supabase.from('vendors').select('*').eq('company', company);
-      if (error || !data || data.length === 0) return safeParse(KEYS.VENDORS);
+      if (error || !data || data.length === 0) return _localByCompany(KEYS.VENDORS);
       const mapped = data.map((r) => ({ ...r }));
       _mergeIntoLocal(KEYS.VENDORS, mapped);   // merge, don't overwrite shared cache
       return mapped as Vendor[];
     } catch {
-      return safeParse(KEYS.VENDORS);
+      return _localByCompany(KEYS.VENDORS);
     }
   },
   saveVendors: async (data: Vendor[]): Promise<void> => {
@@ -527,7 +546,7 @@ export const AsyncSalesService = {
     const company = activeCompany();
     try {
       const { data, error } = await supabase.from('invoices').select('*').eq('company', company);
-      if (error || !data || data.length === 0) return safeParse('gtk_erp_invoices');
+      if (error || !data || data.length === 0) return _localByCompany('gtk_erp_invoices');
       // Intersect with Record because invoices has many extension fields beyond SbInvoiceRow
       const mapped = (data as Array<SbInvoiceRow & Record<string, unknown>>).map((r) => {
         const base = obj(r.data) as Record<string, unknown>;
@@ -557,7 +576,7 @@ export const AsyncSalesService = {
       _mergeIntoLocal('gtk_erp_invoices', mapped as unknown as Array<{ id: string }>);   // merge, don't overwrite shared cache
       return mapped as unknown as Invoice[];
     } catch {
-      return safeParse('gtk_erp_invoices');
+      return _localByCompany('gtk_erp_invoices');
     }
   },
   // Query live outstanding AR for a client from the invoices table.
@@ -646,7 +665,7 @@ export const AsyncSalesService = {
     const company = activeCompany();
     try {
       const { data, error } = await supabase.from('payment_receipts').select('*').eq('company', company);
-      if (error || !data || data.length === 0) return safeParse('gtk_erp_payment_receipts');
+      if (error || !data || data.length === 0) return _localByCompany('gtk_erp_payment_receipts');
       const mapped = (data as SbPaymentReceiptRow[]).map((r) => ({
         id: r.id, invoiceId: r.invoice_id ?? '', date: r.date ?? '', amount: r.amount ?? 0,
         method: r.method ?? '', reference: r.reference ?? '',
@@ -655,7 +674,7 @@ export const AsyncSalesService = {
       _mergeIntoLocal('gtk_erp_payment_receipts', mapped as unknown as Array<{ id: string }>);   // merge, don't overwrite shared cache
       return mapped as PaymentReceipt[];
     } catch {
-      return safeParse('gtk_erp_payment_receipts');
+      return _localByCompany('gtk_erp_payment_receipts');
     }
   },
   savePaymentReceipts: async (data: PaymentReceipt[]): Promise<void> => {
@@ -718,8 +737,8 @@ export const AsyncSalesService = {
     try {
       const { data, error } = await supabase
         .from('credit_notes').select('*').eq('company', company);
-      if (error || !data) return safeParse(KEYS.CREDIT_NOTES);
-      if (data.length === 0) return safeParse(KEYS.CREDIT_NOTES);
+      if (error || !data) return _localByCompany(KEYS.CREDIT_NOTES);
+      if (data.length === 0) return _localByCompany(KEYS.CREDIT_NOTES);
       const mapped = data.map((r) => {
         const base = r.data && typeof r.data === 'object' ? r.data : {};
         return {
@@ -742,7 +761,7 @@ export const AsyncSalesService = {
       _mergeIntoLocal(KEYS.CREDIT_NOTES, mapped);   // merge, don't overwrite shared cache
       return mapped;
     } catch {
-      return safeParse(KEYS.CREDIT_NOTES);
+      return _localByCompany(KEYS.CREDIT_NOTES);
     }
   },
 
@@ -789,7 +808,7 @@ export const AsyncSalesService = {
     try {
       const { data, error } = await supabase
         .from('customer_complaints').select('*').eq('company', company);
-      if (error || !data || data.length === 0) return safeParse(KEYS.CUSTOMER_COMPLAINTS);
+      if (error || !data || data.length === 0) return _localByCompany(KEYS.CUSTOMER_COMPLAINTS);
       const mapped = data.map((r) => {
         const base = r.data && typeof r.data === 'object' ? r.data : {};
         return {
@@ -816,7 +835,7 @@ export const AsyncSalesService = {
       _mergeIntoLocal(KEYS.CUSTOMER_COMPLAINTS, mapped);   // merge, don't overwrite shared cache
       return mapped;
     } catch {
-      return safeParse(KEYS.CUSTOMER_COMPLAINTS);
+      return _localByCompany(KEYS.CUSTOMER_COMPLAINTS);
     }
   },
 
@@ -866,7 +885,7 @@ export const AsyncSalesService = {
     const company = activeCompany();
     try {
       const { data, error } = await supabase.from('price_lists').select('*').eq('company', company);
-      if (error || !data) return safeParse(KEYS.PRICE_LISTS);
+      if (error || !data) return _localByCompany(KEYS.PRICE_LISTS);
       const mapped = data.map((r) => ({
         id: r.id, company: r.company, name: r.name,
         description: r.description ?? '',
@@ -878,7 +897,7 @@ export const AsyncSalesService = {
       }));
       _mergeIntoLocal(KEYS.PRICE_LISTS, mapped);   // merge, don't overwrite shared cache
       return mapped;
-    } catch { return safeParse(KEYS.PRICE_LISTS); }
+    } catch { return _localByCompany(KEYS.PRICE_LISTS); }
   },
   savePriceLists: async (data: SbLooseRow[]): Promise<void> => {
     _mergeIntoLocal<SbLooseRow>(KEYS.PRICE_LISTS, data);
@@ -908,7 +927,7 @@ export const AsyncSalesService = {
     const company = activeCompany();
     try {
       const { data, error } = await supabase.from('price_list_items').select('*').eq('company', company);
-      if (error || !data) return safeParse(KEYS.PRICE_LIST_ITEMS);
+      if (error || !data) return _localByCompany(KEYS.PRICE_LIST_ITEMS);
       const mapped = data.map((r) => ({
         id: r.id, company: r.company,
         priceListId:  r.price_list_id,
@@ -922,7 +941,7 @@ export const AsyncSalesService = {
       }));
       _mergeIntoLocal(KEYS.PRICE_LIST_ITEMS, mapped);   // merge, don't overwrite shared cache
       return mapped;
-    } catch { return safeParse(KEYS.PRICE_LIST_ITEMS); }
+    } catch { return _localByCompany(KEYS.PRICE_LIST_ITEMS); }
   },
   savePriceListItems: async (data: SbLooseRow[]): Promise<void> => {
     _mergeIntoLocal<SbLooseRow>(KEYS.PRICE_LIST_ITEMS, data);
@@ -955,7 +974,7 @@ export const AsyncSalesService = {
     const company = activeCompany();
     try {
       const { data, error } = await supabase.from('work_orders').select('*').eq('company', company);
-      if (error || !data) return safeParse(KEYS.WORK_ORDERS);
+      if (error || !data) return _localByCompany(KEYS.WORK_ORDERS);
       const mapped = data.map((r) => ({
         id: r.id, company: r.company,
         salesOrderId: r.sales_order_id ?? '',
@@ -977,7 +996,7 @@ export const AsyncSalesService = {
       }));
       _mergeIntoLocal(KEYS.WORK_ORDERS, mapped);   // merge, don't overwrite shared cache
       return mapped;
-    } catch { return safeParse(KEYS.WORK_ORDERS); }
+    } catch { return _localByCompany(KEYS.WORK_ORDERS); }
   },
   saveWorkOrders: async (data: SbLooseRow[]): Promise<void> => {
     _mergeIntoLocal<SbLooseRow>(KEYS.WORK_ORDERS, data);
@@ -1020,7 +1039,7 @@ export const AsyncSalesService = {
     const company = activeCompany();
     try {
       const { data, error } = await supabase.from('leads').select('*').eq('company', company);
-      if (error || !data) return safeParse(KEYS.LEADS);
+      if (error || !data) return _localByCompany(KEYS.LEADS);
       const mapped = data.map((r) => ({
         id: r.id, company: r.company, name: r.name,
         contactPerson: r.contact_person ?? '',
@@ -1043,7 +1062,7 @@ export const AsyncSalesService = {
       }));
       _mergeIntoLocal(KEYS.LEADS, mapped);   // merge, don't overwrite shared cache
       return mapped;
-    } catch { return safeParse(KEYS.LEADS); }
+    } catch { return _localByCompany(KEYS.LEADS); }
   },
   saveLeads: async (data: SbLooseRow[]): Promise<void> => {
     _mergeIntoLocal<SbLooseRow>(KEYS.LEADS, data);

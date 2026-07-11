@@ -283,7 +283,12 @@ async function queryBusiness(p: Record<string, any>): Promise<any> {
 
     case 'attendance_today': {
       const today = new Date().toISOString().split('T')[0];
-      const { data, error } = await supabase.from('attendance').select('*').eq('date', today);
+      // Respect the company scope like every other branch — without this an AI
+      // answer for one company mixed in every company's attendance (RLS bounds it
+      // to the user's allowed companies, but a multi-company user still leaked).
+      let aq = supabase.from('attendance').select('*').eq('date', today);
+      if (company) aq = aq.eq('company', company);
+      const { data, error } = await aq;
       if (error) return { error: error.message };
       const present = (data || []).filter((a: any) => a.status === 'Present').length;
       const absent  = (data || []).filter((a: any) => a.status === 'Absent').length;
@@ -292,7 +297,9 @@ async function queryBusiness(p: Record<string, any>): Promise<any> {
     }
 
     case 'production_status': {
-      const { data, error } = await supabase.from('production_pieces').select('status, order_id').limit(1000);
+      let pq = supabase.from('production_pieces').select('status, order_id, company').limit(1000);
+      if (company) pq = pq.eq('company', company);
+      const { data, error } = await pq;
       if (error) return { error: error.message };
       const byStatus: Record<string, number> = {};
       (data || []).forEach((p: any) => { byStatus[p.status] = (byStatus[p.status] || 0) + 1; });
@@ -301,10 +308,10 @@ async function queryBusiness(p: Record<string, any>): Promise<any> {
 
     case 'cash_position': {
       // AR expected + AP due + payroll upcoming
-      const [arRes, apRes] = await Promise.all([
-        supabase.from('invoices').select('balance, due_date').gt('balance', 0),
-        supabase.from('purchase_orders').select('total_amount, status').in('status', ['Approved', 'GRN Posted']),
-      ]);
+      let arQ = supabase.from('invoices').select('balance, due_date').gt('balance', 0);
+      let apQ = supabase.from('purchase_orders').select('total_amount, status').in('status', ['Approved', 'GRN Posted']);
+      if (company) { arQ = arQ.eq('company', company); apQ = apQ.eq('company', company); }
+      const [arRes, apRes] = await Promise.all([arQ, apQ]);
       const ar    = (arRes.data || []).reduce((s: number, i: any) => s + (i.balance || 0), 0);
       const ap    = (apRes.data || []).reduce((s: number, p: any) => s + (p.total_amount || 0), 0);
       return { ar_outstanding: ar, ap_estimated: ap, net_position: ar - ap };
