@@ -48,31 +48,31 @@ DROP POLICY IF EXISTS purchase_orders_strict_delete ON public.purchase_orders;
 
 CREATE POLICY purchase_orders_strict_select ON public.purchase_orders FOR SELECT
   USING (
-    (SELECT auth_user_is_super())
-    OR ((SELECT auth_user_companies()) IS NOT NULL
-        AND from_company = ANY((SELECT auth_user_companies())))
+    auth_user_is_super()
+    OR (auth_user_companies() IS NOT NULL
+        AND from_company = ANY(auth_user_companies()))
   );
 CREATE POLICY purchase_orders_strict_insert ON public.purchase_orders FOR INSERT
   WITH CHECK (
-    (SELECT auth_user_is_super())
-    OR ((SELECT auth_user_companies()) IS NOT NULL
-        AND from_company = ANY((SELECT auth_user_companies())))
+    auth_user_is_super()
+    OR (auth_user_companies() IS NOT NULL
+        AND from_company = ANY(auth_user_companies()))
   );
 CREATE POLICY purchase_orders_strict_update ON public.purchase_orders FOR UPDATE
   USING (
-    (SELECT auth_user_is_super())
-    OR ((SELECT auth_user_companies()) IS NOT NULL
-        AND from_company = ANY((SELECT auth_user_companies())))
+    auth_user_is_super()
+    OR (auth_user_companies() IS NOT NULL
+        AND from_company = ANY(auth_user_companies()))
   )
   WITH CHECK (
-    (SELECT auth_user_is_super())
-    OR ((SELECT auth_user_companies()) IS NOT NULL
-        AND from_company = ANY((SELECT auth_user_companies())))
+    auth_user_is_super()
+    OR (auth_user_companies() IS NOT NULL
+        AND from_company = ANY(auth_user_companies()))
   );
 CREATE POLICY purchase_orders_strict_delete ON public.purchase_orders FOR DELETE
   USING (
-    (SELECT auth_user_is_super())
-    OR ((SELECT auth_user_companies()) IS NOT NULL
-        AND from_company = ANY((SELECT auth_user_companies())))
+    auth_user_is_super()
+    OR (auth_user_companies() IS NOT NULL
+        AND from_company = ANY(auth_user_companies()))
   );
 

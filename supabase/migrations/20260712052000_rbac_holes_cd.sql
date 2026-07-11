@@ -45,9 +45,9 @@ BEGIN
   -- stamped company. NULL-company (legacy) rows and trusted backend contexts
   -- (auth.uid() NULL) are allowed through.
   IF auth.uid() IS NOT NULL
-     AND NOT (SELECT auth_user_is_super())
+     AND NOT auth_user_is_super()
      AND v_row.company IS NOT NULL
-     AND NOT (v_row.company = ANY(COALESCE((SELECT auth_user_companies()), ARRAY[]::text[]))) THEN
+     AND NOT (v_row.company = ANY(COALESCE(auth_user_companies(), ARRAY[]::text[]))) THEN
     RAISE EXCEPTION 'not_authorized: piece % (company %) is outside caller allowed companies',
       p_piece_id, v_row.company
       USING ERRCODE = '42501';
@@ -158,8 +158,8 @@ BEGIN
 
   -- Company guard: array-aware, super bypass, no NULL-skip (God-mode P0 #10-D).
   IF auth.uid() IS NOT NULL
-     AND NOT (SELECT auth_user_is_super())
-     AND NOT (v_invoice.company = ANY(COALESCE((SELECT auth_user_companies()), ARRAY[]::text[]))) THEN
+     AND NOT auth_user_is_super()
+     AND NOT (v_invoice.company = ANY(COALESCE(auth_user_companies(), ARRAY[]::text[]))) THEN
     RAISE EXCEPTION 'SAL-4: Cross-company receipt denied — invoice company "%" not in caller allowed companies',
       v_invoice.company USING ERRCODE = 'P0003';
   END IF;
@@ -243,8 +243,8 @@ BEGIN
   END IF;
 
   IF auth.uid() IS NOT NULL
-     AND NOT (SELECT auth_user_is_super())
-     AND NOT (v_invoice.company = ANY(COALESCE((SELECT auth_user_companies()), ARRAY[]::text[]))) THEN
+     AND NOT auth_user_is_super()
+     AND NOT (v_invoice.company = ANY(COALESCE(auth_user_companies(), ARRAY[]::text[]))) THEN
     RAISE EXCEPTION 'SAL-4: Cross-company receipt denied — invoice company "%" not in caller allowed companies',
       v_invoice.company USING ERRCODE = 'P0003';
   END IF;
