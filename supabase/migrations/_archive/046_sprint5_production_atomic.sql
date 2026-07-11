@@ -53,7 +53,6 @@ BEGIN
 
   -- Per-status forward + corrective transitions (mirror TS PIECE_TRANSITIONS)
   RETURN CASE p_from
-    WHEN 'Pending-Cut'             THEN p_to IN ('Cut')                 -- 083 cutter pool → cut (see 095)
     WHEN 'Cut'                     THEN p_to IN ('Service-Pending','QC-Pending','QC-Failed')
     WHEN 'Service-Pending'         THEN p_to IN ('QC-Pending','Cut','QC-Failed')
     WHEN 'QC-Pending'              THEN p_to IN ('QC-Passed','QC-Failed','Service-Pending')
