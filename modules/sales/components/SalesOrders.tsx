@@ -461,8 +461,6 @@ const SalesOrders: React.FC = () => {
                     { accountId: creditAccId, debit: 0,          credit: newPayment, text: creditText },
                 ],
             };
-            FinanceService.saveLedger([...FinanceService.getLedger(), glTx]);
-
             // ── Append Petty Cash entry for Cash receipts (drawer reconciliation) ──
             if (paymentMethod === 'Cash') {
                 const cashEntries = FinanceService.getPettyCashEntries();
@@ -501,6 +499,17 @@ const SalesOrders: React.FC = () => {
                     payments:       [...(existingInvoice.payments || []), payment],
                 }]);
             }
+
+            // ── Post the GL leg AFTER the receipt/invoice (God-mode P0 #9 torn-write) ──
+            // The invoice balance + receipt (process_payment_receipt runs both in ONE
+            // serialisable DB txn) is the authoritative money-movement record, so it is
+            // persisted FIRST. Posting the GL after it means the worst-case failure is a
+            // GL leg queued for retry (saveLedger's own retry queue) — a recoverable,
+            // self-healing state — instead of the ledger showing cash-received / AR-settled
+            // while the invoice still reads outstanding (the dangerous direction the old
+            // GL-first order produced). True single-DB-txn atomicity (GL folded into the
+            // RPC) is the follow-up migration.
+            FinanceService.saveLedger([...FinanceService.getLedger(), glTx]);
 
             // ── Financial Event registry entry ──
             FinanceService.saveFinancialEvents([
