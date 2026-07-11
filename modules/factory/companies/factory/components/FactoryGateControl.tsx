@@ -59,7 +59,7 @@ const FactoryGateControl: React.FC<FactoryGateControlProps> = ({ dispatches, gat
                 }
                 return p;
             });
-            ProductionService.saveProductionPieces(updatedPieces);
+            ProductionService.saveProductionPiecesBg(updatedPieces);
         });
 
         refreshData();

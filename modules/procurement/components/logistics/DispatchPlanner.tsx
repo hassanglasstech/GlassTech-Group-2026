@@ -299,7 +299,7 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
           }
           return p;
         });
-        ProductionService.saveProductionPieces(updatedPieces);
+        ProductionService.saveProductionPiecesBg(updatedPieces);
         
         // 2b. Auto-update Sales Order status when Site Delivery completes
         if (targetDispatch.serviceType === 'Site Delivery') {
@@ -377,7 +377,7 @@ const DispatchPlanner: React.FC<DispatchPlannerProps> = ({
             }
         });
 
-        ProductionService.saveProductionPieces(allPieces);
+        ProductionService.saveProductionPiecesBg(allPieces);
         ProductionService.saveTemperingDispatches(updatedDispatches);
         refreshData();
     };

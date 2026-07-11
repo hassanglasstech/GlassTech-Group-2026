@@ -515,7 +515,25 @@ const App: React.FC = () => {
         useAuthStore.getState().signOut().catch(() => {});
       }
     });
-    return () => { cancelled = true; subscription.unsubscribe(); };
+    // SyncService fires 'erp:session-invalid' when a background push is rejected
+    // with an auth/RLS error (401/403/42501) — a strong signal the JWT went stale
+    // mid-session. Run the same reconcile (refresh-or-sign-out) so the user is
+    // routed to login and the failed writes stay pending to flush after re-auth,
+    // instead of silently accumulating behind a green toast. Throttled to at most
+    // one reconcile per 30s so a burst of failed table pushes doesn't storm it.
+    let lastSessionCheck = 0;
+    const onSessionInvalid = () => {
+      const now = Date.now();
+      if (now - lastSessionCheck < 30_000) return;
+      lastSessionCheck = now;
+      reconcile().catch(() => {});
+    };
+    window.addEventListener('erp:session-invalid', onSessionInvalid);
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+      window.removeEventListener('erp:session-invalid', onSessionInvalid);
+    };
   }, []);
 
   useEffect(() => {

@@ -43,7 +43,7 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ gatePasses, pieces
                 }
                 return p;
             });
-            ProductionService.saveProductionPieces(updatedPieces);
+            ProductionService.saveProductionPiecesBg(updatedPieces);
         }
     
         const all = ProductionService.getGatePasses();

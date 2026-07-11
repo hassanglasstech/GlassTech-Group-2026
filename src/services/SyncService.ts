@@ -1587,6 +1587,14 @@ const pushTable = async (table: string, localKey: string): Promise<boolean> => {
   );
 
   try {
+    // A push that fails MUST return false so the caller keeps the change in the
+    // pending queue (clearPending only runs on `true`). Previously all three
+    // error classes below `return`ed from inside the retry callback — which
+    // resolves the promise SUCCESSFULLY, so pushTable returned true, the pending
+    // flag was cleared, and the write survived only in localStorage until the
+    // next authoritative pull wiped it → silent data loss behind a green
+    // "synced ✓" toast. Now: never silently drop a write.
+    let schemaFail: string | null = null;
     await withRetry(
       async () => {
         const { error } = await supabase.from(table).upsert(data, {
@@ -1594,31 +1602,38 @@ const pushTable = async (table: string, localKey: string): Promise<boolean> => {
           ignoreDuplicates: false,
         });
         if (error) {
-          // 400 = table/column mismatch — skip this table silently
+          // 400 = table/column/enum mismatch. Deterministic — a retry can't fix
+          // it (needs a mapper/migration fix), so DON'T throw (avoids a pointless
+          // retry storm), but flag it so we return false and KEEP it pending +
+          // surface it, instead of dropping the row.
           if (error.code === 'PGRST204' || error.code === '42P01' ||
               error.message?.includes('relation') || error.message?.includes('column') ||
               error.message?.includes('enum') || error.message?.includes('invalid input value')) {
-            console.log(`[Sync] Skipping ${table} — schema mismatch: ${error.message}`);
+            schemaFail = error.message;
             return;
           }
-          // 409 / 23503 = FK constraint violation — skip gracefully (referenced record exists)
-          if ((error as any).status === 409 || error.code === '23503') {
-            console.log(`[Sync] Skipping ${table} — FK constraint: ${error.message}`);
-            return;
-          }
-          // 401 / 403 / 42501 = auth or RLS — skip gracefully (session may not be ready yet)
-          if ((error as any).status === 401 || (error as any).status === 403 || error.code === '42501') {
-            console.log(`[Sync] Skipping ${table} — permission denied (will retry next sync): ${error.message}`);
-            return;
-          }
+          // 409/23503 (FK — parent not synced yet) and 401/403/42501 (auth/RLS —
+          // session not ready/stale) are transient or ordering-dependent. Throw
+          // so withRetry retries; on final failure the outer catch returns false
+          // → the change stays pending and flushes on the next sync/reconnect.
           throw error;
         }
       },
       { context: `Sync:${table}`, maxRetries: 2, delayMs: 1500 }
     );
+    if (schemaFail) {
+      console.warn(`[Sync] ${table} NOT synced (schema mismatch) — kept pending for a mapper/migration fix: ${schemaFail}`);
+      return false;
+    }
     return true;
   } catch (err: any) {
-    console.warn(`[Sync] Push failed for ${table}:`, translateError(err));
+    const status = (err as any)?.status;
+    if (status === 401 || status === 403 || err?.code === '42501') {
+      // Session is likely stale/expired — the app's auth layer should recover
+      // (forced re-login). Signal it instead of silently dropping the write.
+      try { window.dispatchEvent(new CustomEvent('erp:session-invalid', { detail: { table } })); } catch { /* SSR/no-DOM */ }
+    }
+    console.warn(`[Sync] Push failed for ${table} — kept pending, will retry:`, translateError(err));
     return false;
   }
 };

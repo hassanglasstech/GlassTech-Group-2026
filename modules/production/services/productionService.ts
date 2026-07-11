@@ -355,10 +355,40 @@ export const ProductionService = {
       if (statusFilter) dataQ = dataQ.eq('status', statusFilter);
       const { data: rows } = await dataQ;
 
-      // Unwrap JSONB data column
-      const pieces = (rows || []).map((row: any) =>
-        row.data && typeof row.data === 'object' ? { ...row.data, id: row.id, company: row.company } : row
-      ) as ProductionPiece[];
+      // Map flat columns → camelCase, using `data` jsonb as an OVERLAY only.
+      // The live production_pieces table keeps status/specs/order_id/item_index in
+      // FLAT columns and defaults `data` to '{}'::jsonb — the atomic status RPC
+      // only merges *extras* (assignedCutter, pendingServices, fault…) into `data`.
+      // The old `{...row.data, id, company}` unwrap therefore DROPPED every flat
+      // field (status/specs/orderId) for any row that had gone through the RPC
+      // (i.e. virtually all of them), corrupting the warehouse list. Read
+      // flat-first, fall back to data — same shape as getProductionPiecesAsync.
+      const pieces = (rows || []).map((r: any) => {
+        const d = r.data && typeof r.data === 'object' ? r.data : {};
+        return {
+          id: r.id,
+          company: r.company,
+          orderId: r.order_id ?? d.orderId,
+          itemIndex: Number(r.item_index ?? d.itemIndex ?? 0),
+          specs: r.specs || d.specs || '',
+          status: r.status || d.status || 'Cut',
+          lastUpdated: r.last_updated || r.updated_at || r.created_at || new Date().toISOString(),
+          fault: r.fault ?? d.fault,
+          pendingServices: r.pending_services ?? d.pendingServices,
+          spotId: r.spot_id ?? d.spotId,
+          dispatchId: r.dispatch_id ?? d.dispatchId,
+          serviceLog: r.service_log ?? d.serviceLog,
+          cutBy: r.cut_by ?? d.cutBy,
+          cutAt: r.cut_at ?? d.cutAt,
+          assignedCutter: d.assignedCutter,
+          prevCutters: d.prevCutters,
+          assignedAt: d.assignedAt,
+          assignedBy: d.assignedBy,
+          faultHistory: d.faultHistory,
+          blockedReason: d.blockedReason,
+          commitmentType: d.commitmentType,
+        };
+      }) as ProductionPiece[];
 
       return { data: pieces, total: count || 0 };
     } catch (e) {
@@ -500,8 +530,16 @@ export const ProductionService = {
         last_updated: (p as any).lastUpdated || new Date().toISOString(),
       }));
     if (mapped.length > 0) {
-      supabase.from('production_pieces').upsert(mapped, { onConflict: 'id' })
-        .then(({ error }) => { if (error) console.warn('[Pieces] Supabase push:', error.message); });
+      // AWAIT the cloud write. Fire-and-forget resolved the function green while
+      // an RLS/schema/timing failure left pieces local-only — invisible to the
+      // supervisor/cutter who read from Supabase (the "green toast but pieces
+      // didn't persist" bug). Surface the error so awaiting callers can roll back;
+      // fire-and-forget callers must use saveProductionPiecesBg (catches + logs).
+      const { error } = await supabase.from('production_pieces').upsert(mapped, { onConflict: 'id' });
+      if (error) {
+        Logger.error('Production', 'saveProductionPieces cloud upsert failed', error);
+        throw new Error(`Pieces cloud save failed: ${error.message}`);
+      }
     }
   },
   // Fire-and-forget background variant of saveProductionPieces. Persists +
@@ -509,8 +547,11 @@ export const ProductionService = {
   // swallowed) so callers in a synchronous handler (e.g. GlasscoVendorHub,
   // DispatchPlanner, ncrService, GateControl, ProductionContext) don't have to
   // await the ghost-order validation / Supabase round-trip.
-  saveProductionPiecesBg: (data: ProductionPiece[]): void => {
-    ProductionService.saveProductionPieces(data).catch((err: unknown) => {
+  saveProductionPiecesBg: (
+    data: ProductionPiece[],
+    opts?: { validateOrderIds?: string[] },
+  ): void => {
+    ProductionService.saveProductionPieces(data, opts).catch((err: unknown) => {
       Logger.error('Production', 'Background production-piece save failed', err);
     });
   },

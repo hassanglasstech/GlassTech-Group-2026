@@ -207,7 +207,7 @@ export const useQuotations = () => {
         // scope fix: skip the ghost re-check — the order is persisted just
         // below (saveQuotations) and `others` are already-saved prior-order pieces.
         // Validating the whole array let a stale prior order block this save.
-        ProductionService.saveProductionPieces([...others, ...newPieces], { validateOrderIds: [] });
+        ProductionService.saveProductionPiecesBg([...others, ...newPieces], { validateOrderIds: [] });
     }
 
     await AsyncSalesService.saveQuotations([...all.filter(x => x.id !== finalQuo.id), finalQuo]);

@@ -118,7 +118,7 @@ export const GateControl: React.FC<GateControlProps> = ({ company, gatePasses, d
             if (secondaryDispatchId) updateDispatchList(secondaryDispatchId, false);
 
             ProductionService.saveTemperingDispatches(updatedDispatches);
-            if(piecesUpdated) ProductionService.saveProductionPieces(allPieces);
+            if(piecesUpdated) ProductionService.saveProductionPiecesBg(allPieces);
 
             // CHANGE 3 — route the gate transition through the event-sourced
             // DispatchService so dispatch_events carries the authoritative

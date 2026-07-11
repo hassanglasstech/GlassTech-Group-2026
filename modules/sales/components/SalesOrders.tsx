@@ -239,7 +239,7 @@ const SalesOrders: React.FC = () => {
         
         // 1. Delete production pieces
         const remainingPieces = allPieces.filter(p => p.orderId !== orderRef);
-        ProductionService.saveProductionPieces(remainingPieces);
+        ProductionService.saveProductionPiecesBg(remainingPieces);
         
         // 2. Delete linked dispatches
         const allDispatches = ProductionService.getTemperingDispatches();

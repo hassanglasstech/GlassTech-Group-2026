@@ -84,7 +84,7 @@ const JobRegistryView: React.FC<JobRegistryViewProps> = ({
       });
 
       const allPieces = ProductionService.getProductionPieces();
-      ProductionService.saveProductionPieces([...allPieces, ...newPieces]);
+      ProductionService.saveProductionPiecesBg([...allPieces, ...newPieces]);
       toast.success(`${newPieces.length} pieces generated for ${job.projectName || job.orderNo || job.id}.`, { duration: 5000 });
       if (typeof (window as any).__jobRegistryRefresh === 'function') {
         (window as any).__jobRegistryRefresh();

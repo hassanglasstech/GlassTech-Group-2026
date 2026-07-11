@@ -92,7 +92,7 @@ export const NCRService = {
           ? { ...p, status: 'Broken' as const, lastUpdated: new Date().toISOString() }
           : p
       );
-      ProductionService.saveProductionPieces(updated);
+      ProductionService.saveProductionPiecesBg(updated);
     }
 
     // 3. Auto GL write-off entry (Dispose action)
