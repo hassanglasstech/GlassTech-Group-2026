@@ -344,23 +344,43 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
         return toast.error(`Payroll JV for ${monthName} already posted (${txId}).`);
       }
 
-      // Find or auto-create GL Accounts via ensureAccount
-      const salaryParent   = FinanceService.ensureAccount(company as any, 'PERSONNEL EXPENSES', 2, null, 'Expense', '521');
-      const salaryExpAcc   = FinanceService.ensureAccount(company as any, 'Salaries & Wages', 3, salaryParent.id, 'Expense', '5211');
-      const allowanceAcc   = FinanceService.ensureAccount(company as any, 'Allowances', 3, salaryParent.id, 'Expense', '5212');
-      const overtimeAcc    = FinanceService.ensureAccount(company as any, 'Overtime Pay', 3, salaryParent.id, 'Expense', '5213');
-      const liabParent     = FinanceService.ensureAccount(company as any, 'CURRENT LIABILITIES', 2, null, 'Liability', '22');
-      const payableAcc     = FinanceService.ensureAccount(company as any, 'Salaries Payable', 3, liabParent.id, 'Liability', '2211');
-      const assetParent    = FinanceService.ensureAccount(company as any, 'CURRENT ASSETS', 2, null, 'Asset', '11');
-      const staffLoanAcc   = FinanceService.ensureAccount(company as any, 'Staff Loans & Advances', 3, assetParent.id, 'Asset', '1121');
+      // ── Merged payroll accrual (God-mode P0 #2/#3 — WIP model) ─────────
+      // SINGLE source of truth for the payroll accrual JV (the duplicate auto-GL
+      // in hrService.savePayroll is removed). Production workers' EARNED labour →
+      // 11523 WIP — Direct Labour (IAS 2.10-12, released to COGS at delivery);
+      // admin/office staff → 52111 Salaries — Admin (period cost, IAS 2.16).
+      // Credit 2211 Salaries Payable (cleared by the mark-paid disbursement PV)
+      // + 1121 Staff Loans for advance/loan recovery.
+      //
+      // Balanced by construction: for every record,
+      //   earned = (basic + allowances + overtime) − absent − late
+      //   net    = earned − loan − advance
+      // so  Σ earned  ==  Σ net (→ payable)  +  Σ (loan+advance) (→ staff loans).
+      // The OLD code debited GROSS basic while crediting NET, so it silently went
+      // out of balance by the absent/late deductions and tripped the GL-balance
+      // gate whenever those were non-zero.
+      const PROD_KEYWORDS = ['production', 'cutting', 'cutter', 'polish', 'grind', 'notch', 'operator', 'helper', 'factory', 'floor', 'processing'];
+      const isProductionWorker = (emp: any): boolean => {
+        const dept  = (emp?.work?.department  || '').toLowerCase();
+        const desig = (emp?.work?.designation || '').toLowerCase();
+        return PROD_KEYWORDS.some(k => dept.includes(k) || desig.includes(k));
+      };
 
-      // Build detailed GL lines
-      const details: { accountId: string; debit: number; credit: number; text: string; costCenterId?: string }[] = [];
+      // Accounts (WIP model). ensureAccount dedupes by (company, code).
+      const assetsRoot   = FinanceService.ensureAccount(company as any, 'ASSETS', 1, null, 'Asset', '10');
+      const currentAst   = FinanceService.ensureAccount(company as any, 'CURRENT ASSETS', 2, assetsRoot.id, 'Asset', '11');
+      const inventoryAcc = FinanceService.ensureAccount(company as any, 'INVENTORY', 3, currentAst.id, 'Asset', '115');
+      const wipLabourAcc = FinanceService.ensureAccount(company as any, 'WIP — Direct Labour', 4, inventoryAcc.id, 'Asset', '11523');
+      const expRoot      = FinanceService.ensureAccount(company as any, 'EXPENSES', 1, null, 'Expense', '50');
+      const opexAcc      = FinanceService.ensureAccount(company as any, 'OPERATING EXPENSES', 2, expRoot.id, 'Expense', '52');
+      const staffCosts   = FinanceService.ensureAccount(company as any, 'STAFF COSTS', 3, opexAcc.id, 'Expense', '521');
+      const salariesGrp  = FinanceService.ensureAccount(company as any, 'SALARIES', 4, staffCosts.id, 'Expense', '5211');
+      const adminSalAcc  = FinanceService.ensureAccount(company as any, 'Salaries — Admin & Management', 5, salariesGrp.id, 'Expense', '52111');
+      const liabParent   = FinanceService.ensureAccount(company as any, 'CURRENT LIABILITIES', 2, null, 'Liability', '22');
+      const payableAcc   = FinanceService.ensureAccount(company as any, 'Salaries Payable', 3, liabParent.id, 'Liability', '2211');
+      const staffLoanAcc = FinanceService.ensureAccount(company as any, 'Staff Loans & Advances', 3, currentAst.id, 'Asset', '1121');
 
-      // DEBIT SIDE: Expense breakdowns split by department → costCenterId
-      // Group employees by department, find matching cost center, tag GL lines
       const costCenters = FinanceService.getCostCenters().filter((cc) => cc.company === company);
-
       const findCCId = (dept: string): string | undefined => {
         const cc = costCenters.find((c) =>
           c.department?.toLowerCase() === dept?.toLowerCase() ||
@@ -369,47 +389,44 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
         return cc?.id;
       };
 
-      // Group payrolls by employee department
-      const deptGroups: Record<string, { basic: number; allowances: number; overtime: number }> = {};
+      // Earned labour per dept, split production (→ WIP) vs admin (→ expense).
+      const prodByDept: Record<string, number> = {};
+      const adminByDept: Record<string, number> = {};
+      let totalNetPay = 0;
+      let totalLoanRec = 0;
       payrolls.forEach(p => {
         const emp  = employees.find(e => e.id === p.employeeId);
         const dept = emp?.work?.department || 'General';
-        if (!deptGroups[dept]) deptGroups[dept] = { basic: 0, allowances: 0, overtime: 0 };
-        deptGroups[dept].basic      += p.basicPay;
-        deptGroups[dept].allowances += p.allowances;
-        deptGroups[dept].overtime   += p.overtimePay;
+        const earned = (p.basicPay + p.allowances + p.overtimePay) - p.absentDeduction - p.lateDeduction;
+        const net    = earned - p.loanDeduction - p.advanceDeduction;
+        totalNetPay  += net;
+        totalLoanRec += p.loanDeduction + p.advanceDeduction;
+        if (isProductionWorker(emp)) prodByDept[dept]  = (prodByDept[dept]  || 0) + earned;
+        else                          adminByDept[dept] = (adminByDept[dept] || 0) + earned;
       });
 
-      // Push one GL line per dept per expense type — with costCenterId
-      Object.entries(deptGroups).forEach(([dept, amounts]) => {
-        const ccId = findCCId(dept);
-        if (amounts.basic > 0)
-          details.push({ accountId: salaryExpAcc.id, debit: amounts.basic, credit: 0, text: `Basic Salary — ${dept} — ${monthName}`, costCenterId: ccId });
-        if (amounts.allowances > 0)
-          details.push({ accountId: allowanceAcc.id, debit: amounts.allowances, credit: 0, text: `Allowances — ${dept} — ${monthName}`, costCenterId: ccId });
-        if (amounts.overtime > 0)
-          details.push({ accountId: overtimeAcc.id, debit: amounts.overtime, credit: 0, text: `Overtime — ${dept} — ${monthName}`, costCenterId: ccId });
+      const details: { accountId: string; debit: number; credit: number; text: string; costCenterId?: string }[] = [];
+      Object.entries(prodByDept).forEach(([dept, amt]) => {
+        if (amt > 0) details.push({ accountId: wipLabourAcc.id, debit: amt, credit: 0, text: `Production wages → WIP — ${dept} — ${monthName}`, costCenterId: findCCId(dept) });
       });
+      Object.entries(adminByDept).forEach(([dept, amt]) => {
+        if (amt > 0) details.push({ accountId: adminSalAcc.id, debit: amt, credit: 0, text: `Admin salaries — ${dept} — ${monthName}`, costCenterId: findCCId(dept) });
+      });
+      if (totalNetPay > 0)  details.push({ accountId: payableAcc.id,   debit: 0, credit: totalNetPay,  text: `Net salary payable — ${monthName}` });
+      if (totalLoanRec > 0) details.push({ accountId: staffLoanAcc.id, debit: 0, credit: totalLoanRec, text: `Loan/advance recovery — ${monthName}` });
 
-      // CREDIT SIDE: Net payable + deductions recovered
-      const totalAbsentDed = payrolls.reduce((s, p) => s + p.absentDeduction, 0);
-      const totalLateDed   = payrolls.reduce((s, p) => s + p.lateDeduction, 0);
-      const totalLoanRec   = payrolls.reduce((s, p) => s + p.loanDeduction + p.advanceDeduction, 0);
-      const totalNetPay    = summary.totalNetDisbursable;
+      if (details.length === 0) { return toast.error('No payroll amounts to post.'); }
 
-      if (totalNetPay > 0)   details.push({ accountId: payableAcc.id, debit: 0, credit: totalNetPay, text: `Net Payable — ${monthName}` });
-      if (totalLoanRec > 0)  details.push({ accountId: staffLoanAcc.id, debit: 0, credit: totalLoanRec, text: `Loan/Advance Recovery — ${monthName}` });
-
-      // Absent & Late deductions reduce the expense (contra), but since they're already netted
-      // in netSalary, the above lines are balanced. Add note-only if significant.
-      
+      // docType 'JV' + approvedBy: server-confirmed approver → passes the
+      // Maker-Checker gate legitimately (not a system-auto bypass).
       const transaction: LedgerTransaction = {
-          id: txId, company, docType: 'SA',
+          id: txId, company, docType: 'JV',
           docDate: new Date().toISOString().split('T')[0],
           date: new Date().toISOString().split('T')[0],
-          description: `PAYROLL: ${monthName.toUpperCase()} — ${payrolls.length} employees`,
+          description: `PAYROLL ACCRUAL: ${monthName.toUpperCase()} — ${payrolls.length} employees (production → WIP, admin → expense)`,
           referenceId: selectedMonth,
           status: 'Posted',
+          approvedBy: poster,
           details
       };
 

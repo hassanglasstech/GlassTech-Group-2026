@@ -379,127 +379,17 @@ export const HRService = {
     }
     Logger.action('HR', 'SAVE_PAYROLL', `Payroll updated for ${data.length} records`);
 
-    // ── GL: post wages journal for newly-paid payroll records ────────
-    // Debit  : 51311 Wages — Cutting Dept  (production workers)
-    //          51312 Wages — Processing Dept (polish/grind/notch workers)
-    //          52111 Salaries — Admin & Management (admin/non-production)
-    // Credit : 21311 Salary Payable
-    //
-    // Triggered only for records where isSalaryPaid is being set true.
-    // Production workers identified by department/designation keyword.
-    //
-    // IAS 19: employee benefit costs recognised in the period incurred.
-    const PROD_KEYWORDS = ['production', 'cutting', 'polish', 'grind', 'operator', 'helper', 'factory', 'floor', 'processing'];
-    const isProductionWorker = (emp: any): boolean => {
-      const dept  = (emp?.work?.department  || '').toLowerCase();
-      const desig = (emp?.work?.designation || '').toLowerCase();
-      return PROD_KEYWORDS.some(k => dept.includes(k) || desig.includes(k));
-    };
-    const isCutter = (emp: any): boolean => {
-      const desig = (emp?.work?.designation || '').toLowerCase();
-      return desig.includes('cutter') || desig.includes('cutting');
-    };
-
-    // Group newly-paid records by company+month
-    const byCompanyMonth: Record<string, { company: string; month: string; records: (Payroll & { company?: string })[] }> = {};
-    data.filter(p => p.isSalaryPaid).forEach((p: any) => {
-      const key = `${p.company || 'Glassco'}_${p.month}`;
-      if (!byCompanyMonth[key]) byCompanyMonth[key] = { company: p.company || 'Glassco', month: p.month, records: [] };
-      byCompanyMonth[key].records.push(p);
-    });
-
-    Object.values(byCompanyMonth).forEach(({ company: _co, month, records }) => {
-      const company = _co as Company;
-      const employees = HRService.getEmployees().filter((e) => e.company === company);
-      const empMap = new Map(employees.map((e) => [e.id, e]));
-
-      let cuttingWages    = 0;
-      let processingWages = 0;
-      let adminSalaries   = 0;
-
-      records.forEach((rec) => {
-        const emp  = empMap.get(rec.employeeId);
-        const net  = rec.netSalary || 0;
-        if (!emp) { adminSalaries += net; return; }
-        if (isCutter(emp))            cuttingWages    += net;
-        else if (isProductionWorker(emp)) processingWages += net;
-        else                              adminSalaries   += net;
-      });
-
-      const txId = `GL-PAY-${company}-${month}`;
-      // Guard: don't double-post
-      if (FinanceService.getLedger().some((t) => t.id === txId)) return;
-
-      const today = new Date().toISOString().split('T')[0];
-      const glDetails: any[] = [];
-
-      // ── Option B: Production wages → 11514 WIP — Direct Labour ────────
-      //
-      // IAS 2.10-12: Direct labour is a conversion cost of inventory.
-      // It must NOT be expensed at payroll time — it should flow through WIP
-      // and reach P&L only when the finished goods are delivered (COGS).
-      //
-      // Flow:
-      //   Payroll:  Dr 11514 WIP — Direct Labour  / Cr 21311 Salary Payable
-      //   Delivery: Dr 51311/51312 COGS Labour    / Cr 11514 WIP — Direct Labour
-      //
-      // Admin salaries remain a PERIOD cost (IAS 2.16) → Dr 52111 / Cr Payable.
-      const addProductionWipLine = (amount: number) => {
-        if (amount <= 0) return;
-        // Balance-sheet path: ASSETS > CURRENT ASSETS > INVENTORY > WIP-Direct-Labour
-        const assets    = FinanceService.ensureAccount(company, 'ASSETS',              1, null,       'Asset', '10');
-        const current   = FinanceService.ensureAccount(company, 'CURRENT ASSETS',      2, assets.id,  'Asset', '11');
-        const inv       = FinanceService.ensureAccount(company, 'INVENTORY',           3, current.id, 'Asset', '115');
-        // code was '11514', colliding with 'Laminated Glass
-        // Stock' (ensureAccount dedupes by code, so both concepts shared one
-        // balance). Own code now — see coa.glassco.ts 1152 WIP bucket.
-        const wipLabour = FinanceService.ensureAccount(company, 'WIP — Direct Labour', 4, inv.id,     'Asset', '11523');
-        glDetails.push({
-          accountId: wipLabour.id, debit: amount, credit: 0,
-          text: `Production wages → WIP Labour ${month}: Cutting PKR ${cuttingWages.toLocaleString()} + Processing PKR ${processingWages.toLocaleString()}`,
-        });
-      };
-
-      const addAdminLine = (amount: number) => {
-        if (amount <= 0) return;
-        // Period cost: Admin salaries go directly to P&L (IAS 2.16 — not COGS)
-        const revParent  = FinanceService.ensureAccount(company, 'EXPENSES',           1, null,          'Expense', '50');
-        const opex       = FinanceService.ensureAccount(company, 'OPERATING EXPENSES', 2, revParent.id,  'Expense', '52');
-        const staffCosts = FinanceService.ensureAccount(company, 'STAFF COSTS',        3, opex.id,       'Expense', '521');
-        const salaries   = FinanceService.ensureAccount(company, 'SALARIES',           4, staffCosts.id, 'Expense', '5211');
-        const adminAcc   = FinanceService.ensureAccount(company, 'Salaries — Admin & Management', 5, salaries.id, 'Expense', '52111');
-        glDetails.push({
-          accountId: adminAcc.id, debit: amount, credit: 0,
-          text: `Admin salaries ${month}: PKR ${amount.toLocaleString()}`,
-        });
-      };
-
-      // All production workers (cutters + processing) → single WIP-Labour debit
-      addProductionWipLine(cuttingWages + processingWages);
-      addAdminLine(adminSalaries);
-
-      if (glDetails.length === 0) return;
-
-      // Credit: Salary Payable
-      const liab      = FinanceService.ensureAccount(company, 'LIABILITIES', 1, null, 'Liability', '20');
-      const currLiab  = FinanceService.ensureAccount(company, 'CURRENT LIABILITIES', 2, liab.id, 'Liability', '22');
-      const empLiab   = FinanceService.ensureAccount(company, 'EMPLOYEE LIABILITIES', 3, currLiab.id, 'Liability', '213');
-      const payroll2  = FinanceService.ensureAccount(company, 'PAYROLL', 4, empLiab.id, 'Liability', '2131');
-      const salPayable = FinanceService.ensureAccount(company, 'Salary Payable', 5, payroll2.id, 'Liability', '21311');
-      const totalWages = cuttingWages + processingWages + adminSalaries;
-      glDetails.push({ accountId: salPayable.id, debit: 0, credit: totalWages, text: `Salary payable ${month}: PKR ${totalWages.toLocaleString()}` });
-
-      try {
-        FinanceService.recordTransaction({
-          id: txId, company, docType: 'JV',
-          docDate: today, date: today,
-          description: `Payroll Journal — ${company} — ${month} | Cutting PKR ${cuttingWages.toLocaleString()} | Processing PKR ${processingWages.toLocaleString()} | Admin PKR ${adminSalaries.toLocaleString()}`,
-          referenceId: month, status: 'Posted',
-          details: glDetails,
-        } as any);
-      } catch (e: any) {
-        console.warn('[HRService] Payroll GL posting failed:', e?.message);
-      }
-    });
+    // ── Payroll GL accrual moved out (God-mode P0 #2/#3) ─────────────
+    // This auto-poster was a SECOND payroll accrual on the wrong trigger
+    // (mark-paid instead of approval), used a different payable (21311 vs the
+    // 2211 the disbursement clears), and — as a docType 'JV' without
+    // createdBy:'system-auto' — silently tripped the Maker-Checker gate on every
+    // run (caught by a bare console.warn). Net effect: production wages either
+    // never reached WIP, or (once the gate was satisfied) double-posted against
+    // the approval-flow poster. The accrual now lives in exactly ONE place —
+    // PayrollManagement.handlePostPayrollToLedger, on server-confirmed approval
+    // (production → 11523 WIP-Direct-Labour, admin → 52111 expense, Cr 2211
+    // Salaries Payable + 1121 Staff Loans, balanced). savePayroll only persists
+    // payroll records now.
   },
 };
