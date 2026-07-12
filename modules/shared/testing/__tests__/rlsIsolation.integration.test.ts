@@ -133,7 +133,10 @@ describe.skipIf(!dbUp)('RLS write guards — WITH CHECK on core tables (P0 #5)',
 
   beforeAll(async () => {
     if (!dbUp) return;
-    userA = await makeUser({ emailKey: 'write', company: TEST_COMPANY, allowedCompanies: [TEST_COMPANY], role: 'sales_manager' });
+    // role 'owner' = company-admin: bypasses the per-table MODULE gates (slice 2/2c)
+    // but is STILL company-scoped, so this suite isolates the WITH CHECK
+    // company-scope guard from the orthogonal module gates.
+    userA = await makeUser({ emailKey: 'write', company: TEST_COMPANY, allowedCompanies: [TEST_COMPANY], role: 'owner' });
   });
 
   const rowFor: Record<string, (id: string, company: string) => Record<string, unknown>> = {
