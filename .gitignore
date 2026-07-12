@@ -36,3 +36,4 @@ GlassTech-Group-2026/
 
 # Supabase local CLI temp — leaks project ref / pooler URL, never commit
 supabase/.temp/
+supabase/.branches/
