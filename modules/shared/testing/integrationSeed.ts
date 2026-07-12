@@ -23,6 +23,9 @@ export const makeUser = async (opts: {
   company: string;
   role?: string;
   allowedCompanies?: string[];
+  /** allowed_modules text[] — drives auth_user_has_module() in RLS. Omit for
+   *  module-agnostic tests (defaults to NULL, i.e. no modules). */
+  allowedModules?: string[];
 }): Promise<TestUser> => {
   const email = `itest_${opts.emailKey}@itest.local`;
   const password = 'itest-Password123!';
@@ -45,6 +48,7 @@ export const makeUser = async (opts: {
   const { error: pErr } = await serviceClient.from('user_profiles').upsert({
     id, email,
     allowed_companies: opts.allowedCompanies ?? [opts.company],
+    allowed_modules: opts.allowedModules ?? null,
     role: opts.role ?? 'sales_manager',
   });
   if (pErr) throw new Error(`makeUser profile failed: ${pErr.message}`);
