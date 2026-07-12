@@ -14,6 +14,7 @@ import { supabase } from '@/src/services/supabaseClient';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { CompactPageHeader } from '@/modules/shared/components/CompactPageHeader';
 import { DataGridCard, GridColumn } from '@/modules/shared/components/DataGridCard';
+import { buildPayrollAccrualDetails } from '@/modules/hr/services/payrollAccrual';
 
 const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -389,33 +390,31 @@ const PayrollManagement: React.FC<{ company: Company }> = ({ company }) => {
         return cc?.id;
       };
 
-      // Earned labour per dept, split production (→ WIP) vs admin (→ expense).
-      const prodByDept: Record<string, number> = {};
-      const adminByDept: Record<string, number> = {};
-      let totalNetPay = 0;
-      let totalLoanRec = 0;
-      payrolls.forEach(p => {
-        const emp  = employees.find(e => e.id === p.employeeId);
-        const dept = emp?.work?.department || 'General';
-        const earned = (p.basicPay + p.allowances + p.overtimePay) - p.absentDeduction - p.lateDeduction;
-        const net    = earned - p.loanDeduction - p.advanceDeduction;
-        totalNetPay  += net;
-        totalLoanRec += p.loanDeduction + p.advanceDeduction;
-        if (isProductionWorker(emp)) prodByDept[dept]  = (prodByDept[dept]  || 0) + earned;
-        else                          adminByDept[dept] = (adminByDept[dept] || 0) + earned;
+      // Earned labour split (production → WIP / admin → expense), balanced by
+      // construction. Money math lives in the pure buildPayrollAccrualDetails
+      // (unit-tested in payrollAccrual.test.ts); this component only supplies
+      // the account ids + employee lookups.
+      const empById = (id: string) => employees.find(e => e.id === id);
+      const details = buildPayrollAccrualDetails({
+        payrolls,
+        deptOf:       (id) => empById(id)?.work?.department || 'General',
+        isProduction: (id) => isProductionWorker(empById(id)),
+        accounts: {
+          wipLabourId:   wipLabourAcc.id,
+          adminSalaryId: adminSalAcc.id,
+          payableId:     payableAcc.id,
+          staffLoanId:   staffLoanAcc.id,
+        },
+        monthName,
+        costCenterOf: findCCId,
       });
-
-      const details: { accountId: string; debit: number; credit: number; text: string; costCenterId?: string }[] = [];
-      Object.entries(prodByDept).forEach(([dept, amt]) => {
-        if (amt > 0) details.push({ accountId: wipLabourAcc.id, debit: amt, credit: 0, text: `Production wages → WIP — ${dept} — ${monthName}`, costCenterId: findCCId(dept) });
-      });
-      Object.entries(adminByDept).forEach(([dept, amt]) => {
-        if (amt > 0) details.push({ accountId: adminSalAcc.id, debit: amt, credit: 0, text: `Admin salaries — ${dept} — ${monthName}`, costCenterId: findCCId(dept) });
-      });
-      if (totalNetPay > 0)  details.push({ accountId: payableAcc.id,   debit: 0, credit: totalNetPay,  text: `Net salary payable — ${monthName}` });
-      if (totalLoanRec > 0) details.push({ accountId: staffLoanAcc.id, debit: 0, credit: totalLoanRec, text: `Loan/advance recovery — ${monthName}` });
 
       if (details.length === 0) { return toast.error('No payroll amounts to post.'); }
+
+      // Total loan/advance recovered — used below to update HR loan balances.
+      // (buildPayrollAccrualDetails computes this internally for the GL credit;
+      // recomputed here for the downstream loan-balance + gratuity steps.)
+      const totalLoanRec = payrolls.reduce((s, p) => s + p.loanDeduction + p.advanceDeduction, 0);
 
       // docType 'JV' + approvedBy: server-confirmed approver → passes the
       // Maker-Checker gate legitimately (not a system-auto bypass).
