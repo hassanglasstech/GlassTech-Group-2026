@@ -4,6 +4,38 @@
 
 ---
 
+## ⚠️ CURRENT STATE (updated 2026-07-12) — READ THIS FIRST
+
+This repo (`glasstech-multitenant`, branch **GT-Production**; Vercel deploys
+`origin/main`) is the LIVE multitenant app (GTK · GTI · Glassco · Nippon ·
+Factory). Much of the dated material further down (the "NIPPON HARDWARE GO-LIVE"
+focus, the 2026-04/05 sprint status) is **historical background, not current
+instructions**.
+
+**Current source-of-truth docs (root):**
+- `RESUME_HERE.md` — where we left off.
+- `GLASSCO_GODMODE_RATING_2026-07-12.md` — whole-app grade (~7.2/10) + open risks.
+- `GLASSCO_TEST_REBUILD_2026-07-12.md` + `INTEGRATION_TESTS.md` — the test suite
+  (205 unit + 41 real-DB integration, all green). Run integration against a local
+  Supabase: `npm run supabase:start` → `npm run test:integration`.
+- `GLASSCO_SCHEMA_VERIFY_2026-07-12.md` — migrations verified against live prod.
+- `SCHEMA_GOVERNANCE.md` — the migration baseline IS the schema source of truth.
+- Older dated plans/audits/status now live under `docs/archive/`.
+
+**Two things the sections below get WRONG (verified against live prod 2026-07-12):**
+- `user_profiles` has **no `company` column**. Company scope comes from
+  `user_profiles.allowed_companies` (text[]) via `auth_user_companies()`, and in
+  the app from `appStore.selectedCompany` (the sidebar switcher) — NOT from
+  `profile.company` (a phantom). Read the company via the `activeCompany()` helper.
+- The **database** is the real enforcement layer: RLS (strict per-command policies
+  keyed on `auth_user_companies()`), finance triggers (`enforce_jv_maker_checker`
+  4-eyes, `enforce_ledger_period_lock`), and atomic money RPCs
+  (`post_invoice_atomic`, `process_payment_receipt_v2`, `void_invoice_atomic`,
+  `credit_note_atomic`, `consume_glass_stock`, `post_grn_atomic`,
+  `update_piece_status_atomic`). Never rely on client-side checks alone.
+
+---
+
 ## WHO YOU ARE
 
 You are the **Master Orchestrator** for the GlassTech Group ERP project.
@@ -140,12 +172,14 @@ const { data, error } = await supabase
   .order('created_at', { ascending: false });
 ```
 
-**Company filtering (BUG-1 fix — critical):**
+**Company filtering (CRITICAL — corrected 2026-07-12):**
 ```typescript
-// ALWAYS use both user AND profile from authStore:
-const { user, profile } = useAuthStore();
-const company = profile?.company || user?.company;
-// profile was added in BUG-1 fix — use it or you'll get undefined
+// user_profiles has NO `company` column. Resolve the active company via the
+// helper — it reads appStore.selectedCompany (sidebar switcher) first, then
+// falls back to allowed_companies. Do NOT read profile.company (a phantom).
+import { activeCompany } from '@/modules/sales/services/asyncSalesService';
+const company = activeCompany();
+// Then filter EVERY query: .eq('company', company)  — RLS enforces it too.
 ```
 
 **Service layer:**
@@ -331,9 +365,10 @@ activity_logs (id, company, user_id, action, module, details jsonb,
 
 **Auth store (modules/auth/authStore.ts):**
 ```typescript
-// CRITICAL: always use BOTH user AND profile
 const { user, profile } = useAuthStore();
-// profile is the BUG-1 fix — was missing before, caused company=undefined in 14+ services
+// profile carries role + allowed_companies (text[]) + allowed_modules — NOT a
+// `company` field. For the active company use activeCompany() (see above), which
+// reads appStore.selectedCompany then allowed_companies.
 ```
 
 ---
