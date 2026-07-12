@@ -45,8 +45,10 @@ and offline; integration only runs via `npm run test:integration`.
 | `sales/.../creditNoteAtomic.integration.test.ts` | `credit_note_atomic` posts the reversal GL + CN row + reduces the invoice balance server-side in ONE txn; rolls back on imbalance; rejects a CN exceeding the LIVE balance; GL-id idempotent. |
 | `sales/.../orderToCash.integration.test.ts` | End-to-end: quotation → invoice → partial → full receipt drives the invoice to Paid; a credit note respects the live balance after prior receipts. |
 | `production/.../consumeGlassStock.integration.test.ts` | `consume_glass_stock` decrements material stock + posts the WIP GL + closes the session in ONE txn; blocks insufficient stock; rolls back on imbalance; GL-id idempotent. |
+| `procurement/.../postGrnAtomic.integration.test.ts` | `post_grn_atomic` upserts the received stock + posts the material GL in ONE txn; blocks a GRN double-post; rolls back on imbalance. |
 | `production/.../pieceStatusAtomic.integration.test.ts` | `update_piece_status_atomic` allows legal transitions and rejects illegal ones (the DB `_piece_transition_allowed` mirror agrees with the app's table). |
-| `shared/testing/.../rlsIsolation.integration.test.ts` | As an authenticated company-A user: RLS hides/blocks company-B rows on invoices, ledger, production_pieces, quotations; the SECURITY DEFINER guards reject restatusing B's piece / posting to B's invoice. |
+| `finance/.../ledgerMakerCheckerTrigger.integration.test.ts` | The `enforce_jv_maker_checker` DB trigger blocks a Posted manual JV with no approver / a self-approved (4-eyes) JV, and lets system-auto through — even for a direct service-role insert. |
+| `shared/testing/.../rlsIsolation.integration.test.ts` | As an authenticated company-A user: RLS hides/blocks company-B rows on invoices, ledger, production_pieces, quotations (SELECT + WITH CHECK on INSERT); the SECURITY DEFINER guards reject restatusing B's piece / posting to B's invoice. |
 
 ## CI
 
