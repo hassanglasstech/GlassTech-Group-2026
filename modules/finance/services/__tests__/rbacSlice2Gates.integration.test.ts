@@ -69,22 +69,25 @@ describe.skipIf(!dbUp)('RBAC slice 2 — sales/accounts module gates + per-RPC c
     expect(noH.error).not.toBeNull();
   });
 
-  it('accounts (accounts|hr): accounts and hr users CAN, sales-only CANNOT', async () => {
-    const okA = await clientForToken(accountsU.token).from('accounts').insert({ id: 'S2-ACC-1', company: TEST_COMPANY });
-    expect(okA.error).toBeNull();
-    const okH = await clientForToken(hrU.token).from('accounts').insert({ id: 'S2-ACC-2', company: TEST_COMPANY });
-    expect(okH.error).toBeNull();
-    const noS = await clientForToken(salesU.token).from('accounts').insert({ id: 'S2-ACC-3', company: TEST_COMPANY });
-    expect(noS.error).not.toBeNull();
-    expect(noS.error?.message ?? '').toMatch(/row-level security/i);
+  it('accounts (company-only, reverted per 110000): ANY in-company user CAN write; cross-company blocked', async () => {
+    // accounts is written cross-module via FinanceService.ensureAccount (lazy COA:
+    // client AR sub-accounts, cash/bank nodes, GRN AP, salary sub-accounts…), so
+    // it is NOT module-gated — a sales user creating a client AR node must succeed.
+    expect((await clientForToken(salesU.token).from('accounts').insert({ id: 'S2-ACC-1', company: TEST_COMPANY })).error).toBeNull();
+    expect((await clientForToken(accountsU.token).from('accounts').insert({ id: 'S2-ACC-2', company: TEST_COMPANY })).error).toBeNull();
+    expect((await clientForToken(hrU.token).from('accounts').insert({ id: 'S2-ACC-3', company: TEST_COMPANY })).error).toBeNull();
+    const xco = await clientForToken(salesU.token).from('accounts').insert({ id: 'S2-ACC-XCO', company: TEST_COMPANY_B });
+    expect(xco.error).not.toBeNull();  // company scope still holds
   });
 
   // NOTE: payment_receipts uses the identical {sales} gate as clients (proven
   // above) via the same auth_can_write helper; a direct-insert test is skipped
   // because payment_receipts has an FK to invoices (would need a seeded parent).
 
-  it('owner (company-admin) bypasses the module gate on a gated table', async () => {
-    const ok = await clientForToken(ownerU.token).from('accounts').insert({ id: 'S2-ACC-OWNER', company: TEST_COMPANY });
+  it('owner (company-admin) bypasses the module gate on a gated table (credit_notes)', async () => {
+    // owner has EMPTY allowed_modules, so it only passes credit_notes ({sales,accounts})
+    // via the company-admin bypass — proving the module gate is bypassed, not satisfied.
+    const ok = await clientForToken(ownerU.token).from('credit_notes').insert({ id: 'S2-CN-OWNER', company: TEST_COMPANY });
     expect(ok.error).toBeNull();
   });
 
