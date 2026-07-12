@@ -23,7 +23,12 @@ export default defineConfig(({ mode }) => {
         // Audit #13: was 'modules/__tests__/**' only, which silently DROPPED
         // co-located suites like modules/factory/services/__tests__/*.test.ts
         // (10 real tests never ran). Collect every *.test/*.spec under modules.
-        include: ['modules/**/*.test.ts', 'modules/**/*.test.tsx', 'modules/**/*.spec.ts'],
+        // Test-rebuild: also collect src/** so SyncService (src/services) and other
+        // engine-level code can be regression-tested where it lives.
+        include: [
+          'modules/**/*.test.ts', 'modules/**/*.test.tsx', 'modules/**/*.spec.ts',
+          'src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/*.spec.ts',
+        ],
       },
       build: {
         chunkSizeWarningLimit: 5000,
