@@ -2,6 +2,8 @@
 .env
 .env.local
 .env.*.local
+# Integration-test env (points at LOCAL supabase; keep .env.test.example tracked)
+.env.test
 
 # Logs
 logs

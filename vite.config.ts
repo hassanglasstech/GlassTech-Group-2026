@@ -29,6 +29,10 @@ export default defineConfig(({ mode }) => {
           'modules/**/*.test.ts', 'modules/**/*.test.tsx', 'modules/**/*.spec.ts',
           'src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/*.spec.ts',
         ],
+        // Integration tests (*.integration.test.ts) need a LOCAL Supabase and run
+        // via `npm run test:integration` (vitest.integration.config.ts) — keep them
+        // OUT of the fast unit suite even though they match *.test.ts.
+        exclude: ['**/node_modules/**', '**/dist/**', '**/*.integration.test.ts'],
         coverage: {
           provider: 'v8',
           reporter: ['text-summary', 'json-summary', 'html'],
