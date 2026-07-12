@@ -7,26 +7,13 @@ import {
 import { initDB } from '@/modules/shared/services/db';
 import { bgSaveToIDB, safeParse, safeSave } from '@/modules/shared/services/utils';
 import { supabase } from '../../../src/services/supabaseClient';
-import { useAuthStore } from '@/modules/auth/authStore';
-import { useAppStore } from '@/modules/shared/store/appStore';
+import { activeCompany } from '@/modules/shared/utils/activeCompany';
 import { toast } from 'sonner';
 
-// ── Active company resolver (mirrors asyncSalesService.activeCompany) ──
-// The sidebar company switcher updates ONLY appStore.selectedCompany, not
-// authStore.profile.company. The go-live user's profile.company is 'GTK'
-// (super_admin seed) while App.tsx forces selectedCompany='Nippon' for the
-// Nippon-only deployment. Reading profile.company here fetched GTK
-// store_items/stock_ledger and overwrote the shared local cache, leaving
-// every Nippon inventory/GRN screen empty (and COGS matching corrupted).
-// Prefer the explicitly-selected company; fall back to the auth profile only
-// before the app store has bootstrapped.
-const activeCompany = (): string => {
-  try {
-    const sel = useAppStore.getState().selectedCompany;
-    if (sel) return sel;
-  } catch { /* appStore not initialised yet */ }
-  return useAuthStore.getState().profile?.company ?? '';
-};
+// ── Active company resolver ── canonical, shared ─────────────────────
+// See modules/shared/utils/activeCompany.ts. Prefers appStore.selectedCompany
+// over the phantom profile.company; reading the wrong company here used to fetch
+// another company's store_items/stock_ledger and overwrite the shared cache.
 
 // merge cloud rows into the shared cache by id instead of OVERWRITING it.
 // Every *Async read below filters by activeCompany(), so the cloud response holds

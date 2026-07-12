@@ -10,22 +10,12 @@ import { useAuthStore } from '@/modules/auth/authStore';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { SyncService } from '../../../src/services/SyncService';
 import { errMsg } from '@/modules/shared/services/utils';
+import { activeCompany } from '@/modules/shared/utils/activeCompany';
 
-// ── Active company resolver ──────────────────────────────────────────
-// The company switcher in the sidebar updates ONLY appStore.selectedCompany,
-// not authStore.profile.company. Earlier this file always read profile.company,
-// so when Hassan (auth default = GTK) switched the view to Nippon, every
-// fetch here still asked Supabase for GTK rows — Nippon products imported
-// via Bulk Import would persist correctly but never come back on read.
-// Prefer the explicitly-selected company; fall back to auth profile only
-// when the app store hasn't bootstrapped yet (very early app start).
-const activeCompany = (): string => {
-  try {
-    const sel = useAppStore.getState().selectedCompany;
-    if (sel) return sel;
-  } catch { /* appStore not initialised yet */ }
-  return useAuthStore.getState().profile?.company ?? '';
-};
+// ── Active company resolver ── canonical, shared ─────────────────────
+// See modules/shared/utils/activeCompany.ts. Prefers the sidebar switcher
+// (appStore.selectedCompany) over the phantom profile.company, so a fetch here
+// never asks Supabase for the wrong company's rows after a company switch.
 
 // ── Company-scoped localStorage fallback (God-mode P0 #5) ─────────────
 // The shared gtk_erp_* caches hold every company the RLS-scoped pull returned

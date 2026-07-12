@@ -16,7 +16,7 @@
  */
 
 import { supabase } from '../../../src/services/supabaseClient';
-import { useAuthStore } from '@/modules/auth/authStore';
+import { activeCompany } from '@/modules/shared/utils/activeCompany';
 
 export interface BomTemplate {
   id?:           string;
@@ -48,7 +48,11 @@ export interface BomItem {
   notes?:          string;
 }
 
-const _company = () => useAuthStore.getState().profile?.company ?? 'Glassco';
+// FIX: was `profile?.company ?? 'Glassco'` — profile.company is a phantom field
+// (always empty) so BOM was ALWAYS scoped to 'Glassco', ignoring the company
+// switcher (cross-tenant: Nippon/GTK saw Glassco's BOM). Route through the
+// canonical resolver; keep 'Glassco' only as a pre-bootstrap fallback.
+const _company = () => activeCompany() || 'Glassco';
 
 const _toTpl = (r: any): BomTemplate => ({
   id: r.id, company: r.company, productCode: r.product_code,

@@ -18,8 +18,7 @@ import { safeParse, safeSave } from '../../shared/services/utils';
 import { SyncService } from '@/src/services/SyncService';
 import { Logger } from '@/modules/shared/services/logger';
 import { toast } from 'sonner';
-import { useAuthStore } from '@/modules/auth/authStore';
-import { useAppStore } from '@/modules/shared/store/appStore';
+import { activeCompany } from '@/modules/shared/utils/activeCompany';
 import { FinanceService } from '@/modules/finance/services/financeService';
 import { TagService } from './tagService';
 
@@ -205,9 +204,7 @@ const refreshCache = async (): Promise<void> => {
   // EVERY HR load. Result: employees saved to Supabase fine (POST 201) but never
   // re-appeared after refresh. Mirror the sales module's activeCompany(): prefer
   // the switcher's selected company (multitenant), then profile.company.
-  const company = useAppStore.getState().selectedCompany
-    || useAuthStore.getState().profile?.company
-    || '';
+  const company = activeCompany();
   if (!company) {
     console.warn('[HRService] refreshCache called with no company — skipping Supabase load');
     _cache.loaded = true;

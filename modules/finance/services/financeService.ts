@@ -30,21 +30,12 @@ import { SOFT_DELETE_ENABLED } from '../../shared/config/softDelete';
 import { PeriodService } from './periodService';
 import { useAuthStore, UserRole } from '@/modules/auth/authStore';
 import { useAppStore } from '@/modules/shared/store/appStore';
+import { activeCompany } from '@/modules/shared/utils/activeCompany';
 
-// ── Active company resolver (mirrors asyncSalesService.activeCompany) ──
-// The sidebar switcher updates ONLY appStore.selectedCompany. The go-live
-// user's profile.company is 'GTK' (super_admin seed) while App.tsx forces
-// selectedCompany='Nippon'. Loading the finance cache by profile.company
-// fetched GTK accounts/ledger, so the Nippon COA, trial balance, statements,
-// aging and posting inbox all rendered EMPTY. Prefer the selected company;
-// fall back to the auth profile only before the app store has bootstrapped.
-const activeCompany = (): string => {
-  try {
-    const sel = useAppStore.getState().selectedCompany;
-    if (sel) return sel;
-  } catch { /* appStore not initialised yet */ }
-  return useAuthStore.getState().profile?.company ?? '';
-};
+// ── Active company resolver ── canonical, shared ─────────────────────
+// See modules/shared/utils/activeCompany.ts. Prefers appStore.selectedCompany
+// over the phantom profile.company; loading the finance cache by the wrong
+// company used to render the COA / trial balance / aging / inbox empty.
 
 // _assertGLBalance is now imported from ./glBalance (single source of truth).
 
