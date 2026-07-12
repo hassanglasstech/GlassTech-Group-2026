@@ -125,3 +125,34 @@ describe.skipIf(!dbUp)('RLS breadth — isolation on core money tables (P0 #5)',
     });
   }
 });
+
+// ── RLS WRITE guards: the WITH CHECK policies must block a company-A user from
+//    INSERTing rows stamped with company-B, while allowing their own company. ──
+describe.skipIf(!dbUp)('RLS write guards — WITH CHECK on core tables (P0 #5)', () => {
+  let userA: TestUser;
+
+  beforeAll(async () => {
+    if (!dbUp) return;
+    userA = await makeUser({ emailKey: 'write', company: TEST_COMPANY, allowedCompanies: [TEST_COMPANY], role: 'sales_manager' });
+  });
+
+  const rowFor: Record<string, (id: string, company: string) => Record<string, unknown>> = {
+    quotations: (id, company) => ({ id, company, status: 'Draft' }),
+    production_pieces: (id, company) => ({ id, company, order_id: 'ITEST-ORD', item_index: 0, status: 'Cut', data: {}, last_updated: new Date().toISOString() }),
+    ledger: (id, company) => glRow({ id, company }),
+  };
+
+  for (const [table, row] of Object.entries(rowFor)) {
+    it(`${table}: user can INSERT own company but the WITH CHECK blocks another company`, async () => {
+      await wipeCompany(TEST_COMPANY);
+      await wipeCompany(TEST_COMPANY_B);
+      const a = clientForToken(userA.token);
+
+      const own = await a.from(table).insert(row(`ITEST-W-${table}-A`, TEST_COMPANY));
+      expect(own.error).toBeNull();                     // own company allowed
+
+      const other = await a.from(table).insert(row(`ITEST-W-${table}-B`, TEST_COMPANY_B));
+      expect(other.error).not.toBeNull();               // WITH CHECK blocks cross-company
+    });
+  }
+});

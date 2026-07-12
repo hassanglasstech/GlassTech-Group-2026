@@ -2176,7 +2176,9 @@ CREATE TABLE IF NOT EXISTS public.store_items (
   moving_average_price numeric DEFAULT 0,
   total_value numeric DEFAULT 0,
   storage_bin text,
-  last_movement_date timestamp with time zone,
+  -- reflection mis-typed this: post_grn_atomic inserts COALESCE(r->>'...','')
+  -- (text) here, and the app stores 'YYYY-MM-DD' strings — so prod is text.
+  last_movement_date text,
   created_at timestamp with time zone DEFAULT now(),
   defective_sheets integer DEFAULT 0,
   defective_qty numeric DEFAULT 0,
