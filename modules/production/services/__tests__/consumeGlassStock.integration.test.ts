@@ -56,15 +56,11 @@ const consume = async (sessionId: string, materialId: string, qty: number, gl: R
   });
 };
 
-// ⚠ SKIPPED — KNOWN PROD BUG (verified against live prod 2026-07-12):
-// consume_glass_stock upserts cutting_sessions with only (id, company, data,
-// updated_at) via ON CONFLICT DO UPDATE, but cutting_sessions.job_order_id and
-// cutter_id are NOT NULL on prod. PostgreSQL validates NOT NULL on the proposed
-// insert tuple BEFORE conflict arbitration, so this fails with 23502 even when the
-// session already exists (proven: pre-seeding the session does NOT help). The
-// session-close therefore cannot succeed against the real schema. Un-skip once the
-// RPC lists job_order_id/cutter_id in the INSERT (or they are made nullable on prod).
-describe.skip('consume_glass_stock — real DB inventory→GL atomicity [BLOCKED: prod bug 23502]', () => {
+// Was BLOCKED by a prod bug (23502: cutting_sessions INSERT...ON CONFLICT violated
+// NOT NULL job_order_id/cutter_id). FIXED by migration
+// 20260712071000_fix_consume_glass_stock_session_upsert.sql (plain UPDATE — the
+// session is always already open when it is closed here; the test pre-seeds it).
+describe.skipIf(!dbUp)('consume_glass_stock — real DB inventory→GL atomicity', () => {
   beforeEach(async () => {
     await wipeCompany(TEST_COMPANY);
   });
