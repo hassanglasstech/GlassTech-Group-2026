@@ -40,8 +40,13 @@ and offline; integration only runs via `npm run test:integration`.
 | File | Proves |
 |---|---|
 | `sales/.../paymentReceiptV2.integration.test.ts` | `process_payment_receipt_v2` writes receipt + invoice-balance + balanced GL in ONE transaction; rolls back entirely on an imbalanced GL; rejects over-payment. |
+| `sales/.../postInvoiceAtomic.integration.test.ts` | `post_invoice_atomic` writes the invoice + its balanced GL in ONE transaction; rolls back on imbalance; rejects a duplicate invoice id (idempotency). |
+| `sales/.../voidInvoiceAtomic.integration.test.ts` | `void_invoice_atomic` voids the invoice + posts the reversal GL atomically; rolls back on imbalance; blocks double-void and voiding an invoice with payments. |
+| `sales/.../creditNoteAtomic.integration.test.ts` | `credit_note_atomic` posts the reversal GL + CN row + reduces the invoice balance server-side in ONE txn; rolls back on imbalance; rejects a CN exceeding the LIVE balance; GL-id idempotent. |
+| `sales/.../orderToCash.integration.test.ts` | End-to-end: quotation → invoice → partial → full receipt drives the invoice to Paid; a credit note respects the live balance after prior receipts. |
+| `production/.../consumeGlassStock.integration.test.ts` | `consume_glass_stock` decrements material stock + posts the WIP GL + closes the session in ONE txn; blocks insufficient stock; rolls back on imbalance; GL-id idempotent. |
 | `production/.../pieceStatusAtomic.integration.test.ts` | `update_piece_status_atomic` allows legal transitions and rejects illegal ones (the DB `_piece_transition_allowed` mirror agrees with the app's table). |
-| `shared/testing/.../rlsIsolation.integration.test.ts` | As an authenticated company-A user: RLS hides/blocks company-B invoices; the SECURITY DEFINER guards reject restatusing B's piece / posting to B's invoice. |
+| `shared/testing/.../rlsIsolation.integration.test.ts` | As an authenticated company-A user: RLS hides/blocks company-B rows on invoices, ledger, production_pieces, quotations; the SECURITY DEFINER guards reject restatusing B's piece / posting to B's invoice. |
 
 ## CI
 
