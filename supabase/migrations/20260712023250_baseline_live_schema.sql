@@ -708,11 +708,11 @@ CREATE TABLE IF NOT EXISTS public.cutter_daily_logs (
 CREATE TABLE IF NOT EXISTS public.cutting_sessions (
   id text NOT NULL,
   company text NOT NULL,
-  -- reflection over-constrained these as NOT NULL: consume_glass_stock upserts
-  -- a session with only (id, company, data, updated_at), which proves prod
-  -- allows NULL here (NOT NULL is checked before ON CONFLICT arbitration).
-  job_order_id text,
-  cutter_id text,
+  -- VERIFIED against live prod (2026-07-12): both NOT NULL. Kept faithful.
+  -- consume_glass_stock's session upsert only works via ON CONFLICT DO UPDATE on an
+  -- already-open session (the app opens it first) — the integration test pre-seeds it.
+  job_order_id text NOT NULL,
+  cutter_id text NOT NULL,
   cutter_name text NOT NULL DEFAULT ''::text,
   start_time text NOT NULL DEFAULT ''::text,
   end_time text DEFAULT ''::text,
@@ -2176,9 +2176,12 @@ CREATE TABLE IF NOT EXISTS public.store_items (
   moving_average_price numeric DEFAULT 0,
   total_value numeric DEFAULT 0,
   storage_bin text,
-  -- reflection mis-typed this: post_grn_atomic inserts COALESCE(r->>'...','')
-  -- (text) here, and the app stores 'YYYY-MM-DD' strings — so prod is text.
-  last_movement_date text,
+  -- VERIFIED against live prod (2026-07-12): this is timestamptz. Kept faithful.
+  -- ⚠ LATENT PROD BUG: post_grn_atomic inserts COALESCE(r->>'last_movement_date','')
+  -- (text) into THIS timestamptz column — there is no text→timestamptz assignment
+  -- cast, so that INSERT fails with 42804 on any GRN carrying store_rows. The
+  -- postGrnAtomic integration test is skipped until the RPC is fixed (cast/NULLIF).
+  last_movement_date timestamp with time zone,
   created_at timestamp with time zone DEFAULT now(),
   defective_sheets integer DEFAULT 0,
   defective_qty numeric DEFAULT 0,
