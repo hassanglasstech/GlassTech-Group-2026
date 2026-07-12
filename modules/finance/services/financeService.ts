@@ -875,7 +875,15 @@ export const FinanceService = {
 
       const companiesInDB = new Set((dbRows || []).map((r: any) => r.company));
       const existing = FinanceService.getAccounts();
-      const companies: Company[] = ['GTK', 'GTI', 'Glassco', 'Nippon', 'Factory'];
+      // Only ever seed the ACTIVE company's COA. Iterating all 5 companies breaks
+      // for a non-super user: the accounts.select() above is RLS-filtered to their
+      // OWN company, so the other companies look "missing" and get re-seeded — a
+      // cross-company upsert the RLS then (correctly) rejects, spamming
+      // "new row violates row-level security policy for table accounts" and
+      // jamming the finance retry queue. A session only ever needs its own COA;
+      // super_admin seeds each company as they switch to it.
+      const active = activeCompany();
+      const companies: Company[] = active ? [active as Company] : [];
       let added = false;
       const newAccounts: Account[] = [];
 
