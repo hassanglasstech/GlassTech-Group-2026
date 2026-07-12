@@ -1,0 +1,26 @@
+-- ============================================================================
+-- SECURITY FIX: REVOKE ensure_driver_token from anon (2026-07-12)
+-- Founder applies in the Supabase SQL editor (MCP is read-only).
+-- ============================================================================
+-- ensure_driver_token(p_dispatch_id) is SECURITY DEFINER and was EXECUTE-granted
+-- to anon. It takes NO token and, for a given dispatch, RETURNS the existing
+-- driver_token (or mints one if none exists). So any anonymous caller who knows
+-- or guesses a dispatch id could obtain that dispatch's driver token and then
+-- forge the POD flow (add_signature / add_pod_photo / complete_pod /
+-- verify_delivery_otp all trust that token) = proof-of-delivery hijack.
+--
+-- The token is minted/fetched by AUTHENTICATED dispatch staff when they generate
+-- the driver link; the driver then receives the token in their link and calls
+-- the token-gated driver RPCs with it. No anonymous client path calls
+-- ensure_driver_token (verified: zero app call-sites). So anon does not need it.
+--
+-- Revoke EXECUTE from anon (and PUBLIC, belt-and-suspenders). authenticated +
+-- service_role keep it (staff UI / edge functions). The token-gated driver RPCs
+-- (get_dispatch_for_driver, add_signature, add_pod_photo, complete_pod,
+-- verify_delivery_otp) stay anon-callable — they each validate the driver token
+-- against the dispatch before acting, so they are safe for the un-authenticated
+-- driver. record_vehicle_location stays anon (the driver GPS emitter, token-gated
+-- when a trip_id is supplied).
+-- ============================================================================
+
+REVOKE EXECUTE ON FUNCTION public.ensure_driver_token(text) FROM PUBLIC, anon;
