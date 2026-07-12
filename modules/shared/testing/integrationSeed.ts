@@ -110,6 +110,12 @@ export const seedInvoice = async (input: SeedInvoiceInput): Promise<void> => {
   if (error) throw new Error(`seedInvoice(${input.id}) failed: ${error.message}`);
 };
 
+/** Insert one quotation row (the parent "order" for invoices). Minimal set. */
+export const seedQuotation = async (id: string, company = TEST_COMPANY, status = 'Draft'): Promise<void> => {
+  const { error } = await serviceClient.from('quotations').upsert({ id, company, status });
+  if (error) throw new Error(`seedQuotation(${id}) failed: ${error.message}`);
+};
+
 export interface SeedPieceInput {
   id: string;
   company?: string;

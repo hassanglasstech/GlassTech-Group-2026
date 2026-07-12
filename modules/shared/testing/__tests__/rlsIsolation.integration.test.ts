@@ -12,9 +12,9 @@
  * Run against a LOCAL Supabase (Docker). Skips cleanly if the stack is down.
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { clientForToken, isTestDbReachable } from '@/modules/shared/testing/integrationClient';
+import { serviceClient, clientForToken, isTestDbReachable } from '@/modules/shared/testing/integrationClient';
 import {
-  makeUser, seedInvoice, seedPiece, wipeCompany,
+  makeUser, seedInvoice, seedPiece, glRow, wipeCompany,
   TEST_COMPANY, TEST_COMPANY_B, type TestUser,
 } from '@/modules/shared/testing/integrationSeed';
 
@@ -83,4 +83,45 @@ describe.skipIf(!dbUp)('RLS + cross-company guards — real DB (P0 #5 / #10)', (
     expect(error).not.toBeNull();
     expect(error?.message ?? '').toMatch(/cross-company|not in caller/i);
   });
+});
+
+// ── RLS breadth: the same isolation must hold on the other core money tables,
+//    not just invoices — proves the strict policies genuinely landed everywhere.
+describe.skipIf(!dbUp)('RLS breadth — isolation on core money tables (P0 #5)', () => {
+  let userA: TestUser;
+
+  beforeAll(async () => {
+    if (!dbUp) return;
+    userA = await makeUser({ emailKey: 'breadth', company: TEST_COMPANY, allowedCompanies: [TEST_COMPANY], role: 'sales_manager' });
+  });
+
+  const seeders: Record<string, (id: string, company: string) => Promise<void>> = {
+    quotations: async (id, company) => {
+      const { error } = await serviceClient.from('quotations').insert({ id, company, status: 'Draft' });
+      if (error) throw new Error(`seed quotations ${id}: ${error.message}`);
+    },
+    production_pieces: (id, company) => seedPiece({ id, company, status: 'Cut' }),
+    ledger: async (id, company) => {
+      const { error } = await serviceClient.from('ledger').insert(glRow({ id, company }));
+      if (error) throw new Error(`seed ledger ${id}: ${error.message}`);
+    },
+  };
+
+  for (const [table, seed] of Object.entries(seeders)) {
+    it(`${table}: a company-A user sees only company-A rows`, async () => {
+      await wipeCompany(TEST_COMPANY);
+      await wipeCompany(TEST_COMPANY_B);
+      await seed(`ITEST-${table}-A`, TEST_COMPANY);
+      await seed(`ITEST-${table}-B`, TEST_COMPANY_B);
+
+      const a = clientForToken(userA.token);
+      const { data, error } = await a.from(table).select('id,company');
+
+      expect(error).toBeNull();
+      const ids = (data ?? []).map((r) => r.id);
+      expect(ids).toContain(`ITEST-${table}-A`);
+      expect(ids).not.toContain(`ITEST-${table}-B`);
+      expect((data ?? []).some((r) => r.company === TEST_COMPANY_B)).toBe(false);
+    });
+  }
 });
