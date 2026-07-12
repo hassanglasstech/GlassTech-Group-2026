@@ -56,7 +56,11 @@ export const makeUser = async (opts: {
 };
 
 /** Tables the integration suites write, in FK-safe delete order. */
-const WIPE_TABLES = ['payment_receipts', 'ledger', 'production_pieces', 'invoices', 'quotations', 'clients'];
+const WIPE_TABLES = [
+  'payment_receipts', 'credit_notes', 'ledger', 'production_pieces',
+  'stock_ledger', 'cutting_sessions', 'store_items',
+  'invoices', 'quotations', 'clients',
+];
 
 /** Delete every row belonging to a test company (idempotent; safe on empty). */
 export const wipeCompany = async (company: string): Promise<void> => {

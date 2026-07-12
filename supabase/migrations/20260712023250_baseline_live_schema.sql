@@ -708,8 +708,11 @@ CREATE TABLE IF NOT EXISTS public.cutter_daily_logs (
 CREATE TABLE IF NOT EXISTS public.cutting_sessions (
   id text NOT NULL,
   company text NOT NULL,
-  job_order_id text NOT NULL,
-  cutter_id text NOT NULL,
+  -- reflection over-constrained these as NOT NULL: consume_glass_stock upserts
+  -- a session with only (id, company, data, updated_at), which proves prod
+  -- allows NULL here (NOT NULL is checked before ON CONFLICT arbitration).
+  job_order_id text,
+  cutter_id text,
   cutter_name text NOT NULL DEFAULT ''::text,
   start_time text NOT NULL DEFAULT ''::text,
   end_time text DEFAULT ''::text,
@@ -2187,7 +2190,9 @@ CREATE TABLE IF NOT EXISTS public.store_items (
   remnant_count integer DEFAULT 0,
   remnant_sqft numeric DEFAULT 0,
   data jsonb DEFAULT '{}'::jsonb,
-  version integer DEFAULT 1
+  version integer DEFAULT 1,
+  -- reflection gap: prod store_items has updated_at (consume_glass_stock writes it)
+  updated_at timestamp with time zone DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.tag_master (
