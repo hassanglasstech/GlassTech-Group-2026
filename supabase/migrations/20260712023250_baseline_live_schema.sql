@@ -23,6 +23,34 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 CREATE EXTENSION IF NOT EXISTS supabase_vault WITH SCHEMA vault;
 -- ═══ 2/9 Enum types ═══
 
+-- ═══ 2b/9 Sequences ═══
+-- The live-schema reflection captured serial column DEFAULTs
+-- (nextval('<x>_id_seq'::regclass)) but NOT the CREATE SEQUENCE statements, so a
+-- fresh replay (local/test/CI) failed at the first serial table. These exist on
+-- prod already; IF NOT EXISTS makes this idempotent and harmless there.
+CREATE SEQUENCE IF NOT EXISTS public.activity_log_id_seq;
+CREATE SEQUENCE IF NOT EXISTS public.customer_signatures_id_seq;
+CREATE SEQUENCE IF NOT EXISTS public.delivery_otps_id_seq;
+CREATE SEQUENCE IF NOT EXISTS public.dispatch_events_id_seq;
+CREATE SEQUENCE IF NOT EXISTS public.dispatch_photos_id_seq;
+CREATE SEQUENCE IF NOT EXISTS public.driver_licenses_id_seq;
+CREATE SEQUENCE IF NOT EXISTS public.erp_alerts_id_seq;
+CREATE SEQUENCE IF NOT EXISTS public.golive_checks_id_seq;
+CREATE SEQUENCE IF NOT EXISTS public.perf_telemetry_id_seq;
+CREATE SEQUENCE IF NOT EXISTS public.sla_breaches_id_seq;
+
+-- ═══ 2c/9 Functions used in DDL (must precede the index that references them) ═══
+-- erp_alerts_dedup_date() is used by the functional index idx_erp_alerts_daily_dedup
+-- (Indexes section) but the reflection emitted it later (Functions section), so a
+-- fresh replay failed. Pre-define it here; the later CREATE OR REPLACE re-creates it
+-- identically (idempotent). Pure/IMMUTABLE — no table dependencies.
+CREATE OR REPLACE FUNCTION public.erp_alerts_dedup_date(ts timestamp with time zone)
+ RETURNS date
+ LANGUAGE sql
+ IMMUTABLE PARALLEL SAFE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$ SELECT (ts AT TIME ZONE 'UTC')::date $function$;
+
 -- ═══ 3/9 Tables ═══
 
 CREATE TABLE IF NOT EXISTS public.access_logs (
@@ -6420,3 +6448,16 @@ GRANT EXECUTE ON FUNCTION ledger_row_imbalance(text,jsonb,jsonb) TO authenticate
 GRANT EXECUTE ON FUNCTION ledger_row_imbalance(text,jsonb,jsonb) TO service_role;
 GRANT EXECUTE ON FUNCTION enable_strict_company_rls(text) TO authenticated;
 GRANT EXECUTE ON FUNCTION enable_strict_company_rls(text) TO service_role;
+
+-- ═══ Table / sequence grants (the reflection captured FUNCTION grants only) ═══
+-- Without these, a fresh replay leaves service_role/authenticated with no table
+-- privileges → "permission denied". RLS still enforces per-row company scope;
+-- these are the coarse gate Supabase pairs with RLS. anon is intentionally NOT
+-- granted here (preserves the anon-lockdown posture). This runs ONLY on a fresh
+-- rebuild — the baseline is never re-applied to live prod.
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES    IN SCHEMA public TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;

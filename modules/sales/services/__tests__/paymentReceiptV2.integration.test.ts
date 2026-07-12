@@ -10,9 +10,10 @@
  * Run: install Docker → `npm run supabase:start` → `npm run db:reset`
  *      → `npm run test:integration`. Skips cleanly if the local stack is down.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
-import { serviceClient, isTestDbReachable } from '@/modules/shared/testing/integrationClient';
-import { wipeCompany, seedInvoice, glRow, TEST_COMPANY } from '@/modules/shared/testing/integrationSeed';
+import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { serviceClient, clientForToken, isTestDbReachable } from '@/modules/shared/testing/integrationClient';
+import { wipeCompany, seedInvoice, glRow, makeUser, TEST_COMPANY, type TestUser } from '@/modules/shared/testing/integrationSeed';
 
 const dbUp = await isTestDbReachable();
 if (!dbUp) {
@@ -21,6 +22,19 @@ if (!dbUp) {
 }
 
 describe.skipIf(!dbUp)('process_payment_receipt_v2 — real DB atomicity (P0 #9)', () => {
+  // The RPC is granted to `authenticated` (not service_role), and the app calls
+  // it as a logged-in user — so drive it as a TEST_COMPANY user whose allowed
+  // companies include the invoice's company (the cross-company guard then passes).
+  // serviceClient is still used for seeding + asserting final DB state.
+  let authed: SupabaseClient;
+  let user: TestUser;
+
+  beforeAll(async () => {
+    if (!dbUp) return;
+    user = await makeUser({ emailKey: 'rcpt', company: TEST_COMPANY, allowedCompanies: [TEST_COMPANY], role: 'sales_manager' });
+    authed = clientForToken(user.token);
+  });
+
   beforeEach(async () => {
     await wipeCompany(TEST_COMPANY);
   });
@@ -28,7 +42,7 @@ describe.skipIf(!dbUp)('process_payment_receipt_v2 — real DB atomicity (P0 #9)
   it('posts receipt + invoice-balance + balanced GL in ONE transaction', async () => {
     await seedInvoice({ id: 'ITEST-INV-1', totalAmount: 100000, receivedAmount: 0 });
 
-    const { data, error } = await serviceClient.rpc('process_payment_receipt_v2', {
+    const { data, error } = await authed.rpc('process_payment_receipt_v2', {
       receipt_data: { id: 'ITEST-RCPT-1', amount: 5000, date: '2026-07-12', method: 'Cash', reference: 'R1' },
       p_invoice_id: 'ITEST-INV-1',
       p_gl_row: glRow({ id: 'ITEST-PAY-1' }),
@@ -61,7 +75,7 @@ describe.skipIf(!dbUp)('process_payment_receipt_v2 — real DB atomicity (P0 #9)
   it('ROLLS BACK everything when the GL leg is imbalanced (all-or-nothing)', async () => {
     await seedInvoice({ id: 'ITEST-INV-2', totalAmount: 100000, receivedAmount: 0 });
 
-    const { error } = await serviceClient.rpc('process_payment_receipt_v2', {
+    const { error } = await authed.rpc('process_payment_receipt_v2', {
       receipt_data: { id: 'ITEST-RCPT-2', amount: 5000, date: '2026-07-12', method: 'Cash', reference: 'R2' },
       p_invoice_id: 'ITEST-INV-2',
       p_gl_row: glRow({ id: 'ITEST-PAY-2', details: [
@@ -85,7 +99,7 @@ describe.skipIf(!dbUp)('process_payment_receipt_v2 — real DB atomicity (P0 #9)
   it('rejects an over-payment beyond the PKR 1 tolerance (invoice untouched)', async () => {
     await seedInvoice({ id: 'ITEST-INV-3', totalAmount: 5000, receivedAmount: 0 });
 
-    const { error } = await serviceClient.rpc('process_payment_receipt_v2', {
+    const { error } = await authed.rpc('process_payment_receipt_v2', {
       receipt_data: { id: 'ITEST-RCPT-3', amount: 10000, date: '2026-07-12', method: 'Cash', reference: 'R3' },
       p_invoice_id: 'ITEST-INV-3',
       p_gl_row: null,

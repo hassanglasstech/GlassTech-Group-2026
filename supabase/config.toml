@@ -1,6 +1,10 @@
-[project]
-id = "kqitcgoaibwcsaqvdsit"
-
-[functions]
-# Tells Supabase CLI to bundle _shared/ imports for all edge functions
-deno_dir = "./functions"
+# Supabase CLI configuration.
+# project_id links this local folder to the hosted project (for `supabase link`
+# and remote commands). Everything else uses CLI defaults, which is enough to
+# run a local stack for integration tests (`supabase start`).
+#
+# NOTE: the previous `[project] id = ...` / `[functions] deno_dir = ...` form was
+# INVALID for supabase-cli >= 2.x and broke `supabase start`. `deno_dir` is not a
+# real config key — the CLI auto-bundles relative `_shared/` imports when you run
+# `supabase functions deploy`, so no config is needed for that.
+project_id = "kqitcgoaibwcsaqvdsit"

@@ -39,9 +39,11 @@ export const makeUser = async (opts: {
   if (cErr || !created?.user) throw new Error(`makeUser createUser failed: ${cErr?.message}`);
   const id = created.user.id;
 
+  // NOTE: user_profiles has NO `company` column (the live schema uses
+  // allowed_companies text[]; profile.company is a phantom). auth_user_companies()
+  // reads allowed_companies, so that is what scopes this user.
   const { error: pErr } = await serviceClient.from('user_profiles').upsert({
     id, email,
-    company: opts.company,
     allowed_companies: opts.allowedCompanies ?? [opts.company],
     role: opts.role ?? 'sales_manager',
   });
@@ -54,7 +56,7 @@ export const makeUser = async (opts: {
 };
 
 /** Tables the integration suites write, in FK-safe delete order. */
-const WIPE_TABLES = ['payment_receipts', 'ledger', 'production_pieces', 'invoices', 'clients'];
+const WIPE_TABLES = ['payment_receipts', 'ledger', 'production_pieces', 'invoices', 'quotations', 'clients'];
 
 /** Delete every row belonging to a test company (idempotent; safe on empty). */
 export const wipeCompany = async (company: string): Promise<void> => {
@@ -73,14 +75,26 @@ export interface SeedInvoiceInput {
   clientName?: string;
 }
 
-/** Insert one invoice row (flat columns matching post_invoice_atomic). */
+/** Insert one invoice row (+ its parent quotation, since order_id is NOT NULL
+ *  and FK-references quotations(id)). client_id is left NULL (FK skipped). */
 export const seedInvoice = async (input: SeedInvoiceInput): Promise<void> => {
+  const company = input.company ?? TEST_COMPANY;
   const total = input.totalAmount ?? 100000;
   const received = input.receivedAmount ?? 0;
+  const orderId = `${input.id}-ORD`;
+
+  // invoices.order_id is NOT NULL with an FK → quotations(id); seed the parent.
+  const { error: qErr } = await serviceClient.from('quotations').upsert({
+    id: orderId, company, status: 'Delivered',
+  });
+  if (qErr) throw new Error(`seedInvoice(${input.id}) order seed failed: ${qErr.message}`);
+
   const { error } = await serviceClient.from('invoices').insert({
     id: input.id,
-    company: input.company ?? TEST_COMPANY,
-    client_id: input.clientId ?? 'ITEST-CLIENT',
+    company,
+    order_id: orderId,
+    // client_id left NULL — FK to clients(id) is skipped for NULL.
+    client_id: input.clientId ?? null,
     client_name: input.clientName ?? 'Integration Test Client',
     date: '2026-07-12',
     due_date: '2026-08-12',
