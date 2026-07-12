@@ -7,11 +7,14 @@ name: CI
 # branch and its "type-check" step was actually `vite build` (esbuild strips
 # types — it does NOT type-check). Fixed below: real `tsc --noEmit` + eslint
 # error gate, on the live branches.
+# Test-rebuild: added GT-Production (the active feature/test branch — CI never
+# ran on it before) and switched the test step to test:coverage so the per-file
+# coverage thresholds on the money modules are enforced on every push/PR.
 on:
   push:
-    branches: [multitenant, main]
+    branches: [multitenant, main, GT-Production]
   pull_request:
-    branches: [multitenant, main]
+    branches: [multitenant, main, GT-Production]
 
 jobs:
   build-test:
@@ -30,5 +33,5 @@ jobs:
         run: npm run lint:eslint:errors
       - name: Build
         run: npm run build
-      - name: Run tests
-        run: npm test
+      - name: Run tests + coverage gate
+        run: npm run test:coverage

@@ -29,6 +29,24 @@ export default defineConfig(({ mode }) => {
           'modules/**/*.test.ts', 'modules/**/*.test.tsx', 'modules/**/*.spec.ts',
           'src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/*.spec.ts',
         ],
+        coverage: {
+          provider: 'v8',
+          reporter: ['text-summary', 'json-summary', 'html'],
+          reportsDirectory: './coverage',
+          include: ['modules/**/*.{ts,tsx}', 'src/**/*.{ts,tsx}'],
+          exclude: [
+            '**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/__tests__/**',
+            'modules/shared/testing/**', '**/*.d.ts', 'supabase/**',
+          ],
+          // Per-file gates on the critical, fully-unit-tested pure money modules.
+          // These MUST stay green in CI; the rest of the app is reported (not yet
+          // gated) so coverage can ratchet up file-by-file as real tests land.
+          thresholds: {
+            'modules/finance/services/glBalance.ts':               { statements: 90, branches: 80, functions: 90, lines: 90 },
+            'modules/production/services/pieceStatusMachine.ts':    { statements: 90, branches: 80, functions: 90, lines: 90 },
+            'modules/hr/services/payrollAccrual.ts':               { statements: 90, branches: 80, functions: 90, lines: 90 },
+          },
+        },
       },
       build: {
         chunkSizeWarningLimit: 5000,
