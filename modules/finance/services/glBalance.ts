@@ -44,3 +44,38 @@ export const assertGLBalance = (
     );
   }
 };
+
+// ── Maker-Checker Error: manual JV posted without approval ─────────────
+// A manual Journal Voucher (docType 'JV') may NEVER be written straight to
+// 'Posted' without an approvedBy — it must flow draftJV() → approveJV().
+// system-auto entries (recurring/depreciation/intercompany) are pre-audited
+// and bypass the 4-eyes requirement.
+export class MakerCheckerError extends Error {
+  constructor(public readonly txId: string) {
+    super(
+      `MakerChecker: Manual JV "${txId}" cannot be saved as Posted without approval. ` +
+      `Use FinanceService.draftJV() to create the Draft entry, ` +
+      `then FinanceService.approveJV("${txId}") for an authorized user to post it.`
+    );
+    this.name = 'MakerCheckerError';
+    Object.setPrototypeOf(this, MakerCheckerError.prototype);
+  }
+}
+
+// ── Maker-Checker Gate ─────────────────────────────────────────────────
+// Pure predicate for the 4-eyes rule. Only Posted manual JVs are gated; every
+// other docType / status (invoices, receipts, drafts, system-auto) passes.
+// Called by saveLedger before any Posted write. Extracted so the exact gate
+// condition is unit-tested instead of buried inline in the service.
+export const assertMakerCheckerApproval = (
+  entry: { id?: string; status?: string; docType?: string; approvedBy?: string; createdBy?: string }
+): void => {
+  if (
+    entry.status === 'Posted' &&
+    entry.docType === 'JV' &&
+    !entry.approvedBy &&
+    entry.createdBy !== 'system-auto'
+  ) {
+    throw new MakerCheckerError(entry.id ?? 'UNKNOWN');
+  }
+};

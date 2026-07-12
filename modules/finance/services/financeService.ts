@@ -9,8 +9,11 @@
 // (audit #13) so tests import the REAL assertion, not an inline copy.
 // Re-exported here for backward compatibility (many callers import
 // LedgerImbalanceError from financeService).
-import { LedgerImbalanceError, assertGLBalance as _assertGLBalance } from './glBalance';
-export { LedgerImbalanceError };
+import {
+  LedgerImbalanceError, assertGLBalance as _assertGLBalance,
+  MakerCheckerError, assertMakerCheckerApproval as _assertMakerCheckerApproval,
+} from './glBalance';
+export { LedgerImbalanceError, MakerCheckerError };
 
 import { safeParse, safeSave } from '../../shared/services/utils';
 import { supabase } from '@/src/services/supabaseClient';
@@ -579,17 +582,9 @@ export const FinanceService = {
     d.forEach(entry => {
       if (entry.status === 'Posted') {
         _assertGLBalance(entry);
-        if (
-          entry.docType === 'JV' &&
-          !entry.approvedBy &&
-          entry.createdBy !== 'system-auto'
-        ) {
-          throw new Error(
-            `MakerChecker: Manual JV "${entry.id}" cannot be saved as Posted without approval. ` +
-            `Use FinanceService.draftJV() to create the Draft entry, ` +
-            `then FinanceService.approveJV("${entry.id}") for an authorized user to post it.`
-          );
-        }
+        // 4-eyes gate (pure, unit-tested in ledgerGuards.test.ts): a manual JV
+        // cannot be Posted without an approver unless it is system-auto.
+        _assertMakerCheckerApproval(entry);
       }
     });
     _cache.ledger = d;
