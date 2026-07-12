@@ -27,38 +27,22 @@ export interface UserProfile {
   allowedModules: string[];
   timeRestricted: boolean;
   /**
-   * BUG-1 Fix (Phase 7): Primary active company for this user session.
-   * Populated from user_profiles.company on login.
-   * All service-layer .eq('company', ...) calls resolve through getActiveCompany().
+   * Primary company for this user session, synthesised at login from the DB row
+   * (or ROLE_DEFAULT_COMPANY when there is no `company` column). NOTE: this is a
+   * pre-bootstrap fallback ONLY — the authoritative company at runtime is the
+   * sidebar switcher (appStore.selectedCompany). Service reads resolve company
+   * via modules/shared/utils/activeCompany.ts, which prefers the switcher.
    */
   company: string;
   employeeId?: string;     // linked employee record
   employeeCode?: string;   // e.g. "GTK-007" for display
 }
 
-/**
- * BUG-1 Fix: Safe, deterministic company resolver.
- *
- * Resolution priority:
- *   1. profile.company            — direct DB column (most authoritative)
- *   2. profile.allowedCompanies[0] — first entry in allowed list
- *   3. ROLE_DEFAULT_COMPANY[role]  — role-based fallback (always defined)
- *
- * Never returns an empty string for a logged-in user; callers no longer
- * silently fall back to localStorage with an empty .eq('company', '').
- *
- * @example
- *   const company = getActiveCompany(useAuthStore.getState().profile);
- */
-export function getActiveCompany(profile: UserProfile | null): string {
-  if (!profile) return '';
-  return (
-    profile.company ||
-    profile.allowedCompanies?.[0] ||
-    ROLE_DEFAULT_COMPANY[profile.role] ||
-    ''
-  );
-}
+// NOTE: the old getActiveCompany(profile) resolver was removed (2026-07-12).
+// It ignored the sidebar switcher (appStore.selectedCompany) and led with the
+// phantom profile.company, so it resolved to the WRONG company in the
+// multitenant app. Service reads now use the canonical resolver in
+// modules/shared/utils/activeCompany.ts (prefers the switcher). Do not re-add.
 
 export const ROLE_DEFAULT_COMPANY: Record<UserRole, string> = {
   super_admin:         'GTK',

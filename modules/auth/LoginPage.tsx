@@ -51,7 +51,8 @@ const fetchProfile = async (userId: string, email?: string): Promise<UserProfile
       if (err2 || !data2) return null;
       if (!data2.is_active) return null;
       // BUG-1 Fix: populate company from DB row; fall back to role default
-      // so getActiveCompany() never resolves to an empty string.
+      // so profile.company is never empty (a pre-bootstrap fallback; the runtime
+      // company comes from the sidebar switcher via activeCompany()).
       const role2 = data2.role as UserRole;
       return {
         id:               data2.id,
