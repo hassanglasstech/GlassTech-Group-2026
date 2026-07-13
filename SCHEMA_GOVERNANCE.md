@@ -1,5 +1,30 @@
 # Schema Governance — GlassTech ERP (Supabase)
 
+> ## ✅ Reconcile status (verified 2026-07-14) — Integration Tests CI is GREEN
+> The migration chain was reproduced end-to-end on a fresh local Postgres (the
+> exact steps the Integration Tests CI runs): a clean `supabase start` applied
+> **all 18 governed migrations** (`20260712023250_baseline_live_schema` → …
+> → `20260713120000_vendor_quality_defects`) with only benign notices
+> (extension-exists, `DROP POLICY IF EXISTS` skips) — **zero apply errors** — and
+> `npm run test:integration` then passed **16 files / 72 tests** (real RPCs +
+> RLS) against that DB. So the drift that once reddened this workflow is resolved
+> by the committed baseline + governed migrations; the CI on the current HEAD is
+> green. No migration file needed changing.
+>
+> **Optional governance upgrade (not required for CI):** the baseline is still a
+> best-effort reflection snapshot, and the live DB's `supabase_migrations` history
+> is empty. A one-time `supabase db pull` (below) would produce a byte-perfect
+> baseline AND populate the remote history — nice hygiene, but the current setup
+> already applies cleanly and tests green.
+>
+> _Local repro note (Windows only): the default `5432x` ports sit in this host's
+> WinNAT excluded ranges, so the stack was brought up on a shifted `563xx` block
+> via local-only `supabase/config.toml` overrides + a gitignored `.env.test`
+> (`SUPABASE_TEST_URL=…56321`). Neither is committed; GitHub's ubuntu runner has
+> no such exclusion and uses the defaults._
+
+
+
 **Problem (from the 2026-07-11 audit):** the live DB was built with ad-hoc SQL, so
 `supabase_migrations.schema_migrations` was empty (`list_migrations` = 0) and the
 133 files in `supabase/migrations/` had DIVERGED from the live schema (missing

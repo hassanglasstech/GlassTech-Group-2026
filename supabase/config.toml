@@ -7,4 +7,10 @@
 # INVALID for supabase-cli >= 2.x and broke `supabase start`. `deno_dir` is not a
 # real config key — the CLI auto-bundles relative `_shared/` imports when you run
 # `supabase functions deploy`, so no config is needed for that.
+#
+# Windows-only gotcha: if `supabase start` fails to bind a 5432x port ("access to
+# a socket forbidden"), those ports are in this host's WinNAT excluded range
+# (`netsh int ipv4 show excludedportrange protocol=tcp`). Add LOCAL-ONLY (do not
+# commit) [api]/[db]/[studio] port overrides in a clean block (e.g. 563xx) + a
+# gitignored .env.test with SUPABASE_TEST_URL pointing at the shifted api port.
 project_id = "kqitcgoaibwcsaqvdsit"
