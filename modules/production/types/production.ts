@@ -296,6 +296,8 @@ export interface TemperingDispatch {
   totalCharges: number;
   expectedReturnDate?: string;
   actualReturnDate?: string;
+  signedCopyReceived?: boolean;       // customer's signed delivery-challan copy returned + filed?
+  signedCopyReceivedDate?: string;
   receivedPieceIds?: string[];
 
   // ── Sprint 11: Atomic dispatch + 3-way match ────────────────────────
