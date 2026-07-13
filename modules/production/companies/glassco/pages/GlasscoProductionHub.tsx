@@ -94,6 +94,7 @@ const SECTIONS: ModuleSection[] = [
     blurb: 'Non-conformance & claims',
     cards: [
       { key: 'ncr', title: 'NCR / Claims', desc: 'Non-conformance, reproductions & vendor claims', path: '/production/ncr-claims', icon: <AlertTriangle size={20} />, tone: 'danger' },
+      { key: 'vendor-quality', title: 'Vendor Quality', desc: 'Track plant damage per vendor — bend / bubble / scratch / chipping (no claim)', path: '/production/vendor-quality', icon: <AlertTriangle size={20} />, tone: 'warning', feature: 'quality.vendor_defects' },
     ],
   },
 ];
