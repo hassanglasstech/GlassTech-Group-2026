@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Quotation, Client, Product } from '../../shared/types';
 import { formatNumber } from '../../shared/utils/format';
-import { ArrowLeft, Building2, ArrowRightLeft, Trash2, Copy, Plus, Layers, Hash, Save, FileText, CheckCircle2, AlertTriangle, Calculator, Circle as CircleIcon, Paperclip, ArrowUp, ArrowDown, X } from 'lucide-react';
+import { ArrowLeft, Building2, ArrowRightLeft, Trash2, Copy, Plus, Layers, Hash, Save, FileText, CheckCircle2, AlertTriangle, Calculator, Circle as CircleIcon, Paperclip, ArrowUp, ArrowDown, X, Tag } from 'lucide-react';
 import { PrintSummary } from './GlasscoPrintTemplate';
 import { WastageCalculator } from './WastageCalculator';
 import QuotationWastageTab, { useQuotationWastage } from '@/modules/glassco/core/QuotationWastageTab';
@@ -26,11 +26,15 @@ interface GlasscoEditorProps {
     onRemoveItem: (idx: number) => void;
     onSave: (action: 'draft' | 'save' | 'approve') => void | Promise<void>;
     onSaveWastageDecision?: (decision: Record<string, unknown>) => void;
+    // Phase 4 (WS2): customer-tier price list feeding this quote's rates.
+    activePriceListName?: string;
+    onRepriceItems?: () => void;
 }
 
 export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
     formData, clients, products, isMM, setIsMM, lastSerial = 2427, onClose,
-    onUpdateItem, onAddItem, onAddSection, onDuplicateItem, onRemoveItem, onSave, onSaveWastageDecision
+    onUpdateItem, onAddItem, onAddSection, onDuplicateItem, onRemoveItem, onSave, onSaveWastageDecision,
+    activePriceListName, onRepriceItems
 }) => {
     const totalAmount = (formData.items || []).reduce((s, i) => s + i.amount, 0);
 
@@ -427,6 +431,18 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
                             <option value="">-- Search Customer --</option>
                             {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
+                        {activePriceListName && (
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded" title="This client is on a customer-tier price list — line rates use it.">
+                                    <Tag size={9} /> Tier: {activePriceListName}
+                                </span>
+                                {onRepriceItems && (formData.items || []).some(i => !i.isSection) && (
+                                    <button type="button" onClick={onRepriceItems} className="text-[9px] font-black uppercase text-amber-700 hover:underline">
+                                        Apply to all lines
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </div>
                     <div className="space-y-1 col-span-1">
                         <label className="text-xs font-bold uppercase text-primary tracking-widest ml-1">Project Ref</label>

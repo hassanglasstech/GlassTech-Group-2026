@@ -54,6 +54,8 @@ const GlasscoQuotationManager: React.FC = () => {
     handleReject,
     handleMarkLost,
     handleReopen,
+    activePriceListName,
+    repriceAllItems,
   } = useGlasscoQuotations();
 
   // status / date-range / value-range filter state (applied below).
@@ -262,6 +264,7 @@ const GlasscoQuotationManager: React.FC = () => {
                   onAddItem={addItem} onAddSection={addSection} onDuplicateItem={duplicateItem}
                   onRemoveItem={removeItem} onSave={handleSaveQuotation}
                   onSaveWastageDecision={(dec) => setFormData(prev => ({ ...prev, wastageDecision: dec as Quotation['wastageDecision'] }))}
+                  activePriceListName={activePriceListName} onRepriceItems={repriceAllItems}
                 />
             </div>
         )}

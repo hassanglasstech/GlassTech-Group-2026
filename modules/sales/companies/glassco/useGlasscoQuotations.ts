@@ -43,6 +43,7 @@ export const useGlasscoQuotations = () => {
   const [products, setProducts] = useState<Product[]>([]);
   // Phase 4 (WS2): customer-tier price-list overrides, loaded for the company.
   const [priceListItems, setPriceListItems] = useState<Array<PriceListRateItem & { priceListId?: string }>>([]);
+  const [priceLists, setPriceLists] = useState<Array<{ id?: string; name: string }>>([]);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortType, setSortType] = useState('date_desc');
@@ -94,6 +95,36 @@ export const useGlasscoQuotations = () => {
     return items.length > 0 ? buildPriceListResolver(items) : undefined;
   }, [formData.clientId, clients, priceListItems]);
 
+  // Name of the tier list the current client is on (for the editor badge).
+  const activePriceListName = useMemo<string | undefined>(() => {
+    if (!hasFeature('sales.service_rate_card')) return undefined;
+    const client = clients.find(c => c.id === formData.clientId);
+    const plId = client?.priceListId;
+    if (!plId) return undefined;
+    return priceLists.find(p => p.id === plId)?.name;
+  }, [formData.clientId, clients, priceLists]);
+
+  // Reprice every auto (non-section) line at the active tier rate. Opt-in — used
+  // after switching the client mid-quote, since existing lines aren't retro-priced
+  // (new/edited rows already pick up the tier). Manual-sqft lines keep their sqft
+  // (calculateLineItemTotal honours isManualSqFt) but take the tier rate.
+  const repriceAllItems = (): void => {
+    setFormData(prev => {
+      const items = (prev.items || []).map(it => {
+        if (it.isSection) return it;
+        const pricePerUnit = calculateAutoRate(
+          it.glassSize || '5mm', it.glassType || 'Plain', it.subCategory || 'Standard',
+          it.selectedServices || [], products, it.glassColor, (it as { serviceOnly?: boolean }).serviceOnly, rateOverride,
+        );
+        const next = { ...it, pricePerUnit };
+        const { totalSqFt, amount, aptCharges, notchCharges } = calculateLineItemTotal(next, products);
+        return { ...next, totalSqFt, amount, aptCharges: aptCharges || 0, notchCharges: notchCharges || 0 };
+      });
+      return { ...prev, items };
+    });
+    toast.success('Lines repriced at the tier rate.', { duration: 3000 });
+  };
+
   const refreshData = async () => {
     setIsLoading(true);
     try {
@@ -119,6 +150,10 @@ export const useGlasscoQuotations = () => {
       if (hasFeature('sales.service_rate_card')) {
         const pli = await AsyncSalesService.getPriceListItems();
         setPriceListItems(pli as unknown as Array<PriceListRateItem & { priceListId?: string }>);
+        const pls = await AsyncSalesService.getPriceLists();
+        setPriceLists((pls as Array<{ id?: string; name?: string; company?: string }>)
+          .filter(p => p.company === company)
+          .map(p => ({ id: p.id, name: p.name || '(unnamed)' })));
       }
 
       // Phase-6 (6.6): auto-expire any Draft/Sent quotation past dueDate.
@@ -908,5 +943,8 @@ export const useGlasscoQuotations = () => {
     handleReject,
     handleMarkLost,
     handleReopen,
+    // Phase 4 (WS2) — customer-tier price list
+    activePriceListName,
+    repriceAllItems,
   };
 };
