@@ -5,6 +5,7 @@ import { ProductionService } from '@/modules/production/services/productionServi
 import { SalesService } from '@/modules/sales/services/salesService';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { postTemperingInwardGL, postDeliveryCOGS } from '@/modules/procurement/services/glasscoGLService';
+import { isFinanceGLEnabled } from '@/modules/shared/services/featureFlagService';
 import { FinanceService } from '@/modules/finance/services/financeService';                    // Step 3 — pay-on-collection settlement
 import { TemperingCommitmentService } from '@/modules/finance/services/temperingCommitmentService'; // Step 3 — settle commitment
 import { supabase } from '@/src/services/supabaseClient';                       // Sprint 5
@@ -455,7 +456,10 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
             // Rate is computed per-piece per-mm from vendor's price list.
             // If dispatch has per-mm custom rates (rateOverrides), pass them in.
             // Old flat chargesPerSqFt is no longer used — rates differ by mm.
-            if (isComplete) {
+            // Finance GL off (single-entry go-live): skip the tempering AP GL so a
+            // missing vendor mm-rate can never block receiving pieces back. Pieces
+            // are already saved above; the receive completes regardless.
+            if (isComplete && isFinanceGLEnabled(company)) {
               const payDate = new Date().toISOString().split('T')[0];
               const apAmount = postTemperingInwardGL({
                 company:       company as any,
@@ -566,19 +570,24 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
     // with NO COGS journal (COGS understated, inventory overstated) while the
     // user saw a success toast. Now COGS posts up front; if it throws, nothing
     // is committed and the user is told.
-    try {
-      postDeliveryCOGS({
-        company: company as any,
-        invoiceId: newChallan.id,
-        orderId: directDeliveryForm.siteName,
-        pieceIds: deliveredPieceIds,
-        date: new Date().toISOString().split('T')[0],
-        clientName: directDeliveryForm.siteName,
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      toast.error(`Delivery blocked — COGS GL post failed (${msg}). Nothing was committed; fix and retry.`, { duration: 8000 });
-      return;
+    // Finance GL off (single-entry go-live): skip COGS so a missing MAP / closed
+    // period / imbalance can never block a site delivery. GL on = books mode:
+    // COGS posts up front and a failure blocks the delivery (nothing committed).
+    if (isFinanceGLEnabled(company)) {
+      try {
+        postDeliveryCOGS({
+          company: company as any,
+          invoiceId: newChallan.id,
+          orderId: directDeliveryForm.siteName,
+          pieceIds: deliveredPieceIds,
+          date: new Date().toISOString().split('T')[0],
+          clientName: directDeliveryForm.siteName,
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        toast.error(`Delivery blocked — COGS GL post failed (${msg}). Nothing was committed; fix and retry.`, { duration: 8000 });
+        return;
+      }
     }
 
     // ── GL committed — persist the challan + mark pieces Delivered ──
@@ -591,7 +600,7 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
     setIsDirectDeliveryModalOpen(false);
     setSelectedPiecesForDelivery(new Set());
     setDirectDeliveryForm({ vehicleNo: '', driverName: '', siteName: '' });
-    toast.success(`Direct Delivery Challan ${newChallan.id} created — pieces Delivered, COGS posted.`, { duration: 4000 });
+    toast.success(`Direct Delivery Challan ${newChallan.id} created — pieces Delivered${isFinanceGLEnabled(company) ? ', COGS posted' : ''}.`, { duration: 4000 });
   };
 
   const handleRecordFault = () => {

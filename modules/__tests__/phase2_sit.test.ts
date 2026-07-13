@@ -378,17 +378,39 @@ describe('SIT F3 · generateDeliveryInvoice — GL posting', () => {
     expect(_rpcCalls).toHaveLength(1);                     // no new RPC
   });
 
-  it('SIT-F3-05 · invoice with no production pieces but glass items > 0 sqft is REJECTED', async () => {
+  it('SIT-F3-05 · [GL on] invoice with no production pieces but glass items > 0 sqft is REJECTED', async () => {
     seedClient();
     const order = makeQuotation();
     seedQuotation(order);
     // No production pieces seeded — should fail the pre-flight check
     _mockGetProductionPieces.mockReturnValue([]);
 
+    // Books mode: the pieces-gate protects the ledger (revenue must not post
+    // without COGS). The gate is only enforced when Finance GL is enabled.
+    const { FeatureFlagService } = await import('@/modules/shared/services/featureFlagService');
+    await FeatureFlagService.saveAsync({ 'finance.gl_enabled': true }, 'Glassco');
+
     const { generateDeliveryInvoice } = await import('@/modules/sales/services/deliveryInvoiceService');
     await expect(generateDeliveryInvoice(order as any, 'Glassco', 0))
       .rejects.toThrow(/no production pieces are linked/);
     expect(_rpcCalls).toHaveLength(0);                     // no GL written
+  });
+
+  it('SIT-F3-06 · [GL off] invoice with no pieces is NOT blocked — records the sale', async () => {
+    seedClient();
+    const order = makeQuotation();
+    seedQuotation(order);
+    _mockGetProductionPieces.mockReturnValue([]);
+
+    // Single-entry go-live: with Finance GL off, the pieces-gate is relaxed so
+    // the sale is never blocked on missing production pieces.
+    const { FeatureFlagService } = await import('@/modules/shared/services/featureFlagService');
+    await FeatureFlagService.saveAsync({ 'finance.gl_enabled': false }, 'Glassco');
+
+    const { generateDeliveryInvoice } = await import('@/modules/sales/services/deliveryInvoiceService');
+    const result = await generateDeliveryInvoice(order as any, 'Glassco', 0);
+    expect(result.alreadyInvoiced).toBe(false);
+    expect(_rpcCalls).toHaveLength(1);                     // sale recorded — not blocked
   });
 
 });

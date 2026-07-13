@@ -21,6 +21,8 @@ import { allocateSerial } from '@/modules/sales/services/serialAllocator';
 import { supabase } from '../../../src/services/supabaseClient';
 import { safeParse, safeSave } from '@/modules/shared/services/utils';
 import { isTaxEnabled } from '@/modules/admin/services/taxSettingsService';
+import { isFinanceGLEnabled } from '@/modules/shared/services/featureFlagService';
+import { Logger } from '@/modules/shared/services/logger';
 import { toast } from 'sonner';
 
 // Sprint 1: localStorage cache keys mirrored after the atomic RPC commits,
@@ -351,12 +353,21 @@ export async function generateDeliveryInvoice(
         .map((p) => p.id);
 
   if (hasGlassItems && linkedPieceIds.length === 0) {
-    throw new Error(
-      `Invoice generation blocked for "${order.orderNo || order.id}": order has glass items ` +
-      `(sqft > 0) but no production pieces are linked. Cutting session must be closed first ` +
-      `(it creates the pieces). Otherwise revenue would post without COGS — gross profit ` +
-      `would be permanently inflated. Close the cutting session, then retry invoicing.`
-    );
+    if (isFinanceGLEnabled(company)) {
+      // Books mode: protect the ledger — never post revenue without COGS.
+      throw new Error(
+        `Invoice generation blocked for "${order.orderNo || order.id}": order has glass items ` +
+        `(sqft > 0) but no production pieces are linked. Cutting session must be closed first ` +
+        `(it creates the pieces). Otherwise revenue would post without COGS — gross profit ` +
+        `would be permanently inflated. Close the cutting session, then retry invoicing.`
+      );
+    }
+    // Single-entry go-live (finance GL off): don't block the sale on missing
+    // pieces. The invoice records revenue only (no COGS this invoice). Logged,
+    // not silent, so it's visible when books mode is later turned on.
+    Logger.warn('DeliveryInvoice',
+      `Pieces-gate relaxed (finance GL off): invoicing "${order.orderNo || order.id}" with no linked ` +
+      `pieces — revenue posts without COGS. Enable Finance GL to enforce the pieces gate.`);
   }
 
   // ── JIT Account Creation — AR & Revenue ──────────────────────────

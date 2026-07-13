@@ -90,3 +90,16 @@ export function hasFeature(key: string, companyArg?: string): boolean {
   if (key in FEATURE_DEFAULTS) return FEATURE_DEFAULTS[key];
   return true;
 }
+
+/**
+ * Finance-GL master switch (default OFF — single-entry go-live).
+ * OFF = the double-entry GL side-effects that can fail/block a module action
+ * (tempering-inward AP, delivery COGS) are skipped, and the invoice pieces/COGS
+ * validation gate is relaxed — so Sales + Production flow without the ledger
+ * ever blocking work. ON = full double-entry with those gates enforced (books
+ * mode). The GL machinery is fully BUILT either way; this only governs whether
+ * it gates module work. See `finance.gl_enabled` in the feature registry.
+ */
+export function isFinanceGLEnabled(companyArg?: string): boolean {
+  return hasFeature('finance.gl_enabled', companyArg);
+}
