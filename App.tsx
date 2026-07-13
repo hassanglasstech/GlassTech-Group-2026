@@ -88,6 +88,7 @@ const TemperingDispatchOut = React.lazy(() => import('./modules/production/pages
 // Inward / Receive — A3 money-path: receive-back (tempering AP) + direct delivery (COGS). Dark route until preview-tested.
 const InwardReceivePage = React.lazy(() => import('./modules/production/pages/InwardReceivePage'));
 const ServicePool = React.lazy(() => import('./modules/production/companies/glassco/pages/ServicePool'));
+const GuardScreen = React.lazy(() => import('./modules/production/companies/glassco/pages/GuardScreen'));
 // Service Floor — routed module home for per-piece service marking (revives ServiceFloorView)
 const ServiceFloorPage = React.lazy(() => import('./modules/production/companies/glassco/pages/ServiceFloorPage'));
 // Per-operator service station screens (polish / grinding / hole-notch) — mobile-first, magic-linkable
@@ -875,6 +876,7 @@ const App: React.FC = () => {
                   {/* Inward / Receive — A3 money-path (tempering AP + delivery COGS). Dark route until preview-tested. */}
                   <Route path="/production/inward" element={<ModuleErrorBoundary moduleName="Inward / Receive"><InwardReceivePage /></ModuleErrorBoundary>} />
                   <Route path="/production/service-pool" element={<ModuleErrorBoundary moduleName="Service Pool"><ServicePool /></ModuleErrorBoundary>} />
+                  <Route path="/production/guard" element={<ModuleErrorBoundary moduleName="Guard Screen"><GuardScreen /></ModuleErrorBoundary>} />
                   {/* Service Floor — per-piece service marking (Polishing/Grinding/Notching/Holes) */}
                   <Route path="/production/service-floor" element={<ModuleErrorBoundary moduleName="Service Floor"><ServiceFloorPage /></ModuleErrorBoundary>} />
                   {/* Per-operator service station screens (mobile-first, magic-linkable) */}

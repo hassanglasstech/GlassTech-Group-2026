@@ -84,6 +84,7 @@ const SECTIONS: ModuleSection[] = [
     blurb: 'Monitor flow & performance',
     cards: [
       { key: 'service-pool', title: 'Out at Service Pool', desc: 'Batches at tempering / lamination / DG — returns & overdue', path: '/production/service-pool', icon: <PackageOpen size={20} />, tone: 'info', feature: 'dispatch.service_pool' },
+      { key: 'guard', title: 'Gate Guard', desc: 'Verify gate passes before goods leave the premises', path: '/production/guard', icon: <ShieldCheck size={20} />, tone: 'primary', feature: 'dispatch.guard_screen' },
       { key: 'aging',       title: 'WIP Aging',          desc: 'Stuck pieces & tempering vendor SLA',     path: '/production/aging',             icon: <Clock size={20} />,     tone: 'warning' },
       { key: 'performance', title: 'Cutter Performance', desc: 'Sqft / hr, wastage & cutter leaderboard', path: '/production/cutter-performance', icon: <BarChart3 size={20} />, tone: 'neutral' },
     ],
