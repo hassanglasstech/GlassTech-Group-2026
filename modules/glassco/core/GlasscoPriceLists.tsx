@@ -21,7 +21,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
-import { Plus, Trash2, Save, X, Tag, Users } from 'lucide-react';
+import { Plus, Trash2, Save, X, Tag, Users, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface PriceList {
@@ -51,6 +51,7 @@ const GlasscoPriceLists: React.FC = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingList, setEditingList] = useState<PriceList | null>(null);
   const [editingItem, setEditingItem] = useState<PriceListItem | null>(null);
+  const [assignOpen, setAssignOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     const [l, i, c] = await Promise.all([
@@ -107,6 +108,17 @@ const GlasscoPriceLists: React.FC = () => {
     if (!confirm('Delete this rate override?')) return;
     await AsyncSalesService.deletePriceListItem(id);
     await refresh();
+  };
+
+  // Assign / unassign a client to the selected list. A client belongs to at most
+  // one tier list, so assigning here reassigns from any previous list. Persists
+  // via the client `data` jsonb blob (saveClients) — no dedicated column needed.
+  const toggleClientAssignment = async (client: any) => {
+    if (!selectedId) return;
+    const onThis = client.priceListId === selectedId;
+    const updated = { ...client, priceListId: onThis ? undefined : selectedId };
+    await AsyncSalesService.saveClients([updated]);
+    setClients(prev => prev.map(c => c.id === client.id ? updated : c));
   };
 
   return (
@@ -167,10 +179,16 @@ const GlasscoPriceLists: React.FC = () => {
                   <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Selected list</p>
                   <p className="font-black text-slate-800">{selectedList.name}</p>
                 </div>
-                <button onClick={() => setEditingItem(blankItem(selectedList.id || '', company))}
-                  className="bg-emerald-600 text-white text-[10px] font-black uppercase px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-emerald-700">
-                  <Plus size={12}/> Add Override
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setAssignOpen(true)}
+                    className="bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-slate-50">
+                    <Users size={12}/> Assign Clients
+                  </button>
+                  <button onClick={() => setEditingItem(blankItem(selectedList.id || '', company))}
+                    className="bg-emerald-600 text-white text-[10px] font-black uppercase px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-emerald-700">
+                    <Plus size={12}/> Add Override
+                  </button>
+                </div>
               </div>
 
               {clientsForSelected.length > 0 && (
@@ -307,6 +325,46 @@ const GlasscoPriceLists: React.FC = () => {
             <div className="px-5 py-3 bg-slate-50 border-t flex justify-end gap-2">
               <button onClick={() => setEditingItem(null)} className="px-4 py-2 text-xs font-bold text-slate-500 border rounded-lg">Cancel</button>
               <button onClick={handleSaveItem} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-black uppercase hover:bg-emerald-700 flex items-center gap-1.5"><Save size={12}/> Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign clients modal */}
+      {assignOpen && selectedList && (
+        <div className="fixed inset-0 bg-slate-900/60 z-[500] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]">
+            <div className="bg-slate-800 text-white px-5 py-3 flex items-center justify-between">
+              <div className="min-w-0">
+                <span className="text-sm font-black uppercase">Assign Clients</span>
+                <p className="text-[10px] text-slate-300 font-bold truncate">{selectedList.name} · tap to add / remove</p>
+              </div>
+              <button onClick={() => setAssignOpen(false)} className="p-1 hover:bg-white/10 rounded shrink-0"><X size={16}/></button>
+            </div>
+            <div className="overflow-y-auto divide-y divide-slate-100">
+              {clients.length === 0 && (
+                <div className="p-10 text-center text-slate-300 italic font-bold text-xs">No clients for {company}.</div>
+              )}
+              {clients.map((c) => {
+                const onThis = c.priceListId === selectedId;
+                const onOther = !!c.priceListId && !onThis;
+                return (
+                  <button key={c.id} onClick={() => toggleClientAssignment(c)}
+                    className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-left hover:bg-slate-50">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-700 truncate">{c.name}</p>
+                      {onOther && <p className="text-[9px] font-black text-amber-600 uppercase tracking-wider">On another list — tap to move here</p>}
+                    </div>
+                    <span className={`h-5 w-5 shrink-0 rounded flex items-center justify-center border ${onThis ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 text-transparent'}`}>
+                      <Check size={13}/>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="px-5 py-3 bg-slate-50 border-t flex justify-between items-center">
+              <span className="text-[10px] font-black uppercase text-slate-400">{clientsForSelected.length} on this list</span>
+              <button onClick={() => setAssignOpen(false)} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-black uppercase hover:bg-slate-900">Done</button>
             </div>
           </div>
         </div>

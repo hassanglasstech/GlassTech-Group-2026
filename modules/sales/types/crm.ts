@@ -15,6 +15,12 @@ export interface Client {
   creditLimit: number;
   status: ClientStatus;
   createdAt: string;
+  // Phase 4 (WS2) — customer-tier price list. When set, the client's quotation
+  // line rates resolve from this list's overrides (see buildPriceListResolver)
+  // before falling back to the master product rates. Round-trips via the client
+  // `data` jsonb blob (no dedicated column read/written by the mappers).
+  priceListId?: string;
+  customerTier?: string;
   // Sprint 2 — IC mirror FK. NULL/undefined = no mirror entry on invoice.
   mirrorCompany?: 'GTK' | 'GTI' | 'Glassco' | 'Nippon' | 'Factory' | null;
   // Sprint 2 — optimistic concurrency. Server bumps on every write via

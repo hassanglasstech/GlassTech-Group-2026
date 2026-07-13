@@ -10,8 +10,10 @@ import {
   Plus, Search, Edit2, Trash2, Package, Layers, Wrench,
   FileSpreadsheet, FileUp,
   Factory, ChevronRight, Filter, FileJson,
-  UploadCloud, History
+  UploadCloud, History, Tag
 } from 'lucide-react';
+import { hasFeature } from '@/modules/shared/services/featureFlagService';
+import GlasscoPriceLists from '@/modules/glassco/core/GlasscoPriceLists';
 import ProductFormModal from '@/components/product/ProductFormModal';
 import * as XLSX from 'xlsx';
 import { PriceHistoryEntry } from '@/modules/procurement/types/inventory';
@@ -20,7 +22,8 @@ import { EmptyState } from '@/modules/shared/components/EmptyState';
 
 const GlasscoProductMaster: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
-  const [activeTab, setActiveTab] = useState<'materials' | 'rates' | 'services'>('materials');
+  const [activeTab, setActiveTab] = useState<'materials' | 'rates' | 'services' | 'pricelists'>('materials');
+  const priceListsOn = hasFeature('sales.service_rate_card');
   const [products, setProducts] = useState<Product[]>([]);
   const [storeItems, setStoreItems] = useState<StoreItem[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -445,13 +448,19 @@ const GlasscoProductMaster: React.FC = () => {
             <Layers size={16} /><span>Material Library</span>
           </button>
           <button onClick={() => setActiveTab('rates')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-control font-bold text-xs transition-all ${activeTab === 'rates' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <FileSpreadsheet size={16} /><span>Price Lists</span>
+            <FileSpreadsheet size={16} /><span>Rate Matrix</span>
           </button>
           <button onClick={() => setActiveTab('services')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-control font-bold text-xs transition-all ${activeTab === 'services' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
             <Wrench size={16} /><span>Service Rates</span>
           </button>
+          {priceListsOn && (
+            <button onClick={() => setActiveTab('pricelists')} className={`flex items-center space-x-2 px-6 py-2.5 rounded-control font-bold text-xs transition-all ${activeTab === 'pricelists' ? 'bg-amber-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
+              <Tag size={16} /><span>Customer Tiers</span>
+            </button>
+          )}
         </div>
 
+        {activeTab !== 'pricelists' && (
         <div className="flex items-center space-x-3 w-full lg:w-auto overflow-x-auto no-scrollbar pb-1">
            {/* HIDDEN INPUTS */}
            <input type="file" ref={jsonInputRef} className="hidden" accept=".json" onChange={handleImportJson} />
@@ -486,6 +495,7 @@ const GlasscoProductMaster: React.FC = () => {
               <input type="text" placeholder="Search..." className="w-full pl-9 pr-4 py-2 bg-slate-100 border-none rounded-control font-bold text-xs uppercase focus:ring-2 focus:ring-blue-500 outline-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
            </div>
         </div>
+        )}
       </div>
 
       {activeTab === 'materials' && (
@@ -639,6 +649,12 @@ const GlasscoProductMaster: React.FC = () => {
                  </tbody>
               </table>
            </div>
+        </div>
+      )}
+
+      {activeTab === 'pricelists' && priceListsOn && (
+        <div className="animate-in fade-in">
+          <GlasscoPriceLists />
         </div>
       )}
 

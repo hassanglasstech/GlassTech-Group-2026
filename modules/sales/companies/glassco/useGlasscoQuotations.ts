@@ -5,7 +5,9 @@ import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { allocateSerial } from '@/modules/sales/services/serialAllocator';
 import { toast } from 'sonner';
 import { ProductionService } from '@/modules/production/services/productionService';
-import { calculateAutoRate, calculateLineItemTotal } from '@/modules/glassco/core/GlasscoUtils';
+import { calculateAutoRate, calculateLineItemTotal, buildPriceListResolver } from '@/modules/glassco/core/GlasscoUtils';
+import type { PriceListResolver, PriceListRateItem } from '@/modules/glassco/core/GlasscoUtils';
+import { hasFeature } from '@/modules/shared/services/featureFlagService';
 import { errMsg } from '@/modules/shared/services/utils';
 import { Logger } from '@/modules/shared/services/logger';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
@@ -39,6 +41,8 @@ export const useGlasscoQuotations = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [clients, setClients] = useState<Client[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  // Phase 4 (WS2): customer-tier price-list overrides, loaded for the company.
+  const [priceListItems, setPriceListItems] = useState<Array<PriceListRateItem & { priceListId?: string }>>([]);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortType, setSortType] = useState('date_desc');
@@ -77,6 +81,19 @@ export const useGlasscoQuotations = () => {
       return max || 2522;
   }, [allQuotations]);
 
+  // Phase 4 (WS2): when the quote's client is on a customer-tier price list, line
+  // rates resolve from that list's overrides before falling back to master rates.
+  // Rebuilt when the selected client or the loaded overrides change; new/edited
+  // rows then price at the tier automatically (normal flow picks client first).
+  const rateOverride = useMemo<PriceListResolver | undefined>(() => {
+    if (!hasFeature('sales.service_rate_card')) return undefined;   // phased-launch kill-switch
+    const client = clients.find(c => c.id === formData.clientId);
+    const plId = client?.priceListId;
+    if (!plId) return undefined;
+    const items = priceListItems.filter(i => i.priceListId === plId);
+    return items.length > 0 ? buildPriceListResolver(items) : undefined;
+  }, [formData.clientId, clients, priceListItems]);
+
   const refreshData = async () => {
     setIsLoading(true);
     try {
@@ -96,6 +113,13 @@ export const useGlasscoQuotations = () => {
 
       const allProducts = await AsyncSalesService.getProducts();
       setProducts(allProducts.filter(p => p.company === company));
+
+      // Phase 4 (WS2): tier price-list overrides that feed quotation pricing.
+      // Only fetched when the feature is launched — no wasted query otherwise.
+      if (hasFeature('sales.service_rate_card')) {
+        const pli = await AsyncSalesService.getPriceListItems();
+        setPriceListItems(pli as unknown as Array<PriceListRateItem & { priceListId?: string }>);
+      }
 
       // Phase-6 (6.6): auto-expire any Draft/Sent quotation past dueDate.
       // Fire-and-forget so refresh isn't blocked.
@@ -435,7 +459,8 @@ export const useGlasscoQuotations = () => {
             item.selectedServices || [],
             products,
             item.glassColor,
-            (item as any).serviceOnly           // SERVICE ONLY → glass base rate excluded
+            (item as any).serviceOnly,          // SERVICE ONLY → glass base rate excluded
+            rateOverride                        // Phase 4: client-tier price-list override
         );
     }
 
@@ -464,7 +489,7 @@ export const useGlasscoQuotations = () => {
   const makeBlankItem = (ts: number = Date.now()): QuotationItem => ({
     id: `ITM-${ts}`, description: '', qty: 1, inchW: 0, sootW: 0, inchH: 0, sootH: 0, mmW: 0, mmH: 0,
     width: 0, height: 0, glassSize: '5mm', glassType: 'Plain', subCategory: 'Standard', selectedServices: [], serviceOnly: false,
-    totalSqFt: 0, pricePerUnit: calculateAutoRate('5mm', 'Plain', 'Standard', [], products), amount: 0,
+    totalSqFt: 0, pricePerUnit: calculateAutoRate('5mm', 'Plain', 'Standard', [], products, undefined, false, rateOverride), amount: 0,
     locationCode: '', glazingSpecs: '', inputUnit: isMM ? 'MM' : 'Inch'
   });
 

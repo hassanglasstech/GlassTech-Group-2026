@@ -12,11 +12,60 @@ export const getBillingDimension = (dim: number, threshold: number, inclusive: b
 const normalize = (s: unknown) => String(s || '').trim().toLowerCase();
 
 /**
+ * Phase 4 (WS2) — customer-tier price-list override.
+ * Given a line's (glassType, thickness, subCategory) and either the sheet
+ * (serviceNick === null) or a specific service, return the tier rate — or
+ * undefined to fall through to the master product rate.
+ */
+export type PriceListResolver = (
+  glassType: string,
+  thickness: string,
+  subCategory: string,
+  serviceNick: string | null,
+) => number | undefined;
+
+/** Minimal shape of a price-list override row (camelCase, as read from the DB). */
+export interface PriceListRateItem {
+  glassType?: string;
+  thickness?: string;
+  subCategory?: string;
+  serviceNick?: string;
+  rate: number;
+}
+
+/**
+ * Build a rate resolver from a client's assigned price-list items. A blank item
+ * field is a wildcard ("Any"); a blank serviceNick means the sheet (base glass)
+ * rate, a set serviceNick targets that one service. The most specific match wins
+ * (a (Mirror, 5mm) row beats an (Any, Any) row), so broad tier defaults and
+ * narrow exceptions can coexist in the same list.
+ */
+export const buildPriceListResolver = (items: PriceListRateItem[]): PriceListResolver => {
+  return (glassType, thickness, subCategory, serviceNick) => {
+    const wantNick = serviceNick === null ? '' : normalize(serviceNick);
+    let best: { rate: number; specificity: number } | undefined;
+    for (const it of items) {
+      if (normalize(it.serviceNick) !== wantNick) continue;   // sheet vs service must match exactly
+      let specificity = 0;
+      if (it.glassType && it.glassType.trim()) { if (normalize(it.glassType) !== normalize(glassType)) continue; specificity++; }
+      if (it.thickness && it.thickness.trim()) { if (normalize(it.thickness) !== normalize(thickness)) continue; specificity++; }
+      if (it.subCategory && it.subCategory.trim()) { if (normalize(it.subCategory) !== normalize(subCategory)) continue; specificity++; }
+      const rate = Number(it.rate);
+      if (!isFinite(rate) || rate <= 0) continue;
+      if (!best || specificity > best.specificity) best = { rate, specificity };
+    }
+    return best?.rate;
+  };
+};
+
+/**
  * Calculate per-sqft rate (base glass + per-sqft services only).
  * NOTE: Notch is EXCLUDED here — it is charged per-notch-count in calculateLineItemTotal.
- * NOTE: APT on Mirror glass is EXCLUDED here — it becomes per-piece Rs 1000 flat in calculateLineItemTotal.
+ * NOTE: APT on Mirror glass is EXCLUDED here — it becomes per-piece flat in calculateLineItemTotal.
+ * `override` (Phase 4) applies a client-tier price-list rate over the master rate,
+ * per component (sheet base + each per-sqft service).
  */
-export const calculateAutoRate = (size: string, type: string, subType: string, services: string[], products: Product[], finishColor?: string, serviceOnly: boolean = false) => {
+export const calculateAutoRate = (size: string, type: string, subType: string, services: string[], products: Product[], finishColor?: string, serviceOnly: boolean = false, override?: PriceListResolver) => {
     const sSize = normalize(size);
     const sType = normalize(type);
     const sSubType = normalize(subType || 'Standard');
@@ -50,6 +99,11 @@ export const calculateAutoRate = (size: string, type: string, subType: string, s
     if (glass) {
         baseRate = (isTempered && glass.temperingPrice) ? glass.temperingPrice : (glass.basePrice || 0);
     }
+    // Phase 4: a client-tier sheet override replaces the master base/tempering rate.
+    if (override) {
+        const o = override(sType, sSize, sSubType, null);
+        if (o !== undefined) baseRate = o;
+    }
     // SERVICE ONLY (client-supplied glass): never charge the glass base/tempering
     // rate — only the selected services below contribute to the line rate.
     if (serviceOnly) baseRate = 0;
@@ -78,7 +132,13 @@ export const calculateAutoRate = (size: string, type: string, subType: string, s
             (normalize(p.thickness) === 'all' || !p.thickness)
         );
 
-        if (srv) serviceTotal += (srv.basePrice || 0);
+        let contribution = srv ? (srv.basePrice || 0) : 0;
+        // Phase 4: a client-tier service override replaces that service's master rate.
+        if (override) {
+            const o = override(sType, sSize, sSubType, sNick);
+            if (o !== undefined) contribution = o;
+        }
+        serviceTotal += contribution;
     });
 
     return baseRate + serviceTotal;
@@ -104,8 +164,18 @@ export const calculateLineItemTotal = (item: QuotationItem, products: Product[])
     const hasNotch = item.selectedServices?.some(s => normalize(s) === 'notch');
     const isTempered = item.selectedServices?.some(s => normalize(s) === 't/g');
 
-    // Mirror + APT = Rs 1000 per piece flat (replaces per-sqft APT rate)
-    const aptCharges = (hasAPT && isMirror) ? qty * 1000 : 0;
+    // Mirror + APT = per-piece flat (replaces per-sqft APT rate). Default Rs 1000,
+    // but configurable: a Service product with nick 'apt' billed per piece
+    // (unit Piece/PCS/Nos/Each) supplies the flat rate when one is defined.
+    const aptFlat = (() => {
+        const p = products.find(pr =>
+            normalize(pr.category) === 'service' &&
+            normalize(pr.serviceNick) === 'apt' &&
+            ['piece', 'pcs', 'nos', 'no', 'each', 'pc'].includes(normalize(pr.unit)));
+        const r = Number(p?.basePrice);
+        return (p && isFinite(r) && r > 0) ? r : 1000;
+    })();
+    const aptCharges = (hasAPT && isMirror) ? qty * aptFlat : 0;
 
     // Notch: per-count charge (based on holes[] placed in 2D drawing tab)
     let notchCharges = 0;
