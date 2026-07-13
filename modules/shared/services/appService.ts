@@ -3,7 +3,7 @@ import { supabase } from '@/src/services/supabaseClient';
 import { FactoryCOA } from '../data/factory/FactoryCOA';
 import { GlasscoCOA } from '../data/glassco/GlasscoCOA';
 import { safeParse } from './utils';
-import { Company, Vendor, ActivityLog } from '../types/index';
+import { Company, ActivityLog } from '../types/index';
 import { HRService } from '../../hr/services/hrService';
 import { FinanceService } from '../../finance/services/financeService';
 import { SalesService } from '../../sales/services/salesService';
@@ -18,107 +18,13 @@ const KEYS = {
   ACTIVITY_LOGS: 'gtk_erp_activity_logs',
 };
 
-const CURRENT_VERSION = '1.0';
+const CURRENT_VERSION = '1.1';   // 1.1: de-seed legacy demo vendors from local cache
 
-const DEFAULT_TEMPERING_VENDORS: Vendor[] = [
-    {
-        id: 'VEND-PSG-001',
-        name: 'PSG',
-        nickName: 'PSG',
-        type: 'Tempering',
-        company: 'Glassco',
-        address: 'Korangi Industrial Area',
-        contactPerson: 'Sales Desk',
-        phone: '0300-1234567',
-        registrationDate: '2026-01-01',
-        rates: [
-            { id: 'R1', thickness: '12mm', type: 'Clear', rate: 45, effectiveDate: '2026-01-01' },
-            { id: 'R2', thickness: '12mm', type: 'Reflective', rate: 55, effectiveDate: '2026-01-01' },
-            { id: 'R3', thickness: '10mm', type: 'All', rate: 40, effectiveDate: '2026-01-01' },
-            { id: 'R4', thickness: '8mm', type: 'All', rate: 35, effectiveDate: '2026-01-01' },
-            { id: 'R5', thickness: '6mm', type: 'All', rate: 28, effectiveDate: '2026-01-01' },
-            { id: 'R6', thickness: '5mm', type: 'All', rate: 22, effectiveDate: '2026-01-01' },
-        ]
-    },
-    {
-        id: 'VEND-AHM-002',
-        name: 'AHM',
-        nickName: 'AHM',
-        type: 'Tempering',
-        company: 'Glassco',
-        address: 'Landhi Industrial Area',
-        contactPerson: 'Manager AHM',
-        phone: '0321-9876543',
-        registrationDate: '2026-01-01',
-        rates: [
-            { id: 'R1', thickness: '12mm', type: 'Clear', rate: 42, effectiveDate: '2026-01-01' },
-            { id: 'R2', thickness: '12mm', type: 'Reflective', rate: 52, effectiveDate: '2026-01-01' },
-            { id: 'R3', thickness: '10mm', type: 'All', rate: 38, effectiveDate: '2026-01-01' },
-            { id: 'R4', thickness: '8mm', type: 'All', rate: 32, effectiveDate: '2026-01-01' },
-        ]
-    },
-    {
-        id: 'VEND-LAK-003',
-        name: 'LAKHANI',
-        nickName: 'Lakhani',
-        type: 'Tempering',
-        company: 'Glassco',
-        address: 'Site Area',
-        contactPerson: 'Lakhani Sales',
-        phone: '0333-5556667',
-        registrationDate: '2026-01-01',
-        rates: [
-            { id: 'R1', thickness: '12mm', type: 'All', rate: 45, effectiveDate: '2026-01-01' },
-            { id: 'R2', thickness: '10mm', type: 'All', rate: 40, effectiveDate: '2026-01-01' },
-            { id: 'R3', thickness: '8mm', type: 'All', rate: 35, effectiveDate: '2026-01-01' },
-        ]
-    }
-];
-
-const NIPPON_VENDORS: Vendor[] = [
-    {
-        id: 'VEND-NIP-KL-001',
-        name: 'Guangdong Kin Long Hardware Products Co., Ltd.',
-        nickName: 'Kin Long',
-        type: 'Hardware',
-        company: 'Nippon',
-        registrationDate: '2026-02-23'
-    },
-    {
-        id: 'VEND-NIP-NB-002',
-        name: 'NINGBO WIDEN IMPORT AND EXPORT CO., LTD',
-        nickName: 'Ningbo',
-        type: 'Hardware',
-        company: 'Nippon',
-        registrationDate: '2026-02-23'
-    },
-    {
-        id: 'VEND-NIP-SL-003',
-        name: 'Soleron Building Materials (Hebei) Co., Ltd.',
-        nickName: 'Soleron',
-        type: 'Hardware',
-        company: 'Nippon',
-        registrationDate: '2026-02-23'
-    },
-    {
-        id: 'VEND-NIP-SW-004',
-        name: 'SHANGHAI SIWAY BUILDING MATERIAL CO.LTD',
-        nickName: 'Siway',
-        type: 'Hardware',
-        company: 'Nippon',
-        registrationDate: '2026-02-23'
-    },
-    {
-        id: 'VEND-NIP-FR-005',
-        name: 'Froise',
-        nickName: 'Froise',
-        type: 'Hardware',
-        company: 'Nippon',
-        registrationDate: '2026-02-23'
-    }
-];
-
-
+// NOTE: hardcoded demo/placeholder vendors (PSG/AHM/LAKHANI + the 5 Nippon
+// suppliers) were REMOVED 2026-07-13 — the registry now shows only real,
+// user-added vendors. DB rows are purged via migration
+// 20260713080000_deseed_demo_vendors.sql; local-cache copies are purged on the
+// db_version bump below (see the de-seed block in seedInitialData).
 
 export const AppService = {
   seedInitialData: async () => {
@@ -135,28 +41,17 @@ export const AppService = {
         if (!hasGlassco) newAccounts = [...newAccounts, ...GlasscoCOA];
         if (newAccounts.length > allAccounts.length) localStorage.setItem(KEYS.ACCOUNTS, JSON.stringify(newAccounts));
 
+        // De-seed: purge legacy hardcoded demo vendors from the LOCAL cache so
+        // only real, user-added vendors remain (DB rows removed via migration
+        // 20260713080000_deseed_demo_vendors.sql). Idempotent.
+        const SEED_VENDOR_IDS = [
+            'VEND-PSG-001', 'VEND-AHM-002', 'VEND-LAK-003',
+            'VEND-NIP-KL-001', 'VEND-NIP-NB-002', 'VEND-NIP-SL-003', 'VEND-NIP-SW-004', 'VEND-NIP-FR-005',
+        ];
         const allVendors = safeParse(KEYS.VENDORS);
-        let currentVendors = [...allVendors];
-        let anyVendorAdded = false;
-        
-        DEFAULT_TEMPERING_VENDORS.forEach(seedVendor => {
-            const exists = currentVendors.some(v => v.name === seedVendor.name && v.type === 'Tempering');
-            if (!exists) {
-                currentVendors.push(seedVendor);
-                anyVendorAdded = true;
-            }
-        });
-
-        NIPPON_VENDORS.forEach(seedVendor => {
-            const exists = currentVendors.some(v => v.name === seedVendor.name && v.company === 'Nippon');
-            if (!exists) {
-                currentVendors.push(seedVendor);
-                anyVendorAdded = true;
-            }
-        });
-
-        if (anyVendorAdded) {
-            localStorage.setItem(KEYS.VENDORS, JSON.stringify(currentVendors));
+        const cleanedVendors = allVendors.filter((v: { id?: string }) => !SEED_VENDOR_IDS.includes(v?.id || ''));
+        if (cleanedVendors.length !== allVendors.length) {
+            localStorage.setItem(KEYS.VENDORS, JSON.stringify(cleanedVendors));
         }
 
         localStorage.setItem(KEYS.DB_VERSION, CURRENT_VERSION);

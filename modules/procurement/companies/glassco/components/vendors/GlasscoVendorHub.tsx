@@ -267,7 +267,9 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
                         <select value={registryFilter} onChange={(e) => setRegistryFilter(e.target.value)} className="sap-input font-bold text-xs py-1.5 outline-none focus:ring-2 focus:ring-blue-500">
                             <option value="All">All Categories</option>
                             <option value="Tempering">Tempering Partners</option>
-                            <option value="Glass">Glass Suppliers</option>
+                            <option value="Lamination">Lamination Partners</option>
+                            <option value="Double Glazing">Double Glazing Partners</option>
+                            <option value="Glass">Raw Glass (Supply)</option>
                             <option value="Transport">Logistics & Transport</option>
                             <option value="Crane/Unloading">Crane / Unloading</option>
                             <option value="Labour">Labour</option>
@@ -305,8 +307,8 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
                                   <td className="px-4 py-3">{v.type === 'Transport' ? <span className="text-2xs font-bold text-blue-600 uppercase bg-blue-50 px-2 py-0.5 rounded">{v.vehicles?.length || 0} Vehicles</span> : <span className="text-2xs text-slate-400 font-bold">N/A</span>}</td>
                                   <td className="px-4 py-3 text-center">
                                       <div className="flex justify-center space-x-2">
-                                          {v.type === 'Tempering' && (
-                                              <button onClick={() => openRateModal(v)} aria-label="Manage rates" className="p-2 text-orange-600 bg-orange-50 hover:bg-orange-100 rounded transition-colors" title="Manage Rates"><Receipt size={16}/></button>
+                                          {(['Tempering', 'Lamination', 'Double Glazing', 'Glass'] as string[]).includes(v.type) && (
+                                              <button onClick={() => openRateModal(v)} aria-label="Manage rates / price list" className="p-2 text-orange-600 bg-orange-50 hover:bg-orange-100 rounded transition-colors" title="Manage Rates / Price List"><Receipt size={16}/></button>
                                           )}
                                           <button onClick={() => openAddModal(v)} aria-label="Edit vendor" className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit size={16} /></button>
                                           <button onClick={async () => { if(await confirmModal("Delete vendor?")) { const u = vendors.filter(x => x.id !== v.id); SalesService.saveVendors(u); setVendors(u); }}} aria-label="Delete vendor" className="p-2 rounded transition-colors text-slate-400 hover:text-red-600 hover:bg-red-50"><Trash2 size={16} /></button>
@@ -324,7 +326,7 @@ const GlasscoVendorHub: React.FC<GlasscoVendorHubProps> = ({ company }) => {
         <div className="p-8 space-y-6 bg-slate-50">
           <div className="space-y-1"><label className="text-2xs font-bold uppercase text-slate-500">Vendor Name</label><input type="text" value={newVendorForm.name} onChange={e => setNewVendorForm({...newVendorForm, name: e.target.value})} className="sap-input w-full font-black uppercase" /></div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1"><label className="text-2xs font-bold uppercase text-slate-500">Type</label><select value={newVendorForm.type} onChange={e => setNewVendorForm({...newVendorForm, type: e.target.value as any})} className="sap-input w-full font-bold"><option value="Tempering">Tempering</option><option value="Glass">Glass</option><option value="Transport">Transport</option><option value="Crane/Unloading">Crane / Unloading</option><option value="Labour">Labour</option></select></div>
+            <div className="space-y-1"><label className="text-2xs font-bold uppercase text-slate-500">Type</label><select value={newVendorForm.type} onChange={e => setNewVendorForm({...newVendorForm, type: e.target.value as any})} className="sap-input w-full font-bold"><option value="Tempering">Tempering</option><option value="Lamination">Lamination</option><option value="Double Glazing">Double Glazing</option><option value="Glass">Raw Glass (Supply)</option><option value="Transport">Transport</option><option value="Crane/Unloading">Crane / Unloading</option><option value="Labour">Labour</option></select></div>
             <div className="space-y-1"><label className="text-2xs font-bold uppercase text-slate-500">Phone</label><input type="text" value={newVendorForm.phone} onChange={e => setNewVendorForm({...newVendorForm, phone: e.target.value})} className="sap-input w-full font-bold" /></div>
           {newVendorForm.type === 'Tempering' && (
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border">

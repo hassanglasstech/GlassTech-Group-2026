@@ -127,7 +127,9 @@ export type ClientStatus = typeof ClientStatus[keyof typeof ClientStatus];
 
 export const VendorType = {
   TEMPERING: 'Tempering',
-  GLASS: 'Glass',
+  LAMINATION: 'Lamination',
+  DOUBLE_GLAZING: 'Double Glazing',
+  GLASS: 'Glass',            // "Raw Glass (supply)" in UI — purchase/GRN track
   TRANSPORT: 'Transport',
   HARDWARE: 'Hardware',
   PROFILE: 'Profile',
@@ -135,4 +137,9 @@ export const VendorType = {
   CRANE: 'Crane/Unloading',
   LABOUR: 'Labour',
 } as const;
+
+// The 4 Glassco vendor categories for the unified rate-comparison chart.
+// The 3 outsource services (pieces go out → come back) vs Raw Glass (we buy in).
+export const GLASSCO_SERVICE_VENDOR_TYPES: VendorType[] = ['Tempering', 'Lamination', 'Double Glazing'];
+export const GLASSCO_RATE_CHART_CATEGORIES: VendorType[] = ['Tempering', 'Lamination', 'Double Glazing', 'Glass'];
 export type VendorType = typeof VendorType[keyof typeof VendorType];

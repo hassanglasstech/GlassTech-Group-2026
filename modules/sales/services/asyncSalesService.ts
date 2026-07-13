@@ -508,7 +508,25 @@ export const AsyncSalesService = {
     try {
       const { data, error } = await supabase.from('vendors').select('*').eq('company', company);
       if (error || !data || data.length === 0) return _localByCompany(KEYS.VENDORS);
-      const mapped = data.map((r) => ({ ...r }));
+      // Reconstruct from the `data` jsonb (full camelCase object) so rate/price-list
+      // edits round-trip; fall back to the flat snake_case columns per field.
+      const mapped = (data as Array<Record<string, unknown>>).map((r) => {
+        const base = (obj(r.data) as Record<string, unknown>) || {};
+        return {
+          ...base,
+          id: r.id as string,
+          company: (r.company ?? base.company) as Vendor['company'],
+          name: (r.name ?? base.name) as string,
+          nickName: (r.nick_name ?? base.nickName) as string | undefined,
+          type: (r.type ?? base.type) as Vendor['type'],
+          address: (r.address ?? base.address) as string | undefined,
+          contactPerson: (r.contact_person ?? base.contactPerson) as string | undefined,
+          phone: (r.phone ?? base.phone) as string | undefined,
+          registrationDate: (r.registration_date ?? base.registrationDate) as string | undefined,
+          rates: (r.rates ?? base.rates ?? []) as Vendor['rates'],
+          rateListVersions: (r.rate_list_versions ?? base.rateListVersions ?? []) as Vendor['rateListVersions'],
+        } as Vendor;
+      });
       _mergeIntoLocal(KEYS.VENDORS, mapped);   // merge, don't overwrite shared cache
       return mapped as Vendor[];
     } catch {
@@ -518,9 +536,22 @@ export const AsyncSalesService = {
   saveVendors: async (data: Vendor[]): Promise<void> => {
     safeSave(KEYS.VENDORS, data);
     try {
+      // Write BOTH the flat columns (so the rate-comparison chart / search can
+      // query rates directly) AND the full object into `data` jsonb (faithful
+      // round-trip). Previously only `data` was written while getVendors read the
+      // flat columns → rate edits silently did not persist to Supabase.
       const mapped = data.map((v) => ({
         id: v.id,
         company: v.company || '',
+        name: v.name ?? null,
+        nick_name: v.nickName ?? null,
+        type: v.type ?? null,
+        address: v.address ?? null,
+        contact_person: v.contactPerson ?? null,
+        phone: v.phone ?? null,
+        registration_date: v.registrationDate || null,
+        rates: (v.rates ?? []) as unknown as SbJsonb,
+        rate_list_versions: (v.rateListVersions ?? []) as unknown as SbJsonb,
         data: v as unknown as SbJsonb,
         updated_at: new Date().toISOString(),
       }));
