@@ -103,6 +103,7 @@ const FinanceInbox      = React.lazy(() => import('./modules/finance/pages/Finan
 // Sprint 29 — Reporting pack: standalone operational reports
 const VendorScorecard      = React.lazy(() => import('./modules/procurement/pages/VendorScorecard'));
 const StockAging           = React.lazy(() => import('./modules/procurement/pages/StockAging'));
+const RateChart            = React.lazy(() => import('./modules/procurement/companies/glassco/pages/RateChart'));
 const ProjectProfitability = React.lazy(() => import('./modules/sales/pages/ProjectProfitability'));
 // Sprint 30 — Cutover / Go-Live Wizard + CSV importers
 const CutoverWizard        = React.lazy(() => import('./modules/finance/pages/CutoverWizard'));
@@ -839,6 +840,7 @@ const App: React.FC = () => {
                   {/* Sprint 29 — Operational reports */}
                   <Route path="/procurement/vendor-scorecard"  element={<ModuleErrorBoundary moduleName="Vendor Scorecard"><VendorScorecard /></ModuleErrorBoundary>} />
                   <Route path="/procurement/stock-aging"       element={<ModuleErrorBoundary moduleName="Stock Aging"><StockAging /></ModuleErrorBoundary>} />
+                  <Route path="/procurement/rate-chart"        element={<ModuleErrorBoundary moduleName="Rate Chart"><RateChart /></ModuleErrorBoundary>} />
                   <Route path="/sales/project-profitability"   element={<ModuleErrorBoundary moduleName="Project Profitability"><ProjectProfitability /></ModuleErrorBoundary>} />
                   {/* Sprint 30 — Cutover / Go-Live Wizard + bulk importers */}
                   <Route path="/finance/cutover"               element={<ModuleErrorBoundary moduleName="Cutover Wizard"><CutoverWizard /></ModuleErrorBoundary>} />

@@ -1,16 +1,18 @@
 import React, { useState, useMemo } from 'react';
-import { Package, Warehouse, Truck, Handshake, Globe, ClipboardList } from 'lucide-react';
+import { Package, Warehouse, Truck, Handshake, Globe, ClipboardList, BarChart3 } from 'lucide-react';
 import { useAppStore } from '@/modules/shared/store/appStore';
+import { hasFeature } from '@/modules/shared/services/featureFlagService';
 
 // Lazy load all sub-modules
 const Requisitions   = React.lazy(() => import('./Requisitions'));
 const InventoryModule = React.lazy(() => import('./InventoryModule'));
 const LogisticsModule = React.lazy(() => import('./LogisticsModule'));
 const VendorHub       = React.lazy(() => import('./VendorHub'));
+const RateChart       = React.lazy(() => import('@/modules/procurement/companies/glassco/pages/RateChart'));
 const IntercompanyHub = React.lazy(() => import('@/modules/shared/pages/IntercompanyHub'));
 import SCMDashboard from '@/modules/procurement/components/SCMDashboard';
 
-type ProcTab = 'requisitions' | 'stock' | 'logistics' | 'vendors' | 'supplychain' | 'scm';
+type ProcTab = 'requisitions' | 'stock' | 'logistics' | 'vendors' | 'ratechart' | 'supplychain' | 'scm';
 
 const css = `
   .ph-wrap {
@@ -68,6 +70,7 @@ const ALL_TABS: { id: ProcTab; label: string; icon: React.ReactNode }[] = [
   { id: 'stock',        label: 'Stock / Material', icon: <Warehouse size={14}/> },
   { id: 'logistics',    label: 'Logistics',       icon: <Truck size={14}/> },
   { id: 'vendors',      label: 'Vendors',         icon: <Handshake size={14}/> },
+  { id: 'ratechart',    label: 'Rate Chart',      icon: <BarChart3 size={14}/> },
   { id: 'supplychain',  label: 'Supply Chain',    icon: <Globe size={14}/> },
   { id: 'scm',          label: 'SCM Dashboard',   icon: <Package size={14}/> },
 ];
@@ -87,6 +90,8 @@ const ProcurementHub: React.FC = () => {
         // Hide: logistics (factory-only), scm (glass-only analytics)
         if (t.id === 'logistics' || t.id === 'scm') return false;
       }
+      // Rate chart is feature-flagged (phased launch)
+      if (t.id === 'ratechart' && !hasFeature('proc.rate_chart')) return false;
       return true;
     });
   }, [company]);
@@ -125,6 +130,7 @@ const ProcurementHub: React.FC = () => {
           {active === 'stock'        && <InventoryModule />}
           {active === 'logistics'    && <LogisticsModule />}
           {active === 'vendors'      && <VendorHub />}
+          {active === 'ratechart'    && <RateChart />}
           {active === 'supplychain'  && <IntercompanyHub />}
           {active === 'scm'          && <SCMDashboard />}
         </React.Suspense>
