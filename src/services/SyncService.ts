@@ -350,6 +350,8 @@ const TABLE_PUSH: Record<string, (item: any) => any> = {
     status: d.status||'Pending',
     charges_per_sq_ft: d.chargesPerSqFt||d.charges_per_sq_ft||0,
     total_charges: d.totalCharges||d.total_charges||0,
+    expected_return_date: d.expectedReturnDate||d.expected_return_date||null,
+    actual_return_date: d.actualReturnDate||d.actual_return_date||null,
     // Forward-compat blob so the trip-grouping + link fields the flat columns
     // drop (tripId, gatePassId, receivedPieceIds, ratesByMm, vendorInvoiceNo,
     // threeWayMatchStatus, brokenPieceIds) round-trip — this is what desynced

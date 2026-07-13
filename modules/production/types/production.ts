@@ -295,6 +295,7 @@ export interface TemperingDispatch {
                                        // e.g. { '6': 55, '8': 65, '10': 75, '12': 85 }
   totalCharges: number;
   expectedReturnDate?: string;
+  actualReturnDate?: string;
   receivedPieceIds?: string[];
 
   // ── Sprint 11: Atomic dispatch + 3-way match ────────────────────────

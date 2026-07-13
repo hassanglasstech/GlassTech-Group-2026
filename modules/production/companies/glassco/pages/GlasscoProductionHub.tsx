@@ -16,9 +16,10 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/modules/shared/store/appStore';
+import { hasFeature } from '@/modules/shared/services/featureFlagService';
 import {
   ScanLine, ShieldCheck, Truck, Clock, BarChart3, AlertTriangle, ArrowRight, ClipboardList,
-  Sparkles, Flame, Hammer, Drill, Users,
+  Sparkles, Flame, Hammer, Drill, Users, PackageOpen,
 } from 'lucide-react';
 
 type Tone = 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'neutral';
@@ -30,6 +31,7 @@ interface ModuleCard {
   path: string;
   icon: React.ReactNode;
   tone: Tone;
+  feature?: string;   // optional feature-flag gate; hidden until enabled
 }
 
 // Static tone map so Tailwind generates the classes (no interpolation).
@@ -81,6 +83,7 @@ const SECTIONS: ModuleSection[] = [
     title: 'Tracking & Oversight',
     blurb: 'Monitor flow & performance',
     cards: [
+      { key: 'service-pool', title: 'Out at Service Pool', desc: 'Batches at tempering / lamination / DG — returns & overdue', path: '/production/service-pool', icon: <PackageOpen size={20} />, tone: 'info', feature: 'dispatch.service_pool' },
       { key: 'aging',       title: 'WIP Aging',          desc: 'Stuck pieces & tempering vendor SLA',     path: '/production/aging',             icon: <Clock size={20} />,     tone: 'warning' },
       { key: 'performance', title: 'Cutter Performance', desc: 'Sqft / hr, wastage & cutter leaderboard', path: '/production/cutter-performance', icon: <BarChart3 size={20} />, tone: 'neutral' },
     ],
@@ -105,14 +108,17 @@ const GlasscoProductionHub: React.FC = () => {
         <p className="text-label text-slate-500 mt-0.5">{company} · Glass cutting, tempering &amp; dispatch</p>
       </div>
 
-      {SECTIONS.map(section => (
+      {SECTIONS.map(section => {
+        const cards = section.cards.filter(c => !c.feature || hasFeature(c.feature));
+        if (cards.length === 0) return null;
+        return (
         <section key={section.title} className="space-y-2">
           <div className="flex items-baseline gap-2">
             <h2 className="text-label font-bold uppercase tracking-wide text-slate-600">{section.title}</h2>
             <span className="text-2xs text-slate-400">{section.blurb}</span>
           </div>
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            {section.cards.map(c => (
+            {cards.map(c => (
               <button
                 key={c.key}
                 onClick={() => navigate(c.path)}
@@ -132,7 +138,8 @@ const GlasscoProductionHub: React.FC = () => {
             ))}
           </div>
         </section>
-      ))}
+        );
+      })}
     </div>
   );
 };

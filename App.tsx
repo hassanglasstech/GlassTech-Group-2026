@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Company } from '@/modules/shared/constants';
 import { AppService } from '@/modules/shared/services/appService';
+import { FeatureFlagService } from '@/modules/shared/services/featureFlagService';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { SyncService } from '@/src/services/SyncService';
 import { RealtimeService } from '@/src/services/RealtimeService';
@@ -86,6 +87,7 @@ const DispatchCockpit   = React.lazy(() => import('./modules/dispatch/pages/Disp
 const TemperingDispatchOut = React.lazy(() => import('./modules/production/pages/TemperingDispatchOut'));
 // Inward / Receive — A3 money-path: receive-back (tempering AP) + direct delivery (COGS). Dark route until preview-tested.
 const InwardReceivePage = React.lazy(() => import('./modules/production/pages/InwardReceivePage'));
+const ServicePool = React.lazy(() => import('./modules/production/companies/glassco/pages/ServicePool'));
 // Service Floor — routed module home for per-piece service marking (revives ServiceFloorView)
 const ServiceFloorPage = React.lazy(() => import('./modules/production/companies/glassco/pages/ServiceFloorPage'));
 // Per-operator service station screens (polish / grinding / hole-notch) — mobile-first, magic-linkable
@@ -115,6 +117,7 @@ const DRConsole            = React.lazy(() => import('./modules/admin/pages/DRCo
 const BrandingSettings     = React.lazy(() => import('./modules/admin/pages/BrandingSettings'));
 // Pre-go-live — Tax/GST toggle (off by default; flip when business needs GST invoices)
 const TaxSettings          = React.lazy(() => import('./modules/admin/pages/TaxSettings'));
+const FeatureFlags         = React.lazy(() => import('./modules/admin/pages/FeatureFlags'));
 // Sprint 34 — Performance at Scale (perf telemetry dashboard)
 const HealthMetrics        = React.lazy(() => import('./modules/admin/pages/HealthMetrics'));
 // Sprint 35 — Notifications + Alerts (threshold config)
@@ -620,6 +623,11 @@ const App: React.FC = () => {
     return () => { RealtimeService.stop(); clearInterval(alertInterval); };
   }, [user?.id]); // only when user changes
 
+  // Feature flags: load the active company's entitlements at boot + on switch.
+  useEffect(() => {
+    if (selectedCompany) FeatureFlagService.loadAsync(selectedCompany).catch(() => {});
+  }, [selectedCompany]);
+
   useEffect(() => {
     const handleResize = () => {
       const mobile = window.innerWidth < 1024;
@@ -845,6 +853,7 @@ const App: React.FC = () => {
                   <Route path="/admin/branding"                element={<ModuleErrorBoundary moduleName="Branding Settings"><BrandingSettings /></ModuleErrorBoundary>} />
                   {/* Pre-go-live — Tax/GST Settings toggle */}
                   <Route path="/admin/tax-settings"            element={<ModuleErrorBoundary moduleName="Tax Settings"><TaxSettings /></ModuleErrorBoundary>} />
+                  <Route path="/admin/feature-flags"           element={<ModuleErrorBoundary moduleName="Feature Flags"><FeatureFlags /></ModuleErrorBoundary>} />
                   {/* Sprint 34 — Performance Metrics (admin) */}
                   <Route path="/admin/health-metrics"          element={<ModuleErrorBoundary moduleName="Health Metrics"><HealthMetrics /></ModuleErrorBoundary>} />
                   {/* Sprint 35 — Alert / Notification Settings (admin) */}
@@ -865,6 +874,7 @@ const App: React.FC = () => {
                   <Route path="/production/tempering-dispatch" element={<ModuleErrorBoundary moduleName="Tempering Dispatch"><TemperingDispatchOut /></ModuleErrorBoundary>} />
                   {/* Inward / Receive — A3 money-path (tempering AP + delivery COGS). Dark route until preview-tested. */}
                   <Route path="/production/inward" element={<ModuleErrorBoundary moduleName="Inward / Receive"><InwardReceivePage /></ModuleErrorBoundary>} />
+                  <Route path="/production/service-pool" element={<ModuleErrorBoundary moduleName="Service Pool"><ServicePool /></ModuleErrorBoundary>} />
                   {/* Service Floor — per-piece service marking (Polishing/Grinding/Notching/Holes) */}
                   <Route path="/production/service-floor" element={<ModuleErrorBoundary moduleName="Service Floor"><ServiceFloorPage /></ModuleErrorBoundary>} />
                   {/* Per-operator service station screens (mobile-first, magic-linkable) */}

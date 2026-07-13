@@ -438,7 +438,16 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
     if (inwardDispatch) {
         const currentReceived = inwardDispatch.receivedPieceIds || [];
         if (!currentReceived.includes(pieceId)) {
-            const updatedDispatches = dispatches.map(d => d.id === activeInwardDispatchId ? { ...d, receivedPieceIds: [...currentReceived, pieceId] } : d);
+            const allReceived = [...currentReceived, pieceId];
+            const allPieceIds = inwardDispatch.pieceIds || [];
+            const isComplete  = allPieceIds.every(id => allReceived.includes(id));
+            // Stamp the batch's ACTUAL return date once every piece is back — this
+            // is what drops it out of the Out-at-Service pool (Phase 1). Keep the
+            // first stamped value across any later partial re-receive.
+            const returnStamp = new Date().toISOString().split('T')[0];
+            const updatedDispatches = dispatches.map(d => d.id === activeInwardDispatchId
+              ? { ...d, receivedPieceIds: allReceived, ...(isComplete && !d.actualReturnDate ? { actualReturnDate: returnStamp } : {}) }
+              : d);
             ProductionService.saveTemperingDispatches(updatedDispatches);
             setDispatches(updatedDispatches);
 
@@ -446,9 +455,6 @@ export const ProductionProvider: React.FC<{ company: Company, children: React.Re
             // Rate is computed per-piece per-mm from vendor's price list.
             // If dispatch has per-mm custom rates (rateOverrides), pass them in.
             // Old flat chargesPerSqFt is no longer used — rates differ by mm.
-            const allReceived = [...currentReceived, pieceId];
-            const allPieceIds = inwardDispatch.pieceIds || [];
-            const isComplete  = allPieceIds.every(id => allReceived.includes(id));
             if (isComplete) {
               const payDate = new Date().toISOString().split('T')[0];
               const apAmount = postTemperingInwardGL({

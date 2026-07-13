@@ -53,6 +53,7 @@ const TemperingContent: React.FC = () => {
   const [vendorName, setVendorName] = useState('');
   const [vehicleNo, setVehicleNo] = useState('');
   const [driverName, setDriverName] = useState('');
+  const [expectedReturnDate, setExpectedReturnDate] = useState('');
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<CreatedDispatch | null>(null);
   const [printMode, setPrintMode] = useState<'service' | 'gate' | null>(null);
@@ -158,6 +159,7 @@ const TemperingContent: React.FC = () => {
         chargesPerSqFt: totalSqFt > 0 ? Math.round(charge.total / totalSqFt) : 0,
         ratesByMm: frozenRates,
         totalCharges: charge.total,
+        expectedReturnDate: expectedReturnDate || undefined,
       };
 
       // Persist dispatch (two-tier localStorage), then atomically attach pieces.
@@ -192,6 +194,7 @@ const TemperingContent: React.FC = () => {
       bulk.clear();
       setVehicleNo('');
       setDriverName('');
+      setExpectedReturnDate('');
       toast.success(`Dispatch ${id} — ${selectedIds.length} pcs → ${vendorName} (${fmtPkr(charge.total)})`);
       refreshData();
       setPrintMode('service');    // auto-print the service order
@@ -415,6 +418,12 @@ const TemperingContent: React.FC = () => {
               <label className="mb-1 block text-2xs font-bold uppercase text-slate-500">Driver</label>
               <input value={driverName} onChange={e => setDriverName(e.target.value)} placeholder="Driver name" className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none" />
             </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-2xs font-bold uppercase text-slate-500">Expected Return Date</label>
+            <input type="date" value={expectedReturnDate} onChange={e => setExpectedReturnDate(e.target.value)} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none" />
+            <p className="mt-0.5 text-2xs text-slate-400">When the vendor should return this batch — drives the out-at-service pool + overdue alerts</p>
           </div>
 
           <div className="rounded-xl bg-slate-50 p-3 text-xs">
