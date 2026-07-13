@@ -50,6 +50,7 @@ const TemperingContent: React.FC = () => {
 
   const [query, setQuery] = useState('');
   const [mmFilter, setMmFilter] = useState<string>('all');
+  const [serviceType, setServiceType] = useState<'Tempering' | 'Lamination' | 'Double Glazing'>('Tempering');
   const [vendorName, setVendorName] = useState('');
   const [vehicleNo, setVehicleNo] = useState('');
   const [driverName, setDriverName] = useState('');
@@ -58,10 +59,10 @@ const TemperingContent: React.FC = () => {
   const [created, setCreated] = useState<CreatedDispatch | null>(null);
   const [printMode, setPrintMode] = useState<'service' | 'gate' | null>(null);
 
-  // ── Tempering vendors ────────────────────────────────────────────
+  // ── Service vendors (Tempering / Lamination / Double Glazing) ─────
   const vendors = useMemo<Vendor[]>(
-    () => SalesService.getVendors().filter(v => v.type === 'Tempering' && (!v.company || v.company === 'Glassco')),
-    [],
+    () => SalesService.getVendors().filter(v => v.type === serviceType && (!v.company || v.company === 'Glassco')),
+    [serviceType],
   );
   const ratesByMm = useMemo(() => (vendorName ? getVendorRatesByMm(vendorName) : {}), [vendorName]);
 
@@ -125,7 +126,7 @@ const TemperingContent: React.FC = () => {
   const handleDispatch = async () => {
     const selectedIds = Array.from(bulk.selected);
     if (selectedIds.length === 0) { toast.error('Pehle pieces select karein.'); return; }
-    if (!vendorName) { toast.error('Tempering vendor select karein.'); return; }
+    if (!vendorName) { toast.error(`${serviceType} vendor select karein.`); return; }
     if (!vehicleNo.trim() || !driverName.trim()) { toast.error('Vehicle aur driver name zaroori hain.'); return; }
 
     setBusy(true);
@@ -152,7 +153,7 @@ const TemperingContent: React.FC = () => {
         plantName: vendorName,
         vehicleNo: vehicleNo.trim().toUpperCase(),
         driverName: driverName.trim(),
-        serviceType: 'Tempering',
+        serviceType,
         pieceIds: selectedIds,
         totalSqFt,
         status: 'Dispatched',
@@ -393,7 +394,20 @@ const TemperingContent: React.FC = () => {
           <h3 className="text-xs font-black uppercase tracking-wide text-slate-700">Dispatch to vendor</h3>
 
           <div>
-            <label className="mb-1 block text-2xs font-bold uppercase text-slate-500">Tempering Vendor</label>
+            <label className="mb-1 block text-2xs font-bold uppercase text-slate-500">Service</label>
+            <select
+              value={serviceType}
+              onChange={e => { setServiceType(e.target.value as 'Tempering' | 'Lamination' | 'Double Glazing'); setVendorName(''); }}
+              className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              <option value="Tempering">Tempering</option>
+              <option value="Lamination">Lamination</option>
+              <option value="Double Glazing">Double Glazing</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-2xs font-bold uppercase text-slate-500">{serviceType} Vendor</label>
             <select
               value={vendorName}
               onChange={e => setVendorName(e.target.value)}
