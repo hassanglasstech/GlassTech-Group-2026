@@ -50,6 +50,15 @@
         .print-only{ display: block !important; }
         body, html { height: auto !important; overflow: visible !important; background: white !important; margin: 0 !important; padding: 0 !important; }
         #root       { height: auto !important; overflow: visible !important; }
+        /* Un-clip the app shell: #main-content (overflow-hidden + h-full) and its
+           inner overflow-y-auto scroll container clip the print-only sheet on
+           mobile print engines → blank / partial pages. Force them visible so the
+           full A4 sheet prints. */
+        #main-content { height: auto !important; max-height: none !important; overflow: visible !important; }
+        #main-content * { overflow: visible !important; }
+        /* Cancel mx-auto so the fixed 210mm sheet anchors to the page's left edge
+           instead of being shifted off-page by a narrow flex parent on mobile. */
+        .print-only { margin: 0 !important; box-shadow: none !important; }
         .print-content-wrapper { padding: 15mm !important; }
       }
       .print-only { display: none; }
