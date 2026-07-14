@@ -181,7 +181,10 @@ const ALL_NAV = [
 // Empty `allowedModules` array now means NO ACCESS (was previously "all access")
 // — admin must explicitly tick modules in Admin → Users → Edit.
 // ─────────────────────────────────────────────────────────────────────
-const FULL_ACCESS_ROLES = ['super_admin', 'owner', 'hassan'];
+// 'owner' is a COMPANY admin (all modules WITHIN its allowed_companies), NOT a
+// cross-company/global super — mirrors DB auth_user_is_super() (owner removed
+// 2026-07-12). Only super_admin + hassan bypass company/module scoping.
+const FULL_ACCESS_ROLES = ['super_admin', 'hassan'];
 
 // Maps a URL pathname to its module key. Must match `key` values in CORE_NAV / ROLE_NAV.
 // Any path not in this map is treated as "no module restriction" (Dashboard, public pages).
@@ -282,14 +285,14 @@ const Sidebar = ({ isMobile }: { isMobile: boolean }) => {
 
   // Compute which companies this user can switch to (multitenant).
   // Full-access roles see all five; everyone else sees their allowed_companies.
-  const companies: Company[] = (['super_admin', 'owner', 'hassan'].includes(user?.role || '')
+  const companies: Company[] = (FULL_ACCESS_ROLES.includes(user?.role || '')
     ? (['GTK', 'GTI', 'Glassco', 'Nippon', 'Factory'] as Company[])
     : ((user?.allowedCompanies as Company[]) || []));
 
   // Compute which nav items to show.
   // BUG-1 fix: empty allowedModules now means NO ACCESS (was: "all access").
   // Full-access roles (super_admin/owner/hassan) always see everything.
-  const isFullAccessRole = ['super_admin', 'owner', 'hassan'].includes(user?.role || '');
+  const isFullAccessRole = FULL_ACCESS_ROLES.includes(user?.role || '');
   const allowedModuleKeys = isFullAccessRole ? null : (user?.allowedModules || []);
 
   // Build nav: core items filtered by role permissions + role-specific items
@@ -648,7 +651,7 @@ const App: React.FC = () => {
       // Multitenant: default to the user's first allowed company; only override
       // the current selection if it isn't one this user is allowed to operate as
       // (e.g. a stale persisted value). Full-access roles may keep any company.
-      const allowed: string[] = ['super_admin', 'owner', 'hassan'].includes(user.role || '')
+      const allowed: string[] = FULL_ACCESS_ROLES.includes(user.role || '')
         ? ['GTK', 'GTI', 'Glassco', 'Nippon', 'Factory']
         : (user.allowedCompanies || []);
       const effective = allowed.includes(selectedCompany) ? selectedCompany : (allowed[0] as Company);
@@ -896,7 +899,7 @@ const App: React.FC = () => {
             </div>
           </div>
         </main>
-        <BottomNav allowedModules={['super_admin', 'owner', 'hassan'].includes(user?.role || '') ? null : (user?.allowedModules || [])} />
+        <BottomNav allowedModules={FULL_ACCESS_ROLES.includes(user?.role || '') ? null : (user?.allowedModules || [])} />
         <Suspense fallback={null}><EventOSChatWidget /></Suspense>
         <Suspense fallback={null}><WazirLauncher /></Suspense>
         {/* Sprint 21 — global ⌘K command palette (skips when in input field) */}
