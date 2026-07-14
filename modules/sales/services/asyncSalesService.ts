@@ -123,6 +123,43 @@ const _deleteRow = async (table: string, localKey: string, id: string): Promise<
   }
 };
 
+// ── FK self-heal: guarantee a quotation's client exists in the cloud ──────
+// The quotations→clients FK (fk_quotations_client) rejects a quote whose
+// client_id has no matching clients row. That happens when the client push
+// raced/failed (or the row was deleted). Rather than blocking the sale on a
+// cryptic FK, create a MINIMAL stub client for each missing id and let the
+// caller retry the quote upsert. Returns true if it created at least one stub.
+const _ensureQuotationClients = async (
+  quotes: Array<{ id: string; company: string; clientId?: string; clientName?: string }>,
+): Promise<boolean> => {
+  try {
+    const ids = Array.from(new Set(quotes.map((q) => q.clientId).filter((x): x is string => !!x)));
+    if (ids.length === 0) return false;
+    const { data: existing } = await supabase.from('clients').select('id').in('id', ids);
+    const have = new Set((existing ?? []).map((r) => (r as { id: string }).id));
+    const seen = new Set<string>();
+    const stubs: Array<Record<string, unknown>> = [];
+    for (const q of quotes) {
+      const cid = q.clientId;
+      if (!cid || have.has(cid) || seen.has(cid)) continue;
+      seen.add(cid);
+      const nowIso = new Date().toISOString();
+      stubs.push({
+        id: cid, company: q.company, name: q.clientName || cid,
+        contact_person: '', email: '', phone: '', address: '', ntn: '',
+        credit_limit: 0, status: 'Active', created_at: nowIso, updated_at: nowIso,
+      });
+    }
+    if (stubs.length === 0) return false;
+    const { error } = await supabase.from('clients').upsert(stubs, { onConflict: 'id' });
+    if (error) { Logger.error('Sales', 'FK self-heal stub-client upsert failed', error); return false; }
+    return true;
+  } catch (e: unknown) {
+    Logger.error('Sales', 'FK self-heal failed', e);
+    return false;
+  }
+};
+
 // Simulate network delay for async operations
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -521,7 +558,7 @@ export const AsyncSalesService = {
         // ── flat columns (mirror SyncService TABLE_PUSH.quotations) ──
         date:                   q.date                           || null,
         due_date:               q.dueDate                        || null,
-        client_id:              q.clientId                       || '',
+        client_id:              q.clientId                       || null,
         project_name:           q.projectName                    || '',
         subject:                q.subject                        || '',
         items:                  q.items                          || [],
@@ -544,7 +581,18 @@ export const AsyncSalesService = {
       }));
 
       if (supabase && mapped.length > 0) {
-        const { error } = await supabase.from('quotations').upsert(mapped, { onConflict: 'id' });
+        let { error } = await supabase.from('quotations').upsert(mapped, { onConflict: 'id' });
+        // FK self-heal: if a quote's client_id has no matching clients row
+        // (fk_quotations_client), create a minimal stub client and retry ONCE —
+        // the sale is never blocked on a cryptic FK from a raced/failed client push.
+        if (error && (error.code === '23503' || /fk_quotations_client|foreign key/i.test(error.message))) {
+          const healed = await _ensureQuotationClients(
+            data as Array<{ id: string; company: string; clientId?: string; clientName?: string }>,
+          );
+          if (healed) {
+            ({ error } = await supabase.from('quotations').upsert(mapped, { onConflict: 'id' }));
+          }
+        }
         if (error) {
           console.error('[AsyncSalesService] Supabase Error:', error.message);
           toast.error('Cloud sync failed — saved locally.', { id: 'sync-err' });

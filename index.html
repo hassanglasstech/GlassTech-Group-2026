@@ -86,14 +86,33 @@
     <div id="root" class="h-full"></div>
     <script type="module" src="/index.tsx"></script>
 
-    <!-- ── Register Service Worker ──────────────────────────────── -->
+    <!-- ── Register Service Worker (auto-update: new deploys take over) ─── -->
     <script>
       if ('serviceWorker' in navigator) {
+        // Reload ONCE when a new service worker takes control, so a fresh deploy
+        // loads immediately instead of being pinned to a stale cached bundle.
+        let __gtRefreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (__gtRefreshing) return;
+          __gtRefreshing = true;
+          window.location.reload();
+        });
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
             .then(reg => {
               console.log('[PWA] Service Worker registered:', reg.scope);
-              // Listen for background sync messages
+              reg.update();  // check for a newer sw.js on every load
+              // When a new SW is found & installed, activate it immediately.
+              reg.addEventListener('updatefound', () => {
+                const nw = reg.installing;
+                if (!nw) return;
+                nw.addEventListener('statechange', () => {
+                  if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+                    nw.postMessage({ type: 'SKIP_WAITING' });
+                  }
+                });
+              });
+              // Background sync messages
               navigator.serviceWorker.addEventListener('message', (e) => {
                 if (e.data?.type === 'SYNC_NOW') {
                   window.dispatchEvent(new CustomEvent('gt-sync-now'));
