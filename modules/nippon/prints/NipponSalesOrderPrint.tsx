@@ -311,8 +311,8 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                                                             </td>
                                                             <td className="py-2 px-2 text-center font-bold text-slate-500 uppercase text-[9px]">{item.glassSize || 'PCS'}</td>
                                                             <td className="py-2 px-2 text-center font-black text-slate-900 text-[10px]">{item.qty}</td>
-                                                            <td className="py-2 px-2 text-right font-bold text-slate-600 text-[9px]">{item.pricePerUnit.toLocaleString()}</td>
-                                                            <td className="py-2 px-2 text-right font-black text-slate-900 text-[10px]">{item.isSample ? 'FREE' : item.amount.toLocaleString()}</td>
+                                                            <td className="py-2 px-2 text-right font-bold text-slate-600 text-[9px]">{(item.pricePerUnit ?? item.rate ?? 0).toLocaleString()}</td>
+                                                            <td className="py-2 px-2 text-right font-black text-slate-900 text-[10px]">{item.isSample ? 'FREE' : (item.amount ?? 0).toLocaleString()}</td>
                                                         </tr>
                                                     );
                                                 })}

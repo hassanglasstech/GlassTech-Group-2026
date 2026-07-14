@@ -74,12 +74,12 @@ const ClientMaster: React.FC = () => {
     setIsSaving(true);
     try {
       const all = await AsyncSalesService.getClients();
+      let res: { error?: string };
       if (editingId) {
         const updated = all.map(c => c.id === editingId
           ? { ...c, ...formData, company } as Client
           : c);
-        await AsyncSalesService.saveClients(updated);
-        toast.success("Business Partner updated.");
+        res = await AsyncSalesService.saveClients(updated);
       } else {
         const newClient: Client = {
           ...(formData as Client),
@@ -87,9 +87,13 @@ const ClientMaster: React.FC = () => {
           company,
           createdAt: new Date().toISOString()
         };
-        await AsyncSalesService.saveClients([...all, newClient]);
-        toast.success("Business Partner created.");
+        res = await AsyncSalesService.saveClients([...all, newClient]);
       }
+      if (res.error) {
+        toast.error(`Not saved to cloud: ${res.error}`);
+        return;
+      }
+      toast.success(editingId ? "Business Partner updated." : "Business Partner created.");
       refreshData();
       closeModal();
     } catch (err) {
@@ -102,8 +106,14 @@ const ClientMaster: React.FC = () => {
   const handleDelete = async (id: string) => {
     if (await confirmModal("Delete this Business Partner profile?")) {
       try {
-        const all = await AsyncSalesService.getClients();
-        await AsyncSalesService.saveClients(all.filter(c => c.id !== id));
+        // Per-row cloud delete. The old path upserted the filtered array, which
+        // never removed the row from the cloud table → the "deleted" client
+        // reappeared on the next refresh (green toast, but still there).
+        const { error } = await AsyncSalesService.deleteClient(id);
+        if (error) {
+          toast.error(`Delete failed — profile still in cloud: ${error}`);
+          return;
+        }
         refreshData();
         toast.success("Business Partner profile deleted.");
       } catch (err) {

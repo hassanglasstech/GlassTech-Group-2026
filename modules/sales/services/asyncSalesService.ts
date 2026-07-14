@@ -95,24 +95,31 @@ const _mergeIntoLocal = <T extends { id: string }>(key: string, incoming: T[]): 
 };
 
 // ── Phase-2 (2.6): generic per-row delete (cloud + local) ─────────────
-const _deleteRow = async (table: string, localKey: string, id: string): Promise<void> => {
-  // Local delete first
+// Returns { error } when the CLOUD delete fails so callers can surface it
+// instead of showing a false "deleted" toast. A cloud-delete failure that is
+// swallowed here is the root of "delete kiya, green toast aya, lekin wapas
+// aa gaya" — the row survives in the cloud and getX() re-materialises it.
+const _deleteRow = async (table: string, localKey: string, id: string): Promise<{ error?: string }> => {
+  // Local delete first (optimistic)
   try {
     const existing = safeParse(localKey) as Array<{ id: string }>;
     safeSave(localKey, existing.filter((r) => r.id !== id));
   } catch (e: unknown) {
     console.warn(`[AsyncSalesService] _deleteRow local prune failed for ${table}/${id}: ${errMsg(e)}`);
   }
-  // Cloud delete
+  // Cloud delete — surface failure to the caller (do NOT swallow)
   try {
     const { error } = await supabase.from(table).delete().eq('id', id);
     if (error) {
       Logger.error('Sales', `delete ${table}/${id} cloud failed`, error);
       _queueRetry(table);
+      return { error: error.message };
     }
+    return {};
   } catch (err: unknown) {
     Logger.error('Sales', `delete ${table}/${id} exception`, err);
     _queueRetry(table);
+    return { error: errMsg(err) };
   }
 };
 
@@ -167,10 +174,14 @@ export const AsyncSalesService = {
       return _localByCompany(KEYS.CLIENTS);
     }
   },
-  saveClients: async (data: Client[]): Promise<void> => {
+  saveClients: async (data: Client[]): Promise<{ error?: string }> => {
     // Phase-2 (2.6): per-row merge save (preserves siblings)
     _mergeIntoLocal<Client>(KEYS.CLIENTS, data);
-    // Upsert to Supabase (snake_case mapping + JSONB blob for forward-compat)
+    // Upsert to Supabase (snake_case mapping + JSONB blob for forward-compat).
+    // Returns { error } on cloud failure so callers don't show a false "saved"
+    // toast (mirrors saveQuotations) — the FK-parent for a quotation depends on
+    // this landing, so a silent failure here surfaces later as a cryptic
+    // fk_quotations_client error on the child save.
     try {
       const rows = data.map((c) => ({
         id: c.id,
@@ -192,23 +203,26 @@ export const AsyncSalesService = {
         if (error) {
           console.error('[AsyncSalesService] saveClients Supabase error:', error.message);
           _queueRetry('clients');                                   // D5: queue for retry
+          return { error: error.message };
         }
       }
+      return {};
     } catch (err: unknown) {
       console.error('[AsyncSalesService] saveClients exception:', errMsg(err));
       _queueRetry('clients');
+      return { error: errMsg(err) };
     }
   },
 
-  deleteClient: async (id: string): Promise<void> => {
-    await _deleteRow('clients', KEYS.CLIENTS, id);
+  deleteClient: async (id: string): Promise<{ error?: string }> => {
+    return _deleteRow('clients', KEYS.CLIENTS, id);
   },
 
   // Real per-row product delete (cloud + local). Was missing — product "delete"
   // used to upsert the filtered array, which never removed the row from the cloud
   // table, so a deleted product reappeared on the next refresh.
-  deleteProduct: async (id: string): Promise<void> => {
-    await _deleteRow('products', KEYS.PRODUCTS, id);
+  deleteProduct: async (id: string): Promise<{ error?: string }> => {
+    return _deleteRow('products', KEYS.PRODUCTS, id);
   },
 
   getProducts: async (): Promise<Product[]> => {
@@ -229,7 +243,7 @@ export const AsyncSalesService = {
         toast.error('Cloud sync failed — using local products.', { id: 'get-products', duration: 3000 });
         return _localByCompany('gtk_erp_products');
       }
-      return ((data ?? []) as SbProductRow[]).map((r): Product => ({
+      const mapped = ((data ?? []) as SbProductRow[]).map((r): Product => ({
       id: r.id, company: r.company, category: r.category ?? '', description: r.description ?? '',
       serviceNick: r.service_nick ?? '', profileCode: r.profile_code ?? '',
       thickness: r.thickness ?? '', sheetSize: r.sheet_size ?? '',
@@ -249,6 +263,14 @@ export const AsyncSalesService = {
       subDescription: r.sub_description ?? '',
       nickName: r.nick_name ?? '',
     } as unknown as Product));
+      // Surface local-only products not yet in the cloud (mirror of getClients),
+      // so a product saved while a prior upsert was queued for retry doesn't
+      // vanish from the Master list until the next warmCache.
+      _mergeIntoLocal('gtk_erp_products', mapped);
+      const prodCloudIds = new Set(mapped.map((p) => p.id));
+      const prodPendingLocal = (safeParse('gtk_erp_products') as Product[])
+        .filter((p) => p && p.company === company && p.id && !prodCloudIds.has(p.id));
+      return [...mapped, ...prodPendingLocal];
     } catch (err: unknown) {
       console.error('[AsyncSalesService] getProducts exception:', errMsg(err));
       toast.error('Failed to load products.', { id: 'get-products-err', duration: 3000 });
@@ -453,7 +475,16 @@ export const AsyncSalesService = {
           };
         });
         _mergeIntoLocal(KEYS.QUOTATIONS, mapped);   // merge, don't overwrite shared cache
-        return mapped as unknown as Quotation[];
+        // Surface local-only quotations not yet in the cloud set (mirror of
+        // getClients). A quote/SO approved while the session was stale/offline
+        // (upsert queued for retry) lives only in localStorage; without this it
+        // vanishes from the list — and worse, its already-decremented stock has
+        // no visible order. Company-scoped; deletes prune local too (_deleteRow)
+        // so this cannot resurrect a deleted quotation.
+        const cloudIds = new Set(mapped.map((q) => (q as { id?: string }).id));
+        const pendingLocal = (safeParse(KEYS.QUOTATIONS) as Quotation[])
+          .filter((q) => q && q.company === company && q.id && !cloudIds.has(q.id));
+        return [...(mapped as unknown as Quotation[]), ...pendingLocal];
       }
       return _localByCompany(KEYS.QUOTATIONS);
     } catch (err: unknown) {
@@ -532,8 +563,8 @@ export const AsyncSalesService = {
     }
   },
 
-  deleteQuotation: async (id: string): Promise<void> => {
-    await _deleteRow('quotations', KEYS.QUOTATIONS, id);
+  deleteQuotation: async (id: string): Promise<{ error?: string }> => {
+    return _deleteRow('quotations', KEYS.QUOTATIONS, id);
   },
 
   getProjects: async (): Promise<Project[]> => {

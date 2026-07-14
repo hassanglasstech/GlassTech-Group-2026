@@ -180,7 +180,11 @@ const NipponProductMaster: React.FC = () => {
               // Real cloud+local delete. Previously this upserted the filtered array,
               // which never removed the row from the cloud table → the product came
               // back on the next refresh.
-              await AsyncSalesService.deleteProduct(id);
+              const { error } = await AsyncSalesService.deleteProduct(id);
+              if (error) {
+                  toast.error(`Delete failed — product still in cloud: ${error}`);
+                  return;
+              }
               await refreshData();
               toast.success('Product deleted.');
           } catch (err) {

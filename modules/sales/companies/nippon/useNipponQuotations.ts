@@ -392,7 +392,14 @@ export const useNipponQuotations = () => {
               contactPerson: '', email: '', phone: '', address: '', ntn: '',
               creditLimit: 0, status: 'Active', createdAt: new Date().toISOString(),
             } as Client;
-        await AsyncSalesService.saveClients([clientRow]);
+        const cliRes = await AsyncSalesService.saveClients([clientRow]);
+        if (cliRes?.error) {
+          // The quotation FK (fk_quotations_client) needs this parent in the
+          // cloud first. Surface the real cause here instead of the cryptic FK
+          // error the child save would otherwise throw.
+          toast.error(`Customer could not be saved to cloud — order not saved. ${cliRes.error}`, { duration: 9000 });
+          return;
+        }
       }
 
       // Persist the quote, then decrement inventory ONLY on a confirmed cloud
@@ -493,7 +500,11 @@ export const useNipponQuotations = () => {
       // Use the real per-row delete (cloud + local). Previously this upserted the
       // filtered array, which never removed the row from the cloud table, so the
       // deleted quotation reappeared on the next refresh (cloud read).
-      await AsyncSalesService.deleteQuotation(id);
+      const { error } = await AsyncSalesService.deleteQuotation(id);
+      if (error) {
+        toast.error(`Delete failed — quotation still in cloud: ${error}`);
+        return;
+      }
       Logger.action('SALES', 'NIPPON_QUOTE_DELETED', `${id} (${company})`,
         { referenceId: id, extra: { company } });
       toast.success('Quotation deleted.');
@@ -516,6 +527,16 @@ export const useNipponQuotations = () => {
     }
     if (!confirm(`Void Sales Order ${order.orderNo || id}? The stock it consumed will be returned to inventory.`)) return;
     try {
+      // Persist the Void to the cloud FIRST, then return stock only on a confirmed
+      // save. If we return stock before the cloud write and that write fails, the
+      // order stays 'Approved' in the cloud while stock was already returned
+      // locally → the next refresh re-shows it Approved → a second Void doubles the
+      // stock return. Save-first mirrors the approve flow (stock only after cloud OK).
+      const voidRes = await AsyncSalesService.saveQuotations([{ ...order, status: 'Void' as const }]);
+      if (voidRes?.error) {
+        toast.error(`Void NOT saved to cloud — stock left unchanged. ${voidRes.error}`, { duration: 9000 });
+        return;
+      }
       // Reverse the approval stock decrement (add each line's qty back).
       const store = InventoryService.getStore();
       (order.items || []).forEach(item => {
@@ -536,8 +557,6 @@ export const useNipponQuotations = () => {
         };
       });
       InventoryService.saveStore(store);
-      // Mark Void (upsert the single row — kept for audit).
-      await AsyncSalesService.saveQuotations([{ ...order, status: 'Void' as const }]);
       Logger.action('SALES', 'NIPPON_ORDER_VOIDED', `${order.orderNo || id} (${company})`,
         { referenceId: id, extra: { company } });
       toast.success('Sales Order voided · stock returned to inventory.');

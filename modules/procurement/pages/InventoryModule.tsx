@@ -264,8 +264,8 @@ const InventoryModule: React.FC = () => {
           </div>
       )}
 
-      {activeTab === 'issuance' && (
-              <GoodsIssue 
+      {activeTab === 'issuance' && !isNippon && (
+              <GoodsIssue
                 items={items}
                 costCenters={costCenters}
                 projects={projects}
@@ -280,13 +280,13 @@ const InventoryModule: React.FC = () => {
         </div>
       )}
 
-      {activeTab === 'remnants' && (
+      {activeTab === 'remnants' && isGlassCompany && (
         <div className="animate-in fade-in duration-300">
           <RemnantManager />
         </div>
       )}
 
-      {activeTab === 'consumption' && (
+      {activeTab === 'consumption' && isGlassCompany && (
         <div className="animate-in fade-in duration-300">
           <ProjectConsumption />
         </div>
@@ -314,10 +314,10 @@ const InventoryModule: React.FC = () => {
         <PurchaseReturnModule company={company} />
       )}
 
-      {activeTab === 'mrp' && (
+      {activeTab === 'mrp' && isGlassCompany && (
         <GlasscoMRP />
       )}
-      {activeTab === 'weightMaster' && (
+      {activeTab === 'weightMaster' && isGlassCompany && (
         <div className="animate-in fade-in duration-300">
           <WeightMaster />
         </div>

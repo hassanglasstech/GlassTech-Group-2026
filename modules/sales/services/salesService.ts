@@ -39,7 +39,7 @@ export const SalesService = {
   getClients: (): Client[] => safeParse(KEYS.CLIENTS),
   saveClients: (data: Client[]): void => {
     safeSave(KEYS.CLIENTS, data);
-    _push('clients', () => AsyncSalesService.saveClients(data));
+    _push('clients', () => AsyncSalesService.saveClients(data).then(() => {}));
   },
 
   // ── Products ───────────────────────────────────────────────────────

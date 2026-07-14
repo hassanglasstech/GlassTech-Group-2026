@@ -6,6 +6,7 @@ import { SalesService } from '@/modules/sales/services/salesService';
 import { ProductionService } from '@/modules/production/services/productionService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { FinanceService } from '@/modules/finance/services/financeService';
+import { Logger } from '@/modules/shared/services/logger';
 import { useNavigate } from 'react-router-dom';
 import { Users, Clock, Landmark, Factory, Briefcase, Warehouse, ShoppingBag, Globe, ShieldCheck, TrendingUp, AlertTriangle, Activity, Calendar, Truck, Loader2, DollarSign, FileCheck, Bell } from 'lucide-react';
 
@@ -26,23 +27,30 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const loadHeavyData = async () => {
         setIsLoading(true);
-        // Load employees/quotations first (sync/fast)
-        const emps = HRService.getEmployees().filter(e => e.company === company);
-        const quos = SalesService.getQuotations().filter(q => q.company === company);
-        setEmployees(emps);
-        setQuotations(quos);
+        try {
+          // Load employees/quotations first (sync/fast)
+          const emps = HRService.getEmployees().filter(e => e.company === company);
+          const quos = SalesService.getQuotations().filter(q => q.company === company);
+          setEmployees(emps);
+          setQuotations(quos);
 
-        // Load heavy items async (IDB)
-        const [allPieces, allStore, allLedger] = await Promise.all([
-            ProductionService.getProductionPiecesAsync(company),
-            Promise.resolve(InventoryService.getStore()), // Store is still relatively small but can be async'd
-            Promise.resolve(FinanceService.getLedger())
-        ]);
+          // Load heavy items async (IDB)
+          const [allPieces, allStore, allLedger] = await Promise.all([
+              ProductionService.getProductionPiecesAsync(company),
+              Promise.resolve(InventoryService.getStore()), // Store is still relatively small but can be async'd
+              Promise.resolve(FinanceService.getLedger())
+          ]);
 
-        setPieces(allPieces);
-        setStore(allStore.filter(i => i.company === company));
-        setLedger(allLedger.filter(t => t.company === company));
-        setIsLoading(false);
+          setPieces(allPieces);
+          setStore(allStore.filter(i => i.company === company));
+          setLedger(allLedger.filter(t => t.company === company));
+        } catch (err: unknown) {
+          // Never leave the dashboard stuck on the spinner if a load rejects
+          // (any company's home): finally always clears isLoading.
+          Logger.error('Dashboard', 'Heavy data load failed', err);
+        } finally {
+          setIsLoading(false);
+        }
     };
     loadHeavyData();
   }, [company]);

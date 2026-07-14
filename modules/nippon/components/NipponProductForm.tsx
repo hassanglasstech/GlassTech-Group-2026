@@ -228,10 +228,14 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
         const blob = await (await fetch(formData.image)).blob();
         const { url, error } = await uploadProductImage(prodId, blob);
         if (error || !url) {
-          setIsSaving(false);
-          return toast.error(`Image upload failed: ${error || 'unknown'}. Product not saved.`);
+          // Graceful degrade (mirror the bulk importer): keep the product, ship it
+          // WITHOUT an image rather than blocking the whole save on a transient
+          // bucket/RLS hiccup. The image can be backfilled later via edit → re-upload.
+          finalImageUrl = '';
+          toast.warning(`Image upload failed (${error || 'unknown'}) — product saved without image; add it later.`);
+        } else {
+          finalImageUrl = url;
         }
-        finalImageUrl = url;
       }
 
       const newProduct: Product = {
