@@ -461,7 +461,7 @@ export const AsyncSalesService = {
       return _localByCompany(KEYS.QUOTATIONS);
     }
   },
-  saveQuotations: async (data: Quotation[]): Promise<void> => {
+  saveQuotations: async (data: Quotation[]): Promise<{ error?: string }> => {
     // Phase-2 (2.6): caller may pass ONLY the rows being changed; we
     // merge into existing localStorage by id rather than overwriting.
     // server-side discount cap — last line of defence before DB write.
@@ -518,13 +518,17 @@ export const AsyncSalesService = {
           console.error('[AsyncSalesService] Supabase Error:', error.message);
           toast.error('Cloud sync failed — saved locally.', { id: 'sync-err' });
           _queueRetry('quotations');                              // D5
-        } else {
-          toast.success('Synced to Cloud', { id: 'sync-success' });
+          // Surface the failure so callers can gate side-effects (e.g. do NOT
+          // decrement stock for a Sales Order that never reached the cloud).
+          return { error: error.message };
         }
+        toast.success('Synced to Cloud', { id: 'sync-success' });
       }
+      return {};
     } catch (err: unknown) {
       console.error('[AsyncSalesService] saveQuotations exception:', errMsg(err));
       _queueRetry('quotations');
+      return { error: errMsg(err) };
     }
   },
 

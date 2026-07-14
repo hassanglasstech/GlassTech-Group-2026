@@ -375,10 +375,21 @@ export const useNipponQuotations = () => {
         orderNo: revise ? revisedRef : (approve ? `SO-${mmyy}-${src.manualSerial}` : undefined),
       };
 
-      // persist quote FIRST, then decrement inventory only on success.
-      // Previous order (inventory → quote) left stock out of sync when the
-      // quote save failed.
-      await AsyncSalesService.saveQuotations([...all.filter(x => x.id !== finalQuo.id), finalQuo]);
+      // The quotations→clients FK rejects the insert if the referenced client is
+      // not in the cloud yet (e.g. created during a stale-session window and never
+      // synced). Push the selected client FIRST so the FK is satisfied.
+      const selectedClient = clients.find(c => c.id === src.clientId);
+      if (selectedClient) await AsyncSalesService.saveClients([selectedClient]);
+
+      // Persist the quote, then decrement inventory ONLY on a confirmed cloud
+      // save. saveQuotations now reports cloud failures instead of swallowing them
+      // — if the cloud write fails (FK / RLS / offline) we must NOT touch stock,
+      // or we get "stock minus but order not saved".
+      const saveRes = await AsyncSalesService.saveQuotations([...all.filter(x => x.id !== finalQuo.id), finalQuo]);
+      if (saveRes?.error) {
+        toast.error(`Order NOT saved to cloud — inventory left unchanged. ${saveRes.error}`, { duration: 9000 });
+        return;
+      }
 
       if (approve) {
         const currentStore = InventoryService.getStore();

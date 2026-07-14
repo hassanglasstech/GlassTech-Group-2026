@@ -53,7 +53,7 @@ export const SalesService = {
   getQuotations: (): Quotation[] => safeParse(KEYS.QUOTATIONS),
   saveQuotations: (data: Quotation[]): void => {
     safeSave(KEYS.QUOTATIONS, data);
-    _push('quotations', () => AsyncSalesService.saveQuotations(data));
+    _push('quotations', () => AsyncSalesService.saveQuotations(data).then(() => {}));
   },
 
   // ── Projects ───────────────────────────────────────────────────────
