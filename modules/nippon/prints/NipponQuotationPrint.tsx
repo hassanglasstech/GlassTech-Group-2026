@@ -14,8 +14,14 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
     const items = quote.items || [];
     // Resolve the live product for a line so we can use its current image_url
     // (the form uploads NIP-KL-<code>.jpg), regardless of when the line was added.
-    const prodFor = (it: { productRef?: string; locationCode?: string }) =>
-        products.find(p => (it.productRef && p.id === it.productRef) || (it.locationCode && p.modelNo === it.locationCode));
+    const prodFor = (it: { productRef?: string; locationCode?: string; description?: string }) =>
+        products.find(p =>
+            (it.productRef && p.id === it.productRef) ||
+            // The Nippon line stores locationCode = product.profileCode (not modelNo),
+            // so match on profileCode/id/modelNo, and fall back to an exact description
+            // match — otherwise prodFor misses and the image never resolves.
+            (it.locationCode && (p.profileCode === it.locationCode || p.modelNo === it.locationCode || p.id === it.locationCode)) ||
+            (it.description && (p.description || '').toUpperCase() === it.description.toUpperCase()));
     const subTotal = items.reduce((s, i) => s + (i.amount || 0), 0);
     const discountAmount = quote.discountAmount !== undefined && quote.discountAmount > 0
         ? quote.discountAmount
@@ -277,7 +283,8 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                                                                     means the image shows even when the product master isn't loaded
                                                                     (e.g. the Sales-Order print path). */}
                                                                 <div className="w-[60px] h-[60px] border border-slate-200 rounded overflow-hidden mx-auto bg-white flex items-center justify-center">
-                                                                    <ProductImage id={item.productRef} code={item.locationCode}
+                                                                    <ProductImage id={prodFor(item)?.id || item.productRef}
+                                                                        code={prodFor(item)?.modelNo || item.locationCode}
                                                                         url={prodFor(item)?.imageUrl || item.attachedImage}
                                                                         eager className="w-full h-full object-contain" iconSize={18} />
                                                                 </div>
