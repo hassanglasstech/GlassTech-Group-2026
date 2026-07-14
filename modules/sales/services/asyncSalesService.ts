@@ -256,6 +256,52 @@ export const AsyncSalesService = {
     }
   },
   saveProducts: async (data: Product[]): Promise<void> => {
+    // ── Base64 image → product-images bucket (2026-07-14) ─────────────────
+    // The local Nippon importer stores each image as a base64 data-URI in
+    // image_url (~50 KB/row). Those payloads blow Supabase's upsert body limit,
+    // so the chunk upserts failed and products NEVER reached the cloud — other
+    // users/devices saw an empty Material Master. Upload any base64 image to the
+    // public product-images bucket and swap image_url to the (small) public URL
+    // BEFORE building the rows. `cloudImg` carries the resolved URL per id;
+    // on upload failure we ship '' to the cloud row (keeps it small + the product
+    // still syncs/shows) while leaving the base64 in local state so it still
+    // renders on this machine.
+    const cloudImg = new Map<string, string>();
+    const _dataUriToBlob = (uri: string): { blob: Blob; ext: string } | null => {
+      const m = /^data:([^;]+);base64,(.*)$/.exec(uri);
+      if (!m) return null;
+      const mime = m[1];
+      const extMap: Record<string, string> = {
+        'image/png': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg',
+        'image/webp': 'webp', 'image/gif': 'gif', 'image/svg+xml': 'svg',
+      };
+      try {
+        const bin = atob(m[2]);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return { blob: new Blob([bytes], { type: mime }), ext: extMap[mime] || 'png' };
+      } catch { return null; }
+    };
+    for (const p of data as Array<Product & Record<string, unknown>>) {
+      const img = (p.imageUrl ?? (p.image_url as string) ?? '') as string;
+      if (typeof img !== 'string' || !img.startsWith('data:')) continue;
+      const parsed = _dataUriToBlob(img);
+      if (!parsed) { cloudImg.set(p.id, ''); continue; }
+      try {
+        const path = `${p.id}.${parsed.ext}`;
+        const { error: upErr } = await supabase.storage
+          .from('product-images')
+          .upload(path, parsed.blob, { upsert: true, contentType: parsed.blob.type });
+        if (upErr) throw upErr;
+        const pub = supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+        p.imageUrl = pub; (p as Record<string, unknown>).image_url = pub;   // local now holds the URL too (small)
+        cloudImg.set(p.id, pub);
+      } catch (e) {
+        Logger.warn('Sales', `product image upload failed for ${p.id} — syncing without cloud image`, e);
+        cloudImg.set(p.id, '');   // don't ship base64 to the row; keep it local
+      }
+    }
+
     // Offline persistence: write to localStorage FIRST, like saveClients/
     // saveQuotations/saveInvoices. Without this, a form-based product add
     // (NipponProductMaster → AsyncSalesService.saveProducts) had zero local
@@ -279,7 +325,9 @@ export const AsyncSalesService = {
         // price_history omitted — column added by migration 20260421, may not exist yet
         model_no:        p.modelNo       ?? p.model_no    ?? '',
         brand:           p.brand         ?? '',
-        image_url:       p.imageUrl      ?? p.image_url   ?? '',
+        // Resolved bucket URL (or '' if a base64 upload failed) — never ship the
+        // raw base64 to the row, or the chunk upsert exceeds the body limit.
+        image_url:       cloudImg.has(p.id) ? (cloudImg.get(p.id) ?? '') : (p.imageUrl ?? p.image_url ?? ''),
         sub_category:    p.subCategory   ?? p.sub_category ?? '',
       };
 
