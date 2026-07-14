@@ -59,9 +59,16 @@
         /* Cancel mx-auto so the fixed 210mm sheet anchors to the page's left edge
            instead of being shifted off-page by a narrow flex parent on mobile. */
         .print-only { margin: 0 !important; box-shadow: none !important; }
+        /* The PDF-preview modal's scroll container: collapse its fixed/overflow so
+           only the .print-only sheet prints (backdrop + toolbar are .no-print). */
+        .pdf-preview-scroll { position: static !important; inset: auto !important; overflow: visible !important; padding: 0 !important; z-index: auto !important; }
+        .pdf-preview { box-shadow: none !important; width: auto !important; }
         .print-content-wrapper { padding: 15mm !important; }
       }
       .print-only { display: none; }
+      /* Inside the on-screen PDF preview modal, show the print sheet (it is
+         display:none by default) so the user can see and download it. */
+      .pdf-preview .print-only { display: block !important; }
 
       /* ── Scrollbar ──────────────────────────────────────────── */
       ::-webkit-scrollbar { width: 8px; height: 8px; }

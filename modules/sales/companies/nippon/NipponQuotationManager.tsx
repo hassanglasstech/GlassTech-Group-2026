@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Product, Quotation, QuotationItem } from '@/modules/shared/types';
-import { NipponPrintTemplate } from '@/modules/nippon/prints/NipponPrintTemplate';
+import { NipponDocPreview } from '@/modules/nippon/prints/NipponDocPreview';
 import { SharedQuotationList } from '@/modules/sales/components/SharedQuotationList';
 import { getBrandNick } from '@/modules/shared/utils/brandUtils';
 import {
@@ -176,7 +176,16 @@ const NipponQuotationManager: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {printingQuote && <NipponPrintTemplate printingQuote={printingQuote} clients={clients} printType={nipponPrintType} products={products} />}
+      {printingQuote && (
+        <NipponDocPreview
+          printingQuote={printingQuote}
+          clients={clients}
+          products={products}
+          printType={nipponPrintType}
+          fileName={pdfFileName(printingQuote)}
+          onClose={() => setPrintingQuote(null)}
+        />
+      )}
 
       <div className="no-print bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
         <div className="flex items-center space-x-4">
@@ -226,19 +235,7 @@ const NipponQuotationManager: React.FC = () => {
           setSearchTerm={setSearchTerm}
           onNew={() => openEditor(initialQuotation, false)}
           onEdit={(q) => openEditor(q, docTab === 'orders' && q.status !== 'Void')}
-          onPrint={(q) => {
-            setPrintingQuote(q);
-            setTimeout(() => {
-              // The browser's "Save as PDF" filename comes from document.title, so
-              // set it to a meaningful name: "<Client> <Project> <QUT|SO>-<serial4>".
-              // This also becomes the (small) print header — better than the app name.
-              const prevTitle = document.title;
-              document.title = pdfFileName(q);
-              window.print();
-              document.title = prevTitle;
-              setPrintingQuote(null);
-            }, 500);
-          }}
+          onPrint={(q) => setPrintingQuote(q)}
           onApprove={(q) => handleSave(true, q)}
           onDelete={handleDelete}
           onVoid={docTab === 'orders' ? handleVoid : undefined}
