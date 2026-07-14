@@ -375,11 +375,25 @@ export const useNipponQuotations = () => {
         orderNo: revise ? revisedRef : (approve ? `SO-${mmyy}-${src.manualSerial}` : undefined),
       };
 
-      // The quotations→clients FK rejects the insert if the referenced client is
-      // not in the cloud yet (e.g. created during a stale-session window and never
-      // synced). Push the selected client FIRST so the FK is satisfied.
-      const selectedClient = clients.find(c => c.id === src.clientId);
-      if (selectedClient) await AsyncSalesService.saveClients([selectedClient]);
+      // The quotations→clients FK rejects the insert unless a client row with THIS
+      // exact client_id exists in the cloud. That breaks when the quote references
+      // a client that never synced OR whose id drifted (stale reference). Guarantee
+      // the row exists BEFORE the quote: look the client up in the fresh cloud∪local
+      // set, and if it truly isn't there, synthesise a minimal client from the
+      // quote's own clientId/clientName so the sale is never blocked on a cryptic FK.
+      if (src.clientId) {
+        const freshClients = await AsyncSalesService.getClients();
+        const found = freshClients.find(c => c.id === src.clientId)
+                   || clients.find(c => c.id === src.clientId);
+        const clientRow: Client = found
+          ? { ...found, company }
+          : {
+              id: src.clientId, company, name: (src as { clientName?: string }).clientName || src.clientId,
+              contactPerson: '', email: '', phone: '', address: '', ntn: '',
+              creditLimit: 0, status: 'Active', createdAt: new Date().toISOString(),
+            } as Client;
+        await AsyncSalesService.saveClients([clientRow]);
+      }
 
       // Persist the quote, then decrement inventory ONLY on a confirmed cloud
       // save. saveQuotations now reports cloud failures instead of swallowing them
