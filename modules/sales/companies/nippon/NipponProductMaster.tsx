@@ -788,7 +788,7 @@ const NipponProductMaster: React.FC = () => {
                                     </span>
                                 </td>
                                 <td className="font-black text-blue-600 uppercase">{p.modelNo || '-'}</td>
-                                <td className="font-bold text-slate-800 uppercase">
+                                <td className="font-bold text-slate-800 uppercase w-full">
                                     <div className="flex flex-col">
                                         <span>{p.description}</span>
                                         {p.subCategory && <span className="text-[9px] text-slate-400 font-medium">TYPE: {p.subCategory}</span>}
