@@ -38,6 +38,8 @@ const NipponProductMaster: React.FC = () => {
   const itemsPerPage = 25;
   const [showTools, setShowTools] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [qa, setQa] = useState({ code: '', description: '', unit: 'PCS', price: '' });
 
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const excelInputRef = useRef<HTMLInputElement>(null);
@@ -159,6 +161,42 @@ const NipponProductMaster: React.FC = () => {
     setEditingProduct(null);
     setVariantParent(null);
     setIsModalOpen(true);
+  };
+
+  // Inline quick-add — fast single-item entry without the full form. Captures the
+  // essentials (code, description, unit, price); details/image can be edited later.
+  const handleQuickAdd = async () => {
+    const code = qa.code.trim();
+    const desc = qa.description.trim();
+    if (!code || !desc) { toast.error('Item Code and Description are required.'); return; }
+    const id = code.toUpperCase();
+    if (products.some(p => p.id === id || (p.profileCode || '').toUpperCase() === id)) {
+      toast.error(`"${code}" already exists.`); return;
+    }
+    const product = {
+      id, company: 'Nippon', category: 'Hardware',
+      description: desc.toUpperCase(), profileCode: code.toUpperCase(),
+      modelNo: '', brand: '', mainCategory: '', subCategory: '',
+      unit: qa.unit, costPrice: 0, basePrice: Number(qa.price) || 0,
+      imageUrl: '', variants: [], technicalSpecs: {},
+    } as unknown as Product;
+    const updatedProducts = [...(await AsyncSalesService.getProducts()), product];
+    const store = InventoryService.getStore();
+    store.push({
+      id: product.id, company, name: product.description, category: 'Hardware' as StoreItem['category'],
+      quantity: 0, unrestrictedQty: 0, qiQty: 0, blockedQty: 0, reservedQty: 0, consignmentQty: 0,
+      unit: product.unit, minLevel: 10, reorderPoint: 5, movingAveragePrice: 0,
+      totalValue: 0, storageBin: 'Quick Add', lastMovementDate: new Date().toISOString(),
+    });
+    try {
+      await AsyncSalesService.saveProducts(updatedProducts);
+      InventoryService.saveStore(store);
+      await refreshData();
+      toast.success(`Added: ${product.description}`);
+      setQa({ code: '', description: '', unit: qa.unit, price: '' });
+    } catch (err) {
+      toast.error(`Add failed: ${(err as Error)?.message || 'unknown'}`);
+    }
   };
 
   const handleEdit = (p: Product) => {
@@ -776,6 +814,10 @@ const NipponProductMaster: React.FC = () => {
              <span>Export{imageFilter !== 'all' ? ` (${filtered.length})` : ''}</span>
            </button>
 
+           <button onClick={() => setQuickAddOpen(v => !v)} className={`px-4 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest shrink-0 flex items-center gap-1.5 border transition-all ${quickAddOpen ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-300'}`} title="Fast single-item entry">
+               <Plus size={14}/> Quick Add
+           </button>
+
            <button onClick={openAddModal} className="bg-slate-900 text-white px-6 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-red-600 transition-all flex items-center space-x-2 shrink-0">
                <Plus size={16}/> <span>Add Item</span>
            </button>
@@ -793,6 +835,42 @@ const NipponProductMaster: React.FC = () => {
               Clear
             </button>
           </div>
+        </div>
+      )}
+
+      {quickAddOpen && (
+        <div className="flex flex-wrap items-end gap-2 bg-emerald-50/60 border border-emerald-200 rounded-2xl px-4 py-3 no-print animate-in fade-in slide-in-from-top-1 duration-150">
+          <div className="flex flex-col">
+            <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Item Code *</label>
+            <input value={qa.code} onChange={e => setQa(q => ({ ...q, code: e.target.value }))}
+              placeholder="e.g. A250A1"
+              className="w-36 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono uppercase focus:ring-2 focus:ring-emerald-500 outline-none" />
+          </div>
+          <div className="flex flex-col flex-1 min-w-[180px]">
+            <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Description *</label>
+            <input value={qa.description} onChange={e => setQa(q => ({ ...q, description: e.target.value }))}
+              onKeyDown={e => { if (e.key === 'Enter') handleQuickAdd(); }}
+              placeholder="Product description — press Enter to add"
+              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs uppercase focus:ring-2 focus:ring-emerald-500 outline-none" />
+          </div>
+          <div className="flex flex-col">
+            <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Unit</label>
+            <select value={qa.unit} onChange={e => setQa(q => ({ ...q, unit: e.target.value }))}
+              className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold uppercase focus:ring-2 focus:ring-emerald-500 outline-none">
+              {['PCS', 'SET', 'ROLL', 'MTR', 'KG', 'BOX', 'PKT'].map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col">
+            <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Unit Price</label>
+            <input type="number" value={qa.price} onChange={e => setQa(q => ({ ...q, price: e.target.value }))}
+              onKeyDown={e => { if (e.key === 'Enter') handleQuickAdd(); }}
+              placeholder="0"
+              className="w-24 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-right tabular-nums focus:ring-2 focus:ring-emerald-500 outline-none" />
+          </div>
+          <button onClick={handleQuickAdd}
+            className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-black uppercase text-[10px] tracking-widest shadow-sm transition-all">Add</button>
+          <button onClick={() => setQuickAddOpen(false)}
+            className="px-3 py-2 text-slate-400 hover:text-slate-600 text-[10px] font-black uppercase tracking-widest transition-all">Close</button>
         </div>
       )}
 
