@@ -31,8 +31,8 @@ const NipponProductMaster: React.FC = () => {
   const [variantParent, setVariantParent] = useState<Product | null>(null);   // "Add variant" source
   const [activeTab, setActiveTab] = useState<'list' | 'direct'>('list');
   // Sorting — click any column header to sort; click again to flip direction.
-  type SortKey = 'profileCode' | 'modelNo' | 'description' | 'mainCategory' | 'basePrice' | 'stock';
-  const [sortConfig, setSortConfig] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'description', dir: 'asc' });
+  type SortKey = 'profileCode' | 'modelNo' | 'description' | 'mainCategory' | 'brand' | 'basePrice' | 'stock';
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'profileCode', dir: 'asc' });
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 25;
   const [showTools, setShowTools] = useState(false);
@@ -555,6 +555,27 @@ const NipponProductMaster: React.FC = () => {
   // otherwise it's a column of dashes eating width.
   const anyNick = useMemo(() => products.some(p => !!(p as { nickName?: string }).nickName), [products]);
 
+  // Duplicate detection — count how many products share the same code / name, so
+  // a "dup" badge can flag them. Combined with sorting by Code (or Name), copies
+  // and mistakes line up next to each other.
+  const dupCodeMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const p of products) { const c = (p.profileCode || p.modelNo || '').trim().toUpperCase(); if (c) m[c] = (m[c] || 0) + 1; }
+    return m;
+  }, [products]);
+  const dupNameMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const p of products) { const n = (p.description || '').toLowerCase().replace(/[^a-z0-9]/g, ''); if (n) m[n] = (m[n] || 0) + 1; }
+    return m;
+  }, [products]);
+  const dupBadge = (p: Product) => {
+    const c = (p.profileCode || p.modelNo || '').trim().toUpperCase();
+    const n = (p.description || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (c && dupCodeMap[c] > 1) return { cls: 'text-red-600 bg-red-50 border-red-200', label: 'dup code' };
+    if (n && dupNameMap[n] > 1) return { cls: 'text-amber-600 bg-amber-50 border-amber-100', label: 'same name' };
+    return null;
+  };
+
   const filtered = useMemo(() => {
     const q = searchTerm.toLowerCase().trim();
     const result = products.filter(p => {
@@ -740,6 +761,30 @@ const NipponProductMaster: React.FC = () => {
              </button>
            </div>
            
+           {/* Sort order — pick an order to make duplicates / mistakes line up.
+               (Column headers still sort too; this is the explicit control.) */}
+           <div className="flex items-center gap-1 shrink-0">
+              <select
+                value={sortConfig.key}
+                onChange={e => setSortConfig(s => ({ key: e.target.value as SortKey, dir: s.dir }))}
+                className="pl-3 pr-6 py-2 bg-slate-100 border-none rounded-xl font-bold text-xs uppercase focus:ring-2 focus:ring-red-500 outline-none cursor-pointer"
+                title="Sort products — pick an order to spot duplicates / mistakes easily"
+              >
+                <option value="profileCode">Sort · Code</option>
+                <option value="description">Sort · Name</option>
+                <option value="brand">Sort · Brand</option>
+                <option value="mainCategory">Sort · Category</option>
+                <option value="basePrice">Sort · Price</option>
+                <option value="stock">Sort · Stock</option>
+              </select>
+              <button
+                onClick={() => setSortConfig(s => ({ ...s, dir: s.dir === 'asc' ? 'desc' : 'asc' }))}
+                title={sortConfig.dir === 'asc' ? 'Ascending — click for descending' : 'Descending — click for ascending'}
+                className="p-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-500 transition-all">
+                {sortConfig.dir === 'asc' ? <ArrowUp size={14}/> : <ArrowDown size={14}/>}
+              </button>
+           </div>
+
            <div className="relative w-48 shrink-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
               <input type="text" placeholder="Name / code / nick…" className="w-full pl-9 pr-4 py-2 bg-slate-100 border-none rounded-xl font-bold text-xs uppercase focus:ring-2 focus:ring-red-500 outline-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
@@ -862,7 +907,12 @@ const NipponProductMaster: React.FC = () => {
                                 </td>
                                 <td className="font-bold text-slate-800 uppercase w-full">
                                     <div className="flex flex-col">
-                                        <span>{p.description}</span>
+                                        <span className="flex items-center gap-1.5">
+                                            {p.description}
+                                            {(() => { const b = dupBadge(p); return b
+                                                ? <span className={`text-[8px] font-black uppercase border rounded px-1 py-0.5 ${b.cls}`}>{b.label}</span>
+                                                : null; })()}
+                                        </span>
                                         <span className="text-[10px] text-slate-400 font-medium normal-case truncate">
                                             {[p.mainCategory, p.subCategory].filter(Boolean).join(' · ') || '—'}
                                         </span>
@@ -928,7 +978,12 @@ const NipponProductMaster: React.FC = () => {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-mono text-[11px] font-bold text-slate-500 uppercase truncate" title={code}>{code}</p>
-                        <p className="font-bold text-[13px] text-slate-800 uppercase leading-tight">{p.description}</p>
+                        <p className="font-bold text-[13px] text-slate-800 uppercase leading-tight flex items-center gap-1.5">
+                          {p.description}
+                          {(() => { const b = dupBadge(p); return b
+                            ? <span className={`text-[8px] font-black uppercase border rounded px-1 py-0.5 shrink-0 ${b.cls}`}>{b.label}</span>
+                            : null; })()}
+                        </p>
                         <p className="text-[10px] text-slate-400 truncate">{[p.mainCategory, p.subCategory].filter(Boolean).join(' · ') || '—'}</p>
                         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                           {nick && <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 uppercase">{nick}</span>}
