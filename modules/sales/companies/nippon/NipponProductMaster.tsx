@@ -37,6 +37,7 @@ const NipponProductMaster: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 25;
   const [showTools, setShowTools] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const excelInputRef = useRef<HTMLInputElement>(null);
@@ -603,6 +604,33 @@ const NipponProductMaster: React.FC = () => {
   }, [filtered, currentPage]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
 
+  // ── Bulk multi-select (manage many products at once) ────────────────────
+  const pageAllSelected = paginated.length > 0 && paginated.every(p => selectedIds.has(p.id));
+  const toggleSelect = (id: string) => setSelectedIds(prev => {
+    const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n;
+  });
+  const toggleSelectAllPage = () => setSelectedIds(prev => {
+    const n = new Set(prev);
+    if (pageAllSelected) paginated.forEach(p => n.delete(p.id));
+    else paginated.forEach(p => n.add(p.id));
+    return n;
+  });
+  const clearSelection = () => setSelectedIds(new Set());
+  const bulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (!ids.length) return;
+    if (!window.confirm(`Delete ${ids.length} product(s)? This removes them from the cloud as well.`)) return;
+    let ok = 0, fail = 0;
+    for (const id of ids) {
+      const { error } = await AsyncSalesService.deleteProduct(id);
+      if (error) fail++; else ok++;
+    }
+    clearSelection();
+    await refreshData();
+    if (fail) toast.error(`${ok} deleted · ${fail} failed (still in cloud).`);
+    else toast.success(`${ok} product(s) deleted.`);
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* TABS */}
@@ -754,11 +782,29 @@ const NipponProductMaster: React.FC = () => {
         </div>
       </div>
 
+      {selectedIds.size > 0 && (
+        <div className="flex items-center justify-between gap-3 bg-red-50 border border-red-200 rounded-2xl px-4 py-2.5 no-print animate-in fade-in slide-in-from-top-1 duration-150">
+          <span className="text-xs font-black uppercase tracking-widest text-red-700">{selectedIds.size} selected</span>
+          <div className="flex items-center gap-2">
+            <button onClick={bulkDelete} className="flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-sm transition-all">
+              <Trash2 size={13}/> Delete Selected
+            </button>
+            <button onClick={clearSelection} className="px-3 py-2 bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all">
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       {(
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-x-auto min-h-[500px] no-print">
               <table className="w-full min-w-[1200px] text-left sap-table">
                   <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400 tracking-widest">
                     <tr>
+                        <th className="pl-4 pr-1 w-8">
+                          <input type="checkbox" checked={pageAllSelected} onChange={toggleSelectAllPage}
+                            className="w-3.5 h-3.5 rounded border-slate-300 accent-red-600 cursor-pointer align-middle" title="Select all on this page" />
+                        </th>
                         <th className="px-6 py-4 cursor-pointer select-none hover:text-slate-600" onClick={() => requestSort('profileCode')} title="Sort by KinLong Code">
                           <span className={`inline-flex items-center gap-1 ${sortConfig.key === 'profileCode' ? 'text-red-600' : ''}`}>KinLong Code {sortConfig.key === 'profileCode' ? (sortConfig.dir === 'asc' ? <ArrowUp size={10}/> : <ArrowDown size={10}/>) : <ArrowUpDown size={10} className="opacity-25"/>}</span>
                         </th>
@@ -782,7 +828,11 @@ const NipponProductMaster: React.FC = () => {
                         const stock = getStockLevel(p.id);
                         const nick = (p as { nickName?: string }).nickName || '';
                         return (
-                            <tr key={p.id} className="hover:bg-slate-50 transition-colors text-[13px] group">
+                            <tr key={p.id} className={`hover:bg-slate-50 transition-colors text-[13px] group ${selectedIds.has(p.id) ? 'bg-red-50/60' : ''}`}>
+                                <td className="pl-4 pr-1 w-8">
+                                  <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelect(p.id)}
+                                    className="w-3.5 h-3.5 rounded border-slate-300 accent-red-600 cursor-pointer align-middle" />
+                                </td>
                                 <td className="px-6 py-3 font-mono font-bold text-slate-400 uppercase">{p.profileCode || '-'}</td>
                                 <td className="py-3">
                                     <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center">
