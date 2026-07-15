@@ -798,24 +798,20 @@ const NipponProductMaster: React.FC = () => {
 
       {(
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-x-auto min-h-[500px] no-print">
-              <table className="w-full min-w-[1200px] text-left sap-table">
+              <table className="w-full min-w-[880px] text-left sap-table">
                   <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400 tracking-widest">
                     <tr>
                         <th className="pl-4 pr-1 w-8">
                           <input type="checkbox" checked={pageAllSelected} onChange={toggleSelectAllPage}
                             className="w-3.5 h-3.5 rounded border-slate-300 accent-red-600 cursor-pointer align-middle" title="Select all on this page" />
                         </th>
-                        <th className="px-6 py-4 cursor-pointer select-none hover:text-slate-600" onClick={() => requestSort('profileCode')} title="Sort by KinLong Code">
-                          <span className={`inline-flex items-center gap-1 ${sortConfig.key === 'profileCode' ? 'text-red-600' : ''}`}>KinLong Code {sortConfig.key === 'profileCode' ? (sortConfig.dir === 'asc' ? <ArrowUp size={10}/> : <ArrowDown size={10}/>) : <ArrowUpDown size={10} className="opacity-25"/>}</span>
+                        <th className="px-6 py-4 cursor-pointer select-none hover:text-slate-600" onClick={() => requestSort('profileCode')} title="Sort by Item Code">
+                          <span className={`inline-flex items-center gap-1 ${sortConfig.key === 'profileCode' ? 'text-red-600' : ''}`}>Item Code {sortConfig.key === 'profileCode' ? (sortConfig.dir === 'asc' ? <ArrowUp size={10}/> : <ArrowDown size={10}/>) : <ArrowUpDown size={10} className="opacity-25"/>}</span>
                         </th>
                         <Th label="Image" />
-                        <Th label="Group" k="mainCategory" />
                         <Th label="Description" k="description" />
                         <Th label="Nick" />
                         <Th label="Brand" />
-                        <Th label="Color" />
-                        <Th label="Dir" />
-                        <Th label="Size" />
                         <Th label="Unit Price" k="basePrice" right />
                         <Th label="Stock" k="stock" right />
                         <th className="text-right pr-6 sticky right-0 bg-slate-50 z-10">Action</th>
@@ -831,21 +827,18 @@ const NipponProductMaster: React.FC = () => {
                                   <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelect(p.id)}
                                     className="w-3.5 h-3.5 rounded border-slate-300 accent-red-600 cursor-pointer align-middle" />
                                 </td>
-                                <td className="px-6 py-3 font-mono font-bold text-slate-400 uppercase">{p.profileCode || '-'}</td>
+                                <td className="px-6 py-3 font-mono font-bold text-slate-600 uppercase whitespace-nowrap">{p.profileCode || p.modelNo || '—'}</td>
                                 <td className="py-3">
                                     <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center">
                                         <ProductImage id={p.id} code={p.modelNo || p.profileCode} url={p.imageUrl} alt={p.description} className="w-full h-full object-cover" iconSize={16} />
                                     </div>
                                 </td>
-                                <td className="font-black text-slate-500 uppercase">
-                                    <span className="px-2 py-0.5 rounded border text-[9px] bg-blue-50 text-blue-700 border-blue-100">
-                                        {p.mainCategory || 'Generic'}
-                                    </span>
-                                </td>
                                 <td className="font-bold text-slate-800 uppercase w-full">
                                     <div className="flex flex-col">
                                         <span>{p.description}</span>
-                                        {p.subCategory && <span className="text-[9px] text-slate-400 font-medium">TYPE: {p.subCategory}</span>}
+                                        <span className="text-[10px] text-slate-400 font-medium normal-case truncate">
+                                            {[p.mainCategory, p.subCategory].filter(Boolean).join(' · ') || '—'}
+                                        </span>
                                     </div>
                                 </td>
                                 <td className="text-[10px] uppercase">
@@ -854,10 +847,7 @@ const NipponProductMaster: React.FC = () => {
                                         : <span className="text-slate-300">-</span>}
                                 </td>
                                 <td className="font-bold text-slate-500 text-[11px] uppercase">{getBrandNick(p.brand || '-')}</td>
-                                <td className="font-medium text-slate-500 text-[11px] uppercase">{p.finishColor || '-'}</td>
-                                <td className="font-medium text-slate-500 text-[11px] uppercase">{p.direction || '-'}</td>
-                                <td className="font-medium text-slate-500 text-[11px] uppercase">{p.tongueLength || p.thickness || '-'}</td>
-                                <td className="text-right font-bold text-slate-700 whitespace-nowrap">PKR {p.basePrice?.toLocaleString()}</td>
+                                <td className="text-right font-bold text-slate-700 whitespace-nowrap tabular-nums">{p.basePrice?.toLocaleString()}</td>
                                 <td className="text-right">
                                     <span className={`text-sm font-black ${stock > 0 ? 'text-emerald-600' : 'text-rose-400'}`}>{(Number(stock) || 0).toLocaleString()}</span>
                                     <span className="text-[9px] text-slate-400 ml-1 uppercase">{p.unit}</span>
@@ -876,10 +866,15 @@ const NipponProductMaster: React.FC = () => {
                                     })()}
                                 </td>
                                 <td className="pr-6 text-right sticky right-0 bg-white group-hover:bg-slate-50 transition-colors">
-                                    <div className="flex items-center justify-end space-x-1">
-                                        <button onClick={() => handleAddVariant(p)} title="Add colour/direction variant" className="p-1.5 text-slate-400 hover:text-amber-600 bg-white border border-slate-200 rounded transition-all"><Layers size={12}/></button>
-                                        <button onClick={() => handleEdit(p)} title="Edit" className="p-1.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded transition-all"><Edit2 size={12}/></button>
-                                        <button onClick={() => handleDelete(p.id)} title="Delete" className="p-1.5 text-slate-400 hover:text-red-600 bg-white border border-slate-200 rounded transition-all"><Trash2 size={12}/></button>
+                                    {/* Actions reveal on row hover (focus-within keeps them keyboard-reachable);
+                                        a faint ⋯ hints they're there until you hover. */}
+                                    <div className="relative flex items-center justify-end h-6">
+                                        <span className="text-slate-300 group-hover:opacity-0 transition-opacity select-none">⋯</span>
+                                        <div className="absolute right-0 flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                                            <button onClick={() => handleAddVariant(p)} title="Add colour/direction variant" className="p-1.5 text-slate-400 hover:text-amber-600 bg-white border border-slate-200 rounded transition-all"><Layers size={12}/></button>
+                                            <button onClick={() => handleEdit(p)} title="Edit" className="p-1.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded transition-all"><Edit2 size={12}/></button>
+                                            <button onClick={() => handleDelete(p.id)} title="Delete" className="p-1.5 text-slate-400 hover:text-red-600 bg-white border border-slate-200 rounded transition-all"><Trash2 size={12}/></button>
+                                        </div>
                                     </div>
                                 </td>
                             </tr>
