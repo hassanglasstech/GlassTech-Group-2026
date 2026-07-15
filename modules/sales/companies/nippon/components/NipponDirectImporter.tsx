@@ -19,6 +19,7 @@ import { UploadCloud, FileSpreadsheet, CheckCircle2, AlertCircle, Save, X, Image
 import { Product } from '@/modules/procurement/types/inventory';
 import { StoreItem } from '@/modules/shared/types';
 import { SalesService } from '@/modules/sales/services/salesService';
+import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 
 // Map workbook column header → Product field name (case-insensitive)
@@ -272,10 +273,33 @@ const NipponDirectImporter: React.FC<{ onComplete: () => void }> = ({ onComplete
       });
 
       const existingProducts = SalesService.getProducts();
-      // Dedup by id — overwrite existing Nippon products that share id
-      const newIds = new Set(valid.map(v => v.id));
-      const kept = existingProducts.filter(p => !(p.company === 'Nippon' && newIds.has(p.id)));
-      SalesService.saveProducts([...kept, ...valid]);
+      // FIELD-MERGE (not replace): re-importing a slim sheet must NOT wipe an
+      // existing product's price / image / brand. Keep the existing value wherever
+      // the imported cell is empty/zero; the imported value wins only when it is
+      // meaningful. New ids pass straight through.
+      const existingById = new Map(
+        existingProducts.filter(p => p.company === 'Nippon').map(p => [p.id, p as Product])
+      );
+      const mergeProduct = (prev: Product, incoming: Product): Product => {
+        const out: Record<string, unknown> = { ...(prev as unknown as Record<string, unknown>) };
+        for (const [k, val] of Object.entries(incoming as unknown as Record<string, unknown>)) {
+          const meaningful =
+            val !== undefined && val !== null && val !== '' &&
+            !(typeof val === 'number' && val === 0) &&
+            !(Array.isArray(val) && val.length === 0);
+          if (meaningful) out[k] = val;
+        }
+        out.id = incoming.id;
+        out.company = incoming.company;
+        return out as unknown as Product;
+      };
+      const toSave = valid.map(v => {
+        const prev = existingById.get(v.id);
+        return prev ? mergeProduct(prev, v) : v;
+      });
+      // Await the cloud push so "Imported ✓" only shows after it actually lands
+      // (merges into the local set by id — existing rows not in the sheet survive).
+      await AsyncSalesService.saveProducts(toSave);
 
       // Create matching StoreItem rows (zero qty — opening stock is a
       // separate flow). Only add ones not already in store.
