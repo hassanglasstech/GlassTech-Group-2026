@@ -23,7 +23,7 @@ import WeightMaster from '@/modules/procurement/components/inventory/WeightMaste
 import PurchaseReturnModule from '@/modules/procurement/components/inventory/PurchaseReturnModule';
 import GlasscoMRP from '@/modules/procurement/components/inventory/GlasscoMRP';
 import { 
-  LayoutGrid, ArrowUpRight, Truck, Database, Loader2, Layers, BarChart3, Wrench, Banknote, PackageOpen, ClipboardList, Scale, TrendingDown
+  LayoutGrid, ArrowUpRight, Truck, Database, Loader2, Layers, BarChart3, Wrench, Banknote, PackageOpen, ClipboardList, Scale, TrendingDown, Plus
 } from 'lucide-react';
 
 // ── Sprint 24: 13 sub-tabs → 5 logical groups ─────────────────────────
@@ -220,7 +220,7 @@ const InventoryModule: React.FC = () => {
                              local purchases. The Local Purchase button is
                              redundant + uses an aluminium-flow component. */}
           <button onClick={() => setIsMigoOpen(true)} className="bg-slate-900 text-white px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center space-x-2 shadow-xl hover:bg-blue-600 transition-all whitespace-nowrap">
-            <Truck size={16} /><span>{isAluminiumCompany ? 'GRN (Stock In)' : isNippon ? 'Hardware GRN' : 'Glass GRN'}</span>
+            <Plus size={16} /><span>{isAluminiumCompany ? 'New GRN (Stock In)' : isNippon ? 'New Hardware GRN' : 'New Glass GRN'}</span>
           </button>
           {isGlassCompany && (
             <button onClick={() => setIsStoreMigoOpen(true)} className="bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center space-x-2 shadow-xl hover:bg-emerald-800 transition-all whitespace-nowrap">

@@ -645,23 +645,32 @@ const NipponProductMaster: React.FC = () => {
            {/* Data tools — grouped into one menu to declutter the toolbar */}
            <div className="relative shrink-0">
                <button onClick={() => setShowTools(v => !v)} className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 transition-all">
-                   <Wrench size={14}/> Tools <ChevronDown size={12} className={showTools ? 'rotate-180 transition-transform' : 'transition-transform'}/>
+                   <Wrench size={14}/> Data &amp; Admin <ChevronDown size={12} className={showTools ? 'rotate-180 transition-transform' : 'transition-transform'}/>
                </button>
                {showTools && (
                    <>
                      <div className="fixed inset-0 z-10" onClick={() => setShowTools(false)} />
-                     <div className="absolute left-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-20 py-1.5 animate-in fade-in zoom-in duration-150">
+                     <div className="absolute left-0 top-full mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-20 py-1.5 animate-in fade-in zoom-in duration-150">
+                         <div className="px-4 pt-1 pb-1 text-[9px] font-black uppercase tracking-widest text-slate-300">Export / Backup</div>
                          {[
                            { label: 'Backup (JSON)',          icon: FileJson,        on: handleExportJson },
-                           { label: 'Export Excel (flat)',    icon: FileSpreadsheet, on: handleExportExcel },
+                           { label: 'Export Excel (all)',     icon: FileSpreadsheet, on: handleExportExcel },
                            { label: 'Export by Category',     icon: Layers,          on: handleExportCategoryWise },
-                           { label: 'Restore (JSON)',         icon: UploadCloud,     on: () => jsonInputRef.current?.click() },
-                           { label: 'Import Excel',           icon: FileUp,          on: () => excelInputRef.current?.click() },
-                           { label: 'Remove Duplicates',      icon: Wrench,          on: handleDedupe },
-                           { label: 'Build Stock from Quotations', icon: Layers,     on: handleBuildStockFromQuotations },
                          ].map(({ label, icon: Icon, on }) => (
                            <button key={label} onClick={() => { setShowTools(false); on(); }} className="w-full flex items-center gap-2.5 px-4 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 transition-all">
                                <Icon size={14} className="text-slate-400"/> {label}
+                           </button>
+                         ))}
+                         <div className="my-1 border-t border-slate-100" />
+                         <div className="px-4 pt-1 pb-1 text-[9px] font-black uppercase tracking-widest text-rose-300">⚠ Admin · careful</div>
+                         {[
+                           { label: 'Restore (JSON)',              icon: UploadCloud, on: () => jsonInputRef.current?.click(),   confirm: 'Restore products from a JSON backup? Existing products with the same code can be overwritten.' },
+                           { label: 'Import Excel',                icon: FileUp,      on: () => excelInputRef.current?.click(),  confirm: 'Import products from Excel? Matching products (price/image) can be overwritten.' },
+                           { label: 'Remove Duplicates',           icon: Wrench,      on: handleDedupe,                          confirm: 'Remove duplicate products? Duplicate rows will be permanently deleted.' },
+                           { label: 'Build Stock from Quotations', icon: Layers,      on: handleBuildStockFromQuotations,        confirm: 'Rebuild stock levels from quotations? On-hand stock will be recomputed.' },
+                         ].map(({ label, icon: Icon, on, confirm: msg }) => (
+                           <button key={label} onClick={() => { setShowTools(false); if (window.confirm(msg)) on(); }} className="w-full flex items-center gap-2.5 px-4 py-2 text-[11px] font-bold text-rose-600 hover:bg-rose-50 transition-all">
+                               <Icon size={14} className="text-rose-400"/> {label}
                            </button>
                          ))}
                      </div>
@@ -758,13 +767,11 @@ const NipponProductMaster: React.FC = () => {
                         <Th label="ERP Model No" k="modelNo" />
                         <Th label="Description" k="description" />
                         <Th label="Nick" />
-                        <Th label="Status" />
                         <Th label="Brand" />
                         <Th label="Color" />
                         <Th label="Material" />
                         <Th label="Dir" />
                         <Th label="Size" />
-                        <Th label="Category" />
                         <Th label="Unit Price" k="basePrice" right />
                         <Th label="Stock" k="stock" right />
                         <th className="text-right pr-6 sticky right-0 bg-slate-50 z-10">Action</th>
@@ -775,7 +782,7 @@ const NipponProductMaster: React.FC = () => {
                         const stock = getStockLevel(p.id);
                         const nick = (p as { nickName?: string }).nickName || '';
                         return (
-                            <tr key={p.id} className="hover:bg-slate-50 transition-colors text-xs group">
+                            <tr key={p.id} className="hover:bg-slate-50 transition-colors text-[13px] group">
                                 <td className="px-6 py-3 font-mono font-bold text-slate-400 uppercase">{p.profileCode || '-'}</td>
                                 <td className="py-3">
                                     <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center">
@@ -799,22 +806,11 @@ const NipponProductMaster: React.FC = () => {
                                         ? <span className="font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 whitespace-nowrap">{nick}</span>
                                         : <span className="text-slate-300">-</span>}
                                 </td>
-                                <td>
-                                    {(() => {
-                                        const st = (p.technicalSpecs as Record<string, string> | undefined)?.matchStatus || '';
-                                        if (!st) return <span className="text-slate-300 text-[10px]">-</span>;
-                                        const cls = st === 'Exact Match' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                            : st === 'Near-Match' ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                            : 'bg-blue-50 text-blue-700 border-blue-200';
-                                        return <span className={`px-2 py-0.5 rounded border text-[8px] font-black uppercase whitespace-nowrap ${cls}`}>{st}</span>;
-                                    })()}
-                                </td>
-                                <td className="font-bold text-slate-500 text-[10px] uppercase">{getBrandNick(p.brand || '-')}</td>
-                                <td className="font-medium text-slate-500 text-[10px] uppercase">{p.finishColor || '-'}</td>
-                                <td className="font-medium text-slate-500 text-[10px] uppercase">{p.material || '-'}</td>
-                                <td className="font-medium text-slate-500 text-[10px] uppercase">{p.direction || '-'}</td>
-                                <td className="font-medium text-slate-500 text-[10px] uppercase">{p.tongueLength || p.thickness || '-'}</td>
-                                <td className="font-bold text-slate-500 text-[10px] uppercase"><span className="bg-slate-100 px-2 py-0.5 rounded border">{p.category}</span></td>
+                                <td className="font-bold text-slate-500 text-[11px] uppercase">{getBrandNick(p.brand || '-')}</td>
+                                <td className="font-medium text-slate-500 text-[11px] uppercase">{p.finishColor || '-'}</td>
+                                <td className="font-medium text-slate-500 text-[11px] uppercase">{p.material || '-'}</td>
+                                <td className="font-medium text-slate-500 text-[11px] uppercase">{p.direction || '-'}</td>
+                                <td className="font-medium text-slate-500 text-[11px] uppercase">{p.tongueLength || p.thickness || '-'}</td>
                                 <td className="text-right font-bold text-slate-700 whitespace-nowrap">PKR {p.basePrice?.toLocaleString()}</td>
                                 <td className="text-right">
                                     <span className={`text-sm font-black ${stock > 0 ? 'text-emerald-600' : 'text-rose-400'}`}>{(Number(stock) || 0).toLocaleString()}</span>
