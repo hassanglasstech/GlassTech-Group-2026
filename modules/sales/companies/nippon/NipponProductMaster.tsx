@@ -13,6 +13,8 @@ import {
   ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { findSimilarProducts, similarityMessage } from '@/modules/shared/utils/productSimilarity';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import NipponProductForm from '@/modules/nippon/components/NipponProductForm';
 import NipponDirectImporter from './components/NipponDirectImporter';
 import * as XLSX from 'xlsx';
@@ -97,6 +99,12 @@ const NipponProductMaster: React.FC = () => {
         toast.error(`Code "${product.id}" already exists. Use a different supplier code, or add it as a variant.`);
         return;   // form's finally resets Saving; modal stays open so the user can fix the code
       }
+    }
+    // Soft duplicate warning (ERP-wide): a similar code / name already exists.
+    const sims = findSimilarProducts(product, products, { selfId: editingProduct?.id });
+    if (sims.length) {
+      const ok = await confirmModal(similarityMessage(product, sims));
+      if (!ok) return;   // user chose not to create a possible duplicate
     }
     // Only the changed/new product is upserted (saveProducts merges by id) — no
     // full re-fetch + re-upsert of the whole ~150-row catalog on every save.
@@ -192,6 +200,12 @@ const NipponProductMaster: React.FC = () => {
       unit: qa.unit, costPrice: 0, basePrice: Number(qa.price) || 0,
       imageUrl: '', variants: [], technicalSpecs: {},
     } as unknown as Product;
+    // Soft duplicate warning (ERP-wide): similar code / name already exists.
+    const sims = findSimilarProducts(product, products);
+    if (sims.length) {
+      const ok = await confirmModal(similarityMessage(product, sims));
+      if (!ok) return;
+    }
     const store = InventoryService.getStore();
     store.push({
       id: product.id, company, name: product.description, category: 'Hardware' as StoreItem['category'],

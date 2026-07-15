@@ -19,6 +19,8 @@ import * as XLSX from 'xlsx';
 import { PriceHistoryEntry } from '@/modules/procurement/types/inventory';
 import { KpiTile, KpiRow } from '@/modules/shared/components/KpiTile';
 import { EmptyState } from '@/modules/shared/components/EmptyState';
+import { findSimilarProducts, similarityMessage } from '@/modules/shared/utils/productSimilarity';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 const GlasscoProductMaster: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
@@ -77,7 +79,13 @@ const GlasscoProductMaster: React.FC = () => {
       return Array.from(new Set([...standards, ...dynamic]));
   };
 
-  const handleSaveProduct = (product: Product, storeItemData?: Partial<StoreItem>) => {
+  const handleSaveProduct = async (product: Product, storeItemData?: Partial<StoreItem>) => {
+    // Soft duplicate warning (ERP-wide): a similar code / name already exists.
+    const sims = findSimilarProducts(product, products, { selfId: editingProduct?.id });
+    if (sims.length) {
+      const ok = await confirmModal(similarityMessage(product, sims));
+      if (!ok) return;
+    }
     let updatedProducts = SalesService.getProducts();
     let updatedStore = InventoryService.getStore();
 
