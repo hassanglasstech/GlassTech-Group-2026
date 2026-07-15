@@ -275,14 +275,19 @@ describe('Nippon SIT · generateDeliveryInvoice — trading revenue', () => {
     expect(sumDebit(details)).toBe(25000);
     expect(sumCredit(details)).toBe(25000);
 
-    // Revenue MUST hit the trading chain — code 4120 = HARDWARE SALES INCOME.
-    // If this regresses, Nippon's P&L mis-classifies sales as glass services.
+    // Revenue MUST hit the REAL seeded trading leaf — 41124 = Wholesale Sales —
+    // General Hardware (external customer). NOT the phantom 4120 (which never
+    // existed in the seeded Nippon chart) and NOT the Glassco service chain.
     const revLine = details.find(d => d.credit > 0);
-    expect(revLine?.accountId).toBe('Nippon-4120');
+    expect(revLine?.accountId).toBe('Nippon-41124');
 
-    // And must NOT hit the Glassco chain — code 41110 = SERVICE INCOME.
-    const hitGlassChain = details.some(d => d.accountId === 'Nippon-41110');
-    expect(hitGlassChain).toBe(false);
+    // AR debit must hit the REAL external-wholesale receivable 11213 (not phantom 12210).
+    const arLine = details.find(d => d.debit > 0);
+    expect(arLine?.accountId).toBe('Nippon-11213');
+
+    // And must NOT hit any phantom/glass account.
+    const hitPhantom = details.some(d => ['Nippon-4120', 'Nippon-12210', 'Nippon-41110'].includes(d.accountId));
+    expect(hitPhantom).toBe(false);
   });
 
   it('N-02 · 17% GST produces 3-line balanced GL on Nippon', async () => {

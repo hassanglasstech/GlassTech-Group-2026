@@ -169,7 +169,9 @@ function buildNipponTradingCOGSPlan(params: {
   const invHw      = FinanceService.ensureAccount(company, 'HARDWARE INVENTORY',   4, invRoot.id,      'Asset',   '1151');
   const invGen     = FinanceService.ensureAccount(company, 'GENERAL HARDWARE — STOCK', 5, invHw.id,    'Asset',   '11514');
 
-  const expParent  = FinanceService.ensureAccount(company, 'EXPENSES',             1, null,            'Expense', '50');
+  // Expense root is the seeded '5' (not a parallel '50') so COGS rolls up to the
+  // real expense tree — 5 → 51 → 511 → 5111 → 51114.
+  const expParent  = FinanceService.ensureAccount(company, 'Expenses',             1, null,            'Expense', '5');
   const cogsRoot   = FinanceService.ensureAccount(company, 'COST OF GOODS SOLD',   2, expParent.id,    'Expense', '51');
   const cogsGroup  = FinanceService.ensureAccount(company, 'COGS',                 3, cogsRoot.id,     'Expense', '511');
   // Post to the COA-defined leaf 51114 (511 → 5111 Purchase Cost → 51114) instead
@@ -370,27 +372,54 @@ export async function generateDeliveryInvoice(
       `pieces — revenue posts without COGS. Enable Finance GL to enforce the pieces gate.`);
   }
 
-  // ── JIT Account Creation — AR & Revenue ──────────────────────────
-  const arParent  = FinanceService.ensureAccount(company, 'ASSETS',             1, null,          'Asset',   '10');
-  const arCurrent = FinanceService.ensureAccount(company, 'CURRENT ASSETS',     2, arParent.id,   'Asset',   '11');
-  const arTrade   = FinanceService.ensureAccount(company, 'TRADE RECEIVABLES',  3, arCurrent.id,  'Asset',   '122');
-  const arControl = FinanceService.ensureAccount(company, 'CUSTOMERS CONTROL',  4, arTrade.id,    'Asset',   '1221');
-  const clientAR  = FinanceService.ensureAccount(
-    company,
-    (clientName.toUpperCase() + (order.projectName ? ' — ' + order.projectName.toUpperCase() : '')),
-    5, arControl.id, 'Asset', '12210'
-  );
+  // ── AR & Revenue — resolve to the company's REAL seeded COA leaves ──────
+  // Nippon go-live (EPIC 0.1): the invoice used to CREATE a parallel AR tree
+  // (10 → 122 → 12210) and revenue tree (40 → 412 → 4120) — codes that do NOT
+  // exist in the seeded Nippon chart, so the trial balance split across phantom
+  // accounts. Now trading posts to the REAL seeded chain (AR 1/11/112/1121/1121x,
+  // Revenue 4/41/411/…) routed by customer type. Glass keeps its existing chain.
+  const nipCust: 'GTK' | 'GTI' | 'EXT' = isTradingCompany
+    ? (clientName.toUpperCase().includes('GTK') ? 'GTK'
+       : clientName.toUpperCase().includes('GTI') ? 'GTI' : 'EXT')
+    : 'EXT';
+  let clientAR;
+  if (isTradingCompany) {
+    const arLeaf = nipCust === 'GTK' ? { code: '11211', name: 'Receivable — GTK (Hardware)' }
+                 : nipCust === 'GTI' ? { code: '11212', name: 'Receivable — GTI (Hardware)' }
+                 : { code: '11213', name: 'Receivable — External Wholesale' };
+    const aAssets  = FinanceService.ensureAccount(company, 'Assets',              1, null,        'Asset', '1');
+    const aCurrent = FinanceService.ensureAccount(company, 'Current Assets',      2, aAssets.id,  'Asset', '11');
+    const aTrade   = FinanceService.ensureAccount(company, 'Trade Receivables',   3, aCurrent.id, 'Asset', '112');
+    const aAR      = FinanceService.ensureAccount(company, 'Accounts Receivable', 4, aTrade.id,   'Asset', '1121');
+    clientAR       = FinanceService.ensureAccount(company, arLeaf.name,           5, aAR.id,      'Asset', arLeaf.code);
+  } else {
+    const arParent  = FinanceService.ensureAccount(company, 'ASSETS',             1, null,          'Asset',   '10');
+    const arCurrent = FinanceService.ensureAccount(company, 'CURRENT ASSETS',     2, arParent.id,   'Asset',   '11');
+    const arTrade   = FinanceService.ensureAccount(company, 'TRADE RECEIVABLES',  3, arCurrent.id,  'Asset',   '122');
+    const arControl = FinanceService.ensureAccount(company, 'CUSTOMERS CONTROL',  4, arTrade.id,    'Asset',   '1221');
+    clientAR        = FinanceService.ensureAccount(
+      company,
+      (clientName.toUpperCase() + (order.projectName ? ' — ' + order.projectName.toUpperCase() : '')),
+      5, arControl.id, 'Asset', '12210'
+    );
+  }
 
-  // (Nippon go-live): trading revenue chain differs from glass services.
-  // Nippon sells hardware — revenue must hit "HARDWARE SALES" under SALES
-  // REVENUE, not "GLASS PROCESSING SERVICES". Wrong chain = wrong P&L from day 1.
-  const revParent  = FinanceService.ensureAccount(company, 'REVENUE',                    1, null,           'Revenue', '40');
-  const revSales   = FinanceService.ensureAccount(company, 'SALES REVENUE',              2, revParent.id,   'Revenue', '41');
+  // Revenue — real seeded chain. Trading (Nippon) hits Hardware Sales
+  // (4/41/411/…): intercompany customers → 41111/41112, external wholesale →
+  // 41124 (pairs with the COGS side 51114). Glass keeps its service-income chain.
   let revenueAcc;
   if (isTradingCompany) {
-    const revHardware = FinanceService.ensureAccount(company, 'HARDWARE SALES',          3, revSales.id,    'Revenue', '412');
-    revenueAcc        = FinanceService.ensureAccount(company, 'HARDWARE SALES INCOME',   4, revHardware.id, 'Revenue', '4120');
+    const revLeaf = nipCust === 'GTK' ? { code: '41111', name: 'Sales — GTK (Hardware)',           pCode: '4111', pName: 'Intercompany Sales' }
+                  : nipCust === 'GTI' ? { code: '41112', name: 'Sales — GTI (Hardware)',           pCode: '4111', pName: 'Intercompany Sales' }
+                  :                      { code: '41124', name: 'Wholesale Sales — General Hardware', pCode: '4112', pName: 'External Wholesale' };
+    const rRev   = FinanceService.ensureAccount(company, 'Revenue',        1, null,      'Revenue', '4');
+    const rHW    = FinanceService.ensureAccount(company, 'Hardware Sales', 2, rRev.id,   'Revenue', '41');
+    const rSales = FinanceService.ensureAccount(company, 'Sales Revenue',  3, rHW.id,    'Revenue', '411');
+    const rGrp   = FinanceService.ensureAccount(company, revLeaf.pName,    4, rSales.id, 'Revenue', revLeaf.pCode);
+    revenueAcc   = FinanceService.ensureAccount(company, revLeaf.name,     5, rGrp.id,   'Revenue', revLeaf.code);
   } else {
+    const revParent  = FinanceService.ensureAccount(company, 'REVENUE',                    1, null,           'Revenue', '40');
+    const revSales   = FinanceService.ensureAccount(company, 'SALES REVENUE',              2, revParent.id,   'Revenue', '41');
     const revService = FinanceService.ensureAccount(company, 'SERVICE REVENUE',            3, revSales.id,    'Revenue', '411');
     const revGlass   = FinanceService.ensureAccount(company, 'GLASS PROCESSING SERVICES', 4, revService.id,  'Revenue', '4111');
     revenueAcc       = FinanceService.ensureAccount(company, 'SERVICE INCOME',            5, revGlass.id,    'Revenue', '41110');
