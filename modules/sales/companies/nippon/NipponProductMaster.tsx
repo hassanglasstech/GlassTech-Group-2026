@@ -22,20 +22,25 @@ import * as XLSX from 'xlsx';
 const NipponProductMaster: React.FC = () => {
   const company = 'Nippon';
   const stampUser = useAuthStore(s => s.profile?.fullName || s.profile?.email || s.user?.email || 'user');
+  // Remember the registry view (page + search + filters + sort) for this tab session,
+  // so a refresh — or navigating away and coming back — returns to the SAME page/
+  // filter instead of resetting to page 1.
+  const VIEW_KEY = 'nippon_registry_view';
+  const _view0 = (() => { try { return JSON.parse(sessionStorage.getItem(VIEW_KEY) || '{}'); } catch { return {}; } })();
   const [products, setProducts] = useState<Product[]>([]);
   const [storeItems, setStoreItems] = useState<StoreItem[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [catFilter, setCatFilter] = useState('All');
-  const [subFilter, setSubFilter] = useState('All');
-  const [imageFilter, setImageFilter] = useState<'all' | 'has' | 'missing'>('all');
+  const [searchTerm, setSearchTerm] = useState<string>(_view0.searchTerm || '');
+  const [catFilter, setCatFilter] = useState<string>(_view0.catFilter || 'All');
+  const [subFilter, setSubFilter] = useState<string>(_view0.subFilter || 'All');
+  const [imageFilter, setImageFilter] = useState<'all' | 'has' | 'missing'>(_view0.imageFilter || 'all');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [variantParent, setVariantParent] = useState<Product | null>(null);   // "Add variant" source
   const [activeTab, setActiveTab] = useState<'list' | 'direct'>('list');
   // Sorting — click any column header to sort; click again to flip direction.
   type SortKey = 'profileCode' | 'modelNo' | 'description' | 'mainCategory' | 'brand' | 'basePrice' | 'stock';
-  const [sortConfig, setSortConfig] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'profileCode', dir: 'asc' });
-  const [currentPage, setCurrentPage] = useState(1);
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>(_view0.sortConfig || { key: 'profileCode', dir: 'asc' });
+  const [currentPage, setCurrentPage] = useState<number>(_view0.currentPage || 1);
   const itemsPerPage = 25;
   const [showTools, setShowTools] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -50,8 +55,23 @@ const NipponProductMaster: React.FC = () => {
       : { key, dir: 'asc' });
   };
   // Reset sub-filter when main category changes; reset page on any filter/sort change.
-  useEffect(() => { setSubFilter('All'); }, [catFilter]);
-  useEffect(() => { setCurrentPage(1); }, [searchTerm, catFilter, subFilter, imageFilter, sortConfig]);
+  // Skip the FIRST run of each so a restored view (from sessionStorage) survives mount.
+  const _skipSubReset = useRef(true);
+  useEffect(() => {
+    if (_skipSubReset.current) { _skipSubReset.current = false; return; }
+    setSubFilter('All');
+  }, [catFilter]);
+  const _skipPageReset = useRef(true);
+  useEffect(() => {
+    if (_skipPageReset.current) { _skipPageReset.current = false; return; }
+    setCurrentPage(1);
+  }, [searchTerm, catFilter, subFilter, imageFilter, sortConfig]);
+  // Persist the view so a refresh / navigate-back returns to the same page + filters.
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(VIEW_KEY, JSON.stringify({ searchTerm, catFilter, subFilter, imageFilter, sortConfig, currentPage }));
+    } catch { /* sessionStorage unavailable — non-fatal */ }
+  }, [searchTerm, catFilter, subFilter, imageFilter, sortConfig, currentPage]);
 
   // Sortable column header — click to sort, click again to flip.
   const Th = ({ label, k, right }: { label: string; k?: SortKey; right?: boolean }) => {
@@ -626,6 +646,11 @@ const NipponProductMaster: React.FC = () => {
     return filtered.slice(start, start + itemsPerPage);
   }, [filtered, currentPage]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+  // If a restored page is now beyond the list (data shrank), clamp — but only
+  // once products have loaded, so we don't reset to page 1 during the async load.
+  useEffect(() => {
+    if (products.length > 0 && currentPage > totalPages) setCurrentPage(totalPages);
+  }, [products.length, totalPages, currentPage]);
 
   // ── Bulk multi-select (manage many products at once) ────────────────────
   const pageAllSelected = paginated.length > 0 && paginated.every(p => selectedIds.has(p.id));
