@@ -70,12 +70,19 @@ const InventoryModule: React.FC = () => {
     return t && t in SUB_TO_MAIN ? t : 'overview';
   })();
   const [activeTab, setActiveTab] = useState<SubTabId>(initialSub);
-  const activeMain: MainTabId = SUB_TO_MAIN[activeTab];
+
+  // Nippon-only: Purchase Return belongs under the GRN group (a return reverses a
+  // GRN). For Nippon that empties the Movements group (which held only Purchase
+  // Return), so it drops out below. Glassco/GTK mapping is untouched.
+  const subToMain = (sub: SubTabId): MainTabId =>
+    (company === 'Nippon' && sub === 'purchase_return') ? 'grn' : SUB_TO_MAIN[sub];
+  const activeMain: MainTabId = subToMain(activeTab);
 
   // When user clicks a main group, jump to its default sub-tab (unless
   // the current sub-tab is already inside that group)
   const switchMain = (m: MainTabId) => {
-    if (SUB_TO_MAIN[activeTab] === m) return;
+    if (subToMain(activeTab) === m) return;
+    // Nippon: the GRN group's default is the register; other companies unchanged.
     setActiveTab(MAIN_DEFAULT_SUB[m]);
   };
   const [isLoading, setIsLoading] = useState(true);
@@ -165,10 +172,11 @@ const InventoryModule: React.FC = () => {
   ];
 
   // Filter sub-tabs to those in the active main group
-  const visibleSubTabs = subTabs.filter(t => SUB_TO_MAIN[t.id as SubTabId] === activeMain);
+  const visibleSubTabs = subTabs.filter(t => subToMain(t.id as SubTabId) === activeMain);
 
   // Main groups — only shown if at least one of their sub-tabs is visible
-  // for the current company (planning is glass-only via the MRP gate above).
+  // for the current company (planning is glass-only via the MRP gate above;
+  // Movements drops out for Nippon once Purchase Return moves under GRN).
   const mainGroups: Array<{ id: MainTabId; label: string; icon: React.ElementType }> = [
     { id: 'stock',     label: 'Stock',     icon: LayoutGrid },
     { id: 'master',    label: 'Master',    icon: Database },
@@ -176,6 +184,8 @@ const InventoryModule: React.FC = () => {
     { id: 'grn',       label: 'GRN',       icon: Truck },
     ...(isGlassCompany ? [{ id: 'planning' as MainTabId, label: 'Planning', icon: TrendingDown }] : []),
   ];
+  const mainsWithTabs = new Set(subTabs.map(t => subToMain(t.id as SubTabId)));
+  const visibleMainGroups = mainGroups.filter(g => mainsWithTabs.has(g.id));
 
   // Reflect activeTab → URL ?invtab= for shareable links
   useEffect(() => {
@@ -201,7 +211,7 @@ const InventoryModule: React.FC = () => {
           Action buttons (GRN / Local Purchase) sit in the top tier alongside */}
       <div className="bg-white p-1 rounded-2xl border border-slate-200 shadow-sm no-print">
         <div className="sap-scroll-container">
-          {mainGroups.map(g => (
+          {visibleMainGroups.map(g => (
             <button
               key={g.id}
               onClick={() => switchMain(g.id)}
