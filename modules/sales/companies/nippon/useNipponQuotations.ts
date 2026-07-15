@@ -6,6 +6,7 @@ import { InventoryService } from '@/modules/procurement/services/inventoryServic
 import { StoreItem, ProductComponent } from '@/modules/procurement/types/inventory';
 import { Logger } from '@/modules/shared/services/logger';
 import { nipponImageUrl } from '@/modules/shared/components/ProductImage';
+import { issueNipponOrder } from './nipponFulfilmentService';
 
 // TEMP (inventory module not live yet): stock balances are still 0 because GRN /
 // opening-balance intake isn't wired, so a hard stock gate blocks every approval.
@@ -499,54 +500,13 @@ export const useNipponQuotations = () => {
     }
   };
 
-  // EPIC 2 (store issue): the store incharge physically issues an approved order.
-  // Reduces on-hand (quantity) and releases the reservation made at approve, then
-  // marks the order Delivered. Idempotent — an order can only be issued once.
+  // EPIC 2 (store issue): the store physically issues an approved order — shared
+  // logic lives in nipponFulfilmentService so the dedicated store screen reuses it.
   const issueOrder = async (orderId: string) => {
-    try {
-      const all = await AsyncSalesService.getQuotations();
-      const order = all.find(q => q.id === orderId && q.company === company);
-      if (!order) { toast.error('Order not found.'); return; }
-      if (order.status !== 'Approved') { toast.error('Only an approved Sales Order can be issued.'); return; }
-      if ((order as { issuedAt?: string }).issuedAt) { toast.error('This order is already issued.'); return; }
-
-      const store = InventoryService.getStore();
-      const updated = [...store];
-      (order.items || []).forEach(item => {
-        if (item.isSection) return;
-        const matched = products.find(p =>
-          (item.productRef && p.id === item.productRef) ||
-          (item.locationCode && (p.id === item.locationCode || p.modelNo === item.locationCode || p.profileCode === item.locationCode)));
-        const refId = matched?.id || item.productRef || item.locationCode;
-        if (!refId) return;
-        const idx = updated.findIndex(s => s.id === refId);
-        const need = Number(item.qty) || 0;
-        if (idx !== -1) {
-          updated[idx] = {
-            ...updated[idx],
-            quantity: (updated[idx].quantity || 0) - need,                    // goods physically leave
-            reservedQty: Math.max(0, (updated[idx].reservedQty || 0) - need), // reservation fulfilled
-            lastMovementDate: new Date().toISOString(),
-          };
-        }
-      });
-      InventoryService.saveStore(updated);
-
-      const issued = {
-        ...(order as Quotation),
-        status: 'Delivered' as Quotation['status'],
-        issuedAt: new Date().toISOString(),
-      } as Quotation;
-      const res = await AsyncSalesService.saveQuotations([...all.filter(x => x.id !== orderId), issued]);
-      if (res?.error) { toast.error(`Issue not saved to cloud — stock left unchanged on reload: ${res.error}`, { duration: 9000 }); return; }
-      Logger.action('SALES', 'NIPPON_ORDER_ISSUED', `${orderId} → ${order.orderNo || '-'} issued/delivered`,
-        { referenceId: orderId, extra: { company } });
-      toast.success(`Goods issued — ${order.orderNo || orderId} marked Delivered.`);
-      await refreshData();
-    } catch (err) {
-      Logger.error('NipponQuotations', 'issueOrder failed', err);
-      toast.error(`Issue failed: ${err instanceof Error ? err.message : 'unknown'}`);
-    }
+    const res = await issueNipponOrder(orderId);
+    if (res.error) { toast.error(`Issue failed — ${res.error}`, { duration: 9000 }); return; }
+    toast.success(`Goods issued — ${res.orderNo} marked Delivered.`);
+    await refreshData();
   };
 
   const handleDelete = async (id: string) => {

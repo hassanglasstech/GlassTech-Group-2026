@@ -60,6 +60,7 @@ const VendorHub        = React.lazy(() => import('./modules/procurement/pages/Ve
 const MDDashboard       = React.lazy(() => import('./modules/md-dashboard/MDDashboard'));
 const FactoryInchargeModule = React.lazy(() => import('./modules/factory/pages/FactoryInchargeModule'));
 const ProcurementHub   = React.lazy(() => import('./modules/procurement/pages/ProcurementHub'));
+const StoreIssueScreen = React.lazy(() => import('./modules/sales/companies/nippon/StoreIssueScreen'));
 // EventOS chat FAB hidden app-wide per request (2026-07-15) — see render site below.
 // const EventOSChatWidget = React.lazy(() => import('./modules/factory/components/eventOS/ChatWidget').catch(() => ({ default: () => null })));
 // Wazir launcher hidden app-wide per request (2026-07-15) — see render site below.
@@ -145,6 +146,7 @@ const CORE_NAV = [
   { name: 'Production Board',  path: '/production/workbench', icon: LayoutGrid,  key: 'production'       },
   { name: 'Production',        path: '/production',           icon: Factory,     key: 'production'       },
   { name: 'Material Mgmt',     path: '/inventory',        icon: Warehouse,       key: 'inventory'        },
+  { name: 'Store Issue',       path: '/store-issue',      icon: Package,         key: 'store-issue'      },
   { name: 'Procurement',       path: '/requisitions',     icon: Package,         key: 'requisitions'     },
   { name: 'Finance (FICO)',     path: '/accounts',         icon: Landmark,        key: 'accounts'         },
   { name: 'People (HCM)',       path: '/hr',               icon: Users,           key: 'hr'               },
@@ -196,6 +198,7 @@ const pathToModuleKey = (pathname: string): string | null => {
   if (pathname.startsWith('/sales'))           return 'sales';
   if (pathname.startsWith('/hr'))              return 'hr';
   if (pathname.startsWith('/inventory'))       return 'inventory';
+  if (pathname.startsWith('/store-issue'))     return 'store-issue';
   if (pathname.startsWith('/logistics'))       return 'logistics';
   if (pathname.startsWith('/vendors'))         return 'vendors';
   if (pathname.startsWith('/projects'))        return 'projects';
@@ -810,6 +813,7 @@ const App: React.FC = () => {
                   <Route path="/hr/*"          element={<ModuleErrorBoundary moduleName="HR"><HRModule /></ModuleErrorBoundary>} />
                   <Route path="/sales/*"       element={<ModuleErrorBoundary moduleName="Sales"><SalesCRM /></ModuleErrorBoundary>} />
                   <Route path="/inventory"     element={<ModuleErrorBoundary moduleName="Inventory"><InventoryModule /></ModuleErrorBoundary>} />
+                  <Route path="/store-issue"   element={<ModuleErrorBoundary moduleName="Store Issue"><StoreIssueScreen /></ModuleErrorBoundary>} />
                   <Route path="/logistics"     element={<ModuleErrorBoundary moduleName="Logistics"><LogisticsModule /></ModuleErrorBoundary>} />
                   <Route path="/vendors"       element={<ModuleErrorBoundary moduleName="Vendors"><VendorHub /></ModuleErrorBoundary>} />
                   <Route path="/projects/*"    element={<ModuleErrorBoundary moduleName="Projects"><ProjectsModule /></ModuleErrorBoundary>} />
