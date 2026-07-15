@@ -433,14 +433,17 @@ export const useNipponQuotations = () => {
           const storeIdx = updatedStore.findIndex(s => s.id === refId);
           const need = Number(item.qty) || 0;
           if (storeIdx !== -1) {
-            // Inventory-bootstrap mode: let an uncounted item go NEGATIVE on sale
-            // (e.g. sold 5 of a 0-stock item → -5). That negative is the signal to
-            // go stock-take the item. saveStore + the DB constraints allow negative
-            // for Nippon. When the user records the count, the balance is corrected.
+            // EPIC 1 — approve = RESERVE, not physical issue. Move qty from
+            // available (unrestrictedQty) into reservedQty; the physical on-hand
+            // (quantity) stays until the store issues it (issueOrder). This keeps
+            // inventory on the books until delivery (IFRS: relieve at control
+            // transfer) and gives the store a real "pending issue" queue.
+            // Available may go negative (Nippon oversell) → signals "receive/GRN".
             updatedStore[storeIdx] = {
               ...updatedStore[storeIdx],
+              reservedQty: (updatedStore[storeIdx].reservedQty || 0) + need,
               unrestrictedQty: (updatedStore[storeIdx].unrestrictedQty || 0) - need,
-              quantity: (updatedStore[storeIdx].quantity || 0) - need
+              lastMovementDate: new Date().toISOString(),
             };
           } else {
             // No stock row yet → create one at negative qty (keyed by the real
@@ -458,8 +461,10 @@ export const useNipponQuotations = () => {
               company,
               name: matched?.description || item.description || refId,
               category: (matched?.category as string) || 'Hardware',
-              quantity: -need, unrestrictedQty: -need,
-              qiQty: 0, blockedQty: 0, reservedQty: 0, consignmentQty: 0,
+              // Reserved against an item with no on-hand → physical 0, available
+              // negative (oversold, needs GRN), reservation records the commitment.
+              quantity: 0, unrestrictedQty: -need,
+              qiQty: 0, blockedQty: 0, reservedQty: need, consignmentQty: 0,
               unit: (matched?.unit || item.glassSize || 'PCS') as StoreItem['unit'],
               minLevel: 10, reorderPoint: 5,
               movingAveragePrice: seedCost,
@@ -491,6 +496,56 @@ export const useNipponQuotations = () => {
       toast.error(`Save failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // EPIC 2 (store issue): the store incharge physically issues an approved order.
+  // Reduces on-hand (quantity) and releases the reservation made at approve, then
+  // marks the order Delivered. Idempotent — an order can only be issued once.
+  const issueOrder = async (orderId: string) => {
+    try {
+      const all = await AsyncSalesService.getQuotations();
+      const order = all.find(q => q.id === orderId && q.company === company);
+      if (!order) { toast.error('Order not found.'); return; }
+      if (order.status !== 'Approved') { toast.error('Only an approved Sales Order can be issued.'); return; }
+      if ((order as { issuedAt?: string }).issuedAt) { toast.error('This order is already issued.'); return; }
+
+      const store = InventoryService.getStore();
+      const updated = [...store];
+      (order.items || []).forEach(item => {
+        if (item.isSection) return;
+        const matched = products.find(p =>
+          (item.productRef && p.id === item.productRef) ||
+          (item.locationCode && (p.id === item.locationCode || p.modelNo === item.locationCode || p.profileCode === item.locationCode)));
+        const refId = matched?.id || item.productRef || item.locationCode;
+        if (!refId) return;
+        const idx = updated.findIndex(s => s.id === refId);
+        const need = Number(item.qty) || 0;
+        if (idx !== -1) {
+          updated[idx] = {
+            ...updated[idx],
+            quantity: (updated[idx].quantity || 0) - need,                    // goods physically leave
+            reservedQty: Math.max(0, (updated[idx].reservedQty || 0) - need), // reservation fulfilled
+            lastMovementDate: new Date().toISOString(),
+          };
+        }
+      });
+      InventoryService.saveStore(updated);
+
+      const issued = {
+        ...(order as Quotation),
+        status: 'Delivered' as Quotation['status'],
+        issuedAt: new Date().toISOString(),
+      } as Quotation;
+      const res = await AsyncSalesService.saveQuotations([...all.filter(x => x.id !== orderId), issued]);
+      if (res?.error) { toast.error(`Issue not saved to cloud — stock left unchanged on reload: ${res.error}`, { duration: 9000 }); return; }
+      Logger.action('SALES', 'NIPPON_ORDER_ISSUED', `${orderId} → ${order.orderNo || '-'} issued/delivered`,
+        { referenceId: orderId, extra: { company } });
+      toast.success(`Goods issued — ${order.orderNo || orderId} marked Delivered.`);
+      await refreshData();
+    } catch (err) {
+      Logger.error('NipponQuotations', 'issueOrder failed', err);
+      toast.error(`Issue failed: ${err instanceof Error ? err.message : 'unknown'}`);
     }
   };
 
@@ -597,6 +652,7 @@ export const useNipponQuotations = () => {
     handleSave,
     handleDelete,
     handleVoid,
+    issueOrder,
     selectProduct,
     initialQuotation,
     isSaving,

@@ -5,9 +5,10 @@ import { SharedQuotationList } from '@/modules/sales/components/SharedQuotationL
 import { getBrandNick } from '@/modules/shared/utils/brandUtils';
 import {
   Printer, X, Plus, Trash2, FileSignature,
-  Search, Calendar, Edit2, FileCheck, Eye, Save, ArrowLeft, Layers, Copy, Gift
+  Search, Calendar, Edit2, FileCheck, Eye, Save, ArrowLeft, Layers, Copy, Gift, PackageCheck
 } from 'lucide-react';
 import { useNipponQuotations } from './useNipponQuotations';
+import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 
 const NipponQuotationManager: React.FC = () => {
   const [nipponPrintType, setNipponPrintType] = React.useState<'KinLong' | 'Glasstech' | 'General'>('Glasstech');
@@ -41,14 +42,16 @@ const NipponQuotationManager: React.FC = () => {
     handleSave,
     handleDelete,
     handleVoid,
+    issueOrder,
     selectProduct,
     initialQuotation,
     isSaving,
   } = useNipponQuotations();
 
-  // Quotations vs Sales Orders tab. Orders = approved-and-beyond (+ voided, kept
-  // for audit). Revise mode unlocks an approved order for editing.
-  const [docTab, setDocTab] = React.useState<'quotations' | 'orders'>('quotations');
+  // Quotations vs Sales Orders vs Store Issue tab. Orders = approved-and-beyond
+  // (+ voided, kept for audit). Store Issue = approved orders not yet physically
+  // issued by the store. Revise mode unlocks an approved order for editing.
+  const [docTab, setDocTab] = React.useState<'quotations' | 'orders' | 'issue'>('quotations');
   const [reviseMode, setReviseMode] = React.useState(false);
   const ORDER_STATUSES = ['Approved', 'Invoiced', 'Partial Payment', 'Paid', 'Void'];
 
@@ -217,29 +220,81 @@ const NipponQuotationManager: React.FC = () => {
       {view === 'list' ? (
         <>
         <div className="no-print flex items-center gap-2">
-          {([['quotations', 'Quotations'], ['orders', 'Sales Orders']] as const).map(([key, label]) => (
-            <button key={key} onClick={() => setDocTab(key)}
-              className={`px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest border transition-all flex items-center ${docTab === key ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300'}`}>
-              {label}
-              <span className={`ml-2 text-[9px] px-1.5 py-0.5 rounded-full ${docTab === key ? 'bg-white/20' : 'bg-slate-100 text-slate-500'}`}>
-                {quotations.filter(q => key === 'orders' ? ORDER_STATUSES.includes(q.status as string) : !ORDER_STATUSES.includes(q.status as string)).length}
-              </span>
-            </button>
-          ))}
+          {([['quotations', 'Quotations'], ['orders', 'Sales Orders'], ['issue', 'Store Issue']] as const).map(([key, label]) => {
+            const count = key === 'issue'
+              ? quotations.filter(q => q.status === 'Approved' && !(q as { issuedAt?: string }).issuedAt).length
+              : quotations.filter(q => key === 'orders' ? ORDER_STATUSES.includes(q.status as string) : !ORDER_STATUSES.includes(q.status as string)).length;
+            const activeCls = key === 'issue' ? 'bg-amber-600 text-white border-amber-600 shadow' : 'bg-blue-600 text-white border-blue-600 shadow';
+            return (
+              <button key={key} onClick={() => setDocTab(key)}
+                className={`px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest border transition-all flex items-center ${docTab === key ? activeCls : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300'}`}>
+                {label}
+                <span className={`ml-2 text-[9px] px-1.5 py-0.5 rounded-full ${docTab === key ? 'bg-white/20' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
+              </button>
+            );
+          })}
         </div>
-        <SharedQuotationList
-          companyName="Nippon"
-          quotations={filteredQuotations}
-          clients={clients}
-          searchTerm={searchTerm}
-          setSearchTerm={setSearchTerm}
-          onNew={() => openEditor(initialQuotation, false)}
-          onEdit={(q) => openEditor(q, docTab === 'orders' && q.status !== 'Void')}
-          onPrint={(q) => setPrintingQuote(q)}
-          onApprove={(q) => handleSave(true, q)}
-          onDelete={handleDelete}
-          onVoid={docTab === 'orders' ? handleVoid : undefined}
-        />
+        {docTab === 'issue' ? (
+          (() => {
+            const pending = quotations.filter(q => q.status === 'Approved' && !(q as { issuedAt?: string }).issuedAt);
+            return (
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
+                <div className="px-5 py-3 bg-amber-50 border-b border-amber-100 flex items-center gap-2 no-print">
+                  <PackageCheck size={16} className="text-amber-600"/>
+                  <h3 className="text-xs font-black uppercase tracking-widest text-amber-800">Store — Pending Issue</h3>
+                  <span className="ml-auto text-[10px] font-bold text-amber-600">{pending.length} order(s) to issue</span>
+                </div>
+                {pending.length === 0 ? (
+                  <div className="p-16 text-center text-slate-300 font-black uppercase italic text-xs tracking-widest">No approved orders waiting to be issued.</div>
+                ) : (
+                  <table className="w-full min-w-[640px] text-left">
+                    <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400"><tr>
+                      <th className="px-5 py-3">Order</th><th className="px-5 py-3">Customer</th>
+                      <th className="px-5 py-3 text-center">Items</th><th className="px-5 py-3 text-right">Value</th>
+                      <th className="px-5 py-3 text-right">Action</th>
+                    </tr></thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {pending.map(q => {
+                        const cli = clients.find(c => c.id === q.clientId);
+                        const nLines = (q.items || []).filter(i => !i.isSection).length;
+                        const val = (q as { total?: number }).total ?? (q.items || []).reduce((s, i) => s + (Number(i.amount) || 0), 0);
+                        return (
+                          <tr key={q.id} className="hover:bg-slate-50">
+                            <td className="px-5 py-3 font-black text-blue-600 text-xs uppercase whitespace-nowrap">{q.orderNo || q.id}</td>
+                            <td className="px-5 py-3 font-bold text-slate-700 text-xs uppercase">{cli?.name || (q as { clientName?: string }).clientName || '—'}</td>
+                            <td className="px-5 py-3 text-center text-xs font-bold text-slate-600">{nLines}</td>
+                            <td className="px-5 py-3 text-right text-xs font-black tabular-nums">{Number(val).toLocaleString()}</td>
+                            <td className="px-5 py-3 text-right">
+                              <button
+                                onClick={async () => { if (await confirmModal(`Issue goods for ${q.orderNo || q.id}? On-hand stock will be reduced and the order marked Delivered.`)) issueOrder(q.id); }}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-black uppercase text-[10px] tracking-widest inline-flex items-center gap-1.5 transition-all">
+                                <PackageCheck size={13}/> Issue / Deliver
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            );
+          })()
+        ) : (
+          <SharedQuotationList
+            companyName="Nippon"
+            quotations={filteredQuotations}
+            clients={clients}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            onNew={() => openEditor(initialQuotation, false)}
+            onEdit={(q) => openEditor(q, docTab === 'orders' && q.status !== 'Void')}
+            onPrint={(q) => setPrintingQuote(q)}
+            onApprove={(q) => handleSave(true, q)}
+            onDelete={handleDelete}
+            onVoid={docTab === 'orders' ? handleVoid : undefined}
+          />
+        )}
         </>
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[560px] h-[calc(100dvh-170px)]">
