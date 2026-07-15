@@ -18,7 +18,6 @@ import { toast } from 'sonner';
 import { UploadCloud, FileSpreadsheet, CheckCircle2, AlertCircle, Save, X, Image as ImageIcon, Download } from 'lucide-react';
 import { Product } from '@/modules/procurement/types/inventory';
 import { StoreItem } from '@/modules/shared/types';
-import { SalesService } from '@/modules/sales/services/salesService';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 
@@ -272,11 +271,14 @@ const NipponDirectImporter: React.FC<{ onComplete: () => void }> = ({ onComplete
         return clean;
       });
 
-      const existingProducts = SalesService.getProducts();
       // FIELD-MERGE (not replace): re-importing a slim sheet must NOT wipe an
       // existing product's price / image / brand. Keep the existing value wherever
       // the imported cell is empty/zero; the imported value wins only when it is
       // meaningful. New ids pass straight through.
+      // Seed the merge base from the CLOUD, not the local cache: on a fresh/cold
+      // device SalesService.getProducts() (localStorage) is empty, so a slim
+      // re-import would sail through un-merged and blank out cloud-only fields.
+      const existingProducts = await AsyncSalesService.getProducts();
       const existingById = new Map(
         existingProducts.filter(p => p.company === 'Nippon').map(p => [p.id, p as Product])
       );
@@ -299,7 +301,12 @@ const NipponDirectImporter: React.FC<{ onComplete: () => void }> = ({ onComplete
       });
       // Await the cloud push so "Imported ✓" only shows after it actually lands
       // (merges into the local set by id — existing rows not in the sheet survive).
-      await AsyncSalesService.saveProducts(toSave);
+      const saveRes = await AsyncSalesService.saveProducts(toSave);
+      if (saveRes.error) {
+        toast.error('Imported locally, but cloud sync failed — will retry on reconnect. Do NOT re-import yet.');
+        setSaving(false);
+        return;
+      }
 
       // Create matching StoreItem rows (zero qty — opening stock is a
       // separate flow). Only add ones not already in store.

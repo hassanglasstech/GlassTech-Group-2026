@@ -7,14 +7,13 @@ import { useAuthStore } from '@/modules/auth/authStore';
 import { getBrandNick } from '@/modules/shared/utils/brandUtils';
 import { ProductImage } from '@/modules/shared/components/ProductImage';
 import {
-  Plus, Search, Edit2, Trash2, Package, Filter, Download, Box,
-  FileJson, FileSpreadsheet, FileUp, UploadCloud, Printer, Layers,
+  Plus, Search, Edit2, Trash2, Package, Filter, Download,
+  FileJson, UploadCloud, Printer, Layers,
   Image as ImageIcon, Wrench, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown,
   ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { toast } from 'sonner';
 import NipponProductForm from '@/modules/nippon/components/NipponProductForm';
-import NipponSmartImporter from './components/NipponSmartImporter';
 import NipponDirectImporter from './components/NipponDirectImporter';
 import * as XLSX from 'xlsx';
 
@@ -30,7 +29,7 @@ const NipponProductMaster: React.FC = () => {
   const [imageFilter, setImageFilter] = useState<'all' | 'has' | 'missing'>('all');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [variantParent, setVariantParent] = useState<Product | null>(null);   // "Add variant" source
-  const [activeTab, setActiveTab] = useState<'list' | 'import' | 'direct'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'direct'>('list');
   // Sorting — click any column header to sort; click again to flip direction.
   type SortKey = 'profileCode' | 'modelNo' | 'description' | 'mainCategory' | 'basePrice' | 'stock';
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'description', dir: 'asc' });
@@ -42,7 +41,6 @@ const NipponProductMaster: React.FC = () => {
   const [qa, setQa] = useState({ code: '', description: '', unit: 'PCS', price: '' });
 
   const jsonInputRef = useRef<HTMLInputElement>(null);
-  const excelInputRef = useRef<HTMLInputElement>(null);
 
   const requestSort = (key: SortKey) => {
     setSortConfig(prev => prev.key === key
@@ -88,20 +86,19 @@ const NipponProductMaster: React.FC = () => {
   };
 
   const handleSaveProduct = async (product: Product, storeItemData?: Partial<StoreItem>) => {
-    let updatedProducts = await AsyncSalesService.getProducts();
+    // Only the changed/new product is upserted (saveProducts merges by id) — no
+    // full re-fetch + re-upsert of the whole ~150-row catalog on every save.
     let updatedStore = InventoryService.getStore();
 
     if (editingProduct) {
-        updatedProducts = updatedProducts.map(p => p.id === editingProduct.id ? product : p);
-        updatedStore = updatedStore.map(s => s.id === editingProduct.id ? { 
-            ...s, 
-            name: product.description, 
+        updatedStore = updatedStore.map(s => s.id === editingProduct.id ? {
+            ...s,
+            name: product.description,
             category: product.category as any,
             unit: product.unit,
-            movingAveragePrice: product.costPrice || s.movingAveragePrice 
+            movingAveragePrice: product.costPrice || s.movingAveragePrice
         } : s);
     } else {
-        updatedProducts.push(product);
         updatedStore.push({
             id: product.id,
             company,
@@ -147,10 +144,11 @@ const NipponProductMaster: React.FC = () => {
     }
 
     try {
-      await AsyncSalesService.saveProducts(updatedProducts);
+      const res = await AsyncSalesService.saveProducts([product]);
       InventoryService.saveStore(updatedStore);
       await refreshData();
       setIsModalOpen(false);
+      if (res.error) return;   // saveProducts already showed the cloud-fail toast
       toast.success(editingProduct ? `Updated: ${product.description}` : `Added: ${product.description}`);
     } catch (err) {
       toast.error(`Save failed: ${(err as Error)?.message || 'unknown'}`);
@@ -169,18 +167,18 @@ const NipponProductMaster: React.FC = () => {
     const code = qa.code.trim();
     const desc = qa.description.trim();
     if (!code || !desc) { toast.error('Item Code and Description are required.'); return; }
-    const id = code.toUpperCase();
-    if (products.some(p => p.id === id || (p.profileCode || '').toUpperCase() === id)) {
+    const codeU = code.toUpperCase();
+    const id = `NIP-${codeU}`;   // namespace matches bulk-import ids (NIP-…)
+    if (products.some(p => p.id === id || p.id === codeU || (p.profileCode || '').toUpperCase() === codeU)) {
       toast.error(`"${code}" already exists.`); return;
     }
     const product = {
       id, company: 'Nippon', category: 'Hardware',
-      description: desc.toUpperCase(), profileCode: code.toUpperCase(),
+      description: desc.toUpperCase(), profileCode: codeU,
       modelNo: '', brand: '', mainCategory: '', subCategory: '',
       unit: qa.unit, costPrice: 0, basePrice: Number(qa.price) || 0,
       imageUrl: '', variants: [], technicalSpecs: {},
     } as unknown as Product;
-    const updatedProducts = [...(await AsyncSalesService.getProducts()), product];
     const store = InventoryService.getStore();
     store.push({
       id: product.id, company, name: product.description, category: 'Hardware' as StoreItem['category'],
@@ -189,9 +187,10 @@ const NipponProductMaster: React.FC = () => {
       totalValue: 0, storageBin: 'Quick Add', lastMovementDate: new Date().toISOString(),
     });
     try {
-      await AsyncSalesService.saveProducts(updatedProducts);
+      const res = await AsyncSalesService.saveProducts([product]);
       InventoryService.saveStore(store);
       await refreshData();
+      if (res.error) return;   // keep the form filled so the user can retry
       toast.success(`Added: ${product.description}`);
       setQa({ code: '', description: '', unit: qa.unit, price: '' });
     } catch (err) {
@@ -255,8 +254,9 @@ const NipponProductMaster: React.FC = () => {
       if (removed === 0) { toast.info('No duplicate products found.'); return; }
       if (!confirm(`Found ${removed} duplicate product(s) (same model no / description). Keep the most complete of each and remove the rest? Stock rows are preserved.`)) return;
       try {
-          await AsyncSalesService.saveProducts([...rest, ...keep]);
+          const res = await AsyncSalesService.saveProducts([...rest, ...keep]);
           await refreshData();
+          if (res.error) return;   // cloud-fail toast already shown
           toast.success(`Removed ${removed} duplicate product(s).`);
       } catch (err) {
           toast.error(`Dedupe failed: ${(err as Error)?.message || 'unknown'}`);
@@ -368,40 +368,16 @@ const NipponProductMaster: React.FC = () => {
 
         const otherProds = (await AsyncSalesService.getProducts()).filter(p => p.company !== company);
         const importedProds = data.products.map((p) => ({ ...p, company: 'Nippon' })) as unknown as Product[];
-        
-        await AsyncSalesService.saveProducts([...otherProds, ...importedProds]);
+
+        const res = await AsyncSalesService.saveProducts([...otherProds, ...importedProds]);
         await refreshData();
-        alert(`Imported ${importedProds.length} products from JSON.`);
+        if (res.error) { toast.error('Restore saved locally but cloud sync failed — will retry on reconnect.'); return; }
+        toast.success(`Restored ${importedProds.length} products from JSON backup.`);
       } catch (err) {
-        alert("Error importing JSON. Ensure file is a valid Nippon product export.");
+        toast.error('Error importing JSON. Ensure the file is a valid Nippon product backup.');
       }
     };
     reader.readAsText(file);
-  };
-
-  const handleExportExcel = () => {
-      // Define Template Column Names
-      const dataToExport = products.map(p => ({
-          'Internal ID': p.profileCode || '',
-          'Model No': p.modelNo || '',
-          'Description': p.description,
-          'Brand': p.brand || '',
-          'Main Category': p.mainCategory || '',
-          'Sub Category': p.subCategory || '',
-          'Unit': p.unit,
-          'Cost Price': p.costPrice || 0,
-          'Sales Price': p.basePrice || 0,
-          'Finish': p.finishColor || '',
-          'Material': p.material || '',
-          'Direction': p.direction || '',
-          'Size': p.tongueLength || '',
-          'Spindle Length': p.spindleLength || ''
-      }));
-
-      const ws = XLSX.utils.json_to_sheet(dataToExport);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "NipponMaster");
-      XLSX.writeFile(wb, `Nippon_Catalog_Template_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   // ── Category-wise Excel Export (Phase 5 prep) ─────────────────────
@@ -535,49 +511,6 @@ const NipponProductMaster: React.FC = () => {
     toast.success(`Exported ${filtered.length} products.`);
   };
 
-  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rawData: any[] = XLSX.utils.sheet_to_json(ws);
-
-        const newProducts: Product[] = rawData.map((row, idx) => ({
-            id: `NIP-${row['Model No'] || Date.now()}-${idx}`,
-            company: 'Nippon',
-            description: String(row['Description'] || 'UNNAMED').toUpperCase(),
-            modelNo: String(row['Model No'] || '').toUpperCase(),
-            brand: String(row['Brand'] || '').toUpperCase(),
-            profileCode: String(row['Internal ID'] || '').toUpperCase(),
-            mainCategory: String(row['Main Category'] || '').toUpperCase(),
-            subCategory: String(row['Sub Category'] || '').toUpperCase(),
-            category: 'Hardware', // Default category for Nippon
-            unit: (row['Unit'] || 'PCS') as any,
-            costPrice: Number(row['Cost Price'] || 0),
-            basePrice: Number(row['Sales Price'] || 0),
-            finishColor: row['Finish'] || '',
-            material: row['Material'] || '',
-            direction: row['Direction'] || '',
-            tongueLength: row['Size'] || '',
-            spindleLength: row['Spindle Length'] || '',
-            variants: []
-        }));
-
-        const otherProds = (await AsyncSalesService.getProducts()).filter(p => p.company !== company);
-        await AsyncSalesService.saveProducts([...otherProds, ...newProducts]);
-        await refreshData();
-        alert(`Loaded ${newProducts.length} items from Excel.`);
-      } catch (err) {
-        alert("Excel Import Failed. Ensure column names match the template headers.");
-      }
-    };
-    reader.readAsBinaryString(file);
-  };
-
   // Category filter dropdown values derived from real data — not the
   // legacy "Hardware/Accessory/Consumable" trio that didn't match the
   // actual Window/Door/Sliding taxonomy in the master.
@@ -694,19 +627,11 @@ const NipponProductMaster: React.FC = () => {
         }} />
       ) : (
         <>
-      {/* TOOLBAR */}
-      <div className="flex flex-col lg:flex-row justify-between items-center bg-white p-3 rounded-2xl border border-slate-200 shadow-sm w-full no-print gap-4">
-        <div className="flex items-center space-x-3">
-           <div className="p-2 bg-red-600 rounded-lg text-white shadow-inner"><Box size={20}/></div>
-           <div>
-               <h3 className="font-black text-slate-800 uppercase tracking-tight">Material Registry</h3>
-           </div>
-        </div>
-
+      {/* TOOLBAR — title lives in the tab pill above, so the bar is actions-only */}
+      <div className="flex flex-col lg:flex-row lg:justify-end items-center bg-white p-3 rounded-2xl border border-slate-200 shadow-sm w-full no-print gap-4">
         <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto pb-1">
            {/* HIDDEN INPUTS */}
            <input type="file" ref={jsonInputRef} className="hidden" accept=".json" onChange={handleImportJson} />
-           <input type="file" ref={excelInputRef} className="hidden" accept=".xlsx,.xls" onChange={handleImportExcel} />
 
            {/* Data tools — grouped into one menu to declutter the toolbar */}
            <div className="relative shrink-0">
@@ -720,7 +645,6 @@ const NipponProductMaster: React.FC = () => {
                          <div className="px-4 pt-1 pb-1 text-[9px] font-black uppercase tracking-widest text-slate-300">Export / Backup</div>
                          {[
                            { label: 'Backup (JSON)',          icon: FileJson,        on: handleExportJson },
-                           { label: 'Export Excel (all)',     icon: FileSpreadsheet, on: handleExportExcel },
                            { label: 'Export by Category',     icon: Layers,          on: handleExportCategoryWise },
                          ].map(({ label, icon: Icon, on }) => (
                            <button key={label} onClick={() => { setShowTools(false); on(); }} className="w-full flex items-center gap-2.5 px-4 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 transition-all">
@@ -731,7 +655,6 @@ const NipponProductMaster: React.FC = () => {
                          <div className="px-4 pt-1 pb-1 text-[9px] font-black uppercase tracking-widest text-rose-300">⚠ Admin · careful</div>
                          {[
                            { label: 'Restore (JSON)',              icon: UploadCloud, on: () => jsonInputRef.current?.click(),   confirm: 'Restore products from a JSON backup? Existing products with the same code can be overwritten.' },
-                           { label: 'Import Excel',                icon: FileUp,      on: () => excelInputRef.current?.click(),  confirm: 'Import products from Excel? Matching products (price/image) can be overwritten.' },
                            { label: 'Remove Duplicates',           icon: Wrench,      on: handleDedupe,                          confirm: 'Remove duplicate products? Duplicate rows will be permanently deleted.' },
                            { label: 'Build Stock from Quotations', icon: Layers,      on: handleBuildStockFromQuotations,        confirm: 'Rebuild stock levels from quotations? On-hand stock will be recomputed.' },
                          ].map(({ label, icon: Icon, on, confirm: msg }) => (

@@ -2,6 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { useDebounce } from '@/modules/shared/hooks/useDebounce';
 import { useAppStore } from '@/modules/shared/store/appStore';
+import { useAuthStore } from '@/modules/auth/authStore';
 import { StoreItem } from '@/modules/shared/types';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
@@ -27,6 +28,7 @@ interface StockOverviewProps {
 
 const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSearchTerm, onStockUpdate }) => {
     const company = useAppStore(state => state.selectedCompany);
+    const stampUser = useAuthStore(s => s.profile?.fullName || s.profile?.email || s.user?.email || 'user');
     const [mainFilter, setMainFilter] = useState('All');
     const [subFilter, setSubFilter]   = useState('All');
     const [currentPage, setCurrentPage] = useState(1);
@@ -49,7 +51,7 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
         if (entered === null) return;
         const count = Number(entered);
         if (!Number.isFinite(count) || count < 0) { toast.error('Enter a valid quantity (0 or more).'); return; }
-        const { opening, sold } = InventoryService.recordStockCount(item.id, count);
+        const { opening, sold } = InventoryService.recordStockCount(item.id, count, stampUser);
         toast.success(
             sold > 0
                 ? `Opening recorded: ${opening} (counted ${count} + ${sold} already sold). On-hand set to ${count}.`
@@ -65,7 +67,9 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
     };
 
     // Memoize product list + an id→product map (was an O(n×m) .find per row, per render).
-    const allProducts = useMemo(() => SalesService.getProducts(), [company, items]);
+    // Company-scoped: orphan detection gates a permanent cloud delete, so the
+    // product set it's derived from must never include other companies' rows.
+    const allProducts = useMemo(() => SalesService.getProducts().filter(p => p.company === company), [company, items]);
     const productMap = useMemo(() => {
         const m = new Map<string, ReturnType<typeof SalesService.getProducts>[number]>();
         for (const p of allProducts) m.set(p.id, p);
@@ -178,18 +182,30 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
         });
     }, [items, searchTerm, mainFilter, subFilter, lowStockOnly, needsCountOnly, needsCountIds, sortConfig, productMap]);
 
-    // Paginate first — both flat AND grouped views render this same page slice,
-    // so grouped no longer dumps the entire (potentially huge) list at once.
+    // Flat view paginates. Grouped view is a browse-by-category surface — it
+    // renders the FULL filtered set so each category banner's count is truthful
+    // and a category is never split across pages (the catalog is bounded ~185 rows).
     const pagedItems = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
         return filteredItems.slice(startIndex, startIndex + itemsPerPage);
     }, [filteredItems, currentPage]);
 
-    // Group the current page by main_category → sub_category for the grouped view.
+    // Total stock valuation for the current filter — what the owner most wants
+    // at a glance ("what's my inventory worth"). Respects search + category filters.
+    const totalValuation = useMemo(
+        () => filteredItems.reduce((s, i) => s + (i.totalValue || 0), 0),
+        [filteredItems]
+    );
+    const totalConsignment = useMemo(
+        () => filteredItems.reduce((s, i) => s + (i.consignmentQty || 0), 0),
+        [filteredItems]
+    );
+
+    // Group the full filtered set by main_category → sub_category (grouped view).
     const grouped = useMemo(() => {
         if (viewMode !== 'grouped') return null;
         const tree: Record<string, Record<string, StoreItem[]>> = {};
-        for (const item of pagedItems) {
+        for (const item of filteredItems) {
             const product = productMap.get(item.id);
             const main = product?.mainCategory?.trim() || 'Uncategorized';
             const sub  = product?.subCategory?.trim()  || 'General';
@@ -206,7 +222,7 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
             subs: Object.entries(tree[main]).sort(([a],[b]) => a.localeCompare(b)),
             total: Object.values(tree[main]).flat().length,
         }));
-    }, [pagedItems, productMap, viewMode]);
+    }, [filteredItems, productMap, viewMode]);
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
@@ -285,9 +301,14 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                            </button>
                        </div>
                    )}
-                   <div className="bg-blue-50 text-blue-700 px-4 py-2 rounded-xl text-xs font-bold border border-blue-100 flex items-center space-x-2">
-                      <Box size={14}/> <span>Consignment: {items.reduce((s,i) => s+(i.consignmentQty || 0), 0)}</span>
+                   <div className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded-xl text-xs font-black border border-emerald-100 flex items-center space-x-2" title="Total valuation of the items currently shown">
+                      <span>Value: PKR {Math.round(totalValuation).toLocaleString()}</span>
                    </div>
+                   {totalConsignment > 0 && (
+                     <div className="bg-blue-50 text-blue-700 px-4 py-2 rounded-xl text-xs font-bold border border-blue-100 flex items-center space-x-2">
+                        <Box size={14}/> <span>Consignment: {totalConsignment.toLocaleString()}</span>
+                     </div>
+                   )}
                 </div>
              </div>
              
@@ -318,8 +339,6 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
              {(() => {
                const renderRow = (item: StoreItem) => {
                  const product = productMap.get(item.id);
-                 const specs = product?.technicalSpecs as Record<string, string> | undefined;
-                 const status = specs?.matchStatus || '';
                  const nick = (product as { nickName?: string } | undefined)?.nickName || '';
                  const currencySymbol = 'PKR';
                  const sqftPerSheet = product?.sheetSize ? (() => {
@@ -327,9 +346,6 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                    return w && h ? Number(((w * h) / 144).toFixed(3)) : 0;
                  })() : 0;
                  const sheetCount = sqftPerSheet > 0 ? Math.round((item.unrestrictedQty || 0) / sqftPerSheet) : null;
-                 const statusCls = status === 'Exact Match' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                   : status === 'Near-Match' ? 'bg-amber-50 text-amber-700 border-amber-200'
-                   : 'bg-blue-50 text-blue-700 border-blue-200';
 
                  return (
                    <tr key={item.id} className="hover:bg-slate-50 group">
@@ -364,17 +380,17 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                          )}
                        </div>
                      </td>
-                     <td className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase">
-                       {isNippon ? (
-                         status
-                           ? <span className={`px-2 py-0.5 rounded border text-[8px] font-black uppercase whitespace-nowrap ${statusCls}`}>{status}</span>
-                           : <span className="text-slate-300">-</span>
-                       ) : (product?.finishColor || product?.direction || product?.tongueLength) ? (
-                         <span>{product?.finishColor || '-'} <span className="text-slate-300">|</span> {product?.direction || '-'} <span className="text-slate-300">|</span> {product?.tongueLength || '-'}</span>
-                       ) : (
-                         <span className="text-slate-300">-</span>
-                       )}
-                     </td>
+                     {/* Glass specs column — hidden for Nippon (the old "Status" here
+                         showed an import-reconciliation artifact, not inventory data). */}
+                     {!isNippon && (
+                       <td className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase">
+                         {(product?.finishColor || product?.direction || product?.tongueLength) ? (
+                           <span>{product?.finishColor || '-'} <span className="text-slate-300">|</span> {product?.direction || '-'} <span className="text-slate-300">|</span> {product?.tongueLength || '-'}</span>
+                         ) : (
+                           <span className="text-slate-300">-</span>
+                         )}
+                       </td>
+                     )}
                      <td className="px-6 py-4">
                        {item.storageBin && item.storageBin !== 'MAIN' ? (
                          <span className="text-[10px] font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 uppercase">{item.storageBin}</span>
@@ -437,14 +453,14 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                  );
                };
 
-               const colCount = isNippon ? 8 : 9;
+               const colCount = isNippon ? 7 : 9;
                const tableHeader = (
                  <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400">
                    <tr>
                      <th className="px-6 py-4">Visual</th>
                      {sortable('Item & Code', 'code')}
                      {sortable('Description', 'name')}
-                     <th className="px-6 py-4">{isNippon ? 'Status' : 'Specs (Color/Dir/Tng)'}</th>
+                     {!isNippon && <th className="px-6 py-4">Specs (Color/Dir/Tng)</th>}
                      <th className="px-6 py-4">Location</th>
                      {!isNippon && <th className="px-6 py-4 text-right">Sheets</th>}
                      {sortable('Balance Qty', 'qty', true)}
@@ -485,12 +501,8 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                        </div>
                      ))}
                    </div>
-                   <Pagination
-                     totalItems={filteredItems.length}
-                     itemsPerPage={itemsPerPage}
-                     currentPage={currentPage}
-                     onPageChange={setCurrentPage}
-                   />
+                   {/* Grouped view shows the full filtered set (browse-by-category),
+                       so no row pagination — category banners are the navigation. */}
                    </>
                  );
                }

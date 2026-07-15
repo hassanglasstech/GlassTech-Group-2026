@@ -314,7 +314,7 @@ export const AsyncSalesService = {
       return _localByCompany('gtk_erp_products');
     }
   },
-  saveProducts: async (data: Product[]): Promise<void> => {
+  saveProducts: async (data: Product[]): Promise<{ error?: string }> => {
     // ── Base64 image → product-images bucket (2026-07-14) ─────────────────
     // The local Nippon importer stores each image as a base64 data-URI in
     // image_url (~50 KB/row). Those payloads blow Supabase's upsert body limit,
@@ -461,9 +461,15 @@ export const AsyncSalesService = {
       }
     }
     if (failures.length > 0) {
+      // Keep the internal toast: glass/GTK callers go through the fire-and-forget
+      // SalesService.saveProducts wrapper and never inspect the return value, so
+      // this is their only failure signal. Nippon callers await and gate their
+      // SUCCESS toast on `!error` (so no double toast fires on failure).
       toast.error(`Products cloud sync — ${failures.length} chunk(s) failed: ${failures[0]}`, { id: 'save-products', duration: 8000 });
       _queueRetry('products');
+      return { error: failures.join('; ') };
     }
+    return {};
   },
 
   getQuotations: async (): Promise<Quotation[]> => {

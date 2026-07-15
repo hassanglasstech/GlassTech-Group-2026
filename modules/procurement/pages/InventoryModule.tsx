@@ -255,6 +255,7 @@ const InventoryModule: React.FC = () => {
           items={items}
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
+          onStockUpdate={refreshSync}
         />
       )}
 

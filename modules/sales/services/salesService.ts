@@ -46,7 +46,9 @@ export const SalesService = {
   getProducts: (): Product[] => safeParse(KEYS.PRODUCTS),
   saveProducts: (data: Product[]): void => {
     safeSave(KEYS.PRODUCTS, data);
-    _push('products', () => AsyncSalesService.saveProducts(data));
+    // saveProducts now returns { error } for awaiting callers; the fire-and-forget
+    // wrapper just needs a Promise<void>, so discard the result here.
+    _push('products', async () => { await AsyncSalesService.saveProducts(data); });
   },
 
   // ── Quotations ─────────────────────────────────────────────────────

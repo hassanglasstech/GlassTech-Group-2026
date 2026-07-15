@@ -459,7 +459,8 @@ export const InventoryService = {
       category: s.category||'', quantity: s.quantity||0,
       unrestricted_qty: s.unrestrictedQty||0, qi_qty: s.qiQty||0,
       blocked_qty: s.blockedQty||0, reserved_qty: s.reservedQty||0,
-      unit: s.unit||'Sqft',
+      // Default unit by company — never glass-brand a trading row as 'Sqft'.
+      unit: s.unit || (s.company === 'Nippon' ? 'PCS' : 'Sqft'),
       moving_average_price: s.movingAveragePrice||0,
       total_value: s.totalValue||0, storage_bin: s.storageBin||'',
       // Postgres timestamptz rejects '' — must be null when no date is set,
@@ -479,21 +480,49 @@ export const InventoryService = {
   // On-hand is set to the counted figure; the negative is cleared. Reads the
   // FULL store, updates one row, saves the whole list (never partial — that
   // would wipe other companies from local cache). Returns { opening, sold }.
-  recordStockCount: (itemId: string, count: number): { opening: number; sold: number } => {
+  recordStockCount: (itemId: string, count: number, user: string = 'stock-take'): { opening: number; sold: number } => {
     const store = InventoryService.getStore();
     const idx = store.findIndex(s => s.id === itemId);
     if (idx === -1) return { opening: count, sold: 0 };
     const cur = store[idx];
-    const sold = Math.max(0, -((cur as any).unrestrictedQty ?? cur.quantity ?? 0));
+    const prevBal = (cur as any).unrestrictedQty ?? cur.quantity ?? 0;
+    const sold = Math.max(0, -prevBal);
     const opening = count + sold;
+    const map = (cur as any).movingAveragePrice || 0;
+    const nowIso = new Date().toISOString();
     store[idx] = {
       ...cur,
       quantity: count,
       unrestrictedQty: count,
-      totalValue: count * ((cur as any).movingAveragePrice || 0),
-      lastMovementDate: new Date().toISOString(),
+      totalValue: count * map,
+      lastMovementDate: nowIso,
     } as StoreItem;
     InventoryService.saveStore(store);
+    // Audit trail: a physical count is a real stock movement — record it in the
+    // material ledger (mvmnt 561 = Opening Balance / count) so the adjustment
+    // isn't silent. qty = the correction applied; balanceAfter = the counted on-hand.
+    try {
+      const entry: MaterialLedgerEntry = {
+        id: `SC-${itemId}-${Date.now()}`,
+        company: cur.company,
+        materialId: itemId,
+        timestamp: nowIso,
+        mvmntCode: '561',
+        qty: count - prevBal,
+        uom: cur.unit || 'PCS',
+        valuation: map,
+        balanceAfter: count,
+        referenceDoc: 'STOCK-TAKE',
+        user,
+        remarks: sold > 0
+          ? `Stock-take: counted ${count} (+${sold} sold while uncounted → opening ${opening})`
+          : `Stock-take: counted ${count}`,
+        storageBin: (cur as any).storageBin || '',
+      };
+      InventoryService.saveStockLedger([...InventoryService.getStockLedger(), entry]);
+    } catch (e) {
+      console.error('[InventoryService] recordStockCount ledger append failed', e);
+    }
     return { opening, sold };
   },
 
