@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, ShoppingBag, Landmark, ShieldCheck,
   Briefcase, Factory, LayoutGrid, Globe, Warehouse, Menu, Bell, Search,
   Truck, Handshake, Folder, Loader2, X, LogOut, ChevronDown,
-  Home, DollarSign, Settings, BarChart3, Package, ScanLine, ArrowLeft
+  Home, DollarSign, Settings, BarChart3, Package, ScanLine
 } from 'lucide-react';
 import { Company } from '@/modules/shared/constants';
 import { AppService } from '@/modules/shared/services/appService';
@@ -101,6 +101,7 @@ const CuttingSupervisorScreen = React.lazy(() => import('./modules/production/co
 // Sprint 21 — Global UX foundations
 const CommandPalette    = React.lazy(() => import('./modules/shared/components/CommandPalette'));
 const Breadcrumbs       = React.lazy(() => import('./modules/shared/components/Breadcrumbs'));
+const BackButton        = React.lazy(() => import('./modules/shared/components/BackButton'));
 // Sprint 25 — Finance inbox
 const FinanceInbox      = React.lazy(() => import('./modules/finance/pages/FinanceInbox'));
 // Sprint 29 — Reporting pack: standalone operational reports
@@ -792,10 +793,7 @@ const App: React.FC = () => {
           {/* Sprint 21 — Persistent breadcrumbs (auto-hides on home + opt-out paths) */}
           <Suspense fallback={null}>
             <div className="px-3 md:px-4 pt-2 w-full no-print flex items-center gap-2">
-              <button onClick={() => window.history.back()} title="Go back"
-                className="flex items-center gap-1 shrink-0 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300 text-[11px] font-black uppercase tracking-widest transition-all">
-                <ArrowLeft size={13}/> Back
-              </button>
+              <BackButton/>
               <Breadcrumbs/>
             </div>
           </Suspense>
