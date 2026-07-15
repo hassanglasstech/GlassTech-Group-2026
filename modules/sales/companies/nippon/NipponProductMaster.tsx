@@ -843,7 +843,9 @@ const NipponProductMaster: React.FC = () => {
                                   <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelect(p.id)}
                                     className="w-3.5 h-3.5 rounded border-slate-300 accent-red-600 cursor-pointer align-middle" />
                                 </td>
-                                <td className="px-6 py-3 font-mono font-bold text-slate-600 uppercase whitespace-nowrap">{p.profileCode || p.modelNo || '—'}</td>
+                                <td className="px-6 py-3 font-mono font-bold text-slate-600 uppercase">
+                                    <span className="block max-w-[150px] truncate" title={p.profileCode || p.modelNo || ''}>{p.profileCode || p.modelNo || '—'}</span>
+                                </td>
                                 <td className="py-3">
                                     <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center">
                                         <ProductImage id={p.id} code={p.modelNo || p.profileCode} url={p.imageUrl} alt={p.description} className="w-full h-full object-cover" iconSize={16} />
@@ -865,7 +867,7 @@ const NipponProductMaster: React.FC = () => {
                                 <td className="font-bold text-slate-500 text-[11px] uppercase">{getBrandNick(p.brand || '-')}</td>
                                 <td className="text-right font-bold text-slate-700 whitespace-nowrap tabular-nums">{p.basePrice?.toLocaleString()}</td>
                                 <td className="text-right">
-                                    <span className={`text-sm font-black ${stock > 0 ? 'text-emerald-600' : 'text-rose-400'}`}>{(Number(stock) || 0).toLocaleString()}</span>
+                                    <span className={`text-sm font-black ${stock > 0 ? 'text-emerald-600' : stock < 0 ? 'text-rose-500' : 'text-slate-300'}`}>{(Number(stock) || 0).toLocaleString()}</span>
                                     <span className="text-[9px] text-slate-400 ml-1 uppercase">{p.unit}</span>
                                     {(() => {
                                         const row = storeItems.find(s => s.id === p.id);
