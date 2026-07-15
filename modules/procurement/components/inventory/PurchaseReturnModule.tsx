@@ -10,6 +10,7 @@ import React, { useState, useEffect } from 'react';
 import { Company } from '@/modules/shared/types/core';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { FinanceService }   from '@/modules/finance/services/financeService';
+import { isFinanceGLEnabled } from '@/modules/shared/services/featureFlagService';
 import { SalesService }     from '@/modules/sales/services/salesService';
 import { confirmModal }     from '@/modules/shared/components/ConfirmDialog';
 import { useAuthStore }     from '@/modules/auth/authStore';
@@ -189,53 +190,57 @@ const PurchaseReturnModule: React.FC<Props> = ({ company }) => {
     setSaving(true);
     try {
       const dnId  = getNextDNNumber(company);
-      const txId  = `GL-${dnId}`;
       const today = date;
 
-      // God Mode audit (Phase 3): explicit per-company account lookup.
-      // Was previously pattern-matched (`code.startsWith('221')`) — `221`
-      // in some COAs is Customer Receivables, posting a Dr to that would
-      // INCREASE customer-due (wrong direction). String-fallback IDs like
-      // `${company}-21114` never joined to an actual account row in the
-      // ledger, so debit notes silently posted to orphans.
-      const apCode  = AP_ACCOUNT_BY_COMPANY[company];
-      const invCode = INVENTORY_ACCOUNT_BY_COMPANY[company];
-      if (!apCode || !invCode) {
-        toast.error(`No AP/Inventory account mapping for company ${company}. Configure AP_ACCOUNT_BY_COMPANY.`);
-        setSaving(false);
-        return;
+      // ── Post GL — only when finance posting is enabled. When OFF (Nippon),
+      // the return records + reduces stock with NO GL, so a missing COA leaf
+      // can never block the physical return.
+      const glOn = isFinanceGLEnabled(company);
+      let txId = '';
+      if (glOn) {
+        txId = `GL-${dnId}`;
+        // God Mode audit (Phase 3): explicit per-company account lookup.
+        // Was previously pattern-matched (`code.startsWith('221')`) — `221`
+        // in some COAs is Customer Receivables, posting a Dr to that would
+        // INCREASE customer-due (wrong direction). String-fallback IDs like
+        // `${company}-21114` never joined to an actual account row in the
+        // ledger, so debit notes silently posted to orphans.
+        const apCode  = AP_ACCOUNT_BY_COMPANY[company];
+        const invCode = INVENTORY_ACCOUNT_BY_COMPANY[company];
+        if (!apCode || !invCode) {
+          toast.error(`No AP/Inventory account mapping for company ${company}. Configure AP_ACCOUNT_BY_COMPANY.`);
+          setSaving(false);
+          return;
+        }
+
+        const allAccounts = FinanceService.getAccounts().filter((a: any) => a.company === company);
+        const apAcc  = allAccounts.find((a: any) => a.code === apCode);
+        const invAcc = allAccounts.find((a: any) => a.code === invCode);
+
+        if (!apAcc || !invAcc) {
+          toast.error(
+            `${company} COA missing required accounts: ` +
+            `${!apAcc  ? `AP ${apCode} ` : ''}` +
+            `${!invAcc ? `Inventory ${invCode}` : ''}` +
+            `— cannot post debit note. Open Finance → COA to add them.`,
+            { duration: 8000 }
+          );
+          setSaving(false);
+          return;
+        }
+
+        FinanceService.recordTransaction({
+          id: txId, company, docType: 'RV',
+          docDate: today, date: today,
+          description: `PURCHASE RETURN ${dnId} — ${selectedVendor?.name || vendorId}${grnRef ? ` — GRN: ${grnRef}` : ''} — ${reason}`,
+          referenceId: dnId,
+          status: 'Posted',
+          details: [
+            { accountId: apAcc.id,  debit: totalAmount, credit: 0,           text: `AP reduction: ${selectedVendor?.name || vendorId}` },
+            { accountId: invAcc.id, debit: 0,           credit: totalAmount, text: `Inventory return: ${lines.map(l => l.materialDesc).join(', ').slice(0, 60)}` },
+          ],
+        });
       }
-
-      const allAccounts = FinanceService.getAccounts().filter((a: any) => a.company === company);
-      const apAcc  = allAccounts.find((a: any) => a.code === apCode);
-      const invAcc = allAccounts.find((a: any) => a.code === invCode);
-
-      if (!apAcc || !invAcc) {
-        toast.error(
-          `${company} COA missing required accounts: ` +
-          `${!apAcc  ? `AP ${apCode} ` : ''}` +
-          `${!invAcc ? `Inventory ${invCode}` : ''}` +
-          `— cannot post debit note. Open Finance → COA to add them.`,
-          { duration: 8000 }
-        );
-        setSaving(false);
-        return;
-      }
-      const apAccId  = apAcc.id;
-      const invAccId = invAcc.id;
-
-      // ── Post GL ───────────────────────────────────────────────────────────
-      FinanceService.recordTransaction({
-        id: txId, company, docType: 'RV',
-        docDate: today, date: today,
-        description: `PURCHASE RETURN ${dnId} — ${selectedVendor?.name || vendorId}${grnRef ? ` — GRN: ${grnRef}` : ''} — ${reason}`,
-        referenceId: dnId,
-        status: 'Posted',
-        details: [
-          { accountId: apAccId,  debit: totalAmount, credit: 0,           text: `AP reduction: ${selectedVendor?.name || vendorId}` },
-          { accountId: invAccId, debit: 0,           credit: totalAmount, text: `Inventory return: ${lines.map(l => l.materialDesc).join(', ').slice(0, 60)}` },
-        ],
-      });
 
       // ── Reduce inventory quantity for linked items ────────────────────────
       const allStore = InventoryService.getStore();

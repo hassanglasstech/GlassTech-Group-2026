@@ -7,6 +7,7 @@ import { Product, MaterialLedgerEntry, Company } from '@/modules/shared/types';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { orchestrateNipponGRN, NipponPaymentMode } from '@/modules/procurement/services/grnGLService';
+import { isFinanceGLEnabled } from '@/modules/shared/services/featureFlagService';
 import { Truck, X, PackageCheck, Download, FileUp, Loader2, ScanLine } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -172,24 +173,30 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
             const grnDate = new Date().toISOString().split('T')[0];
             const vendorName = grnData.vendorName || 'Bulk Import';
 
-            // 1. GL FIRST — if it fails, stock is NOT touched
-            const txId = orchestrateNipponGRN({
-                grnId, grnDate, vendorName,
-                paymentMode: grnData.paymentMode,
-                lines: matched.map(({ item, prod }) => ({
-                    productId: prod.id,
-                    description: prod.description,
-                    brand: prod.brand,
-                    mainCategory: prod.mainCategory,
-                    qty: item.qty,
-                    rate: item.price,
-                })),
-                freightTotal: importFreight || 0,
-            });
-            if (!txId) {
-                toast.error('GL posting failed. Stock NOT received. Fix accounts and retry.');
-                setIsPosting(false);
-                return;
+            // 1. GL — only when finance posting is enabled for this company.
+            // When OFF (Nippon default), receiving physical stock must NEVER be
+            // blocked by finance: skip GL and proceed to stock + ledger.
+            const glOn = isFinanceGLEnabled(company);
+            let txId: string | null = null;
+            if (glOn) {
+                txId = orchestrateNipponGRN({
+                    grnId, grnDate, vendorName,
+                    paymentMode: grnData.paymentMode,
+                    lines: matched.map(({ item, prod }) => ({
+                        productId: prod.id,
+                        description: prod.description,
+                        brand: prod.brand,
+                        mainCategory: prod.mainCategory,
+                        qty: item.qty,
+                        rate: item.price,
+                    })),
+                    freightTotal: importFreight || 0,
+                });
+                if (!txId) {
+                    toast.error('GL posting failed. Stock NOT received. Fix accounts and retry.');
+                    setIsPosting(false);
+                    return;
+                }
             }
 
             // 2. Update store + stock ledger
@@ -199,8 +206,21 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
             const newLedger: MaterialLedgerEntry[] = [];
 
             for (const [rowIdx, { item, prod }] of matched.entries()) {
-                const sIdx = updatedStore.findIndex(s => s.id === prod.id);
-                if (sIdx === -1) continue;
+                let sIdx = updatedStore.findIndex(s => s.id === prod.id);
+                if (sIdx === -1) {
+                    // Product exists in the master but has no stock row yet — create it
+                    // (mirrors GTKStoreReceipt) so received stock is never silently lost.
+                    updatedStore.push({
+                        id: prod.id, company, name: prod.description,
+                        category: (prod.category as any) || 'Hardware',
+                        quantity: 0, unrestrictedQty: 0, qiQty: 0, blockedQty: 0,
+                        reservedQty: 0, consignmentQty: 0,
+                        unit: prod.unit || 'PCS', minLevel: 10, reorderPoint: 5,
+                        movingAveragePrice: 0, totalValue: 0, storageBin: 'GRN',
+                        lastMovementDate: new Date().toISOString(),
+                    } as any);
+                    sIdx = updatedStore.length - 1;
+                }
                 const s = { ...updatedStore[sIdx] };
                 // Leakage #2 fix: absorb freight pro-rata (by material value)
                 // into each line's value so MAP reflects true landed cost.
@@ -236,7 +256,7 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
                     balanceAfter: s.quantity,
                     referenceDoc: grnId,
                     user: profile?.fullName || user?.email || 'Nippon Store',
-                    remarks: `${vendorName} — bulk import (GL ${txId})`,
+                    remarks: `${vendorName} — bulk import${txId ? ` (GL ${txId})` : ' (stock only — GL off)'}`,
                 });
             }
 
@@ -244,7 +264,7 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
             InventoryService.saveStockLedger([...allLedger, ...newLedger]);
 
             refreshData();
-            toast.success(`GRN ${grnId} posted: ${matched.length} item(s), GL ${txId}`, { duration: 5000 });
+            toast.success(`GRN ${grnId} posted: ${matched.length} item(s)${txId ? `, GL ${txId}` : ''}`, { duration: 5000 });
             onClose();
         } catch (err: any) {
             toast.error(`Failed: ${err?.message || 'unknown error'}. Books NOT updated.`);
@@ -278,24 +298,28 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
             const grnDate = new Date().toISOString().split('T')[0];
             const vendorName = grnData.vendorName || prod?.brand || 'Unknown Vendor';
 
-            // 1. GL FIRST — landed cost capitalized via freightTotal
-            const txId = orchestrateNipponGRN({
-                grnId, grnDate, vendorName,
-                paymentMode: grnData.paymentMode,
-                lines: [{
-                    productId: item.id,
-                    description: item.name || item.id,
-                    brand: prod?.brand,
-                    mainCategory: prod?.mainCategory,
-                    qty: grnData.qty,
-                    rate: grnData.valuation,
-                }],
-                freightTotal: grnData.transportCost || 0,
-            });
-            if (!txId) {
-                toast.error('GL posting failed. Stock NOT received.');
-                setIsPosting(false);
-                return;
+            // 1. GL — only when finance posting is enabled; never block receipt.
+            const glOn = isFinanceGLEnabled(company);
+            let txId: string | null = null;
+            if (glOn) {
+                txId = orchestrateNipponGRN({
+                    grnId, grnDate, vendorName,
+                    paymentMode: grnData.paymentMode,
+                    lines: [{
+                        productId: item.id,
+                        description: item.name || item.id,
+                        brand: prod?.brand,
+                        mainCategory: prod?.mainCategory,
+                        qty: grnData.qty,
+                        rate: grnData.valuation,
+                    }],
+                    freightTotal: grnData.transportCost || 0,
+                });
+                if (!txId) {
+                    toast.error('GL posting failed. Stock NOT received.');
+                    setIsPosting(false);
+                    return;
+                }
             }
 
             // 2. Update store with landed-cost MAP
@@ -304,7 +328,12 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
             item.quantity        = (item.quantity || 0) + grnData.qty;
             item.unrestrictedQty = (item.unrestrictedQty || 0) + grnData.qty;
             item.totalValue      = (item.totalValue || 0) + totalBatchCost;
-            item.movingAveragePrice = Number((item.totalValue / (item.quantity || 1)).toFixed(2));
+            // Guard the negative-stock case (Nippon sell-before-GRN): a ≤0 balance
+            // would make totalValue/quantity a negative MAP → negative COGS later.
+            // Fall back to this lot's unit landed cost when quantity ≤ 0.
+            item.movingAveragePrice = item.quantity > 0
+                ? Number((item.totalValue / item.quantity).toFixed(2))
+                : (grnData.qty > 0 ? Number((totalBatchCost / grnData.qty).toFixed(2)) : (item.movingAveragePrice || 0));
 
             const newEntry: MaterialLedgerEntry = {
                 id: grnId,
@@ -318,7 +347,7 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
                 balanceAfter: item.quantity,
                 referenceDoc: grnData.referenceDoc || grnId,
                 user: profile?.fullName || user?.email || 'Nippon Store',
-                remarks: `${vendorName} — ${grnData.remarks || 'manual GRN'} (GL ${txId})`,
+                remarks: `${vendorName} — ${grnData.remarks || 'manual GRN'}${txId ? ` (GL ${txId})` : ' (stock only — GL off)'}`,
                 batchNo: grnData.batchNo
             };
 
@@ -327,7 +356,7 @@ const NipponGoodsReceipt: React.FC<NipponGoodsReceiptProps> = ({ isOpen, onClose
             InventoryService.saveStockLedger([...InventoryService.getStockLedger(), newEntry]);
 
             refreshData();
-            toast.success(`GRN ${grnId} posted: ${grnData.qty} ${item.unit} @ MAP ${item.movingAveragePrice}, GL ${txId}`, { duration: 5000 });
+            toast.success(`GRN ${grnId} posted: ${grnData.qty} ${item.unit} @ MAP ${item.movingAveragePrice}${txId ? `, GL ${txId}` : ''}`, { duration: 5000 });
             onClose();
         } catch (err: any) {
             toast.error(`Failed: ${err?.message || 'unknown error'}. Books NOT updated.`);

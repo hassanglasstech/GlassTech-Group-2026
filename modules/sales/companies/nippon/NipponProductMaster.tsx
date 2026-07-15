@@ -270,24 +270,25 @@ const NipponProductMaster: React.FC = () => {
     const entry = window.prompt(`Opening balance (counted qty) for ${p.description}:`, String(Math.max(0, cur?.unrestrictedQty ?? 0)));
     if (entry === null) return;
     const qty = Number(entry);
-    if (!isFinite(qty)) { toast.error('Enter a valid number'); return; }
-    const nowIso = new Date().toISOString();
+    if (!isFinite(qty) || qty < 0) { toast.error('Enter a valid quantity (0 or more).'); return; }
+    // If there's no store row yet, create a zero row first so the shared
+    // recordStockCount engine (which writes the material-ledger trail) can set it.
     const store = InventoryService.getStore();
-    const idx = store.findIndex(s => s.id === p.id);
-    if (idx !== -1) {
-      store[idx] = { ...store[idx], quantity: qty, unrestrictedQty: qty,
-        openingBalance: qty, openingBalanceAt: nowIso, openingBalanceBy: stampUser, lastMovementDate: nowIso };
-    } else {
+    if (!store.some(s => s.id === p.id)) {
       store.push({ id: p.id, company, name: p.description, category: (p.category as any) || 'Hardware',
-        quantity: qty, unrestrictedQty: qty, qiQty: 0, blockedQty: 0, reservedQty: 0, consignmentQty: 0,
+        quantity: 0, unrestrictedQty: 0, qiQty: 0, blockedQty: 0, reservedQty: 0, consignmentQty: 0,
         unit: p.unit, minLevel: 10, reorderPoint: 5, movingAveragePrice: p.costPrice || 0, totalValue: 0,
-        storageBin: 'Opening', lastMovementDate: nowIso,
-        openingBalance: qty, openingBalanceAt: nowIso, openingBalanceBy: stampUser } as StoreItem);
+        storageBin: 'Opening', lastMovementDate: new Date().toISOString() } as StoreItem);
+      InventoryService.saveStore(store);
     }
     try {
-      InventoryService.saveStore(store);
+      // One opening-balance engine, shared with the Stock tab's stock-take —
+      // writes store qty + a material-ledger entry (mvmnt 561) + OB stamp.
+      const { opening, sold } = InventoryService.recordStockCount(p.id, qty, stampUser);
       await refreshData();
-      toast.success(`Opening balance ${qty} recorded for ${p.description} · ${stampUser}`);
+      toast.success(sold > 0
+        ? `Opening ${opening} recorded (counted ${qty} + ${sold} already sold) · ${stampUser}`
+        : `Opening balance ${qty} recorded for ${p.description} · ${stampUser}`);
     } catch (err) {
       toast.error(`Save failed: ${(err as Error)?.message || 'unknown'}`);
     }

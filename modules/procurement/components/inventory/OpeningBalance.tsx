@@ -19,6 +19,7 @@ import { InventoryService } from '@/modules/procurement/services/inventoryServic
 import { SalesService } from '@/modules/sales/services/salesService';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { FinanceService } from '@/modules/finance/services/financeService';
+import { isFinanceGLEnabled } from '@/modules/shared/services/featureFlagService';
 import { StoreItem, MaterialLedgerEntry, Product } from '@/modules/shared/types';
 import {
   Package, Upload, AlertTriangle, CheckCircle2, Search, Plus, Trash2,
@@ -492,9 +493,12 @@ const OpeningBalance: React.FC<{ refreshData: () => void }> = ({ refreshData }) 
         glTotal += line.totalValue;
       });
 
-      // FIX 4: GL FIRST — if _assertGLBalance throws, stock is NOT yet saved
+      // FIX 4: GL FIRST — if _assertGLBalance throws, stock is NOT yet saved.
+      // Gated on finance.gl_enabled (OFF for Nippon): when off, opening stock
+      // saves with NO GL, so a missing COA leaf / imbalance can never block the
+      // owner from entering go-live stock. Stock + ledger still persist below.
       // ── GL Entry: Dr Inventory / Cr Opening Balance Equity ─────────
-      if (glTotal > 0) {
+      if (glTotal > 0 && isFinanceGLEnabled(company)) {
         try {
           // Phase 1: Nippon uses 31112 (its dedicated leaf added Day 1),
           // others fall back to 31901. Without this branch Nippon's OB would

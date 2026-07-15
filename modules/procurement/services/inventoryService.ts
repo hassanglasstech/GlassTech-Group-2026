@@ -496,6 +496,11 @@ export const InventoryService = {
       unrestrictedQty: count,
       totalValue: count * map,
       lastMovementDate: nowIso,
+      // Stamp opening-balance metadata so the "OB pending" indicators clear and
+      // both stock-take (Stock tab) and per-row OB-set (registry) share one path.
+      openingBalance: opening,
+      openingBalanceAt: nowIso,
+      openingBalanceBy: user,
     } as StoreItem;
     InventoryService.saveStore(store);
     // Audit trail: a physical count is a real stock movement — record it in the
