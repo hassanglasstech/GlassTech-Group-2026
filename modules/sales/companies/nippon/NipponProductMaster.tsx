@@ -551,6 +551,9 @@ const NipponProductMaster: React.FC = () => {
 
   const missingImgCount = useMemo(() => products.filter(p => !p.imageUrl).length, [products]);
   const hasImgCount     = useMemo(() => products.filter(p => !!p.imageUrl).length, [products]);
+  // Only show the Nick column if at least one item actually has a nickname —
+  // otherwise it's a column of dashes eating width.
+  const anyNick = useMemo(() => products.some(p => !!(p as { nickName?: string }).nickName), [products]);
 
   const filtered = useMemo(() => {
     const q = searchTerm.toLowerCase().trim();
@@ -751,13 +754,17 @@ const NipponProductMaster: React.FC = () => {
              <span>Export{imageFilter !== 'all' ? ` (${filtered.length})` : ''}</span>
            </button>
 
-           <button onClick={() => setQuickAddOpen(v => !v)} className={`px-4 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest shrink-0 flex items-center gap-1.5 border transition-all ${quickAddOpen ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-300'}`} title="Fast single-item entry">
-               <Plus size={14}/> Quick Add
-           </button>
-
-           <button onClick={openAddModal} className="bg-slate-900 text-white px-6 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-red-600 transition-all flex items-center space-x-2 shrink-0">
-               <Plus size={16}/> <span>Add Item</span>
-           </button>
+           {/* One primary Add control — full form via the button, fast inline
+               entry via the caret (Quick Add). */}
+           <div className="flex items-stretch shrink-0 rounded-xl overflow-hidden shadow-xl">
+             <button onClick={openAddModal} className="bg-slate-900 text-white px-5 py-2.5 font-black uppercase text-xs tracking-widest hover:bg-red-600 transition-all flex items-center gap-2">
+                 <Plus size={16}/> <span>Add Item</span>
+             </button>
+             <button onClick={() => setQuickAddOpen(v => !v)} title="Quick Add — fast single-item entry"
+               className={`px-2.5 border-l border-white/20 flex items-center transition-all ${quickAddOpen ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-white hover:bg-red-600'}`}>
+                 <ChevronDown size={16} className={quickAddOpen ? 'rotate-180 transition-transform' : 'transition-transform'}/>
+             </button>
+           </div>
         </div>
       </div>
 
@@ -813,7 +820,9 @@ const NipponProductMaster: React.FC = () => {
       )}
 
       {(
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-x-auto min-h-[500px] no-print">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-[500px] no-print">
+              {/* DESKTOP — table (horizontal scroll only on md+, never on phone) */}
+              <div className="hidden md:block overflow-x-auto">
               <table className="w-full min-w-[880px] text-left sap-table">
                   <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400 tracking-widest">
                     <tr>
@@ -826,7 +835,7 @@ const NipponProductMaster: React.FC = () => {
                         </th>
                         <Th label="Image" />
                         <Th label="Description" k="description" />
-                        <Th label="Nick" />
+                        {anyNick && <Th label="Nick" />}
                         <Th label="Brand" />
                         <Th label="Unit Price" k="basePrice" right />
                         <Th label="Stock" k="stock" right />
@@ -859,11 +868,13 @@ const NipponProductMaster: React.FC = () => {
                                         </span>
                                     </div>
                                 </td>
+                                {anyNick && (
                                 <td className="text-[10px] uppercase">
                                     {nick
                                         ? <span className="font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 whitespace-nowrap">{nick}</span>
                                         : <span className="text-slate-300">-</span>}
                                 </td>
+                                )}
                                 <td className="font-bold text-slate-500 text-[11px] uppercase">{getBrandNick(p.brand || '-')}</td>
                                 <td className="text-right font-bold text-slate-700 whitespace-nowrap tabular-nums">{p.basePrice?.toLocaleString()}</td>
                                 <td className="text-right">
@@ -900,6 +911,44 @@ const NipponProductMaster: React.FC = () => {
                     })}
                   </tbody>
               </table>
+              </div>
+
+              {/* MOBILE — card list (the wide table is unusable at phone width) */}
+              <div className="md:hidden divide-y divide-slate-100">
+                {paginated.map(p => {
+                  const stock = getStockLevel(p.id);
+                  const nick = (p as { nickName?: string }).nickName || '';
+                  const code = p.profileCode || p.modelNo || '—';
+                  return (
+                    <div key={p.id} className={`flex items-start gap-3 p-3 ${selectedIds.has(p.id) ? 'bg-red-50/60' : ''}`}>
+                      <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelect(p.id)}
+                        className="mt-1 w-4 h-4 rounded border-slate-300 accent-red-600 cursor-pointer shrink-0" />
+                      <div className="w-12 h-12 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center shrink-0">
+                        <ProductImage id={p.id} code={p.modelNo || p.profileCode} url={p.imageUrl} alt={p.description} className="w-full h-full object-cover" iconSize={18} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-mono text-[11px] font-bold text-slate-500 uppercase truncate" title={code}>{code}</p>
+                        <p className="font-bold text-[13px] text-slate-800 uppercase leading-tight">{p.description}</p>
+                        <p className="text-[10px] text-slate-400 truncate">{[p.mainCategory, p.subCategory].filter(Boolean).join(' · ') || '—'}</p>
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                          {nick && <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 uppercase">{nick}</span>}
+                          <span className="text-[10px] font-bold text-slate-500 uppercase">{getBrandNick(p.brand || '-')}</span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1.5">
+                          <span className="text-[13px] font-black text-slate-700 tabular-nums">{p.basePrice?.toLocaleString()}</span>
+                          <span className={`text-[12px] font-black ${stock > 0 ? 'text-emerald-600' : stock < 0 ? 'text-rose-500' : 'text-slate-300'}`}>{(Number(stock) || 0).toLocaleString()} <span className="text-[9px] text-slate-400 uppercase">{p.unit}</span></span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1 shrink-0">
+                        <button onClick={() => handleEdit(p)} title="Edit" className="p-2 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded"><Edit2 size={14}/></button>
+                        <button onClick={() => handleAddVariant(p)} title="Add variant" className="p-2 text-slate-400 hover:text-amber-600 bg-white border border-slate-200 rounded"><Layers size={14}/></button>
+                        <button onClick={() => handleDelete(p.id)} title="Delete" className="p-2 text-slate-400 hover:text-red-600 bg-white border border-slate-200 rounded"><Trash2 size={14}/></button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
               {filtered.length === 0 && (
                   <div className="p-20 text-center text-slate-300 font-black uppercase italic text-xs tracking-widest">
                       <Package size={48} className="mx-auto mb-4 opacity-10"/>

@@ -123,10 +123,15 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
         return categoryTree.get(mainFilter) || [];
     }, [mainFilter, categoryTree]);
 
-    // Phase 11 — Low stock alerts
-    const lowStockAlerts = useMemo(() =>
-      InventoryService.getLowStockItems(company),
-    [items, company]);
+    // Phase 11 — Low stock alerts.
+    // For Nippon, exclude items that are simply not-yet-stocked (qty ≤ 0, in the
+    // "needs count" set): a brand-new item at 0 isn't "critically low", it's setup-
+    // pending. Keeps the red low-stock banner meaningful instead of screaming about
+    // every un-received item. Glass keeps the full list (0 = genuine stockout there).
+    const lowStockAlerts = useMemo(() => {
+      const raw = InventoryService.getLowStockItems(company);
+      return isNippon ? raw.filter(a => !needsCountIds.has(a.item.id)) : raw;
+    }, [items, company, isNippon, needsCountIds]);
     const lowStockMap: Record<string, 'red' | 'orange'> = {};
     lowStockAlerts.forEach(a => { lowStockMap[a.item.id] = a.alertLevel; });
 
@@ -391,13 +396,15 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                          )}
                        </td>
                      )}
-                     <td className="px-6 py-4">
-                       {item.storageBin && item.storageBin !== 'MAIN' ? (
-                         <span className="text-[10px] font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 uppercase">{item.storageBin}</span>
-                       ) : (
-                         <span className="text-[10px] text-slate-300">—</span>
-                       )}
-                     </td>
+                     {!isNippon && (
+                       <td className="px-6 py-4">
+                         {item.storageBin && item.storageBin !== 'MAIN' ? (
+                           <span className="text-[10px] font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 uppercase">{item.storageBin}</span>
+                         ) : (
+                           <span className="text-[10px] text-slate-300">—</span>
+                         )}
+                       </td>
+                     )}
                      {!isNippon && (
                        <td className="px-6 py-4 text-right">
                          {sheetCount !== null ? (
@@ -453,7 +460,7 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                  );
                };
 
-               const colCount = isNippon ? 7 : 9;
+               const colCount = isNippon ? 6 : 9;
                const tableHeader = (
                  <thead className="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400">
                    <tr>
@@ -461,7 +468,7 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                      {sortable('Item & Code', 'code')}
                      {sortable('Description', 'name')}
                      {!isNippon && <th className="px-6 py-4">Specs (Color/Dir/Tng)</th>}
-                     <th className="px-6 py-4">Location</th>
+                     {!isNippon && <th className="px-6 py-4">Location</th>}
                      {!isNippon && <th className="px-6 py-4 text-right">Sheets</th>}
                      {sortable('Balance Qty', 'qty', true)}
                      {sortable('Unit Price', 'price', true)}

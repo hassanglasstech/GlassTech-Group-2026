@@ -60,7 +60,8 @@ const VendorHub        = React.lazy(() => import('./modules/procurement/pages/Ve
 const MDDashboard       = React.lazy(() => import('./modules/md-dashboard/MDDashboard'));
 const FactoryInchargeModule = React.lazy(() => import('./modules/factory/pages/FactoryInchargeModule'));
 const ProcurementHub   = React.lazy(() => import('./modules/procurement/pages/ProcurementHub'));
-const EventOSChatWidget = React.lazy(() => import('./modules/factory/components/eventOS/ChatWidget').catch(() => ({ default: () => null })));
+// EventOS chat FAB hidden app-wide per request (2026-07-15) — see render site below.
+// const EventOSChatWidget = React.lazy(() => import('./modules/factory/components/eventOS/ChatWidget').catch(() => ({ default: () => null })));
 // Wazir launcher hidden app-wide per request (2026-07-15) — see render site below.
 // const WazirLauncher     = React.lazy(() => import('./modules/wazir/components/WazirLauncher').catch(() => ({ default: () => null })));
 const TestSuite        = React.lazy(() => import('./modules/shared/pages/TestSuite'));
@@ -905,7 +906,9 @@ const App: React.FC = () => {
           </div>
         </main>
         <BottomNav allowedModules={FULL_ACCESS_ROLES.includes(user?.role || '') ? null : (user?.allowedModules || [])} />
-        <Suspense fallback={null}><EventOSChatWidget /></Suspense>
+        {/* EventOS chat FAB hidden app-wide per request (2026-07-15) — it floated
+            bottom-right over module content. Uncomment to restore. */}
+        {/* <Suspense fallback={null}><EventOSChatWidget /></Suspense> */}
         {/* Wazir launcher hidden app-wide per request (2026-07-15). It also had a
             [title] attribute that a global `[title]{position:relative}` rule made
             override its `.fixed`, dropping the button into the flex flow and
