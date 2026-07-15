@@ -637,7 +637,7 @@ const NipponProductMaster: React.FC = () => {
            </div>
         </div>
 
-        <div className="flex items-center space-x-2 w-full lg:w-auto overflow-x-auto no-scrollbar pb-1">
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto pb-1">
            {/* HIDDEN INPUTS */}
            <input type="file" ref={jsonInputRef} className="hidden" accept=".json" onChange={handleImportJson} />
            <input type="file" ref={excelInputRef} className="hidden" accept=".xlsx,.xls" onChange={handleImportExcel} />

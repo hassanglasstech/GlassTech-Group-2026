@@ -789,12 +789,12 @@ const App: React.FC = () => {
           <Suspense fallback={null}><OverrideModeBar /></Suspense>
           {/* Sprint 21 — Persistent breadcrumbs (auto-hides on home + opt-out paths) */}
           <Suspense fallback={null}>
-            <div className="px-3 md:px-8 pt-2 max-w-[1920px] mx-auto w-full no-print">
+            <div className="px-3 md:px-8 pt-2 w-full no-print">
               <Breadcrumbs/>
             </div>
           </Suspense>
           <div className="flex-1 overflow-y-auto scroll-smooth pb-16 lg:pb-0">
-            <div className="p-3 md:p-8 max-w-[1920px] mx-auto min-h-full flex flex-col">
+            <div className="p-3 md:p-8 min-h-full flex flex-col w-full">
               <Suspense fallback={
                 <div className="h-full flex flex-col items-center justify-center text-slate-400 animate-pulse">
                   <div className="space-y-4 animate-slide-up"><div className="skeleton skeleton-heading"></div><div className="grid grid-cols-2 md:grid-cols-4 gap-4"><div className="skeleton skeleton-card"></div><div className="skeleton skeleton-card"></div><div className="skeleton skeleton-card"></div><div className="skeleton skeleton-card"></div></div><div className="skeleton skeleton-heading" style={{width:"30%",marginTop:"16px"}}></div><div className="skeleton skeleton-row"></div><div className="skeleton skeleton-row"></div><div className="skeleton skeleton-row"></div></div>
