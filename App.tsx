@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, ShoppingBag, Landmark, ShieldCheck,
   Briefcase, Factory, LayoutGrid, Globe, Warehouse, Menu, Bell, Search,
   Truck, Handshake, Folder, Loader2, X, LogOut, ChevronDown,
-  Home, DollarSign, Settings, BarChart3, Package, ScanLine
+  Home, DollarSign, Settings, BarChart3, Package, ScanLine, ArrowLeft
 } from 'lucide-react';
 import { Company } from '@/modules/shared/constants';
 import { AppService } from '@/modules/shared/services/appService';
@@ -789,12 +789,16 @@ const App: React.FC = () => {
           <Suspense fallback={null}><OverrideModeBar /></Suspense>
           {/* Sprint 21 — Persistent breadcrumbs (auto-hides on home + opt-out paths) */}
           <Suspense fallback={null}>
-            <div className="px-3 md:px-8 pt-2 w-full no-print">
+            <div className="px-3 md:px-4 pt-2 w-full no-print flex items-center gap-2">
+              <button onClick={() => window.history.back()} title="Go back"
+                className="flex items-center gap-1 shrink-0 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300 text-[11px] font-black uppercase tracking-widest transition-all">
+                <ArrowLeft size={13}/> Back
+              </button>
               <Breadcrumbs/>
             </div>
           </Suspense>
           <div className="flex-1 overflow-y-auto scroll-smooth pb-16 lg:pb-0">
-            <div className="p-3 md:p-8 min-h-full flex flex-col w-full">
+            <div className="p-3 md:px-4 md:py-6 min-h-full flex flex-col w-full">
               <Suspense fallback={
                 <div className="h-full flex flex-col items-center justify-center text-slate-400 animate-pulse">
                   <div className="space-y-4 animate-slide-up"><div className="skeleton skeleton-heading"></div><div className="grid grid-cols-2 md:grid-cols-4 gap-4"><div className="skeleton skeleton-card"></div><div className="skeleton skeleton-card"></div><div className="skeleton skeleton-card"></div><div className="skeleton skeleton-card"></div></div><div className="skeleton skeleton-heading" style={{width:"30%",marginTop:"16px"}}></div><div className="skeleton skeleton-row"></div><div className="skeleton skeleton-row"></div><div className="skeleton skeleton-row"></div></div>
