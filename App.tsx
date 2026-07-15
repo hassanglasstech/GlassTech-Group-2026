@@ -61,7 +61,8 @@ const MDDashboard       = React.lazy(() => import('./modules/md-dashboard/MDDash
 const FactoryInchargeModule = React.lazy(() => import('./modules/factory/pages/FactoryInchargeModule'));
 const ProcurementHub   = React.lazy(() => import('./modules/procurement/pages/ProcurementHub'));
 const EventOSChatWidget = React.lazy(() => import('./modules/factory/components/eventOS/ChatWidget').catch(() => ({ default: () => null })));
-const WazirLauncher     = React.lazy(() => import('./modules/wazir/components/WazirLauncher').catch(() => ({ default: () => null })));
+// Wazir launcher hidden app-wide per request (2026-07-15) — see render site below.
+// const WazirLauncher     = React.lazy(() => import('./modules/wazir/components/WazirLauncher').catch(() => ({ default: () => null })));
 const TestSuite        = React.lazy(() => import('./modules/shared/pages/TestSuite'));
 const HealthMonitor    = React.lazy(() => import('./modules/admin/pages/HealthMonitor'));
 const LoanFlowChart    = React.lazy(() => import('./modules/shared/pages/LoanFlowChart'));
@@ -905,7 +906,11 @@ const App: React.FC = () => {
         </main>
         <BottomNav allowedModules={FULL_ACCESS_ROLES.includes(user?.role || '') ? null : (user?.allowedModules || [])} />
         <Suspense fallback={null}><EventOSChatWidget /></Suspense>
-        <Suspense fallback={null}><WazirLauncher /></Suspense>
+        {/* Wazir launcher hidden app-wide per request (2026-07-15). It also had a
+            [title] attribute that a global `[title]{position:relative}` rule made
+            override its `.fixed`, dropping the button into the flex flow and
+            stealing ~56px on the right (the right-side dead band). */}
+        {/* <Suspense fallback={null}><WazirLauncher /></Suspense> */}
         {/* Sprint 21 — global ⌘K command palette (skips when in input field) */}
         <Suspense fallback={null}><CommandPalette /></Suspense>
       </div>

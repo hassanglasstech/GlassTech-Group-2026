@@ -810,12 +810,10 @@ const NipponProductMaster: React.FC = () => {
                         </th>
                         <Th label="Image" />
                         <Th label="Group" k="mainCategory" />
-                        <Th label="ERP Model No" k="modelNo" />
                         <Th label="Description" k="description" />
                         <Th label="Nick" />
                         <Th label="Brand" />
                         <Th label="Color" />
-                        <Th label="Material" />
                         <Th label="Dir" />
                         <Th label="Size" />
                         <Th label="Unit Price" k="basePrice" right />
@@ -844,7 +842,6 @@ const NipponProductMaster: React.FC = () => {
                                         {p.mainCategory || 'Generic'}
                                     </span>
                                 </td>
-                                <td className="font-black text-blue-600 uppercase">{p.modelNo || '-'}</td>
                                 <td className="font-bold text-slate-800 uppercase w-full">
                                     <div className="flex flex-col">
                                         <span>{p.description}</span>
@@ -858,7 +855,6 @@ const NipponProductMaster: React.FC = () => {
                                 </td>
                                 <td className="font-bold text-slate-500 text-[11px] uppercase">{getBrandNick(p.brand || '-')}</td>
                                 <td className="font-medium text-slate-500 text-[11px] uppercase">{p.finishColor || '-'}</td>
-                                <td className="font-medium text-slate-500 text-[11px] uppercase">{p.material || '-'}</td>
                                 <td className="font-medium text-slate-500 text-[11px] uppercase">{p.direction || '-'}</td>
                                 <td className="font-medium text-slate-500 text-[11px] uppercase">{p.tongueLength || p.thickness || '-'}</td>
                                 <td className="text-right font-bold text-slate-700 whitespace-nowrap">PKR {p.basePrice?.toLocaleString()}</td>
