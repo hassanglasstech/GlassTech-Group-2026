@@ -86,6 +86,18 @@ const NipponProductMaster: React.FC = () => {
   };
 
   const handleSaveProduct = async (product: Product, storeItemData?: Partial<StoreItem>) => {
+    // Duplicate-code guard for NEW items (editing keeps its frozen id). Matches the
+    // bare-code id, any legacy NIP- id, and profileCode so a code is never reused.
+    if (!editingProduct) {
+      const idU = (product.id || '').toUpperCase();
+      const dup = products.some(p =>
+        p.id === product.id || p.id === `NIP-${idU}` ||
+        (p.profileCode || '').toUpperCase() === idU);
+      if (dup) {
+        toast.error(`Code "${product.id}" already exists. Use a different supplier code, or add it as a variant.`);
+        return;   // form's finally resets Saving; modal stays open so the user can fix the code
+      }
+    }
     // Only the changed/new product is upserted (saveProducts merges by id) — no
     // full re-fetch + re-upsert of the whole ~150-row catalog on every save.
     let updatedStore = InventoryService.getStore();
@@ -168,8 +180,9 @@ const NipponProductMaster: React.FC = () => {
     const desc = qa.description.trim();
     if (!code || !desc) { toast.error('Item Code and Description are required.'); return; }
     const codeU = code.toUpperCase();
-    const id = `NIP-${codeU}`;   // namespace matches bulk-import ids (NIP-…)
-    if (products.some(p => p.id === id || p.id === codeU || (p.profileCode || '').toUpperCase() === codeU)) {
+    const id = codeU;   // Item Code = the supplier/mfr code itself (no prefix)
+    // Dedupe: match the new bare-code id, any legacy NIP- id, and profileCode.
+    if (products.some(p => p.id === codeU || p.id === `NIP-${codeU}` || (p.profileCode || '').toUpperCase() === codeU)) {
       toast.error(`"${code}" already exists.`); return;
     }
     const product = {
@@ -765,10 +778,11 @@ const NipponProductMaster: React.FC = () => {
       {quickAddOpen && (
         <div className="flex flex-wrap items-end gap-2 bg-emerald-50/60 border border-emerald-200 rounded-2xl px-4 py-3 no-print animate-in fade-in slide-in-from-top-1 duration-150">
           <div className="flex flex-col">
-            <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Item Code *</label>
+            <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Supplier Code *</label>
             <input value={qa.code} onChange={e => setQa(q => ({ ...q, code: e.target.value }))}
-              placeholder="e.g. A250A1"
-              className="w-36 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono uppercase focus:ring-2 focus:ring-emerald-500 outline-none" />
+              placeholder="e.g. CZS133 or CZS133-BK"
+              title="Supplier / manufacturer code + optional variant suffix (e.g. -BK black, -L left)"
+              className="w-44 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono uppercase focus:ring-2 focus:ring-emerald-500 outline-none" />
           </div>
           <div className="flex flex-col flex-1 min-w-[180px]">
             <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Description *</label>
@@ -807,8 +821,8 @@ const NipponProductMaster: React.FC = () => {
                           <input type="checkbox" checked={pageAllSelected} onChange={toggleSelectAllPage}
                             className="w-3.5 h-3.5 rounded border-slate-300 accent-red-600 cursor-pointer align-middle" title="Select all on this page" />
                         </th>
-                        <th className="px-6 py-4 cursor-pointer select-none hover:text-slate-600" onClick={() => requestSort('profileCode')} title="Sort by Item Code">
-                          <span className={`inline-flex items-center gap-1 ${sortConfig.key === 'profileCode' ? 'text-red-600' : ''}`}>Item Code {sortConfig.key === 'profileCode' ? (sortConfig.dir === 'asc' ? <ArrowUp size={10}/> : <ArrowDown size={10}/>) : <ArrowUpDown size={10} className="opacity-25"/>}</span>
+                        <th className="px-6 py-4 cursor-pointer select-none hover:text-slate-600" onClick={() => requestSort('profileCode')} title="Sort by Supplier / Mfr Code">
+                          <span className={`inline-flex items-center gap-1 ${sortConfig.key === 'profileCode' ? 'text-red-600' : ''}`}>Supplier Code {sortConfig.key === 'profileCode' ? (sortConfig.dir === 'asc' ? <ArrowUp size={10}/> : <ArrowDown size={10}/>) : <ArrowUpDown size={10} className="opacity-25"/>}</span>
                         </th>
                         <Th label="Image" />
                         <Th label="Description" k="description" />

@@ -211,7 +211,14 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
       if (isSaving) return;
       setIsSaving(true);
 
-      const prodId = editingProduct ? editingProduct.id : `NIP-${formData.modelNo || Date.now()}`;
+      // Item Code = the supplier / mfr code (what the customer remembers), no
+      // vendor-neutral prefix. Prefer the supplier code, fall back to model no,
+      // last-resort a unique id so a save never fails. Editing keeps the frozen id.
+      const prodId = editingProduct
+        ? editingProduct.id
+        : (formData.internalId?.trim().toUpperCase()
+           || formData.modelNo?.trim().toUpperCase()
+           || `ITM-${Date.now().toString(36).toUpperCase()}`);
 
       // If a new image was picked it's an in-memory base64 data-URL. Push it to
       // the bucket as NIP-KL-<code>.png (code = ERP model no, else KinLong code)
