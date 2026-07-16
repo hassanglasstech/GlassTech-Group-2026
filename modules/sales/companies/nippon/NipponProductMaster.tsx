@@ -681,6 +681,37 @@ const NipponProductMaster: React.FC = () => {
     if (products.length > 0 && currentPage > totalPages) setCurrentPage(totalPages);
   }, [products.length, totalPages, currentPage]);
 
+  // Numbered page list with ellipsis gaps (1 2 … 5 6 7 … 24). ≤7 pages = all shown.
+  const pageList = useMemo<(number | 'gap')[]>(() => {
+    const t = totalPages, c = currentPage;
+    if (t <= 7) return Array.from({ length: t }, (_, i) => i + 1);
+    const keep = new Set<number>([1, 2, t - 1, t, c - 1, c, c + 1]);
+    const nums = [...keep].filter(n => n >= 1 && n <= t).sort((a, b) => a - b);
+    const out: (number | 'gap')[] = [];
+    let prev = 0;
+    for (const n of nums) { if (n - prev > 1) out.push('gap'); out.push(n); prev = n; }
+    return out;
+  }, [totalPages, currentPage]);
+
+  // Reusable numbered pager — rendered at BOTH the top and bottom of the table.
+  const renderPager = (pos: 'top' | 'bottom') => (
+    <div className={`flex flex-wrap items-center justify-between gap-2 px-6 py-3 no-print bg-slate-50/40 ${pos === 'top' ? 'border-b border-slate-100' : 'border-t border-slate-100'}`}>
+      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+        {filtered.length} item{filtered.length !== 1 ? 's' : ''} · showing {(currentPage - 1) * itemsPerPage + 1}–{Math.min(currentPage * itemsPerPage, filtered.length)}
+      </span>
+      <div className="flex items-center gap-1">
+        <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
+          className="p-2 rounded-lg border border-slate-200 bg-white text-slate-500 disabled:opacity-30 hover:bg-slate-50 transition-all"><ChevronLeft size={14}/></button>
+        {pageList.map((n, i) => n === 'gap'
+          ? <span key={`g${i}`} className="px-1.5 text-slate-300 text-xs select-none">…</span>
+          : <button key={n} onClick={() => setCurrentPage(n)}
+              className={`min-w-[2rem] px-2 py-1.5 rounded-lg text-[11px] font-black transition-all ${n === currentPage ? 'bg-red-600 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}>{n}</button>)}
+        <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages}
+          className="p-2 rounded-lg border border-slate-200 bg-white text-slate-500 disabled:opacity-30 hover:bg-slate-50 transition-all"><ChevronRight size={14}/></button>
+      </div>
+    </div>
+  );
+
   // ── Bulk multi-select (manage many products at once) ────────────────────
   const pageAllSelected = paginated.length > 0 && paginated.every(p => selectedIds.has(p.id));
   const toggleSelect = (id: string) => setSelectedIds(prev => {
@@ -724,6 +755,14 @@ const NipponProductMaster: React.FC = () => {
         >
           Bulk Import
         </button>
+        {/* Catalogue is a full builder page (branding + PDF) — a tab that routes there. */}
+        <a
+          href="#/nippon/catalogue"
+          title="Open Catalogue Builder (PDF + Branding)"
+          className="px-6 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all text-slate-400 hover:text-blue-600 flex items-center gap-1.5"
+        >
+          <Printer size={12}/> Catalogue
+        </a>
       </div>
 
       {activeTab === 'direct' ? (
@@ -774,14 +813,6 @@ const NipponProductMaster: React.FC = () => {
            </div>
 
            <div className="h-8 w-px bg-slate-200 hidden lg:block mx-2"></div>
-
-           <a
-               href="#/nippon/catalogue"
-               className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest mr-2 transition-all shadow-sm"
-               title="Open Catalogue Builder (PDF + Branding)"
-           >
-               <Printer size={13}/> Catalogue
-           </a>
 
            <div className="relative shrink-0">
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
@@ -934,6 +965,8 @@ const NipponProductMaster: React.FC = () => {
 
       {(
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-[500px] no-print">
+              {/* Top pager — same numbered control as the footer (industry-standard). */}
+              {filtered.length > 0 && totalPages > 1 && renderPager('top')}
               {/* DESKTOP — table (horizontal scroll only on md+, never on phone) */}
               <div className="hidden md:block overflow-x-auto">
               <table className="w-full min-w-[880px] text-left sap-table">
@@ -1078,21 +1111,8 @@ const NipponProductMaster: React.FC = () => {
                       No hardware items found in selection.
                   </div>
               )}
-              {/* Pagination footer */}
-              {filtered.length > 0 && (
-                <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/40">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                        {filtered.length} item{filtered.length !== 1 ? 's' : ''} · showing {(currentPage - 1) * itemsPerPage + 1}–{Math.min(currentPage * itemsPerPage, filtered.length)}
-                    </span>
-                    <div className="flex items-center gap-1">
-                        <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
-                            className="p-2 rounded-lg border border-slate-200 bg-white text-slate-500 disabled:opacity-30 hover:bg-slate-50 transition-all"><ChevronLeft size={14}/></button>
-                        <span className="px-3 text-[11px] font-black text-slate-600">{currentPage} / {totalPages}</span>
-                        <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages}
-                            className="p-2 rounded-lg border border-slate-200 bg-white text-slate-500 disabled:opacity-30 hover:bg-slate-50 transition-all"><ChevronRight size={14}/></button>
-                    </div>
-                </div>
-              )}
+              {/* Pagination footer — numbered pager */}
+              {filtered.length > 0 && renderPager('bottom')}
           </div>
       )}
       </>

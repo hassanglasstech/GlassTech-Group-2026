@@ -6,6 +6,8 @@ import { toast } from 'sonner';
 import { X, Box, Tag, Building2, Hash, Layout, ListFilter, UploadCloud, Layers, Search, Lock } from 'lucide-react';
 import { uploadProductImage, deleteProductImage } from '@/modules/sales/companies/nippon/nipponProductImageService';
 import { ProductImage } from '../../shared/components/ProductImage';
+import { confirmModal } from '../../shared/components/ConfirmDialog';
+import { findSimilarProducts, similarityMessage } from '../../shared/utils/productSimilarity';
 import { safeParse, safeSave } from '../../shared/services/utils';
 
 // Variant axis — what makes one variant differ from its siblings. Single-axis
@@ -418,6 +420,15 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
           minLevel: Number(formData.minLevel),
           unit: formData.unit
       };
+
+      // ERP-wide duplicate / close-match guard — warn (don't block) if another
+      // product has the same/near code or same/near name (typo-tolerant). Skips
+      // self when editing. User can still "save anyway".
+      const sims = findSimilarProducts(newProduct, allProducts, { selfId: editingProduct?.id });
+      if (sims.length) {
+        const ok = await confirmModal(similarityMessage(newProduct, sims));
+        if (!ok) { setIsSaving(false); return; }
+      }
 
       // onSave is async (parent does Supabase upsert + refresh). Await it so
       // the "Saving…" button state actually reflects the cloud round-trip and
