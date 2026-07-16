@@ -17,7 +17,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useDebounce } from '@/modules/shared/hooks/useDebounce';
 import { Company, Quotation, ProductionPiece, LedgerTransaction, Invoice, PaymentReceipt } from '../../shared/types';
 import { FinanceService, LedgerImbalanceError } from '../services/financeService';
-import { resolveClientARAccount } from '../services/clientAccountResolver';
+import { resolveClientARAccount, resolveCashAccount } from '../services/clientAccountResolver';
+import { isFinanceGLEnabled } from '@/modules/shared/services/featureFlagService';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { Logger } from '@/modules/shared/services/logger';
 import { SalesService } from '../../sales/services/salesService';
@@ -177,6 +178,22 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
 
   const confirmGenerateInvoice = async () => {
     if (!gstModalOrder) return;
+    // P0-3: generateDeliveryInvoice ALWAYS posts GL (invoice+revenue+COGS). So
+    // invoicing here must obey the SAME gate as the fulfilment path — otherwise a
+    // user could post full books with Finance-GL "off", contradicting single-entry
+    // go-live. And a trading order must be physically DELIVERED (goods issued)
+    // before it can be invoiced — no revenue before control transfer (IFRS 15).
+    if (!isFinanceGLEnabled(company)) {
+      setGstModalOrder(null);
+      toast.warning('Finance GL is off — invoices post automatically at Store Issue once GL is enabled. Nothing invoiced here.', { duration: 8000 });
+      return;
+    }
+    const issued = gstModalOrder.status === 'Delivered' || !!(gstModalOrder as { issuedAt?: string }).issuedAt;
+    if (company === 'Nippon' && !issued) {
+      setGstModalOrder(null);
+      toast.warning('Issue the goods from the Store first — an order can only be invoiced after it is delivered.', { duration: 8000 });
+      return;
+    }
     const client = clients.find((c: any) => c.id === gstModalOrder.clientId);
     if (client) {
       const creditLimit = (client as any).creditLimit || 0;
@@ -225,19 +242,9 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
     if (receiptForm.amount > receiptModalInvoice.balance)
       return toast.error(`Cannot exceed balance of PKR ${receiptModalInvoice.balance.toLocaleString()}`);
 
-    const METHOD_ACCOUNT_MAP: Record<string, { code: string; name: string }> = {
-      'Cash':          { code: '1111', name: 'CASH IN HAND' },
-      'Bank Transfer': { code: '1112', name: 'CASH AT BANK' },
-      'Cheque':        { code: '1112', name: 'CASH AT BANK' },
-      'Online':        { code: '1113', name: 'ONLINE COLLECTIONS' },
-    };
-    const methodMap = METHOD_ACCOUNT_MAP[receiptForm.method] || METHOD_ACCOUNT_MAP['Cash'];
-
-    const cashParent  = FinanceService.ensureAccount(company as any, 'ASSETS',          1, null,             'Asset', '10');
-    const cashCurrent = FinanceService.ensureAccount(company as any, 'CURRENT ASSETS',  2, cashParent.id,    'Asset', '11');
-    const cashBank    = FinanceService.ensureAccount(company as any, 'CASH & BANK',     3, cashCurrent.id,   'Asset', '111');
-    const methodParent= FinanceService.ensureAccount(company as any, methodMap.name,    4, cashBank.id,      'Asset', methodMap.code);
-    const cashAcc     = FinanceService.ensureAccount(company as any, `${methodMap.name} — MAIN`, 5, methodParent.id, 'Asset', `${methodMap.code}0`);
+    // P0-2: shared resolver → real seeded cash/bank leaf per company (Nippon no
+    // longer debits a phantom 11110 tree; glass keeps its exact chain).
+    const cashAcc = resolveCashAccount(company, receiptForm.method);
 
     // EPIC 4: shared resolver → receipt CREDIT matches the invoice DEBIT
     // (trading → real 1121x, glass → generic 12210). No more phantom-12210 drift.

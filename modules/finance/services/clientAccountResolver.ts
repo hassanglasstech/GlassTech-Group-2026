@@ -92,3 +92,39 @@ export function resolveClientAdvanceAccount(
   const q3 = FinanceService.ensureAccount(company, 'CUSTOMER ADVANCES',   3, q2.id,  'Liability', '223');
   return     FinanceService.ensureAccount(company, `${clientName.toUpperCase()} — ADVANCE`, 4, q3.id, 'Liability', '2230');
 }
+
+/**
+ * The cash/bank leaf a receipt DEBITS, by payment method. Same drift risk as AR:
+ * the receipt cash leg was inlined in SalesOrders + BillingHub building the glass
+ * chain (10→111→{code}0), which for Nippon created ORPHAN accounts (11110…) that
+ * don't exist in the seeded trading chart — so a Nippon receipt debited off-
+ * balance-sheet cash and the trial balance split (P0-2). Trading now posts to the
+ * REAL seeded cash/bank leaves; glass keeps its exact existing chain.
+ */
+export function resolveCashAccount(company: Company, method: string): Account {
+  if (isTradingCompany(company)) {
+    // Nippon seeded Cash & Bank: Cash in Hand 11112, MCB Bank 11121 (coa.nippon).
+    const isCash = method === 'Cash';
+    const leaf = isCash
+      ? { code: '11112', name: 'Cash in Hand',       pCode: '1111', pName: 'Cash' }
+      : { code: '11121', name: 'Bank — MCB Current', pCode: '1112', pName: 'Bank' };
+    const a1 = FinanceService.ensureAccount(company, 'Assets',         1, null,  'Asset', '1');
+    const a2 = FinanceService.ensureAccount(company, 'Current Assets', 2, a1.id, 'Asset', '11');
+    const a3 = FinanceService.ensureAccount(company, 'Cash & Bank',    3, a2.id, 'Asset', '111');
+    const a4 = FinanceService.ensureAccount(company, leaf.pName,       4, a3.id, 'Asset', leaf.pCode);
+    return     FinanceService.ensureAccount(company, leaf.name,        5, a4.id, 'Asset', leaf.code);
+  }
+  // Non-trading (glass) — preserve the existing generic cash chain EXACTLY.
+  const MAP: Record<string, { code: string; name: string }> = {
+    'Cash':          { code: '1111', name: 'CASH IN HAND' },
+    'Bank Transfer': { code: '1112', name: 'CASH AT BANK' },
+    'Cheque':        { code: '1112', name: 'CASH AT BANK' },
+    'Online':        { code: '1113', name: 'ONLINE COLLECTIONS' },
+  };
+  const m = MAP[method] || MAP['Cash'];
+  const p1 = FinanceService.ensureAccount(company, 'ASSETS',         1, null,   'Asset', '10');
+  const p2 = FinanceService.ensureAccount(company, 'CURRENT ASSETS', 2, p1.id,  'Asset', '11');
+  const p3 = FinanceService.ensureAccount(company, 'CASH & BANK',    3, p2.id,  'Asset', '111');
+  const p4 = FinanceService.ensureAccount(company, m.name,           4, p3.id,  'Asset', m.code);
+  return     FinanceService.ensureAccount(company, `${m.name} — MAIN`, 5, p4.id, 'Asset', `${m.code}0`);
+}

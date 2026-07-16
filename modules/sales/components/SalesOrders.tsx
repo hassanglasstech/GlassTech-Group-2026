@@ -5,7 +5,7 @@ import { PaymentReceipt } from '../../finance/types/finance';
 import { SalesService } from '../services/salesService';
 import { AsyncSalesService } from '../services/asyncSalesService';
 import { FinanceService, ledgerToRow } from '../../finance/services/financeService';
-import { resolveClientARAccount, resolveClientAdvanceAccount } from '../../finance/services/clientAccountResolver';
+import { resolveClientARAccount, resolveClientAdvanceAccount, resolveCashAccount } from '../../finance/services/clientAccountResolver';
 import { generateDeliveryInvoice } from '../services/deliveryInvoiceService';
 import { ProductionService } from '../../production/services/productionService';
 import { InventoryService } from '../../procurement/services/inventoryService';
@@ -416,19 +416,9 @@ const SalesOrders: React.FC = () => {
             const receiptId = `REC-${Date.now()}-${_rand4}`;
             const txId      = `GL-${receiptId}`;
 
-            // ── Cash/Bank account by method ──
-            const METHOD_MAP: Record<string, { code: string; name: string }> = {
-                'Cash':          { code: '1111', name: 'CASH IN HAND' },
-                'Bank Transfer': { code: '1112', name: 'CASH AT BANK' },
-                'Cheque':        { code: '1112', name: 'CASH AT BANK' },
-                'Online':        { code: '1113', name: 'ONLINE COLLECTIONS' },
-            };
-            const m            = METHOD_MAP[paymentMethod] || METHOD_MAP['Cash'];
-            const cashParent   = FinanceService.ensureAccount(company, 'ASSETS',          1, null,             'Asset', '10');
-            const cashCurrent  = FinanceService.ensureAccount(company, 'CURRENT ASSETS',  2, cashParent.id,    'Asset', '11');
-            const cashBank     = FinanceService.ensureAccount(company, 'CASH & BANK',     3, cashCurrent.id,   'Asset', '111');
-            const methodParent = FinanceService.ensureAccount(company, m.name,            4, cashBank.id,      'Asset', m.code);
-            const cashAcc      = FinanceService.ensureAccount(company, `${m.name} — MAIN`, 5, methodParent.id, 'Asset', `${m.code}0`);
+            // ── Cash/Bank account by method (P0-2: shared resolver → real seeded
+            // leaf per company; trading no longer posts to a phantom 11110 tree) ──
+            const cashAcc = resolveCashAccount(company, paymentMethod);
 
             // ── Credit side: AR (invoiced) OR Customer Advance Liability (no invoice yet) ──
             // EPIC 4: both resolved via the shared clientAccountResolver so the
