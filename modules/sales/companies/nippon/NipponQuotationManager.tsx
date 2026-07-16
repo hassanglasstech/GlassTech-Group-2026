@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Product, Quotation, QuotationItem } from '@/modules/shared/types';
 import { NipponDocPreview } from '@/modules/nippon/prints/NipponDocPreview';
 import { SharedQuotationList } from '@/modules/sales/components/SharedQuotationList';
@@ -51,7 +52,18 @@ const NipponQuotationManager: React.FC = () => {
   // Quotations vs Sales Orders vs Store Issue tab. Orders = approved-and-beyond
   // (+ voided, kept for audit). Store Issue = approved orders not yet physically
   // issued by the store. Revise mode unlocks an approved order for editing.
-  const [docTab, setDocTab] = React.useState<'quotations' | 'orders' | 'issue'>('quotations');
+  // docTab in the URL (?doc=) so Back / refresh / deep-link work at this level too
+  // — the parent Sales tab uses ?tab=, so a distinct key avoids any collision.
+  const [docParams, setDocParams] = useSearchParams();
+  const DOC_TABS = ['quotations', 'orders', 'issue'] as const;
+  const docRaw = docParams.get('doc');
+  const docTab: 'quotations' | 'orders' | 'issue' =
+    (DOC_TABS as readonly string[]).includes(docRaw || '') ? (docRaw as 'quotations' | 'orders' | 'issue') : 'quotations';
+  const setDocTab = (t: 'quotations' | 'orders' | 'issue'): void => {
+    const next = new URLSearchParams(docParams);
+    next.set('doc', t);
+    setDocParams(next);
+  };
   const [reviseMode, setReviseMode] = React.useState(false);
   // 'Delivered' = approved order whose goods were issued from the store. It MUST
   // live in the ORDER bucket — without it, an issued order fails this test and

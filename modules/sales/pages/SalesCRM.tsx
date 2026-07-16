@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { useSearchParams } from 'react-router-dom';
 import ClientMaster from './ClientMaster';
 import QuotationManager from './QuotationManager';
 import NipponQuotationManager from '../companies/nippon/NipponQuotationManager';
@@ -99,10 +100,20 @@ const styles = `
 const SalesCRM: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
 
-  // Default to 'orders' for Glassco (most used) — others start at quotations
-  const [activeTab, setActiveTab] = useState<ActiveTab>(
-    company === 'Glassco' ? 'orders' : 'quotations'
-  );
+  // Tab lives in the URL (?tab=) so Back / refresh / deep-link / command-palette
+  // all work — previously it was React state, so the URL stayed /sales, the nav
+  // stack only held one entry, and Back fell through to Home (the reported bug).
+  // Default to 'orders' for Glassco (most used) — others start at quotations.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const VALID_TABS: ActiveTab[] = ['orders', 'quotations', 'clients', 'design', 'pipeline', 'invoices', 'complaints'];
+  const defaultTab: ActiveTab = company === 'Glassco' ? 'orders' : 'quotations';
+  const urlTab = searchParams.get('tab') as ActiveTab | null;
+  const activeTab: ActiveTab = urlTab && VALID_TABS.includes(urlTab) ? urlTab : defaultTab;
+  const setActiveTab = (t: ActiveTab): void => {
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', t);
+    setSearchParams(next);   // pushes a history entry → Back retraces tab changes
+  };
 
   const showDesign = company !== 'Glassco' && company !== 'Nippon';
 
