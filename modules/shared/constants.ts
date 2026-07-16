@@ -32,6 +32,11 @@ export const QuotationStatus = {
   SENT: 'Sent',
   APPROVED: 'Approved',
   REJECTED: 'Rejected',
+  // Trading fulfilment (Nippon): an approved order whose goods have physically
+  // been issued from the store. A real terminal-ish order state — it must be
+  // recognized so a delivered order stays in the ORDER lists and is not
+  // mis-bucketed back into "quotations".
+  DELIVERED: 'Delivered',
   INVOICED: 'Invoiced',
   PARTIAL: 'Partial Payment',
   PAID: 'Paid',

@@ -355,32 +355,13 @@ const NipponProductMaster: React.FC = () => {
   // the most complete of each group (has image + most non-empty fields); removes the
   // rest. Stock rows are left untouched. Variants (distinct modelNo) are NOT merged.
   const handleDedupe = async () => {
-      const allProducts = await AsyncSalesService.getProducts();
-      const mine = allProducts.filter(p => p.company === company);
-      const rest = allProducts.filter(p => p.company !== company);
-      const norm = (s?: string) => (s || '').trim().toUpperCase();
-      const keyOf = (p: Product) => norm(p.modelNo) || `${norm(p.description)}|${norm(p.brand)}`;
-      const score = (p: Product) => (p.imageUrl ? 1000 : 0) + Object.values(p).filter(v => v !== '' && v != null).length;
-      const groups = new Map<string, Product[]>();
-      mine.forEach(p => { const k = keyOf(p); const g = groups.get(k) || []; g.push(p); groups.set(k, g); });
-      const keep: Product[] = [];
-      let removed = 0;
-      groups.forEach(g => {
-          if (g.length === 1) { keep.push(g[0]); return; }
-          const best = g.slice().sort((a, b) => score(b) - score(a))[0];
-          keep.push(best);
-          removed += g.length - 1;
-      });
-      if (removed === 0) { toast.info('No duplicate products found.'); return; }
-      if (!confirm(`Found ${removed} duplicate product(s) (same model no / description). Keep the most complete of each and remove the rest? Stock rows are preserved.`)) return;
-      try {
-          const res = await AsyncSalesService.saveProducts([...rest, ...keep]);
-          await refreshData();
-          if (res.error) return;   // cloud-fail toast already shown
-          toast.success(`Removed ${removed} duplicate product(s).`);
-      } catch (err) {
-          toast.error(`Dedupe failed: ${(err as Error)?.message || 'unknown'}`);
-      }
+      // P0-4 (God-mode audit): the old body upserted survivors but NEVER deleted
+      // the losing duplicates (upsert doesn't remove omitted rows), so duplicates
+      // silently returned on the next refresh while the toast claimed "Removed N".
+      // Disabled until rebuilt as a real merge (repoint quotation/stock references
+      // to the survivor + transfer stock, then archive the losers) so it can't
+      // lose history. Use per-row delete for now.
+      toast.warning('Remove Duplicates is temporarily disabled — the old tool did not actually delete duplicates (they came back on refresh). A safe merge tool is being built. Use per-row delete for now.', { duration: 9000 });
   };
 
   // #4 — record a physical opening-balance count for a product, stamped with

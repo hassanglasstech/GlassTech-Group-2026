@@ -53,7 +53,10 @@ const NipponQuotationManager: React.FC = () => {
   // issued by the store. Revise mode unlocks an approved order for editing.
   const [docTab, setDocTab] = React.useState<'quotations' | 'orders' | 'issue'>('quotations');
   const [reviseMode, setReviseMode] = React.useState(false);
-  const ORDER_STATUSES = ['Approved', 'Invoiced', 'Partial Payment', 'Paid', 'Void'];
+  // 'Delivered' = approved order whose goods were issued from the store. It MUST
+  // live in the ORDER bucket — without it, an issued order fails this test and
+  // silently falls back into the Quotations tab (P0-1), disappearing from tracking.
+  const ORDER_STATUSES = ['Approved', 'Delivered', 'Invoiced', 'Partial Payment', 'Paid', 'Void'];
 
   // Unsaved-changes guard. Snapshot the doc when the editor opens; if formData
   // diverges, warn before leaving. Snapshot is taken in openEditor().
