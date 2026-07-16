@@ -548,13 +548,26 @@ const NipponQuotationManager: React.FC = () => {
                             </td>
                             <td className="w-28">
                                 {/* Rate defaults from the product master but is EDITABLE per line so a
-                                    trader can key a negotiated unit price (P1-2). Locked on a saved
-                                    order and zeroed for a free sample. amount recomputes via updateItem. */}
-                                <input readOnly={isLocked || item.isSample} type="number"
-                                    title="Negotiated unit price — defaults from the product master, editable per line"
-                                    className={`sap-input w-full py-0.5 text-right text-xs font-bold text-blue-600 ${(isLocked || item.isSample) ? 'bg-slate-50 cursor-not-allowed' : ''}`}
-                                    value={item.pricePerUnit || ''}
-                                    onChange={e => updateItem(idx, 'pricePerUnit', Number(e.target.value))} />
+                                    trader can key a negotiated unit price (P1-2, per the audit). Locked
+                                    on a saved order and for a free sample. amount recomputes via
+                                    updateItem. Guardrail: a below-cost rate turns red so a loss sale
+                                    can't slip through unseen (the approval-gate is a separate P1). */}
+                                {(() => {
+                                  const cp = products.find(pp => pp.id === item.productRef || pp.id === item.locationCode
+                                    || pp.modelNo === item.locationCode || pp.profileCode === item.locationCode);
+                                  const cost = Number(cp?.costPrice) || 0;
+                                  const belowCost = !item.isSample && cost > 0
+                                    && Number(item.pricePerUnit) > 0 && Number(item.pricePerUnit) < cost;
+                                  return (
+                                    <input readOnly={isLocked || item.isSample} type="number"
+                                        title={belowCost
+                                          ? `⚠ Below cost (Rs ${cost.toLocaleString()}) — selling at a loss`
+                                          : 'Negotiated unit price — defaults from the product master, editable per line'}
+                                        className={`sap-input w-full py-0.5 text-right text-xs font-bold ${belowCost ? 'text-rose-700 bg-rose-50 border border-rose-400' : 'text-blue-600'} ${(isLocked || item.isSample) ? 'bg-slate-50 cursor-not-allowed' : ''}`}
+                                        value={item.pricePerUnit || ''}
+                                        onChange={e => updateItem(idx, 'pricePerUnit', Number(e.target.value))} />
+                                  );
+                                })()}
                             </td>
                             <td className="w-28 text-right font-black text-slate-800 pr-4">
                                 {item.isSample
