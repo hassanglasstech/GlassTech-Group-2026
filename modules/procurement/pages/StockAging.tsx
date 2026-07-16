@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { useAuthStore } from '@/modules/auth/authStore';
-import { supabase } from '@/src/services/supabaseClient';
+import { InventoryService } from '@/modules/procurement/services/inventoryService';
+import { Logger } from '@/modules/shared/services/logger';
 import { Package, RefreshCw, AlertTriangle, TrendingDown, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import ReportExport from '@/modules/finance/components/ReportExport';
@@ -41,67 +42,41 @@ const StockAging: React.FC = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('stock_ledger')
-        .select('material_code, material_name, unit, warehouse, qty_in, qty_out, date, unit_cost')
-        .eq('company', company)
-        .order('date', { ascending: false });
-
-      if (error) throw error;
-
+      // Repaired (P1-5): the old raw query hit stock_ledger columns that don't
+      // exist (material_code/qty_in/qty_out/unit_cost) → it always errored and the
+      // page showed "Failed to load". Drive aging from store_items via the tested
+      // InventoryService mapping instead: on-hand + last-movement + MAP all exist.
+      const store = (await InventoryService.getStoreAsync()).filter(s => s.company === company);
       const today = new Date();
-      const map   = new Map<string, {
-        materialCode: string; materialName: string; unit: string;
-        warehouse: string; onHand: number; lastDate: Date; unitCost: number;
-      }>();
-
-      (data ?? []).forEach((sl: any) => {
-        const key = `${sl.material_code}__${sl.warehouse ?? ''}`;
-        const cur = map.get(key);
-        const d   = sl.date ? new Date(sl.date) : new Date(0);
-
-        if (!cur) {
-          map.set(key, {
-            materialCode: sl.material_code ?? '—',
-            materialName: sl.material_name ?? sl.material_code ?? '—',
-            unit:         sl.unit          ?? 'pcs',
-            warehouse:    sl.warehouse     ?? 'Main',
-            onHand:       (Number(sl.qty_in) || 0) - (Number(sl.qty_out) || 0),
-            lastDate:     d,
-            unitCost:     Number(sl.unit_cost) || 0,
-          });
-        } else {
-          cur.onHand += (Number(sl.qty_in) || 0) - (Number(sl.qty_out) || 0);
-          if (d > cur.lastDate) {
-            cur.lastDate = d;
-            cur.unitCost = Number(sl.unit_cost) || cur.unitCost;
-          }
-        }
-      });
-
       const parsed: StockRow[] = [];
-      map.forEach(v => {
-        if (v.onHand <= 0) return;
-        const daysSince = Math.floor((today.getTime() - v.lastDate.getTime()) / 86400000);
+
+      store.forEach(s => {
+        const onHand = Number(s.quantity) || 0;
+        if (onHand <= 0) return;   // aging is for stock you're still holding
+        const lastRaw = (s as { lastMovementDate?: string }).lastMovementDate;
+        const last    = lastRaw ? new Date(lastRaw) : new Date(0);
+        const daysSince = Math.max(0, Math.floor((today.getTime() - last.getTime()) / 86400000));
         const status: StockRow['status'] =
           daysSince > 180 ? 'dead'        :
           daysSince > 90  ? 'slow_moving' :
           daysSince > 30  ? 'moderate'    : 'active';
+        const map = Number(s.movingAveragePrice) || 0;
         parsed.push({
-          materialCode: v.materialCode,
-          materialName: v.materialName,
-          unit:         v.unit,
-          warehouse:    v.warehouse,
-          onHandQty:    Math.round(v.onHand * 100) / 100,
-          lastMovement: v.lastDate.toISOString().slice(0, 10),
+          materialCode: s.id,
+          materialName: s.name || s.id,
+          unit:         s.unit || 'pcs',
+          warehouse:    (s as { storageBin?: string }).storageBin || 'Main',
+          onHandQty:    Math.round(onHand * 100) / 100,
+          lastMovement: lastRaw ? last.toISOString().slice(0, 10) : '—',
           daysSince,
           status,
-          estValue:     Math.round(v.onHand * v.unitCost),
+          estValue:     Math.round(onHand * map),
         });
       });
 
       setRows(parsed.sort((a, b) => b.daysSince - a.daysSince));
     } catch (e) {
+      Logger.error('StockAging', 'load failed', e);
       toast.error('Failed to load stock data');
     } finally {
       setLoading(false);
