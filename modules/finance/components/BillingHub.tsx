@@ -39,6 +39,7 @@ import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import { CompactPageHeader } from '@/modules/shared/components/CompactPageHeader';
 import { DataGridCard, GridColumn } from '@/modules/shared/components/DataGridCard';
 import RowHistoryButton from '@/modules/finance/components/RowHistoryButton';   // Sprint 31
+import { CustomerStatementModal } from '@/modules/finance/components/CustomerStatementModal';   // P1-6
 
 // ── Invoice status chip ───────────────────────────────────────────────
 const InvoiceStatus: React.FC<{ status: string; isOverdue: boolean }> = ({ status, isOverdue }) => (
@@ -93,6 +94,7 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
   const [taxEnabled, setTaxEnabled]       = useState(false);
 
   const [printInvoice, setPrintInvoice]   = useState<any | null>(null);
+  const [statementClient, setStatementClient] = useState<{ id: string; name: string } | null>(null);   // P1-6
   const [voidingId, setVoidingId]         = useState<string | null>(null);
 
   useEffect(() => { refreshData(); }, [company]);
@@ -514,6 +516,14 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
           >
             <Printer size={13} />
           </button>
+          {/* P1-6 — per-customer account statement (invoices − receipts − credit notes) */}
+          <button
+            onClick={() => setStatementClient({ id: inv.clientId, name: inv.clientName })}
+            title="Customer account statement"
+            className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
+          >
+            <FileText size={13} />
+          </button>
           {/* Sprint 31 — change history modal (uses activity_log_summary) */}
           <RowHistoryButton table="invoices" rowId={inv.id} variant="icon"/>
           {inv.status !== 'Paid' && (
@@ -836,6 +846,15 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
           invoice={printInvoice}
           company={company}
           onClose={() => setPrintInvoice(null)}
+        />
+      )}
+
+      {/* ── P1-6 Customer Account Statement ───────────────────────── */}
+      {statementClient && (
+        <CustomerStatementModal
+          clientId={statementClient.id}
+          clientName={statementClient.name}
+          onClose={() => setStatementClient(null)}
         />
       )}
     </div>
