@@ -19,6 +19,13 @@ export interface Product {
    *  product id. Variants are their own stockable rows (own qty/price/image) but
    *  link back here for grouping/traceability. */
   variantOf?: string;
+  /** Structured variant axis — what makes this variant differ from its siblings,
+   *  e.g. { Length: "320" } or { Color: "Black" }. Drives the grouping label and
+   *  the code suffix. Empty/absent on standalone products and parents. */
+  variantAttributes?: Record<string, string>;
+  /** True when the variant carries its OWN image instead of inheriting the
+   *  parent's. Default (false/absent) = shows the parent image. */
+  variantImageOverride?: boolean;
   glassType?: 'Clear' | 'Plain' | 'Color' | 'Fluted' | 'Mirror' | 'Tinted' | 'Reflective' | 'Frosted' | 'Tempered' | 'Annealed' | 'Laminated' | 'Double Glazed' | 'One Side';
   mainCategory?: string; 
   subCategory?: string; 

@@ -201,6 +201,35 @@ const NipponProductMaster: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  // Batch variant save — one saveProducts + one store save + one refresh for all
+  // N variants (e.g. lengths 10/12/14). Each gets its own zero-stock store row
+  // (MAP = its cost). Mirrors handleSaveProduct's store-row shape.
+  const handleSaveVariants = async (list: Product[]) => {
+    if (!list.length) return;
+    const store = InventoryService.getStore();
+    list.forEach(product => {
+      store.push({
+        id: product.id, company, name: product.description,
+        category: product.category as StoreItem['category'],
+        quantity: 0, unrestrictedQty: 0, qiQty: 0, blockedQty: 0, reservedQty: 0, consignmentQty: 0,
+        unit: product.unit, minLevel: 10, reorderPoint: 5,
+        movingAveragePrice: product.costPrice || 0, totalValue: 0,
+        storageBin: 'New', lastMovementDate: new Date().toISOString(),
+      });
+    });
+    try {
+      const res = await AsyncSalesService.saveProducts(list);
+      InventoryService.saveStore(store);
+      await refreshData();
+      setIsModalOpen(false);
+      setVariantParent(null);
+      if (res.error) return;
+      toast.success(`Added ${list.length} variant${list.length > 1 ? 's' : ''}.`);
+    } catch (err) {
+      toast.error(`Save failed: ${(err as Error)?.message || 'unknown'}`);
+    }
+  };
+
   // Inline quick-add — fast single-item entry without the full form. Captures the
   // essentials (code, description, unit, price); details/image can be edited later.
   const handleQuickAdd = async () => {
@@ -1073,8 +1102,10 @@ const NipponProductMaster: React.FC = () => {
         isOpen={isModalOpen}
         onClose={() => { setIsModalOpen(false); setVariantParent(null); }}
         onSave={handleSaveProduct}
+        onSaveMany={handleSaveVariants}
         editingProduct={editingProduct}
         variantOf={variantParent}
+        allProducts={products}
       />
     </div>
   );

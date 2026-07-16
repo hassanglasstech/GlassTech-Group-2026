@@ -3,9 +3,28 @@ import React, { useState, useEffect } from 'react';
 import { Product, StoreItem, Vendor } from '../../shared/types';
 import { SalesService } from '../../sales/services/salesService';
 import { toast } from 'sonner';
-import { X, Box, Tag, Building2, Hash, Layout, ListFilter, UploadCloud } from 'lucide-react';
+import { X, Box, Tag, Building2, Hash, Layout, ListFilter, UploadCloud, Layers, Search, Lock } from 'lucide-react';
 import { uploadProductImage, deleteProductImage } from '@/modules/sales/companies/nippon/nipponProductImageService';
+import { ProductImage } from '../../shared/components/ProductImage';
 import { safeParse, safeSave } from '../../shared/services/utils';
+
+// Variant axis — what makes one variant differ from its siblings. Single-axis
+// (one product varies on ONE dimension) covers ~95% of hardware. The chosen axis
+// maps back onto an existing legacy field so old search/prints keep working.
+const VARIANT_AXES = ['Length', 'Color', 'Direction', 'Size', 'Finish', 'Custom'] as const;
+type VariantAxis = typeof VARIANT_AXES[number];
+
+// Auto short-suffix for the SKU code (parent-code + "-" + suffix). Known values
+// get canonical abbreviations; anything else is alnum-squeezed. User can override.
+const SUFFIX_MAP: Record<string, string> = {
+  BLACK: 'BK', WHITE: 'W', SILVER: 'SL', GOLD: 'GD', BRONZE: 'BZ', GREY: 'GY', GRAY: 'GY',
+  CHROME: 'CR', BROWN: 'BR', LEFT: 'L', RIGHT: 'R', UNIVERSAL: 'U',
+};
+const suffixFor = (val: string): string => {
+  const v = val.trim().toUpperCase();
+  if (SUFFIX_MAP[v]) return SUFFIX_MAP[v];
+  return v.replace(/[^A-Z0-9]/g, '').slice(0, 8) || 'V';
+};
 
 // Unit options. Defaults ship with the app; user-added units are persisted to
 // localStorage so they show in the dropdown on every future product.
@@ -29,12 +48,26 @@ interface NipponProductFormProps {
    *  this parent — an "Add variant" (colour/direction/size). Saved as a new
    *  stockable product linked back via variantOf = parent.id. */
   variantOf?: Product | null;
+  /** All Nippon products — powers the parent picker + duplicate-code check. */
+  allProducts?: Product[];
+  /** Batch save for multi-variant add (e.g. lengths 10, 12, 14 in one go). */
+  onSaveMany?: (products: Product[]) => void | Promise<void>;
 }
 
 const NipponProductForm: React.FC<NipponProductFormProps> = ({
-  isOpen, onClose, onSave, editingProduct, variantOf
+  isOpen, onClose, onSave, editingProduct, variantOf, allProducts = [], onSaveMany
 }) => {
   const [nipponVendors, setNipponVendors] = useState<Vendor[]>([]);
+  // ── Variant state ──────────────────────────────────────────────────────
+  // variantMode on = this new product is a variant of a parent. Entered either
+  // via the row "Add variant" button (variantOf pre-set) or the toggle below.
+  const [variantMode, setVariantMode] = useState(false);
+  const [selectedParent, setSelectedParent] = useState<Product | null>(null);
+  const [parentSearch, setParentSearch] = useState('');
+  const [axisType, setAxisType] = useState<VariantAxis>('Length');
+  const [axisValues, setAxisValues] = useState('');   // comma-separated → batch
+  // Parents = real, non-variant products (1 level deep — no variant-of-variant).
+  const parentOptions = allProducts.filter(p => !p.variantOf);
   const [formData, setFormData] = useState({
       internalId: '',
       modelNo: '',
@@ -92,13 +125,22 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
     }
   };
 
+  // Init on open / entry-point change: vendors + variant mode + reset axis.
+  useEffect(() => {
+    if (!isOpen) return;
+    const allVendors = SalesService.getVendors();
+    setNipponVendors(allVendors.filter(v => v.company === 'Nippon'));
+    if (variantOf) { setVariantMode(true); setSelectedParent(variantOf); }
+    else if (!editingProduct) { setVariantMode(false); setSelectedParent(null); }
+    setAxisType('Length'); setAxisValues(''); setParentSearch('');
+  }, [isOpen, editingProduct, variantOf]);
+
+  // Prefill the form: from the product being edited, else from the chosen parent
+  // (specs inherit from the parent when adding a variant).
   useEffect(() => {
     if (isOpen) {
-        const allVendors = SalesService.getVendors();
-        setNipponVendors(allVendors.filter(v => v.company === 'Nippon'));
-
         // Prefill from the product being edited OR the parent when adding a variant.
-        const src = editingProduct || variantOf;
+        const src = editingProduct || selectedParent;
         if (src) {
             setFormData({
                 internalId: src.profileCode || '',
@@ -140,7 +182,7 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
             });
         }
     }
-  }, [isOpen, editingProduct, variantOf]);
+  }, [isOpen, editingProduct, selectedParent]);
 
   const processFile = (file: File) => {
     const reader = new FileReader();
@@ -206,7 +248,101 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
     if (file) processFile(file);
   };
 
+  // Map the chosen axis value onto the matching legacy field (so existing search
+  // + prints keep working) AND record it structured in variantAttributes.
+  const applyAxis = (p: Product, type: VariantAxis, val: string): Product => {
+    const V = val.toUpperCase();
+    const specs: Record<string, string> = { ...(p.technicalSpecs || {}) };
+    const out: Product = { ...p };
+    switch (type) {
+      case 'Color': case 'Finish': out.finishColor = V; break;
+      case 'Direction': out.direction = V; break;
+      case 'Length': specs['Length'] = V; break;
+      case 'Size': specs['Size'] = V; break;
+      default: specs[type] = V;
+    }
+    out.technicalSpecs = specs;
+    out.variantAttributes = { [type]: val.trim() };
+    return out;
+  };
+
+  // Variant save — builds one stockable SKU per axis value (batch: "10, 12, 14"
+  // → three SKUs). Specs inherit from the parent (already prefilled); each variant
+  // gets its own code (parentCode-suffix), price, stock and inherits the parent
+  // image. One value → single save; many → onSaveMany batch.
+  const handleSaveVariants = async () => {
+    if (!selectedParent) return toast.error('Pick a parent product first.');
+    if (!formData.description) return toast.error('Description is required.');
+    const values = Array.from(new Set(
+      axisValues.split(',').map(s => s.trim()).filter(Boolean),
+    ));
+    if (values.length === 0) return toast.error(`Enter at least one ${axisType} value (e.g. 10, 12, 14).`);
+    if (isSaving) return;
+
+    const base = (selectedParent.profileCode || selectedParent.modelNo || selectedParent.id).toUpperCase();
+    const parentImg = selectedParent.imageUrl || '';
+    const existingIds = new Set(allProducts.map(p => p.id.toUpperCase()));
+    const built: Product[] = [];
+    const collisions: string[] = [];
+    for (const val of values) {
+      const id = `${base}-${suffixFor(val)}`;
+      if (existingIds.has(id.toUpperCase()) || built.some(b => b.id === id)) { collisions.push(id); continue; }
+      let p: Product = {
+        id,
+        company: 'Nippon',
+        category: formData.category,
+        mainCategory: formData.mainCategory,
+        subCategory: formData.subCategory,
+        description: `${formData.description.toUpperCase()} ${val.toUpperCase()}`.trim(),
+        modelNo: id,
+        brand: formData.brand.toUpperCase(),
+        profileCode: id,
+        unit: formData.unit as Product['unit'],
+        costPrice: Number(formData.costPrice),
+        basePrice: Number(formData.basePrice),
+        material: formData.material,
+        tongueLength: formData.tongueLength,
+        spindleLength: formData.spindleLength,
+        imageUrl: parentImg,
+        variants: [],
+        variantOf: selectedParent.id,
+        variantImageOverride: false,
+        technicalSpecs: { ...formData.technicalSpecs },
+        width: Number(formData.width),
+        height: Number(formData.height),
+        frameColor: formData.frameColor,
+        meshColor: formData.meshColor,
+        hsCode: formData.hsCode,
+        subDescription: formData.subDescription || '',
+        nickName: (formData as Record<string, unknown>).nickName as string || '',
+      } as Product;
+      p = applyAxis(p, axisType, val);
+      built.push(p);
+    }
+
+    if (collisions.length) {
+      toast.error(`Code${collisions.length > 1 ? 's' : ''} already exist: ${collisions.join(', ')}. Skipped.`, { duration: 8000 });
+    }
+    if (built.length === 0) return;
+
+    setIsSaving(true);
+    try {
+      const storeData: Partial<StoreItem> = { minLevel: Number(formData.minLevel), unit: formData.unit };
+      if (built.length === 1) {
+        await Promise.resolve(onSave(built[0], storeData));
+      } else if (onSaveMany) {
+        await Promise.resolve(onSaveMany(built));
+      } else {
+        // Fallback if the parent didn't wire a batch handler: save sequentially.
+        for (const p of built) await Promise.resolve(onSave(p, storeData));
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSave = async () => {
+      if (variantMode) return handleSaveVariants();
       if (!formData.description || !formData.unit) return toast.error("Description and Unit are required.");
       if (isSaving) return;
       setIsSaving(true);
@@ -298,13 +434,115 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
         <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in duration-200 border border-slate-300 flex flex-col max-h-[92vh]">
             <div className="px-8 py-6 bg-red-700 text-white flex justify-between items-center shrink-0">
                 <div>
-                    <h3 className="text-xl font-black uppercase tracking-tight">{editingProduct ? 'Edit Component' : variantOf ? 'New Variant' : 'New Hardware Item'}</h3>
-                    <p className="text-[10px] font-bold text-red-200 uppercase tracking-widest mt-1">{variantOf && !editingProduct ? `Variant of ${variantOf.modelNo || variantOf.description}` : 'Nippon Catalog Entry'}</p>
+                    <h3 className="text-xl font-black uppercase tracking-tight">{editingProduct ? 'Edit Component' : variantMode ? 'New Variant' : 'New Hardware Item'}</h3>
+                    <p className="text-[10px] font-bold text-red-200 uppercase tracking-widest mt-1">{variantMode && selectedParent ? `Variant of ${selectedParent.profileCode || selectedParent.modelNo || selectedParent.description}` : 'Nippon Catalog Entry'}</p>
                 </div>
                 <button onClick={onClose} className="hover:bg-white/10 p-2 rounded-full transition-all"><X size={24}/></button>
             </div>
             
             <div className="p-8 space-y-6 bg-slate-50 overflow-y-auto flex-1 min-h-0">
+                {/* ── VARIANT PANEL ─────────────────────────────────────── */}
+                {!editingProduct && (
+                  <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+                    {/* Standalone vs Variant toggle */}
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => { setVariantMode(false); setSelectedParent(null); }}
+                        className={`flex-1 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${!variantMode ? 'bg-slate-800 text-white shadow' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
+                        Standalone Product
+                      </button>
+                      <button type="button" onClick={() => setVariantMode(true)}
+                        className={`flex-1 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${variantMode ? 'bg-amber-600 text-white shadow' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
+                        <Layers size={13}/> Variant of Existing
+                      </button>
+                    </div>
+
+                    {variantMode && (
+                      <div className="space-y-3 pt-1">
+                        {/* Parent picker */}
+                        {selectedParent ? (
+                          <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl p-2.5">
+                            <div className="w-10 h-10 bg-white rounded-lg overflow-hidden border border-amber-200 flex items-center justify-center shrink-0">
+                              <ProductImage id={selectedParent.id} code={selectedParent.modelNo || selectedParent.profileCode} url={selectedParent.imageUrl} alt={selectedParent.description} className="w-full h-full object-cover" iconSize={16}/>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[10px] font-black uppercase text-amber-700 truncate">Parent · {selectedParent.profileCode || selectedParent.modelNo || selectedParent.id}</p>
+                              <p className="text-[11px] font-bold text-slate-600 truncate">{selectedParent.description}</p>
+                            </div>
+                            <button type="button" onClick={() => { setSelectedParent(null); setParentSearch(''); }} className="text-[10px] font-black text-amber-600 uppercase hover:underline shrink-0">Change</button>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="relative">
+                              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                              <input autoFocus value={parentSearch} onChange={e => setParentSearch(e.target.value)}
+                                placeholder="Search parent by code or name…"
+                                className="sap-input w-full text-xs font-bold pl-9"/>
+                            </div>
+                            {parentSearch.trim() && (
+                              <div className="max-h-44 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-50 bg-white">
+                                {parentOptions
+                                  .filter(p => {
+                                    const q = parentSearch.trim().toUpperCase();
+                                    return (p.profileCode || '').toUpperCase().includes(q)
+                                      || (p.modelNo || '').toUpperCase().includes(q)
+                                      || (p.description || '').toUpperCase().includes(q)
+                                      || p.id.toUpperCase().includes(q);
+                                  })
+                                  .slice(0, 25)
+                                  .map(p => (
+                                    <button key={p.id} type="button" onClick={() => setSelectedParent(p)}
+                                      className="w-full flex items-center gap-2.5 p-2 hover:bg-amber-50 text-left transition-colors">
+                                      <div className="w-8 h-8 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center shrink-0">
+                                        <ProductImage id={p.id} code={p.modelNo || p.profileCode} url={p.imageUrl} alt={p.description} className="w-full h-full object-cover" iconSize={13}/>
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="text-[10px] font-black uppercase text-indigo-600 truncate">{p.profileCode || p.modelNo || p.id}</p>
+                                        <p className="text-[11px] font-bold text-slate-600 truncate">{p.description}</p>
+                                      </div>
+                                    </button>
+                                  ))}
+                                {parentOptions.filter(p => {
+                                  const q = parentSearch.trim().toUpperCase();
+                                  return (p.profileCode || '').toUpperCase().includes(q) || (p.modelNo || '').toUpperCase().includes(q) || (p.description || '').toUpperCase().includes(q) || p.id.toUpperCase().includes(q);
+                                }).length === 0 && (
+                                  <p className="text-center text-[10px] font-bold text-slate-400 uppercase py-3">No matching product</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Axis + values (only once a parent is chosen) */}
+                        {selectedParent && (
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold uppercase text-slate-400">Varies by</label>
+                              <select value={axisType} onChange={e => setAxisType(e.target.value as VariantAxis)} className="sap-input w-full font-bold text-xs">
+                                {VARIANT_AXES.map(a => <option key={a} value={a}>{a}</option>)}
+                              </select>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold uppercase text-slate-400">{axisType} value(s)</label>
+                              <input value={axisValues} onChange={e => setAxisValues(e.target.value)}
+                                placeholder={axisType === 'Length' ? 'e.g. 10, 12, 14' : axisType === 'Color' ? 'e.g. Black, White' : 'comma-separated'}
+                                className="sap-input w-full font-bold text-xs uppercase"/>
+                            </div>
+                            {/* Code preview */}
+                            <div className="col-span-2 text-[10px] font-bold text-slate-400">
+                              {axisValues.trim()
+                                ? <span>Will create: <span className="text-emerald-600 font-black">{Array.from(new Set(axisValues.split(',').map(s => s.trim()).filter(Boolean))).map(v => `${(selectedParent.profileCode || selectedParent.modelNo || selectedParent.id).toUpperCase()}-${suffixFor(v)}`).join('  ·  ')}</span></span>
+                                : <span className="italic">Enter one or more values — each becomes its own SKU (own stock &amp; price).</span>}
+                            </div>
+                            <div className="col-span-2 flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 rounded-lg p-2">
+                              <Lock size={11}/> Specs, category, brand &amp; image below are inherited from the parent — edit price/stock per variant; adjust specs only if this variant differs.
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* IMAGE UPLOAD SECTION */}
                 <div 
                     className={`flex items-center space-x-6 bg-white p-4 rounded-2xl border-2 border-dashed transition-all group ${isDragging ? 'border-red-500 bg-red-50' : 'border-slate-200 hover:border-red-300'}`}
@@ -702,7 +940,8 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
             <div className="px-8 py-6 bg-white border-t flex justify-end space-x-3 shrink-0">
                 <button onClick={onClose} className="px-6 py-2 text-slate-400 font-bold uppercase text-xs hover:text-slate-600">Cancel</button>
                 <button onClick={handleSave} disabled={isSaving} className="bg-red-600 text-white px-8 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-red-700 transition-all flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
-                    <Box size={16}/> <span>{isSaving ? 'Saving…' : 'Save Hardware'}</span>
+                    {variantMode ? <Layers size={16}/> : <Box size={16}/>}
+                    <span>{isSaving ? 'Saving…' : variantMode ? (() => { const n = new Set(axisValues.split(',').map(s => s.trim()).filter(Boolean)).size; return n > 1 ? `Save ${n} Variants` : 'Save Variant'; })() : 'Save Hardware'}</span>
                 </button>
             </div>
 
