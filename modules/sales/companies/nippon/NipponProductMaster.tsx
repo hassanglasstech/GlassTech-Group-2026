@@ -688,6 +688,34 @@ const NipponProductMaster: React.FC = () => {
     return null;
   };
 
+  // P1-11 (variant feature B — visibility): count children per parent so the
+  // registry can show a "N variants" badge on a parent and a "↳ parent-code" chip
+  // on each variant. Makes the variantOf relationship visible without changing
+  // the flat list / pagination.
+  const variantChildCount = useMemo(() => {
+    const m: Record<string, number> = {};
+    products.forEach(p => { if (p.variantOf) m[p.variantOf] = (m[p.variantOf] || 0) + 1; });
+    return m;
+  }, [products]);
+  const variantBadge = (p: Product): { kind: 'parent' | 'child'; label: string } | null => {
+    if (p.variantOf) {
+      const parent = products.find(pp => pp.id === p.variantOf);
+      const pc = parent?.profileCode || parent?.modelNo || p.variantOf;
+      return { kind: 'child', label: `↳ ${pc}` };
+    }
+    const n = variantChildCount[p.id] || 0;
+    return n > 0 ? { kind: 'parent', label: `${n} variant${n > 1 ? 's' : ''}` } : null;
+  };
+  const variantBadgeEl = (p: Product) => {
+    const v = variantBadge(p);
+    if (!v) return null;
+    return (
+      <span className={`text-[8px] font-black uppercase border rounded px-1 py-0.5 ${v.kind === 'parent' ? 'text-indigo-600 bg-indigo-50 border-indigo-200' : 'text-slate-500 bg-slate-50 border-slate-200'}`}>
+        {v.label}
+      </span>
+    );
+  };
+
   const filtered = useMemo(() => {
     const q = searchTerm.toLowerCase().trim();
     const result = products.filter(p => {
@@ -1064,11 +1092,12 @@ const NipponProductMaster: React.FC = () => {
                                 </td>
                                 <td className="font-bold text-slate-800 uppercase w-full">
                                     <div className="flex flex-col">
-                                        <span className="flex items-center gap-1.5">
+                                        <span className="flex items-center gap-1.5 flex-wrap">
                                             {p.description}
                                             {(() => { const b = dupBadge(p); return b
                                                 ? <span className={`text-[8px] font-black uppercase border rounded px-1 py-0.5 ${b.cls}`}>{b.label}</span>
                                                 : null; })()}
+                                            {variantBadgeEl(p)}
                                         </span>
                                         <span className="text-[10px] text-slate-400 font-medium normal-case truncate">
                                             {[p.mainCategory, p.subCategory].filter(Boolean).join(' · ') || '—'}
@@ -1135,11 +1164,12 @@ const NipponProductMaster: React.FC = () => {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-mono text-[11px] font-bold text-slate-500 uppercase truncate" title={code}>{code}</p>
-                        <p className="font-bold text-[13px] text-slate-800 uppercase leading-tight flex items-center gap-1.5">
+                        <p className="font-bold text-[13px] text-slate-800 uppercase leading-tight flex items-center gap-1.5 flex-wrap">
                           {p.description}
                           {(() => { const b = dupBadge(p); return b
                             ? <span className={`text-[8px] font-black uppercase border rounded px-1 py-0.5 shrink-0 ${b.cls}`}>{b.label}</span>
                             : null; })()}
+                          {variantBadgeEl(p)}
                         </p>
                         <p className="text-[10px] text-slate-400 truncate">{[p.mainCategory, p.subCategory].filter(Boolean).join(' · ') || '—'}</p>
                         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
