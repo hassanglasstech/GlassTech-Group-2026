@@ -172,7 +172,7 @@ const StoreIssueScreen: React.FC = () => {
         message: `${cli?.name || 'Customer'} · Vehicle ${gatePass.vehicleNo} · Driver ${gatePass.driverName}${gatePass.driverPhone ? ` (${gatePass.driverPhone})` : ''}${gatePass.isReturnable ? ' · RETURNABLE' : ''} · QR ${qrToken}`,
         type: 'general',
         referenceId: gpOrder.id,
-        link: `#/factory-incharge`,
+        link: `#/gatekeeper`,
       });
       toast.success(`Gate pass issued for ${gpOrder.orderNo || gpOrder.id} — pushed to the Factory gate.`);
       setGpOrder(null);

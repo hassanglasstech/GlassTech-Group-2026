@@ -59,6 +59,7 @@ const LogisticsModule  = React.lazy(() => import('./modules/procurement/pages/Lo
 const VendorHub        = React.lazy(() => import('./modules/procurement/pages/VendorHub'));
 const MDDashboard       = React.lazy(() => import('./modules/md-dashboard/MDDashboard'));
 const FactoryInchargeModule = React.lazy(() => import('./modules/factory/pages/FactoryInchargeModule'));
+const FactoryGatekeeper = React.lazy(() => import('./modules/factory/pages/FactoryGatekeeper'));
 const ProcurementHub   = React.lazy(() => import('./modules/procurement/pages/ProcurementHub'));
 const StoreIssueScreen = React.lazy(() => import('./modules/sales/companies/nippon/StoreIssueScreen'));
 // EventOS chat FAB hidden app-wide per request (2026-07-15) — see render site below.
@@ -170,6 +171,7 @@ const ROLE_NAV: Record<string, { name: string; path: string; icon: any; key: str
 const ALL_NAV = [
   ...CORE_NAV,
   { name: 'Factory Incharge', path: '/factory-incharge', icon: Factory,    key: 'factory-incharge' },
+  { name: 'Factory Gate',     path: '/gatekeeper',       icon: ShieldCheck,key: 'gatekeeper'       },
   { name: 'MD Dashboard',     path: '/md-dashboard',     icon: BarChart3,  key: 'md-dashboard'     },
   { name: 'Basis Admin',      path: '/admin',            icon: ShieldCheck,key: 'admin'            },
 ];
@@ -213,6 +215,7 @@ const pathToModuleKey = (pathname: string): string | null => {
   if (pathname.startsWith('/hub'))             return 'hub';
   if (pathname.startsWith('/admin'))           return 'admin';
   if (pathname.startsWith('/md-dashboard'))    return 'md-dashboard';
+  if (pathname.startsWith('/gatekeeper'))      return 'gatekeeper';
   if (pathname.startsWith('/factory-incharge'))return 'factory-incharge';
   if (pathname.startsWith('/health'))          return 'admin';
   if (pathname.startsWith('/test-suite'))      return 'test-suite';
@@ -834,6 +837,7 @@ const App: React.FC = () => {
                   <Route path="/finance/inbox"  element={<ModuleErrorBoundary moduleName="Finance Inbox"><FinanceInbox /></ModuleErrorBoundary>} />
                   <Route path="/md-dashboard" element={<ModuleErrorBoundary moduleName="MD Dashboard"><MDDashboard /></ModuleErrorBoundary>} />
                   <Route path="/factory-incharge" element={<ModuleErrorBoundary moduleName="Factory Incharge"><FactoryInchargeModule /></ModuleErrorBoundary>} />
+                  <Route path="/gatekeeper" element={<ModuleErrorBoundary moduleName="Factory Gate"><FactoryGatekeeper /></ModuleErrorBoundary>} />
                   <Route path="/admin"         element={<ModuleErrorBoundary moduleName="Admin"><AdminSecurity /></ModuleErrorBoundary>} />
                   <Route path="/change-password" element={<ModuleErrorBoundary moduleName="Change Password"><ChangePasswordPage /></ModuleErrorBoundary>} />
                   <Route path="/nippon/catalogue" element={<ModuleErrorBoundary moduleName="Catalogue"><NipponCataloguePage /></ModuleErrorBoundary>} />
