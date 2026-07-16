@@ -547,12 +547,14 @@ const NipponQuotationManager: React.FC = () => {
                                 <input readOnly={isLocked} type="number" className="sap-input w-full py-0.5 text-center text-xs font-bold" value={item.qty || ''} onChange={e => updateItem(idx, 'qty', Number(e.target.value))} />
                             </td>
                             <td className="w-28">
-                                {/* Price is LOCKED to the product-master sale price — not hand-editable
-                                    on the quote (prevents accidental price changes). A Free sample
-                                    zeroes it via the Sample toggle. */}
-                                <input readOnly type="number" title="Price is set from the product master — not editable here"
-                                    className="sap-input w-full py-0.5 text-right text-xs font-bold text-blue-600 bg-slate-50 cursor-not-allowed"
-                                    value={item.pricePerUnit || ''} />
+                                {/* Rate defaults from the product master but is EDITABLE per line so a
+                                    trader can key a negotiated unit price (P1-2). Locked on a saved
+                                    order and zeroed for a free sample. amount recomputes via updateItem. */}
+                                <input readOnly={isLocked || item.isSample} type="number"
+                                    title="Negotiated unit price — defaults from the product master, editable per line"
+                                    className={`sap-input w-full py-0.5 text-right text-xs font-bold text-blue-600 ${(isLocked || item.isSample) ? 'bg-slate-50 cursor-not-allowed' : ''}`}
+                                    value={item.pricePerUnit || ''}
+                                    onChange={e => updateItem(idx, 'pricePerUnit', Number(e.target.value))} />
                             </td>
                             <td className="w-28 text-right font-black text-slate-800 pr-4">
                                 {item.isSample
@@ -603,6 +605,32 @@ const NipponQuotationManager: React.FC = () => {
                       <div className="text-xl font-black text-slate-800 leading-none mt-1">Rs {(subTotal - (formData.discountAmount || 0)).toLocaleString()}</div>
                     </div>
                   </div>
+
+                  {/* Seller-only live margin (P1-2) — NEVER printed on the customer quote.
+                      Cost is looked up from the product master by line, so a trader sees
+                      gross profit before giving a discount / editing a rate. */}
+                  {(() => {
+                    const findCost = (it: { productRef?: string; locationCode?: string }): number => {
+                      const p = products.find(pp => pp.id === it.productRef || pp.id === it.locationCode
+                        || pp.modelNo === it.locationCode || pp.profileCode === it.locationCode);
+                      return Number(p?.costPrice) || 0;
+                    };
+                    const lines = (formData.items || []).filter(i => !i.isSection && !i.isSample);
+                    const totalCost = lines.reduce((s, it) => s + findCost(it) * (Number(it.qty) || 0), 0);
+                    const net = subTotal - (formData.discountAmount || 0);
+                    const gp = net - totalCost;
+                    const gpPct = net > 0 ? (gp / net) * 100 : 0;
+                    const missingCost = lines.some(it => findCost(it) <= 0);
+                    if (lines.length === 0) return null;
+                    return (
+                      <div className="no-print flex justify-end items-center gap-6 text-[10px] font-black uppercase tracking-widest pt-0.5">
+                        <span className="text-slate-400">Cost <span className="text-slate-600 tabular-nums">Rs {Math.round(totalCost).toLocaleString()}</span></span>
+                        <span className={gp >= 0 ? 'text-emerald-600' : 'text-rose-600'}>GP <span className="tabular-nums">Rs {Math.round(gp).toLocaleString()}</span></span>
+                        <span className={`px-2 py-0.5 rounded ${gpPct >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'} tabular-nums`}>GP {gpPct.toFixed(1)}%</span>
+                        {missingCost && <span className="text-amber-600 normal-case" title="Some lines have no master cost — margin is understated">⚠ cost missing on some lines</span>}
+                      </div>
+                    );
+                  })()}
 
                   {/* Buttons Row */}
                   <div className="flex justify-between items-center">
