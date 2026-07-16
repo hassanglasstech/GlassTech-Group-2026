@@ -288,8 +288,27 @@ const NipponProductMaster: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  // Remove a deleted product's stock row(s) too — a product delete must not
+  // leave an orphan store row (it keeps showing in Stock and corrupts inventory
+  // valuation, IAS 2: stock ⊆ product, no orphans). Includes set-component
+  // sub-rows (id-SUB-*). Returns the on-hand qty that was removed (for warning).
+  const purgeStoreRows = async (productIds: string[]): Promise<number> => {
+    const store = InventoryService.getStore();
+    const idSet = new Set(productIds);
+    const rows = store.filter(s => idSet.has(s.id) || productIds.some(pid => s.id.startsWith(`${pid}-SUB-`)));
+    if (!rows.length) return 0;
+    const onHand = rows.reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
+    await InventoryService.deleteStoreItems(rows.map(s => s.id));
+    return onHand;
+  };
+
   const handleDelete = async (id: string) => {
-      if(confirm("Delete this hardware item? Stock history will be preserved but item will be hidden.")) {
+      const row = storeItems.find(s => s.id === id);
+      const onHand = Number(row?.quantity) || 0;
+      const warn = onHand > 0
+        ? `\n\n⚠ This item still has ${onHand} on-hand — deleting removes that stock too. Write it off first if you need the value recorded.`
+        : '';
+      if (await confirmModal(`Delete this hardware item? It will be removed from both the catalogue and Stock.${warn}`)) {
           try {
               // Real cloud+local delete. Previously this upserted the filtered array,
               // which never removed the row from the cloud table → the product came
@@ -299,12 +318,37 @@ const NipponProductMaster: React.FC = () => {
                   toast.error(`Delete failed — product still in cloud: ${error}`);
                   return;
               }
+              const removedQty = await purgeStoreRows([id]);   // no orphan stock row left behind
               await refreshData();
-              toast.success('Product deleted.');
+              toast.success(removedQty > 0 ? `Product deleted (${removedQty} on-hand removed from Stock).` : 'Product deleted.');
           } catch (err) {
               toast.error(`Delete failed: ${(err as Error)?.message || 'unknown'}`);
           }
       }
+  };
+
+  // Reconciliation sweep — remove EMPTY stock rows whose product no longer exists
+  // (orphans left by earlier deletes/dedupes). Rows that still hold on-hand qty
+  // are KEPT and flagged for manual review/write-off (never silently dropped).
+  const handleCleanOrphanStock = async () => {
+    const store = InventoryService.getStore().filter(s => s.company === company);
+    const liveIds = new Set(products.map(p => p.id));
+    const orphans = store.filter(s => {
+      const parentId = s.id.includes('-SUB-') ? s.id.split('-SUB-')[0] : s.id;
+      return !liveIds.has(parentId) && !liveIds.has(s.id);
+    });
+    if (!orphans.length) { toast.info('No orphan stock — the product and stock lists are in sync.'); return; }
+    const isEmpty = (s: StoreItem) => (Number(s.quantity) || 0) === 0 && (Number(s.unrestrictedQty) || 0) === 0 && (Number(s.reservedQty) || 0) === 0;
+    const empty = orphans.filter(isEmpty);
+    const nonEmpty = orphans.filter(s => !isEmpty(s));
+    const msg = `Found ${orphans.length} stock row(s) with no matching product.\n\n` +
+      `• ${empty.length} empty (qty 0) — safe to remove.\n` +
+      (nonEmpty.length ? `• ${nonEmpty.length} still have on-hand qty — KEPT for review/write-off: ${nonEmpty.slice(0, 5).map(s => s.name).join(', ')}${nonEmpty.length > 5 ? '…' : ''}\n` : '') +
+      `\nRemove the ${empty.length} empty orphan row(s) now?`;
+    if (!(await confirmModal(msg))) return;
+    if (empty.length) await InventoryService.deleteStoreItems(empty.map(s => s.id));
+    await refreshData();
+    toast.success(`Removed ${empty.length} empty orphan stock row(s).${nonEmpty.length ? ` ${nonEmpty.length} with stock kept for review.` : ''}`);
   };
 
   // Remove duplicate products (grouped by model no, else description|brand). Keeps
@@ -729,10 +773,12 @@ const NipponProductMaster: React.FC = () => {
     if (!ids.length) return;
     if (!window.confirm(`Delete ${ids.length} product(s)? This removes them from the cloud as well.`)) return;
     let ok = 0, fail = 0;
+    const deletedIds: string[] = [];
     for (const id of ids) {
       const { error } = await AsyncSalesService.deleteProduct(id);
-      if (error) fail++; else ok++;
+      if (error) fail++; else { ok++; deletedIds.push(id); }
     }
+    if (deletedIds.length) await purgeStoreRows(deletedIds);   // no orphan stock rows
     clearSelection();
     await refreshData();
     if (fail) toast.error(`${ok} deleted · ${fail} failed (still in cloud).`);
@@ -801,9 +847,10 @@ const NipponProductMaster: React.FC = () => {
                          {[
                            { label: 'Restore (JSON)',              icon: UploadCloud, on: () => jsonInputRef.current?.click(),   confirm: 'Restore products from a JSON backup? Existing products with the same code can be overwritten.' },
                            { label: 'Remove Duplicates',           icon: Wrench,      on: handleDedupe,                          confirm: 'Remove duplicate products? Duplicate rows will be permanently deleted.' },
+                           { label: 'Clean Orphan Stock',          icon: Layers,      on: handleCleanOrphanStock,                confirm: null },
                            { label: 'Build Stock from Quotations', icon: Layers,      on: handleBuildStockFromQuotations,        confirm: 'Rebuild stock levels from quotations? On-hand stock will be recomputed.' },
                          ].map(({ label, icon: Icon, on, confirm: msg }) => (
-                           <button key={label} onClick={() => { setShowTools(false); if (window.confirm(msg)) on(); }} className="w-full flex items-center gap-2.5 px-4 py-2 text-[11px] font-bold text-rose-600 hover:bg-rose-50 transition-all">
+                           <button key={label} onClick={() => { setShowTools(false); if (!msg || window.confirm(msg)) on(); }} className="w-full flex items-center gap-2.5 px-4 py-2 text-[11px] font-bold text-rose-600 hover:bg-rose-50 transition-all">
                                <Icon size={14} className="text-rose-400"/> {label}
                            </button>
                          ))}
