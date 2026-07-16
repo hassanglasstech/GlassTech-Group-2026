@@ -94,6 +94,27 @@ export interface GlassServiceCharge {
   amount: number;
 }
 
+/**
+ * Gate Pass B — an order's gate pass. Issued by the office from an issued/staged
+ * order, QR-verified, and pushed cross-company to the Factory gatekeeper who
+ * stamps IN/OUT at the shared gate. Rides on the order's `data` jsonb (no schema
+ * change); the qrToken is what the gatekeeper scans to authorise the goods.
+ */
+export interface GatePassInfo {
+  qrToken: string;              // scanned by the gatekeeper to verify the pass
+  vehicleNo: string;
+  driverName: string;
+  driverPhone?: string;
+  isReturnable: boolean;        // vehicle/goods expected back (gate-in-back)
+  instructions?: string;        // driver / gate instructions (Urdu slip in phase D)
+  issuedAt: string;             // ISO
+  issuedBy: string;
+  status: 'Issued' | 'GateIn' | 'GateOut' | 'Returned';
+  gateInAt?: string;            // stamped by the gatekeeper (the tap IS the record)
+  gateOutAt?: string;
+  returnedAt?: string;
+}
+
 export interface Quotation {
   id: string;
   orderNo?: string;
@@ -170,6 +191,9 @@ export interface Quotation {
   pickedBy?: string;
   /** ISO timestamp of the last pick save / completion. */
   pickedAt?: string;
+  /** Gate Pass B — the gate pass issued for this order (QR-verified, cross-company
+   *  pushed to the Factory gatekeeper). Rides in the quotations `data` jsonb. */
+  gatePass?: GatePassInfo;
 
   // Wastage analysis decision (saved at quotation time)
   wastageDecision?: {
