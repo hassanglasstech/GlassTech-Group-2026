@@ -9,11 +9,12 @@ import { Globe, Inbox, CheckCircle2, Clock, Truck, ShieldAlert, Package, Message
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/appStore';
 import ICOTransferPanel from './ICOTransferPanel';
+import IntercompanyProcurement from './IntercompanyProcurement';
 
 const IntercompanyHub: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'inbox' | 'history' | 'transfers'>('transfers');
+  const [activeTab, setActiveTab] = useState<'procurement' | 'inbox' | 'history' | 'transfers'>('procurement');
   const [inbox, setInbox] = useState<PurchaseOrder[]>([]);
   const [history, setHistory] = useState<PurchaseOrder[]>([]);
   
@@ -151,8 +152,14 @@ const IntercompanyHub: React.FC = () => {
       </div>
 
       <div className="flex space-x-1 bg-white p-1 rounded-2xl border border-slate-200 w-fit no-print shadow-sm">
-          <button 
-            onClick={() => setActiveTab('transfers')} 
+          <button
+            onClick={() => setActiveTab('procurement')}
+            className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'procurement' ? 'bg-emerald-600 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <FilePlus size={16}/> <span>Project Procurement</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('transfers')}
             className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'transfers' ? 'bg-indigo-600 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}
           >
             <ArrowRightLeft size={16}/> <span>ICO Transfers</span>
@@ -171,9 +178,13 @@ const IntercompanyHub: React.FC = () => {
           </button>
       </div>
 
+      {/* Project → IC Order (order-time mirror) */}
+      {activeTab === 'procurement' && <IntercompanyProcurement />}
+
       {/* ICO Transfer Panel */}
       {activeTab === 'transfers' && <ICOTransferPanel company={company} />}
 
+      {(activeTab === 'inbox' || activeTab === 'history') && (
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
          <div className={`px-8 py-6 border-b flex items-center space-x-3 ${activeTab === 'inbox' ? 'bg-indigo-50' : 'bg-slate-50'}`}>
             {activeTab === 'inbox' ? <RefreshCw className="text-indigo-600"/> : <History className="text-slate-600"/>}
@@ -266,6 +277,7 @@ const IntercompanyHub: React.FC = () => {
             </table>
          </div>
       </div>
+      )}
 
       {/* PROJECT RECONCILIATION MODAL */}
       {isReconcileOpen && selectedPO && (

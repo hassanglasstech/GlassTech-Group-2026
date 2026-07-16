@@ -143,6 +143,20 @@ export interface Quotation {
   replacementReason?: string;      // 'Customer Breakage'
   costBearer?: 'Customer' | 'GlassCo';
 
+  // ── Intercompany P2 — order-time mirror tag. When a GTK/GTI project raises an
+  //    IC material demand, a tagged Sales Order is created in the SUPPLIER company
+  //    (Glassco/Nippon) so it appears in their Sales + Store queue immediately.
+  //    One order, two lenses (Sales Order for the seller, Project Purchase for the
+  //    buyer). Round-trips via the quotations `data` jsonb blob (no schema change). ──
+  /** True when this Sales Order was raised by another group company's project. */
+  intercompany?: boolean;
+  /** The buyer company that raised it (e.g. 'GTK'). */
+  sourceCompany?: Company;
+  /** The buyer's project this demand belongs to (for project-cost roll-up). */
+  sourceProjectId?: string;
+  /** The buyer's project title (denormalised for display on the seller side). */
+  sourceProjectTitle?: string;
+
   // ── Gate Pass A/B (fulfilment) — order-level pick + dispatch data. Round-trips
   //    via the quotations `data` jsonb blob (no schema change). ──
   /** Office → store/driver instructions that ride the order (fragile / call-before

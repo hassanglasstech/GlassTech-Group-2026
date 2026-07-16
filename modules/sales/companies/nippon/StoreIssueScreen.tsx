@@ -283,6 +283,7 @@ const StoreIssueScreen: React.FC = () => {
               <button key={q.id} onClick={() => openDetail(q)}
                 className="w-full text-left bg-white rounded-2xl border border-slate-200 shadow-sm hover:border-blue-300 hover:shadow transition-all px-5 py-4 flex items-center gap-3 flex-wrap">
                 {q.priority === 'Urgent' && <span className="flex items-center gap-1 text-[9px] font-black uppercase bg-rose-500 text-white px-2 py-0.5 rounded-full"><Zap size={10}/> Urgent</span>}
+                {q.intercompany && <span title={`Intercompany order from ${q.sourceCompany}${q.sourceProjectTitle ? ` · ${q.sourceProjectTitle}` : ''}`} className="text-[9px] font-black uppercase bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">IC · {q.sourceCompany}</span>}
                 <span className="font-black text-blue-600 text-sm uppercase">{q.orderNo || q.id}</span>
                 <span className="text-xs font-bold text-slate-600 uppercase">{cli?.name || (q as { clientName?: string }).clientName || '—'}</span>
                 <span className="text-[10px] font-bold text-slate-400">{lines.length} line(s) · PKR {Number(val).toLocaleString()}</span>
