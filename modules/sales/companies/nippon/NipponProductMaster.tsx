@@ -302,7 +302,31 @@ const NipponProductMaster: React.FC = () => {
     return onHand;
   };
 
+  // P0-5 (referential integrity / IAS-audit): a product referenced by any saved
+  // quotation/order/invoice must NOT be hard-deleted — it would orphan that
+  // history (broken reprints, lost audit trail). Count references by matching the
+  // product's id / model / supplier code against each line's productRef /
+  // locationCode. (Full soft-delete/archive needs a `products.archived` column —
+  // founder SQL; until then we BLOCK the destructive delete, which is the safe
+  // half of the standard.)
+  const countProductReferences = async (p: Product | undefined, id: string): Promise<number> => {
+    const codes = new Set([id, p?.modelNo, p?.profileCode].filter(Boolean).map(s => String(s).toUpperCase()));
+    const hit = (items?: Array<{ productRef?: string; locationCode?: string }>) =>
+      (items || []).some(it => [it.productRef, it.locationCode]
+        .filter(Boolean).some(r => codes.has(String(r).toUpperCase())));
+    const [qs, invs] = await Promise.all([AsyncSalesService.getQuotations(), AsyncSalesService.getInvoices()]);
+    const q = qs.filter(x => x.company === company && hit((x as { items?: Array<{ productRef?: string; locationCode?: string }> }).items)).length;
+    const i = invs.filter(x => x.company === company && hit((x as { items?: Array<{ productRef?: string; locationCode?: string }> }).items)).length;
+    return q + i;
+  };
+
   const handleDelete = async (id: string) => {
+      const prod = products.find(p => p.id === id);
+      const refs = await countProductReferences(prod, id);
+      if (refs > 0) {
+        toast.error(`Can't delete — this product is on ${refs} saved quotation/invoice document(s). Hard-deleting would orphan that history. Keep it (archive support is coming).`, { duration: 9000 });
+        return;
+      }
       const row = storeItems.find(s => s.id === id);
       const onHand = Number(row?.quantity) || 0;
       const warn = onHand > 0
@@ -753,17 +777,21 @@ const NipponProductMaster: React.FC = () => {
     const ids = Array.from(selectedIds);
     if (!ids.length) return;
     if (!window.confirm(`Delete ${ids.length} product(s)? This removes them from the cloud as well.`)) return;
-    let ok = 0, fail = 0;
+    let ok = 0, fail = 0, blocked = 0;
     const deletedIds: string[] = [];
     for (const id of ids) {
+      // P0-5: never hard-delete a product with saved quotation/invoice history.
+      const refs = await countProductReferences(products.find(p => p.id === id), id);
+      if (refs > 0) { blocked++; continue; }
       const { error } = await AsyncSalesService.deleteProduct(id);
       if (error) fail++; else { ok++; deletedIds.push(id); }
     }
     if (deletedIds.length) await purgeStoreRows(deletedIds);   // no orphan stock rows
     clearSelection();
     await refreshData();
-    if (fail) toast.error(`${ok} deleted · ${fail} failed (still in cloud).`);
-    else toast.success(`${ok} product(s) deleted.`);
+    const blockedMsg = blocked ? ` · ${blocked} kept (used on saved documents)` : '';
+    if (fail) toast.error(`${ok} deleted · ${fail} failed (still in cloud)${blockedMsg}.`);
+    else toast.success(`${ok} product(s) deleted${blockedMsg}.`);
   };
 
   return (
