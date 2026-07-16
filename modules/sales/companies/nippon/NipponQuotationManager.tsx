@@ -400,6 +400,28 @@ const NipponQuotationManager: React.FC = () => {
                 )}
               </div>
 
+              {/* Gate Pass A — office instruction thread + priority. These ride the
+                  order to the store picker (StoreIssueScreen) and, later, the driver
+                  gate pass. One thread, set once, seen by everyone downstream. */}
+              <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3 flex-wrap shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[10px] font-black uppercase text-slate-400">Priority</span>
+                  {(['Normal', 'Urgent'] as const).map(pr => (
+                    <button key={pr} type="button" disabled={isLocked}
+                      onClick={() => setFormData(prev => ({ ...prev, priority: pr }))}
+                      className={`text-[10px] font-black uppercase px-3 py-1 rounded-lg border transition-all ${(formData.priority || 'Normal') === pr ? (pr === 'Urgent' ? 'bg-rose-600 text-white border-rose-600' : 'bg-slate-700 text-white border-slate-700') : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
+                      {pr}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2 flex-1 min-w-[220px]">
+                  <span className="text-[10px] font-black uppercase text-slate-400 shrink-0">Instructions</span>
+                  <input disabled={isLocked} type="text" placeholder="Fragile · call before delivery · partial OK · deliver by…"
+                    className="sap-input w-full text-xs" value={formData.specialInstructions || ''}
+                    onChange={e => setFormData({ ...formData, specialInstructions: e.target.value })}/>
+                </div>
+              </div>
+
               {/* Items Grid */}
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
                 <div className="flex-1 overflow-auto">

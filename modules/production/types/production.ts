@@ -78,6 +78,15 @@ export interface QuotationItem {
    *  stock still moves, printed with a SAMPLE tag. Separate from the whole-quote
    *  Sample toggle (Quotation.isSample). */
   isSample?: boolean;
+  // ── Gate Pass A (store pick) — per-line pick data, round-trips via items jsonb ──
+  /** WMS bin the store picks this line from. Seeded from the product's store bin
+   *  (store_items.storage_bin); the store can override per line. */
+  binLocation?: string;
+  /** Qty the store physically picked (partial-pick support). Undefined = not yet
+   *  picked; defaults to the ordered qty when the picker opens the line. */
+  pickedQty?: number;
+  /** Store incharge's note for this line ("2 pcs damaged, substituted"). */
+  storeNote?: string;
 }
 
 export interface GlassServiceCharge {
@@ -133,6 +142,20 @@ export interface Quotation {
   originalOrderRef?: string;       // original quotation/SO ID
   replacementReason?: string;      // 'Customer Breakage'
   costBearer?: 'Customer' | 'GlassCo';
+
+  // ── Gate Pass A/B (fulfilment) — order-level pick + dispatch data. Round-trips
+  //    via the quotations `data` jsonb blob (no schema change). ──
+  /** Office → store/driver instructions that ride the order (fragile / call-before
+   *  / partial-ok / deliver-by). One thread from office to the gate. */
+  specialInstructions?: string;
+  /** Fulfilment priority — Urgent floats the order to the top of the pick queue. */
+  priority?: 'Normal' | 'Urgent';
+  /** Store pick progress: Pending (untouched) → Picking (progress saved) → Picked. */
+  pickStatus?: 'Pending' | 'Picking' | 'Picked';
+  /** Who saved the last pick progress / completed the pick. */
+  pickedBy?: string;
+  /** ISO timestamp of the last pick save / completion. */
+  pickedAt?: string;
 
   // Wastage analysis decision (saved at quotation time)
   wastageDecision?: {
