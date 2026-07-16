@@ -15,7 +15,10 @@ import { SalesService } from '@/modules/sales/services/salesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { Logger } from '@/modules/shared/services/logger';
 import { useAuthStore } from '@/modules/auth/authStore';
-import { Quotation } from '@/modules/shared/types';
+import { isFinanceGLEnabled } from '@/modules/shared/services/featureFlagService';
+import { loadTaxSettings } from '@/modules/admin/services/taxSettingsService';
+import { generateDeliveryInvoice } from '@/modules/sales/services/deliveryInvoiceService';
+import { Quotation, Company } from '@/modules/shared/types';
 
 /** Resolve the acting user for the audit stamp (works outside React). */
 function actor(): string {
@@ -31,7 +34,7 @@ export function isPendingIssue(q: Quotation): boolean {
 export async function issueNipponOrder(
   orderId: string,
   by?: string,
-): Promise<{ error?: string; orderNo?: string }> {
+): Promise<{ error?: string; orderNo?: string; invoiceId?: string; invoiceError?: string }> {
   try {
     const stampBy = by || actor();
     const company = activeCompany();
@@ -75,7 +78,42 @@ export async function issueNipponOrder(
 
     Logger.action('SALES', 'NIPPON_ORDER_ISSUED', `${orderId} → ${order.orderNo || '-'} issued/delivered by ${stampBy}`,
       { referenceId: orderId, extra: { company } });
-    return { orderNo: order.orderNo || orderId };
+
+    // ── EPIC 3: auto-invoice + GL at goods-issue (books mode only) ──────
+    // IFRS 15 §31: revenue (and its matched COGS) is recognized when CONTROL
+    // transfers to the customer — that moment is the physical goods-issue above,
+    // not the earlier quotation/approval. So when Finance-GL is ON we generate
+    // the delivery invoice here (AR + Hardware Sales + COGS, one atomic post).
+    //
+    // When Finance-GL is OFF (single-entry go-live), issuing ONLY moves stock —
+    // the Sales Order itself is the sales record and no ledger entry is made.
+    // Flipping `finance.gl_enabled` ON later turns this one gate into the whole
+    // finance flow, with zero code change. Invoice failure (e.g. credit-limit)
+    // is surfaced but does NOT roll back the physical issue — the goods are
+    // already out; the invoice can be regenerated from the Billing Hub.
+    let invoiceId: string | undefined;
+    let invoiceError: string | undefined;
+    if (isFinanceGLEnabled(company)) {
+      try {
+        const { data: tax } = await loadTaxSettings(company);
+        const gstPercent = tax?.enabled ? (tax.gst_rate || 0) : 0;
+        const inv = await generateDeliveryInvoice(
+          issued,
+          company as Company,
+          gstPercent,
+          (issued as { issuedAt?: string }).issuedAt,
+        );
+        invoiceId = inv.invoiceId;
+        Logger.action('SALES', 'NIPPON_INVOICE_AT_ISSUE',
+          `${orderId} → invoice ${invoiceId} (PKR ${inv.grandTotal})`,
+          { referenceId: invoiceId, extra: { company } });
+      } catch (err) {
+        invoiceError = err instanceof Error ? err.message : 'invoice generation failed';
+        Logger.error('NipponFulfilment', 'auto-invoice at issue failed (goods already issued)', err);
+      }
+    }
+
+    return { orderNo: order.orderNo || orderId, invoiceId, invoiceError };
   } catch (err) {
     Logger.error('NipponFulfilment', 'issueNipponOrder failed', err);
     return { error: err instanceof Error ? err.message : 'unknown error' };

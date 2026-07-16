@@ -60,7 +60,13 @@ const StoreIssueScreen: React.FC = () => {
     const res = await issueNipponOrder(q.id);
     setBusy(null);
     if (res.error) { toast.error(`Issue failed — ${res.error}`, { duration: 8000 }); return; }
-    toast.success(`Issued — ${res.orderNo} marked Delivered.`);
+    if (res.invoiceId) {
+      toast.success(`Issued — ${res.orderNo} delivered · invoice ${res.invoiceId} posted.`);
+    } else if (res.invoiceError) {
+      toast.warning(`Issued — ${res.orderNo} delivered, but invoice failed: ${res.invoiceError}`, { duration: 9000 });
+    } else {
+      toast.success(`Issued — ${res.orderNo} marked Delivered.`);
+    }
     await load();
   };
 

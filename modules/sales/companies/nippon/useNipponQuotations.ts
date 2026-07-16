@@ -505,7 +505,13 @@ export const useNipponQuotations = () => {
   const issueOrder = async (orderId: string) => {
     const res = await issueNipponOrder(orderId);
     if (res.error) { toast.error(`Issue failed — ${res.error}`, { duration: 9000 }); return; }
-    toast.success(`Goods issued — ${res.orderNo} marked Delivered.`);
+    if (res.invoiceId) {
+      toast.success(`Goods issued — ${res.orderNo} delivered · invoice ${res.invoiceId} posted.`);
+    } else if (res.invoiceError) {
+      toast.warning(`Goods issued — ${res.orderNo} delivered, but invoice failed: ${res.invoiceError}`, { duration: 9000 });
+    } else {
+      toast.success(`Goods issued — ${res.orderNo} marked Delivered.`);
+    }
     await refreshData();
   };
 
