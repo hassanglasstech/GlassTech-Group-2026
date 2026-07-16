@@ -438,3 +438,38 @@ describe('Nippon SIT · clientAccountResolver — invoice↔receipt AR parity (E
   });
 
 });
+
+describe('Nippon SIT · advance application at delivery (EPIC 4.2)', () => {
+
+  it('N-10 · held advance nets AR: Dr 21123 / Cr 11213 for min(advance, total), balanced', async () => {
+    const { buildAdvanceApplicationTx } = await import('@/modules/sales/services/deliveryInvoiceService');
+    const tx = buildAdvanceApplicationTx({
+      company: 'Nippon', clientName: 'External Wholesale Co', clientARId: 'Nippon-11213',
+      advanceHeld: 10000, grandTotal: 25000, invoiceId: 'INV-NIP-1', date: '2026-07-16', orderId: 'ORD-1',
+    });
+    expect(tx).not.toBeNull();
+    const advLine = tx!.details.find(d => d.debit > 0);
+    const arLine  = tx!.details.find(d => d.credit > 0);
+    expect(advLine?.accountId).toBe('Nippon-21123');   // contract liability reduced
+    expect(arLine?.accountId).toBe('Nippon-11213');    // AR reduced (same leaf invoice debited)
+    expect(advLine?.debit).toBe(10000);
+    expect(arLine?.credit).toBe(10000);
+    expect(sumDebit(tx!.details)).toBe(sumCredit(tx!.details));  // balanced
+  });
+
+  it('N-11 · advance ≥ total caps application at total; zero advance → null (no-op)', async () => {
+    const { buildAdvanceApplicationTx } = await import('@/modules/sales/services/deliveryInvoiceService');
+    const capped = buildAdvanceApplicationTx({
+      company: 'Nippon', clientName: 'External Co', clientARId: 'Nippon-11213',
+      advanceHeld: 40000, grandTotal: 25000, invoiceId: 'INV-NIP-2', date: '2026-07-16', orderId: 'ORD-2',
+    });
+    expect(capped!.details.find(d => d.debit > 0)?.debit).toBe(25000);  // capped at invoice total
+
+    const none = buildAdvanceApplicationTx({
+      company: 'Nippon', clientName: 'External Co', clientARId: 'Nippon-11213',
+      advanceHeld: 0, grandTotal: 25000, invoiceId: 'INV-NIP-3', date: '2026-07-16', orderId: 'ORD-3',
+    });
+    expect(none).toBeNull();
+  });
+
+});

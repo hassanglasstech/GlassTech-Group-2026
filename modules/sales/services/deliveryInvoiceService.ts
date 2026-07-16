@@ -9,7 +9,7 @@
 
 import { Company, Quotation, LedgerTransaction, Invoice } from '@/modules/shared/types';
 import { FinanceService, ledgerToRow } from '@/modules/finance/services/financeService';
-import { resolveClientARAccount } from '@/modules/finance/services/clientAccountResolver';
+import { resolveClientARAccount, resolveClientAdvanceAccount } from '@/modules/finance/services/clientAccountResolver';
 import { SalesService } from '@/modules/sales/services/salesService';
 import {
   postDeliveryCOGS,
@@ -230,6 +230,40 @@ function resolveRecognitionDate(raw: string | undefined, today: string): string 
   const candidate = (raw ?? '').slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(candidate)) return today;
   return candidate > today ? today : candidate;
+}
+
+/**
+ * EPIC 4.2 — advance application at delivery (pure, testable).
+ *
+ * IFRS 15: cash received before control transfers is a contract liability
+ * (Dr Cash / Cr Client-Advance) — NOT revenue. At delivery the invoice debits
+ * AR in full; if we stop there, AR and the advance liability BOTH sit open,
+ * grossing up receivables and liabilities on the balance sheet. This reclass —
+ * Dr Client-Advance / Cr AR for min(advanceHeld, invoiceTotal) — nets them so
+ * post-delivery AR shows only the amount still owed. Returns null when there's
+ * no advance to apply. Caller posts it (books mode only).
+ */
+export function buildAdvanceApplicationTx(params: {
+  company: Company; clientName: string; clientARId: string;
+  advanceHeld: number; grandTotal: number; invoiceId: string; date: string; orderId: string;
+}): LedgerTransaction | null {
+  const applied = Math.min(Number(params.advanceHeld) || 0, params.grandTotal);
+  if (applied <= 0) return null;
+  const advAcc = resolveClientAdvanceAccount(params.company, params.clientName);
+  const tx: LedgerTransaction = {
+    id: 'GLADV-' + params.invoiceId, company: params.company, docType: 'DR',
+    docDate: params.date, date: params.date,
+    description: 'ADVANCE APPLIED to ' + params.invoiceId + ': ' + params.clientName +
+      ' — PKR ' + applied.toLocaleString('en-PK'),
+    referenceId: params.invoiceId, status: 'Posted', reqId: params.orderId,
+    createdBy: 'system-auto',
+    details: [
+      { accountId: advAcc.id,         debit: applied, credit: 0,       text: 'Advance applied: ' + params.clientName },
+      { accountId: params.clientARId, debit: 0,       credit: applied, text: 'AR reduced by advance: ' + params.invoiceId },
+    ],
+  } as unknown as LedgerTransaction;
+  FinanceService.assertGLBalance(tx);
+  return tx;
 }
 
 export async function generateDeliveryInvoice(
@@ -701,6 +735,31 @@ export async function generateDeliveryInvoice(
       },
     ]);
   } catch { /* event log is best-effort, never blocks an invoice */ }
+
+  // ── EPIC 4.2: apply any held customer advance against this invoice's AR ──
+  // Books mode only (inert until finance.gl_enabled is flipped on). Posted
+  // app-side as a follow-on reclass (not in the atomic invoice RPC, whose
+  // signature is fixed) — saveLedger's own retry queue keeps a failed cloud
+  // push recoverable. Idempotent because the invoice itself only posts once.
+  if (isFinanceGLEnabled(company)) {
+    try {
+      const advTx = buildAdvanceApplicationTx({
+        company, clientName, clientARId: clientAR.id,
+        advanceHeld: Number((order as { receivedAmount?: number }).receivedAmount) || 0,
+        grandTotal, invoiceId, date: glDate, orderId: order.id,
+      });
+      if (advTx) {
+        FinanceService.saveLedger([...FinanceService.getLedger(), advTx]);
+        Logger.action('SALES', 'ADVANCE_APPLIED',
+          `${invoiceId}: advance applied to AR — ${clientName}`,
+          { referenceId: invoiceId, extra: { company } });
+      }
+    } catch (e) {
+      // Invoice already posted — a failed reclass must not throw. Logged so it's
+      // visible; the advance stays as an open contract liability until retried.
+      Logger.error('DeliveryInvoice', 'advance-application post failed (invoice already posted)', e);
+    }
+  }
 
   return { invoiceId, finalAmount, gstAmount, grandTotal, alreadyInvoiced: false, clientName };
 }
