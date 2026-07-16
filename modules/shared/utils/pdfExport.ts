@@ -2,15 +2,19 @@
 //
 // Why: on mobile, the browser's print → "Save as PDF" path is unreliable (blank
 // pages, no save dialog). Generating the PDF ourselves produces a real .pdf file
-// download that works the same on every device. The heavy libs are dynamically
-// imported so they land in a lazy chunk and never weigh down the initial load.
+// that works the same on every device — and, importantly, a Blob we can hand to
+// the Web Share API so a trader can WhatsApp a quote straight from the preview.
+// The heavy libs are dynamically imported so they land in a lazy chunk and never
+// weigh down the initial load.
+
+import type { jsPDF as JsPdf } from 'jspdf';
 
 /**
- * Render `el` to a multi-page A4 PDF and trigger a download named `<filename>.pdf`.
- * The node is captured at its natural width (the print sheet is 210mm), sliced
- * across A4 pages when taller than one page.
+ * Render `el` to a multi-page A4 jsPDF document (natural 210mm width, sliced
+ * across A4 pages when taller than one page). Shared by the download + share
+ * paths so both produce an identical file.
  */
-export async function exportElementToPdf(el: HTMLElement, filename: string): Promise<void> {
+async function renderElementToPdf(el: HTMLElement): Promise<JsPdf> {
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
     import('html2canvas'),
     import('jspdf'),
@@ -46,6 +50,18 @@ export async function exportElementToPdf(el: HTMLElement, filename: string): Pro
     pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH, undefined, 'FAST');
     heightLeft -= pageH;
   }
+  return pdf;
+}
 
+/** Render `el` to a PDF and trigger a download named `<filename>.pdf`. */
+export async function exportElementToPdf(el: HTMLElement, filename: string): Promise<void> {
+  const pdf = await renderElementToPdf(el);
   pdf.save(`${filename}.pdf`);
+}
+
+/** Render `el` to a PDF and return it as a File (for the Web Share API / upload). */
+export async function elementToPdfFile(el: HTMLElement, filename: string): Promise<File> {
+  const pdf = await renderElementToPdf(el);
+  const blob = pdf.output('blob');
+  return new File([blob], `${filename}.pdf`, { type: 'application/pdf' });
 }

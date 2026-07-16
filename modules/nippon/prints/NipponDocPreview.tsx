@@ -1,8 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Download, Printer, Loader2 } from 'lucide-react';
+import { X, Download, Printer, Loader2, Share2 } from 'lucide-react';
 import { NipponPrintTemplate } from './NipponPrintTemplate';
-import { exportElementToPdf } from '../../shared/utils/pdfExport';
+import { exportElementToPdf, elementToPdfFile } from '../../shared/utils/pdfExport';
 import { Quotation, Client, Product } from '../../shared/types';
 import { toast } from 'sonner';
 
@@ -49,6 +49,38 @@ export const NipponDocPreview: React.FC<Props> = ({
     document.title = prev;
   };
 
+  // Share the PDF (P1-8). On mobile the native share sheet attaches the real PDF
+  // and lists WhatsApp directly; on desktop (no file-share) we download the PDF
+  // and open WhatsApp Web to the client so they attach it — the trader's actual
+  // send-a-quote workflow, in one tap.
+  const handleShare = async () => {
+    if (!sheetRef.current || busy) return;
+    setBusy(true);
+    try {
+      const label = `${isSO ? 'Sales Order' : 'Quotation'} ${printingQuote.orderNo || printingQuote.id}`;
+      const file = await elementToPdfFile(sheetRef.current, docName);
+      const nav = navigator as Navigator & { canShare?: (d?: ShareData) => boolean };
+      if (typeof navigator.share === 'function' && nav.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: docName, text: label });
+      } else {
+        // Desktop fallback: download + open WhatsApp Web (prefilled) to the client.
+        await exportElementToPdf(sheetRef.current, docName);
+        const client = clients.find(c => c.id === printingQuote.clientId);
+        const raw = (client?.phone || '').replace(/\D/g, '');
+        const waPhone = raw ? (raw.startsWith('92') ? raw : `92${raw.replace(/^0/, '')}`) : '';
+        const text = encodeURIComponent(`${label} — PDF attached.`);
+        window.open(`https://wa.me/${waPhone}?text=${text}`, '_blank', 'noopener');
+        toast.info('PDF download ho gaya — WhatsApp khul gaya, PDF attach kar ke bhej dein.', { duration: 7000 });
+      }
+    } catch (e: unknown) {
+      if ((e as { name?: string })?.name !== 'AbortError') {
+        toast.error('Share nahi ho saka — PDF download karke bhej dein.');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return createPortal(
     <>
       {/* Backdrop + toolbar — hidden on print */}
@@ -56,6 +88,11 @@ export const NipponDocPreview: React.FC<Props> = ({
       <div className="fixed top-0 inset-x-0 z-[10001] flex items-center justify-between gap-2 px-3 py-2.5 bg-white border-b border-slate-200 shadow-sm no-print">
         <span className="font-black text-[11px] uppercase tracking-widest text-slate-600 truncate">{docName}</span>
         <div className="flex items-center gap-2 shrink-0">
+          <button onClick={handleShare} disabled={busy} title="Share / WhatsApp"
+            className="flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-sm transition-all">
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />}
+            Share
+          </button>
           <button onClick={handleDownload} disabled={busy}
             className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-sm transition-all">
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
