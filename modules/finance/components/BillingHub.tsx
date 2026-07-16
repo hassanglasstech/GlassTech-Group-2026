@@ -17,6 +17,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useDebounce } from '@/modules/shared/hooks/useDebounce';
 import { Company, Quotation, ProductionPiece, LedgerTransaction, Invoice, PaymentReceipt } from '../../shared/types';
 import { FinanceService, LedgerImbalanceError } from '../services/financeService';
+import { resolveClientARAccount } from '../services/clientAccountResolver';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { Logger } from '@/modules/shared/services/logger';
 import { SalesService } from '../../sales/services/salesService';
@@ -238,11 +239,9 @@ const BillingHub: React.FC<{ company: Company }> = ({ company }) => {
     const methodParent= FinanceService.ensureAccount(company as any, methodMap.name,    4, cashBank.id,      'Asset', methodMap.code);
     const cashAcc     = FinanceService.ensureAccount(company as any, `${methodMap.name} — MAIN`, 5, methodParent.id, 'Asset', `${methodMap.code}0`);
 
-    const arParent  = FinanceService.ensureAccount(company as any, 'ASSETS',              1, null,           'Asset', '10');
-    const arCurrent = FinanceService.ensureAccount(company as any, 'CURRENT ASSETS',     2, arParent.id,    'Asset', '11');
-    const arTrade   = FinanceService.ensureAccount(company as any, 'TRADE RECEIVABLES',  3, arCurrent.id,   'Asset', '122');
-    const arControl = FinanceService.ensureAccount(company as any, 'CUSTOMERS CONTROL',  4, arTrade.id,     'Asset', '1221');
-    const clientAR  = FinanceService.ensureAccount(company as any, receiptModalInvoice.clientName.toUpperCase(), 5, arControl.id, 'Asset', '12210');
+    // EPIC 4: shared resolver → receipt CREDIT matches the invoice DEBIT
+    // (trading → real 1121x, glass → generic 12210). No more phantom-12210 drift.
+    const clientAR  = resolveClientARAccount(company as Company, receiptModalInvoice.clientName);
 
     const receiptId = `REC-${Date.now().toString().slice(-6)}`;
     const txId      = `GL-${receiptId}`;

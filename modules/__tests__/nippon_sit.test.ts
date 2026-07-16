@@ -406,3 +406,35 @@ describe('Nippon SIT · COGS-at-delivery from inventory', () => {
   });
 
 });
+
+// ══════════════════════════════════════════════════════════════════════
+// N-07 .. N-09 · EPIC 4 — invoice↔receipt AR parity (shared resolver)
+// The invoice DEBITS AR and the receipt CREDITS AR through the SAME
+// clientAccountResolver, so they can never post to different accounts.
+// (Before EPIC 4 the receipt credited phantom 12210 while the invoice
+//  debited real 11213, so trading AR never cleared.)
+// ══════════════════════════════════════════════════════════════════════
+
+describe('Nippon SIT · clientAccountResolver — invoice↔receipt AR parity (EPIC 4)', () => {
+
+  it('N-07 · trading AR routes external→11213, GTK→11211, GTI→11212 (= invoice debit)', async () => {
+    const { resolveClientARAccount } = await import('@/modules/finance/services/clientAccountResolver');
+    expect(resolveClientARAccount('Nippon', 'External Wholesale Co').id).toBe('Nippon-11213');
+    expect(resolveClientARAccount('Nippon', 'GTK Traders').id).toBe('Nippon-11211');
+    expect(resolveClientARAccount('Nippon', 'GTI Fabricators').id).toBe('Nippon-11212');
+  });
+
+  it('N-08 · trading advance = contract liability 2112x (21123 external, 21121 GTK)', async () => {
+    const { resolveClientAdvanceAccount } = await import('@/modules/finance/services/clientAccountResolver');
+    expect(resolveClientAdvanceAccount('Nippon', 'External Co').id).toBe('Nippon-21123');
+    expect(resolveClientAdvanceAccount('Nippon', 'GTK Co').id).toBe('Nippon-21121');
+  });
+
+  it('N-09 · non-trading (glass) AR/advance chain preserved (12210 / 2230)', async () => {
+    const { resolveClientARAccount, resolveClientAdvanceAccount } =
+      await import('@/modules/finance/services/clientAccountResolver');
+    expect(resolveClientARAccount('Glassco', 'Any Client').id).toBe('Glassco-12210');
+    expect(resolveClientAdvanceAccount('Glassco', 'Any Client').id).toBe('Glassco-2230');
+  });
+
+});

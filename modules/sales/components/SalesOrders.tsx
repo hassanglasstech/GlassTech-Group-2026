@@ -5,6 +5,7 @@ import { PaymentReceipt } from '../../finance/types/finance';
 import { SalesService } from '../services/salesService';
 import { AsyncSalesService } from '../services/asyncSalesService';
 import { FinanceService, ledgerToRow } from '../../finance/services/financeService';
+import { resolveClientARAccount, resolveClientAdvanceAccount } from '../../finance/services/clientAccountResolver';
 import { generateDeliveryInvoice } from '../services/deliveryInvoiceService';
 import { ProductionService } from '../../production/services/productionService';
 import { InventoryService } from '../../procurement/services/inventoryService';
@@ -430,22 +431,17 @@ const SalesOrders: React.FC = () => {
             const cashAcc      = FinanceService.ensureAccount(company, `${m.name} — MAIN`, 5, methodParent.id, 'Asset', `${m.code}0`);
 
             // ── Credit side: AR (invoiced) OR Customer Advance Liability (no invoice yet) ──
+            // EPIC 4: both resolved via the shared clientAccountResolver so the
+            // receipt CREDIT lands on the SAME account the invoice DEBITED (trading
+            // → real 1121x / 2112x, glass → generic 12210 / 2230). Prevents the
+            // AR-never-clears drift where a Nippon receipt credited phantom 12210.
             let creditAccId: string;
             let creditText:  string;
             if (existingInvoice) {
-                const arParent  = FinanceService.ensureAccount(company, 'ASSETS',              1, null,           'Asset', '10');
-                const arCurrent = FinanceService.ensureAccount(company, 'CURRENT ASSETS',     2, arParent.id,    'Asset', '11');
-                const arTrade   = FinanceService.ensureAccount(company, 'TRADE RECEIVABLES',  3, arCurrent.id,   'Asset', '122');
-                const arControl = FinanceService.ensureAccount(company, 'CUSTOMERS CONTROL',  4, arTrade.id,     'Asset', '1221');
-                const clientAR  = FinanceService.ensureAccount(company, clientName.toUpperCase(), 5, arControl.id, 'Asset', '12210');
-                creditAccId = clientAR.id;
+                creditAccId = resolveClientARAccount(company, clientName).id;
                 creditText  = `AR settled: ${clientName} — ${existingInvoice.id}`;
             } else {
-                const liabParent = FinanceService.ensureAccount(company, 'LIABILITIES',         1, null,           'Liability', '20');
-                const liabCurr   = FinanceService.ensureAccount(company, 'CURRENT LIABILITIES', 2, liabParent.id,  'Liability', '22');
-                const advance    = FinanceService.ensureAccount(company, 'CUSTOMER ADVANCES',   3, liabCurr.id,    'Liability', '223');
-                const clientAdv  = FinanceService.ensureAccount(company, `${clientName.toUpperCase()} — ADVANCE`, 4, advance.id, 'Liability', '2230');
-                creditAccId = clientAdv.id;
+                creditAccId = resolveClientAdvanceAccount(company, clientName).id;
                 creditText  = `Customer advance: ${clientName} — ${orderRef}`;
             }
 

@@ -9,6 +9,7 @@
 
 import { Company, Quotation, LedgerTransaction, Invoice } from '@/modules/shared/types';
 import { FinanceService, ledgerToRow } from '@/modules/finance/services/financeService';
+import { resolveClientARAccount } from '@/modules/finance/services/clientAccountResolver';
 import { SalesService } from '@/modules/sales/services/salesService';
 import {
   postDeliveryCOGS,
@@ -382,27 +383,10 @@ export async function generateDeliveryInvoice(
     ? (clientName.toUpperCase().includes('GTK') ? 'GTK'
        : clientName.toUpperCase().includes('GTI') ? 'GTI' : 'EXT')
     : 'EXT';
-  let clientAR;
-  if (isTradingCompany) {
-    const arLeaf = nipCust === 'GTK' ? { code: '11211', name: 'Receivable — GTK (Hardware)' }
-                 : nipCust === 'GTI' ? { code: '11212', name: 'Receivable — GTI (Hardware)' }
-                 : { code: '11213', name: 'Receivable — External Wholesale' };
-    const aAssets  = FinanceService.ensureAccount(company, 'Assets',              1, null,        'Asset', '1');
-    const aCurrent = FinanceService.ensureAccount(company, 'Current Assets',      2, aAssets.id,  'Asset', '11');
-    const aTrade   = FinanceService.ensureAccount(company, 'Trade Receivables',   3, aCurrent.id, 'Asset', '112');
-    const aAR      = FinanceService.ensureAccount(company, 'Accounts Receivable', 4, aTrade.id,   'Asset', '1121');
-    clientAR       = FinanceService.ensureAccount(company, arLeaf.name,           5, aAR.id,      'Asset', arLeaf.code);
-  } else {
-    const arParent  = FinanceService.ensureAccount(company, 'ASSETS',             1, null,          'Asset',   '10');
-    const arCurrent = FinanceService.ensureAccount(company, 'CURRENT ASSETS',     2, arParent.id,   'Asset',   '11');
-    const arTrade   = FinanceService.ensureAccount(company, 'TRADE RECEIVABLES',  3, arCurrent.id,  'Asset',   '122');
-    const arControl = FinanceService.ensureAccount(company, 'CUSTOMERS CONTROL',  4, arTrade.id,    'Asset',   '1221');
-    clientAR        = FinanceService.ensureAccount(
-      company,
-      (clientName.toUpperCase() + (order.projectName ? ' — ' + order.projectName.toUpperCase() : '')),
-      5, arControl.id, 'Asset', '12210'
-    );
-  }
+  // EPIC 4: AR resolved via the shared resolver so the invoice DEBIT and the
+  // receipt CREDIT (SalesOrders / BillingHub) can never post to different
+  // accounts. Trading → real 1121x by customer type; glass → generic 12210.
+  const clientAR = resolveClientARAccount(company, clientName, order.projectName);
 
   // Revenue — real seeded chain. Trading (Nippon) hits Hardware Sales
   // (4/41/411/…): intercompany customers → 41111/41112, external wholesale →
