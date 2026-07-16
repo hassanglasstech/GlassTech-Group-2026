@@ -421,8 +421,21 @@ const StockOverview: React.FC<StockOverviewProps> = ({ items, searchTerm, setSea
                              {lowStockMap[item.id] === 'red' ? '⚠ Critical' : '⚡ Low'}
                            </span>
                          )}
-                         <span className={`font-black ${(item.unrestrictedQty ?? 0) < 0 ? 'text-red-600' : 'text-slate-900'}`}>{(item.unrestrictedQty || 0).toLocaleString()}</span>
-                         <span className="text-[10px] text-slate-400">{item.unit}</span>
+                         {/* P1-5: show the full stock picture. The big number is AVAILABLE
+                             (available-to-promise); on-hand & reserved are surfaced beneath so a
+                             seller sees "5 free, 3 reserved" instead of one ambiguous figure. */}
+                         <div className="flex flex-col items-end leading-tight">
+                           <div className="flex items-baseline gap-1">
+                             <span className={`font-black ${(item.unrestrictedQty ?? 0) < 0 ? 'text-red-600' : 'text-slate-900'}`}>{(item.unrestrictedQty || 0).toLocaleString()}</span>
+                             <span className="text-[10px] text-slate-400">{item.unit}</span>
+                           </div>
+                           {isNippon && ((Number(item.reservedQty) || 0) > 0 || (Number(item.quantity) || 0) !== (Number(item.unrestrictedQty) || 0)) && (
+                             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide tabular-nums">
+                               on-hand {(Number(item.quantity) || 0).toLocaleString()}
+                               {(Number(item.reservedQty) || 0) > 0 && <> · <span className="text-amber-600">reserved {(Number(item.reservedQty) || 0).toLocaleString()}</span></>}
+                             </span>
+                           )}
+                         </div>
                          {isNippon && (
                            <button onClick={() => handleStockTake(item)} title="Record physical stock count"
                              className="ml-1 p-1 rounded border border-amber-200 text-amber-600 hover:bg-amber-50 transition-all">
