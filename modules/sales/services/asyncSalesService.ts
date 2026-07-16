@@ -1073,6 +1073,10 @@ export const AsyncSalesService = {
         isActive:      r.is_active !== false,
         createdBy:     r.created_by ?? '',
         createdAt:     r.created_at ?? '',
+        // IC-P1: Nippon (trading) price lists embed their product->rate rows in
+        // the `data` jsonb blob (no price_list_items rows). Surface them so the
+        // Nippon pricing resolver can read them; Glassco lists just get [].
+        items:         Array.isArray(r.data?.items) ? r.data.items : [],
       }));
       _mergeIntoLocal(KEYS.PRICE_LISTS, mapped);   // merge, don't overwrite shared cache
       return mapped;

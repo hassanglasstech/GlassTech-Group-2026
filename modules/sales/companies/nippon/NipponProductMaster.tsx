@@ -17,6 +17,7 @@ import { findSimilarProducts, similarityMessage } from '@/modules/shared/utils/p
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import NipponProductForm from '@/modules/nippon/components/NipponProductForm';
 import NipponDirectImporter from './components/NipponDirectImporter';
+import NipponPriceLists from './NipponPriceLists';
 import * as XLSX from 'xlsx';
 
 const NipponProductMaster: React.FC = () => {
@@ -36,7 +37,7 @@ const NipponProductMaster: React.FC = () => {
   const [imageFilter, setImageFilter] = useState<'all' | 'has' | 'missing'>(_view0.imageFilter || 'all');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [variantParent, setVariantParent] = useState<Product | null>(null);   // "Add variant" source
-  const [activeTab, setActiveTab] = useState<'list' | 'direct'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'direct' | 'pricing'>('list');
   // Sorting — click any column header to sort; click again to flip direction.
   type SortKey = 'profileCode' | 'modelNo' | 'description' | 'mainCategory' | 'brand' | 'basePrice' | 'stock';
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>(_view0.sortConfig || { key: 'profileCode', dir: 'asc' });
@@ -838,6 +839,12 @@ const NipponProductMaster: React.FC = () => {
         >
           Bulk Import
         </button>
+        <button
+          onClick={() => setActiveTab('pricing')}
+          className={`px-6 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${activeTab === 'pricing' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          Price Lists
+        </button>
         {/* Catalogue is a full builder page (branding + PDF) — a tab that routes there. */}
         <a
           href="#/nippon/catalogue"
@@ -848,7 +855,9 @@ const NipponProductMaster: React.FC = () => {
         </a>
       </div>
 
-      {activeTab === 'direct' ? (
+      {activeTab === 'pricing' ? (
+        <NipponPriceLists />
+      ) : activeTab === 'direct' ? (
         <NipponDirectImporter onComplete={() => {
           setActiveTab('list');
           refreshData();

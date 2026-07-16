@@ -7,6 +7,7 @@ import { StoreItem, ProductComponent } from '@/modules/procurement/types/invento
 import { Logger } from '@/modules/shared/services/logger';
 import { nipponImageUrl } from '@/modules/shared/components/ProductImage';
 import { issueNipponOrder } from './nipponFulfilmentService';
+import { NipponPriceList, resolveClientRate } from './nipponPricing';
 
 // TEMP (inventory module not live yet): stock balances are still 0 because GRN /
 // opening-balance intake isn't wired, so a hard stock gate blocks every approval.
@@ -20,6 +21,7 @@ export const useNipponQuotations = () => {
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [priceLists, setPriceLists] = useState<NipponPriceList[]>([]);
   const [storeItems, setStoreItems] = useState<StoreItem[]>([]);
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [searchTerm, setSearchTerm] = useState('');
@@ -74,6 +76,11 @@ export const useNipponQuotations = () => {
     
     const allProducts = await AsyncSalesService.getProducts();
     setProducts(allProducts.filter(p => p.company === company));
+
+    // IC-P1: customer / transfer-price lists — used to auto-apply a linked
+    // customer's negotiated rate over the product-master rate.
+    const allLists = await AsyncSalesService.getPriceLists();
+    setPriceLists((allLists as unknown as NipponPriceList[]).filter(l => l.company === company));
 
     // Pull stock from Supabase first (async); fall back to localStorage in the
     // service. Filter to Nippon defensively in case authStore.company is empty.
@@ -234,7 +241,12 @@ export const useNipponQuotations = () => {
       // for store rows whose product wasn't matched (stub) or had no modelNo.
       item.locationCode = prod.modelNo || prod.itemCode || prod.profileCode || prod.id || '';
       item.productRef   = prod.id;
-      item.pricePerUnit = prod.price || prod.basePrice || 0;
+      // IC-P1: if the selected customer has an assigned price list with a
+      // negotiated rate for this product, it wins over the master rate.
+      const custRate = resolveClientRate(prev.clientId, priceLists)(prod.id);
+      item.pricePerUnit = (custRate !== undefined && custRate > 0)
+        ? custRate
+        : (prod.price || prod.basePrice || 0);
       item.glassSize = prod.unit || 'PCS';
       item.glazingSpecs = prod.brand || ''; // Brand
       item.amount = (Number(item.qty) || 1) * (Number(item.pricePerUnit) || 0);
@@ -245,6 +257,23 @@ export const useNipponQuotations = () => {
       
       next[index] = item;
       return { ...prev, items: next };
+    });
+  };
+
+  // IC-P1: set the order's customer AND re-price existing lines from that
+  // customer's assigned price list. Only fires on an explicit customer change
+  // (wired to the client <select>), so opening a saved order never re-prices it.
+  // Manual per-line rate edits made afterwards are preserved.
+  const applyClientPricing = (clientId: string) => {
+    const resolver = resolveClientRate(clientId, priceLists);
+    setFormData(prev => {
+      const items = (prev.items || []).map(it => {
+        if (it.isSection || it.isSample || !it.productRef) return it;
+        const r = resolver(it.productRef);
+        if (r === undefined || r <= 0) return it;
+        return { ...it, pricePerUnit: r, amount: (Number(it.qty) || 0) * r };
+      });
+      return { ...prev, clientId, items };
     });
   };
 
@@ -612,6 +641,7 @@ export const useNipponQuotations = () => {
     setPendingSetSuggestion,
     addFullSet,
     updateItem,
+    applyClientPricing,
     toggleItemSample,
     handleRemoveItem,
     handleDuplicateItem,

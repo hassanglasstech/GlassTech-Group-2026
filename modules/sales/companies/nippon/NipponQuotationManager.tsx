@@ -37,6 +37,7 @@ const NipponQuotationManager: React.FC = () => {
     setPendingSetSuggestion,
     addFullSet,
     updateItem,
+    applyClientPricing,
     toggleItemSample,
     handleRemoveItem,
     handleDuplicateItem,
@@ -337,7 +338,7 @@ const NipponQuotationManager: React.FC = () => {
               <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-2 shrink-0">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase text-slate-400">Client</label>
-                  <select disabled={isLocked} className="sap-input w-full font-bold" value={formData.clientId} onChange={e => setFormData({...formData, clientId: e.target.value})}>
+                  <select disabled={isLocked} className="sap-input w-full font-bold" value={formData.clientId} onChange={e => applyClientPricing(e.target.value)}>
                     <option value="">Select Client...</option>
                     {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
