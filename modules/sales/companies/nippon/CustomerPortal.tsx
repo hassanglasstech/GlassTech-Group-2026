@@ -24,6 +24,7 @@ import { NipponPriceList, resolveClientRate } from './nipponPricing';
 import { getNicknames, setNickname, NicknameMap } from './customerNicknames';
 import { CustomerStatementModal } from '@/modules/finance/components/CustomerStatementModal';
 import { NipponDocPreview } from '@/modules/nippon/prints/NipponDocPreview';
+import { AlertService } from '@/modules/shared/services/alertService';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 import { toast } from 'sonner';
 import { Search, ShoppingCart, Plus, Minus, Trash2, Send, Tag, Package, Loader2, History, Store, BadgeCheck, FileText, Truck, Eye, CheckCircle2, Clock, X, Download, Upload } from 'lucide-react';
@@ -52,6 +53,7 @@ const CustomerPortal: React.FC = () => {
   const [pdfOrder, setPdfOrder] = useState<Quotation | null>(null);        // download quotation PDF
   const [proofView, setProofView] = useState<string | null>(null);         // payment-proof lightbox
   const [payingId, setPayingId] = useState<string | null>(null);           // upload in progress
+  const [payAmount, setPayAmount] = useState<string>('');                  // customer's claimed amount
 
   // Live: when the Nippon desk quotes / approves / dispatches an order, the
   // customer's list updates without a manual refresh (same realtime bus the
@@ -167,6 +169,9 @@ const CustomerPortal: React.FC = () => {
       };
       const res = await AsyncSalesService.saveQuotations([quo]);
       if (res?.error) { toast.error(`Order not sent — ${res.error}`, { duration: 8000 }); return; }
+      // Best-effort alert to the Nippon office bell (RLS may block a customer insert → silent).
+      AlertService.custom('Nippon', `New customer order — ${myClient.name || displayName}`,
+        { body: `${items.length} item(s) · Rs ${cartTotal.toLocaleString()}`, link: '#/sales', reference_id: id, severity: 'info' }).catch(() => {});
       toast.success('Order sent to Nippon — they will confirm shortly.', { duration: 7000 });
       setCart([]);
       await load();
@@ -176,11 +181,27 @@ const CustomerPortal: React.FC = () => {
     } finally { setSending(false); }
   };
 
-  // Customer uploads a payment screenshot against a quoted order + marks it paid.
-  // Stored as a base64 data URI on the order (zero setup); office confirms it.
-  const uploadPayment = async (order: Quotation, file: File): Promise<void> => {
+  // Customer accepts the quotation (before paying).
+  const acceptQuotation = async (order: Quotation): Promise<void> => {
+    try {
+      const updated: Quotation = { ...order, accepted: true, acceptedAt: new Date().toISOString() };
+      const res = await AsyncSalesService.saveQuotations([updated]);
+      if (res?.error) { toast.error(`Not saved — ${res.error}`, { duration: 8000 }); return; }
+      toast.success('Quotation accepted. Ab payment kar ke screenshot upload karein.');
+      setDetailOrder(updated);
+      await load();
+    } catch (err) {
+      toast.error(`Failed: ${err instanceof Error ? err.message : 'error'}`);
+    }
+  };
+
+  // Customer submits payment: amount they claim to have paid + a screenshot (base64).
+  // This is a CLAIM only — the owner's Finance receipt is the record of truth.
+  const submitPayment = async (order: Quotation, file: File): Promise<void> => {
     if (!file.type.startsWith('image/')) { toast.error('Please upload an image (screenshot).'); return; }
     if (file.size > 5 * 1024 * 1024) { toast.error('Screenshot must be under 5 MB.'); return; }
+    const amt = Number(payAmount) || Number(order.paymentClaimAmount) || 0;
+    if (amt <= 0) { toast.error('Pehle payment amount (PKR) enter karein.'); return; }
     setPayingId(order.id);
     try {
       const dataUri = await new Promise<string>((resolve, reject) => {
@@ -189,9 +210,12 @@ const CustomerPortal: React.FC = () => {
         r.onerror = () => reject(new Error('read failed'));
         r.readAsDataURL(file);
       });
-      const updated: Quotation = { ...order, paymentProof: dataUri, paymentSubmittedAt: new Date().toISOString() };
+      const updated: Quotation = { ...order, paymentProof: dataUri, paymentClaimAmount: amt, paymentSubmittedAt: new Date().toISOString() };
       const res = await AsyncSalesService.saveQuotations([updated]);
       if (res?.error) { toast.error(`Payment proof not sent — ${res.error}`, { duration: 8000 }); return; }
+      // Best-effort alert to the Nippon office (RLS may block a customer insert → silent).
+      AlertService.custom('Nippon', `Payment submitted — ${myClient?.name || displayName}`,
+        { body: `PKR ${amt.toLocaleString()} against ${order.orderNo || order.id}`, link: '#/sales', reference_id: order.id, severity: 'warning' }).catch(() => {});
       toast.success('Payment proof sent — Nippon will confirm shortly.', { duration: 7000 });
       setDetailOrder(updated);
       await load();
@@ -432,31 +456,49 @@ const CustomerPortal: React.FC = () => {
                   </div>
                 )}
 
-                {/* Payment — once Nippon has quoted, the customer pays and uploads a screenshot */}
+                {/* Accept & Pay — once Nippon has quoted: accept → enter amount + screenshot */}
                 {o.quotedAt && !ORDER_LIKE.includes(o.status as string) && (
-                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
-                    <div className="text-[10px] font-black uppercase text-amber-700 tracking-widest mb-1.5 flex items-center gap-1.5"><FileText size={13}/> Payment</div>
-                    {o.paymentConfirmed ? (
-                      <div className="text-xs font-bold text-emerald-700 flex items-center gap-1.5"><CheckCircle2 size={14}/> Payment confirmed by Nippon.</div>
-                    ) : o.paymentProof ? (
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 space-y-2">
+                    <div className="text-[10px] font-black uppercase text-amber-700 tracking-widest flex items-center gap-1.5"><FileText size={13}/> Accept &amp; Pay</div>
+                    {!o.accepted ? (
                       <div className="space-y-2">
-                        <div className="text-xs font-bold text-amber-800">Payment proof sent{o.paymentSubmittedAt ? ` · ${fmtDT(o.paymentSubmittedAt)}` : ''} — awaiting Nippon confirmation.</div>
-                        <div className="flex items-center gap-3">
-                          <button onClick={() => setProofView(o.paymentProof || null)} className="text-[10px] font-black uppercase text-blue-600 hover:text-blue-800">View</button>
-                          <label className="text-[10px] font-black uppercase text-slate-500 hover:text-slate-700 cursor-pointer">
-                            {payingId === o.id ? 'Uploading…' : 'Re-upload'}
-                            <input type="file" accept="image/*" className="hidden" disabled={payingId === o.id} onChange={e => e.target.files?.[0] && uploadPayment(o, e.target.files[0])} />
-                          </label>
-                        </div>
+                        <div className="text-xs font-bold text-amber-800">Quotation PDF review karein, phir accept karein.</div>
+                        <button onClick={() => acceptQuotation(o)} className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-black uppercase tracking-widest">
+                          <CheckCircle2 size={13} /> Accept Quotation
+                        </button>
                       </div>
                     ) : (
-                      <div className="space-y-2">
-                        <div className="text-xs font-bold text-amber-800">Download the quotation PDF, pay, then upload your payment screenshot to mark it paid.</div>
-                        <label className="inline-flex items-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-black uppercase tracking-widest cursor-pointer">
-                          {payingId === o.id ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} {payingId === o.id ? 'Uploading…' : 'Upload Payment Screenshot'}
-                          <input type="file" accept="image/*" className="hidden" disabled={payingId === o.id} onChange={e => e.target.files?.[0] && uploadPayment(o, e.target.files[0])} />
-                        </label>
-                      </div>
+                      <>
+                        <div className="text-[10px] font-bold text-emerald-700 flex items-center gap-1.5"><CheckCircle2 size={12} /> Quotation accepted{o.acceptedAt ? ` · ${fmtDT(o.acceptedAt)}` : ''}</div>
+                        {o.paymentConfirmed ? (
+                          <div className="bg-white rounded-lg border border-emerald-200 p-2.5 text-xs font-black text-emerald-700 flex items-center gap-1.5">
+                            <CheckCircle2 size={14} /> Payment confirmed by Nippon{o.paymentConfirmedAt ? ` · ${fmtDT(o.paymentConfirmedAt)}` : ''}
+                          </div>
+                        ) : o.paymentProof ? (
+                          <div className="space-y-1.5">
+                            <div className="text-xs font-bold text-amber-800">Payment submitted{o.paymentClaimAmount ? ` · PKR ${Number(o.paymentClaimAmount).toLocaleString()}` : ''}{o.paymentSubmittedAt ? ` · ${fmtDT(o.paymentSubmittedAt)}` : ''} — awaiting Nippon confirmation.</div>
+                            <div className="flex items-center gap-3">
+                              <button onClick={() => setProofView(o.paymentProof || null)} className="text-[10px] font-black uppercase text-blue-600 hover:text-blue-800">View</button>
+                              <label className="text-[10px] font-black uppercase text-slate-500 hover:text-slate-700 cursor-pointer">
+                                {payingId === o.id ? 'Uploading…' : 'Re-upload'}
+                                <input type="file" accept="image/*" className="hidden" disabled={payingId === o.id} onChange={e => e.target.files?.[0] && submitPayment(o, e.target.files[0])} />
+                              </label>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="text-xs font-bold text-amber-800">Payment amount enter karein + screenshot upload karein. <span className="text-slate-400 font-bold">(Order total: Rs {val.toLocaleString()})</span></div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <input type="number" min={0} value={payAmount} placeholder="Amount (PKR)"
+                                onChange={e => setPayAmount(e.target.value)} className="sap-input w-40 text-xs font-black" />
+                              <label className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest cursor-pointer ${payingId === o.id ? 'bg-emerald-300 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}>
+                                {payingId === o.id ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} {payingId === o.id ? 'Uploading…' : 'Upload Screenshot & Submit'}
+                                <input type="file" accept="image/*" className="hidden" disabled={payingId === o.id} onChange={e => e.target.files?.[0] && submitPayment(o, e.target.files[0])} />
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}

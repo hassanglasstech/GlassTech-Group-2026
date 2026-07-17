@@ -9,6 +9,7 @@ import { nipponImageUrl } from '@/modules/shared/components/ProductImage';
 import { issueNipponOrder } from './nipponFulfilmentService';
 import { NipponPriceList, resolveClientRate } from './nipponPricing';
 import { useAuthStore } from '@/modules/auth/authStore';
+import { AlertService } from '@/modules/shared/services/alertService';
 
 // TEMP (inventory module not live yet): stock balances are still 0 because GRN /
 // opening-balance intake isn't wired, so a hard stock gate blocks every approval.
@@ -546,6 +547,12 @@ export const useNipponQuotations = () => {
         `${finalQuo.id} → ${finalQuo.orderNo || '-'} (${company}) total=${itemsSubtotal}`,
         { referenceId: finalQuo.id, amount: itemsSubtotal, extra: { company } });
       toast.success(revise ? `Sales Order revised → ${finalQuo.orderNo}` : approve ? `Sales Order ${finalQuo.orderNo} created.` : 'Quotation saved.');
+
+      // Alert the office/store bell that an order is approved and heading to the store.
+      if (approve && !revise) {
+        AlertService.custom(company, `Order approved — ${clients.find(c => c.id === finalQuo.clientId)?.name || finalQuo.clientId}`,
+          { body: `${finalQuo.orderNo} · Rs ${itemsSubtotal.toLocaleString()} → store`, link: '#/store-issue', reference_id: finalQuo.id, severity: 'info' }).catch(() => {});
+      }
 
       await refreshData();
       setView('list');

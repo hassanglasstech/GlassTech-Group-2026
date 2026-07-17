@@ -193,8 +193,13 @@ export interface Quotation {
   issuedBy?: string;
   // ── Nippon payment loop (hard gate: office must confirm payment before the
   //    order can be approved/sent to store). All ride in the quotations data jsonb. ──
+  /** Customer accepted the quotation in the portal (before paying). */
+  accepted?: boolean;
+  acceptedAt?: string;
   /** Customer-uploaded payment proof (screenshot as a base64 data URI). */
   paymentProof?: string;
+  /** Amount the customer SAYS they paid (a CLAIM — the owner's receipt is the record). */
+  paymentClaimAmount?: number;
   /** Customer marked the order paid + uploaded proof (portal). */
   paymentSubmittedAt?: string;
   /** Office verified the payment actually arrived — unblocks approval. */
