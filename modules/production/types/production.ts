@@ -120,6 +120,19 @@ export interface GatePassInfo {
   photoUrl?: string;
 }
 
+/** Nippon — an advance payment receipt posted by the owner against an order.
+ *  IFRS 15: the cash is a contract liability (Cr Client Advance 21123) until
+ *  delivery. Sequential + append-only (correct via reversal, never edit/delete). */
+export interface NipponAdvanceReceipt {
+  receiptNo: string;
+  amount: number;
+  method: 'Cash' | 'Bank Transfer' | 'Cheque' | 'Online';
+  reference?: string;      // bank/online txn ref or cheque no
+  date: string;            // ISO
+  by: string;              // owner who posted it
+  glTxId?: string;         // set when the GL journal was posted (books mode)
+}
+
 export interface Quotation {
   id: string;
   orderNo?: string;
@@ -206,6 +219,8 @@ export interface Quotation {
   paymentConfirmed?: boolean;
   paymentConfirmedAt?: string;
   paymentConfirmedBy?: string;
+  /** Owner-posted advance receipts against this order (Dr Cash/Bank · Cr Advance). */
+  advanceReceipts?: NipponAdvanceReceipt[];
   // ── Gate pass is REQUESTED by the store, then ISSUED by the office in Logistics. ──
   /** Store asked the office to issue a gate pass for this (delivered/ready) order. */
   gatePassRequested?: boolean;

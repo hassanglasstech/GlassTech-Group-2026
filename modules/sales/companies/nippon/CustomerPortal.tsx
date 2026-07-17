@@ -471,8 +471,20 @@ const CustomerPortal: React.FC = () => {
                       <>
                         <div className="text-[10px] font-bold text-emerald-700 flex items-center gap-1.5"><CheckCircle2 size={12} /> Quotation accepted{o.acceptedAt ? ` · ${fmtDT(o.acceptedAt)}` : ''}</div>
                         {o.paymentConfirmed ? (
-                          <div className="bg-white rounded-lg border border-emerald-200 p-2.5 text-xs font-black text-emerald-700 flex items-center gap-1.5">
-                            <CheckCircle2 size={14} /> Payment confirmed by Nippon{o.paymentConfirmedAt ? ` · ${fmtDT(o.paymentConfirmedAt)}` : ''}
+                          <div className="bg-white rounded-lg border border-emerald-200 p-2.5 space-y-1.5">
+                            <div className="text-xs font-black text-emerald-700 flex items-center gap-1.5"><CheckCircle2 size={14} /> Payment confirmed by Nippon{o.paymentConfirmedAt ? ` · ${fmtDT(o.paymentConfirmedAt)}` : ''}</div>
+                            {(o.advanceReceipts || []).length > 0 && (
+                              <div className="space-y-1 pt-1 border-t border-emerald-50">
+                                <div className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Official receipt(s)</div>
+                                {(o.advanceReceipts || []).map(r => (
+                                  <div key={r.receiptNo} className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-600">
+                                    <span className="font-mono text-slate-700">{r.receiptNo}</span>
+                                    <span className="text-slate-400">{r.method} · {fmtD(r.date)}</span>
+                                    <span className="font-black tabular-nums text-slate-800">PKR {Number(r.amount).toLocaleString()}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ) : o.paymentProof ? (
                           <div className="space-y-1.5">

@@ -6,12 +6,16 @@ import { SharedQuotationList } from '@/modules/sales/components/SharedQuotationL
 import { getBrandNick } from '@/modules/shared/utils/brandUtils';
 import {
   Printer, X, Plus, Trash2, FileSignature,
-  Search, Calendar, Edit2, FileCheck, Eye, Save, ArrowLeft, Layers, Copy, Gift, PackageCheck, CheckCircle2
+  Search, Calendar, Edit2, FileCheck, Eye, Save, ArrowLeft, Layers, Copy, Gift, PackageCheck, CheckCircle2, Loader2
 } from 'lucide-react';
 import { useNipponQuotations } from './useNipponQuotations';
 import { useAuthStore } from '@/modules/auth/authStore';
+import { recordAdvanceReceipt } from './nipponAdvanceReceiptService';
+import { NipponReceiptPrint } from '@/modules/nippon/prints/NipponReceiptPrint';
+import { NipponAdvanceReceipt } from '@/modules/production/types/production';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import { useUnsavedGuard } from '@/modules/shared/hooks/useUnsavedGuard';
+import { toast } from 'sonner';
 
 const NipponQuotationManager: React.FC = () => {
   // Default print header is Kin Long (Nippon's primary supplier). A customer's own
@@ -49,16 +53,21 @@ const NipponQuotationManager: React.FC = () => {
     handleDelete,
     handleVoid,
     issueOrder,
-    confirmPayment,
+    refreshData,
     selectProduct,
     initialQuotation,
     isSaving,
   } = useNipponQuotations();
   const [proofView, setProofView] = React.useState<string | null>(null);   // payment-proof lightbox
-  const [confirmingPay, setConfirmingPay] = React.useState(false);
   // Only the owner (or Hassan / super_admin) may approve orders (rule 7).
   const role = useAuthStore(s => s.profile?.role || s.user?.role || '');
+  const actorName = useAuthStore(s => s.profile?.fullName || s.profile?.email || s.user?.email || 'owner');
   const isOwner = ['owner', 'hassan', 'super_admin'].includes(role);
+  // Advance-receipt (Phase C) modal + print state.
+  const [receiptOrder, setReceiptOrder] = React.useState<Partial<Quotation> | null>(null);
+  const [receiptForm, setReceiptForm] = React.useState<{ amount: string; method: NipponAdvanceReceipt['method']; reference: string }>({ amount: '', method: 'Cash', reference: '' });
+  const [recordingReceipt, setRecordingReceipt] = React.useState(false);
+  const [printReceipt, setPrintReceipt] = React.useState<{ order: Quotation; receipt: NipponAdvanceReceipt } | null>(null);
 
   // Quotations vs Sales Orders vs Store Issue tab. Orders = approved-and-beyond
   // (+ voided, kept for audit). Store Issue = approved orders not yet physically
@@ -121,6 +130,37 @@ const NipponQuotationManager: React.FC = () => {
       if (switchToPref) setNipponPrintType(pref);
     }
     setPrintingQuote(q);
+  };
+
+  // Phase C — owner records a payment RECEIVED against this order (advance).
+  const openReceiptModal = (): void => {
+    const net = subTotal - (formData.discountAmount || 0);
+    setReceiptForm({ amount: String(formData.paymentClaimAmount || net || ''), method: 'Cash', reference: '' });
+    setReceiptOrder(formData);
+  };
+  const submitReceipt = async (): Promise<void> => {
+    if (!receiptOrder) return;
+    const amount = Number(receiptForm.amount) || 0;
+    if (amount <= 0) { toast.error('Enter the amount received.'); return; }
+    setRecordingReceipt(true);
+    const cli = clients.find(c => c.id === receiptOrder.clientId);
+    const res = await recordAdvanceReceipt({
+      order: receiptOrder as Quotation, company: 'Nippon',
+      clientName: cli?.name || receiptOrder.clientId || '',
+      amount, method: receiptForm.method, reference: receiptForm.reference, by: actorName,
+    });
+    setRecordingReceipt(false);
+    if (res.error || !res.data) { toast.error(`Receipt failed — ${res.error || 'unknown'}`, { duration: 8000 }); return; }
+    const { order: updated, receipt, glPosted } = res.data;
+    setFormData(updated);
+    setReceiptOrder(null);
+    toast.success(`Receipt ${receipt.receiptNo} recorded${glPosted ? ' + posted to GL' : ''}.`);
+    setPrintReceipt({ order: updated, receipt });
+    await refreshData();
+    // Prepayment popup (rule 6) — owner decides whether to release goods now.
+    if (isOwner && await confirmModal(`Payment recorded for ${updated.orderNo || updated.manualSerial || updated.id}. Approve the order and release goods to the store now?`)) {
+      handleSave(true, updated);
+    }
   };
 
   // "<Client> <Project> <QUT|SO>-<serial4>" — used as the print/PDF filename.
@@ -475,8 +515,9 @@ const NipponQuotationManager: React.FC = () => {
                 </div>
               </div>
 
-              {/* Payment (hard gate) — office reviews the customer's uploaded proof
-                  and confirms before this order can be approved. Customer orders only. */}
+              {/* Payment — the customer's claim (screenshot + amount) is shown for the
+                  owner to verify; the owner records the official RECEIPT (Dr Cash/Bank ·
+                  Cr Client Advance) which confirms payment + unblocks approval. */}
               {formData.customerPlaced && (
                 <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3 flex-wrap shrink-0">
                   <span className="text-[10px] font-black uppercase text-slate-400 shrink-0">Payment</span>
@@ -484,34 +525,25 @@ const NipponQuotationManager: React.FC = () => {
                     <>
                       <button type="button" onClick={() => setProofView(formData.paymentProof || null)}
                         className="flex items-center gap-1.5 text-[10px] font-black uppercase text-blue-600 hover:text-blue-800">
-                        <Eye size={13}/> View proof
+                        <Eye size={13}/> Customer proof
                       </button>
                       <span className="text-[10px] font-bold text-slate-400">
-                        Submitted{formData.paymentSubmittedAt ? ` ${new Date(formData.paymentSubmittedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}
+                        Claim{formData.paymentClaimAmount ? ` PKR ${Number(formData.paymentClaimAmount).toLocaleString()}` : ''}{formData.paymentSubmittedAt ? ` · ${new Date(formData.paymentSubmittedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short' })}` : ''}
                       </span>
-                      {formData.paymentConfirmed ? (
-                        <span className="ml-auto flex items-center gap-1 text-[10px] font-black uppercase text-emerald-600"><CheckCircle2 size={13}/> Payment confirmed</span>
-                      ) : (
-                        <button type="button" disabled={confirmingPay}
-                          onClick={async () => {
-                            setConfirmingPay(true);
-                            const u = await confirmPayment(formData as Quotation);
-                            setConfirmingPay(false);
-                            if (u) {
-                              setFormData(u);
-                              // Prepayment popup (rule 6): ask the owner to release goods now.
-                              if (isOwner && await confirmModal(`Payment confirmed for ${u.orderNo || u.manualSerial || u.id}. Is payment enough — approve the order and release goods to the store now?`)) {
-                                handleSave(true, u);
-                              }
-                            }
-                          }}
-                          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-[10px] font-black uppercase tracking-widest">
-                          <CheckCircle2 size={13}/> {confirmingPay ? 'Confirming…' : 'Confirm Payment Received'}
-                        </button>
-                      )}
                     </>
                   ) : (
-                    <span className="text-[10px] font-bold text-amber-600">Customer ne abhi payment proof upload nahi kiya — approve tab tak block hai.</span>
+                    <span className="text-[10px] font-bold text-slate-400">No customer proof yet — record the receipt when payment arrives.</span>
+                  )}
+                  {formData.paymentConfirmed ? (
+                    <span className="ml-auto flex items-center gap-1 text-[10px] font-black uppercase text-emerald-600">
+                      <CheckCircle2 size={13}/> Payment confirmed{formData.advanceReceipts?.length ? ` · ${formData.advanceReceipts.length} receipt(s)` : ''}
+                    </span>
+                  ) : (
+                    <button type="button" disabled={!isOwner} title={!isOwner ? 'Only the owner records payments' : undefined}
+                      onClick={openReceiptModal}
+                      className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-[10px] font-black uppercase tracking-widest">
+                      <CheckCircle2 size={13}/> Record Payment Receipt
+                    </button>
                   )}
                 </div>
               )}
@@ -845,6 +877,60 @@ const NipponQuotationManager: React.FC = () => {
           <img src={proofView} alt="Payment proof" className="max-h-[90vh] max-w-[90vw] rounded-xl shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
           <button onClick={() => setProofView(null)} className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 rounded-xl text-white"><X size={18} /></button>
         </div>
+      )}
+
+      {/* Record Payment Receipt (Phase C) */}
+      {receiptOrder && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-[600]">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="bg-slate-800 text-white px-5 py-3 flex items-center justify-between">
+              <span className="text-sm font-black uppercase tracking-tight">Record Payment Receipt</span>
+              <button onClick={() => setReceiptOrder(null)} className="p-1 hover:bg-white/10 rounded"><X size={16}/></button>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{receiptOrder.orderNo || receiptOrder.manualSerial || receiptOrder.id} · {clients.find(c => c.id === receiptOrder.clientId)?.name || 'Customer'}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Amount (PKR) *</label>
+                  <input type="number" min={0} value={receiptForm.amount} onChange={e => setReceiptForm(f => ({ ...f, amount: e.target.value }))} className="sap-input w-full text-sm font-black"/>
+                </div>
+                <div>
+                  <label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Method *</label>
+                  <select value={receiptForm.method} onChange={e => setReceiptForm(f => ({ ...f, method: e.target.value as NipponAdvanceReceipt['method'] }))} className="sap-input w-full text-xs font-bold">
+                    <option value="Cash">Cash</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                    <option value="Online">Online</option>
+                    <option value="Cheque">Cheque</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Reference (txn / cheque no)</label>
+                <input type="text" value={receiptForm.reference} onChange={e => setReceiptForm(f => ({ ...f, reference: e.target.value }))} className="sap-input w-full text-xs" placeholder="e.g. MCB-889912 · cheque 4521"/>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-[10px] font-bold text-blue-800 leading-snug">
+                Dr Cash/Bank · Cr Client Advance (21123). Advance delivery pe AR se net ho jayega. GL sirf finance.gl_enabled ON hone par post hoga.
+              </div>
+            </div>
+            <div className="px-5 py-3 bg-slate-50 border-t flex justify-end gap-2">
+              <button onClick={() => setReceiptOrder(null)} className="px-4 py-2 text-xs font-bold text-slate-500 border rounded-lg">Cancel</button>
+              <button onClick={submitReceipt} disabled={recordingReceipt} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-black uppercase hover:bg-emerald-700 flex items-center gap-1.5 disabled:opacity-50">
+                {recordingReceipt ? <Loader2 size={13} className="animate-spin"/> : <CheckCircle2 size={13}/>} Record &amp; Post
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment receipt print (customer's preferred format) */}
+      {printReceipt && (
+        <NipponReceiptPrint
+          receipt={printReceipt.receipt}
+          order={printReceipt.order}
+          clients={clients}
+          printType={clients.find(c => c.id === printReceipt.order.clientId)?.preferredPrintType || nipponPrintType}
+          onClose={() => setPrintReceipt(null)}
+        />
       )}
 
       {/* ══════════════════════════════════════════════════════════
