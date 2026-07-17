@@ -169,6 +169,9 @@ export interface Quotation {
   //    (Glassco/Nippon) so it appears in their Sales + Store queue immediately.
   //    One order, two lenses (Sales Order for the seller, Project Purchase for the
   //    buyer). Round-trips via the quotations `data` jsonb blob (no schema change). ──
+  /** Customer portal — this quotation was placed by the customer themselves via
+   *  the self-service portal (Draft, awaiting Nippon review). Round-trips via data jsonb. */
+  customerPlaced?: boolean;
   /** True when this Sales Order was raised by another group company's project. */
   intercompany?: boolean;
   /** The buyer company that raised it (e.g. 'GTK'). */

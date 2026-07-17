@@ -52,6 +52,8 @@ const ROLES_LIST = [
   { value: 'glassco_admin',      label: 'Glassco Admin',        desc: 'Glassco full access',                                   color: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
   { value: 'glassco_production', label: 'Production Staff',     desc: 'Production modules only (legacy)',                      color: 'bg-amber-100 text-amber-800 border-amber-200' },
   { value: 'nippon_admin',       label: 'Nippon Admin',         desc: 'Nippon full access',                                    color: 'bg-rose-100 text-rose-800 border-rose-200' },
+  // ── External ────────────────────────────────────────────────────────
+  { value: 'customer',           label: 'Customer (Portal)',    desc: 'Self-service portal — own orders + rates only',         color: 'bg-teal-100 text-teal-800 border-teal-200' },
 ];
 
 const ROLE_DEFAULTS: Record<string, { companies: string[]; modules: string[] }> = {
@@ -69,6 +71,7 @@ const ROLE_DEFAULTS: Record<string, { companies: string[]; modules: string[] }> 
   glassco_admin:       { companies: ['Glassco'],                                modules: [] },
   glassco_production:  { companies: ['Glassco'],                                modules: ['production','inventory','logistics','requisitions'] },
   nippon_admin:        { companies: ['Nippon'],                                 modules: ['sales','inventory','hr','accounts','requisitions'] },
+  customer:            { companies: ['Nippon'],                                 modules: ['customer-portal'] },
 };
 
 // The full module catalog + which companies actually run each module. When an
@@ -89,16 +92,17 @@ const MODULE_CATALOG: { key: string; label: string }[] = [
   { key: 'hub',              label: 'Supply Hub' },
   { key: 'md-dashboard',     label: 'MD Dashboard' },
   { key: 'factory-incharge', label: 'Factory Desk' },
+  { key: 'customer-portal',  label: 'Customer Portal' },
   { key: 'admin',            label: 'Admin / Basis' },
 ];
 
-const PRODUCTION_CO = ['sales','hr','inventory','requisitions','production','accounts','logistics','vendors','projects','hub','md-dashboard','factory-incharge','admin'];
+const PRODUCTION_CO =['sales','hr','inventory','requisitions','production','accounts','logistics','vendors','projects','hub','md-dashboard','factory-incharge','admin'];
 const COMPANY_MODULES: Record<string, string[]> = {
   GTK:     PRODUCTION_CO,
   GTI:     PRODUCTION_CO,
   Glassco: PRODUCTION_CO,
   // Nippon = trading: Store Issue instead of Production; no Logistics/Factory Desk.
-  Nippon:  ['sales','hr','inventory','store-issue','requisitions','accounts','vendors','projects','hub','md-dashboard','admin'],
+  Nippon:  ['sales','hr','inventory','store-issue','requisitions','accounts','vendors','projects','hub','md-dashboard','customer-portal','admin'],
   // Factory = ops/logistics hub.
   Factory: ['inventory','logistics','requisitions','hub','md-dashboard','factory-incharge','admin'],
 };
