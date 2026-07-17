@@ -149,6 +149,7 @@ const CORE_NAV = [
   { name: 'Production',        path: '/production',           icon: Factory,     key: 'production'       },
   { name: 'Material Mgmt',     path: '/inventory',        icon: Warehouse,       key: 'inventory'        },
   { name: 'Store Issue',       path: '/store-issue',      icon: Package,         key: 'store-issue'      },
+  { name: 'Logistics',         path: '/logistics',        icon: Truck,           key: 'logistics'        },
   { name: 'Customer Portal',   path: '/customer-portal',  icon: Package,         key: 'customer-portal'  },
   { name: 'Procurement',       path: '/requisitions',     icon: Package,         key: 'requisitions'     },
   { name: 'Finance (FICO)',     path: '/accounts',         icon: Landmark,        key: 'accounts'         },

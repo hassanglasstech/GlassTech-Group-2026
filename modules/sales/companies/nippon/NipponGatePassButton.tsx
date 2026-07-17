@@ -25,20 +25,44 @@ import { Truck, QrCode, X, Loader2, FileText } from 'lucide-react';
 interface Props {
   order: Quotation;
   clientName?: string;
-  /** Called with the updated order after a pass is issued (refresh the caller). */
+  /** Called with the updated order after a pass is requested/issued (refresh the caller). */
   onIssued?: (updated: Quotation) => void;
   /** 'sm' for dense table rows, 'md' (default) for the pick-detail toolbar. */
   size?: 'sm' | 'md';
   /** Show the "اردو پرچی" slip button next to the gate-pass button. Default true. */
   showSlipButton?: boolean;
+  /** 'request' = store asks the office for a pass (no modal). 'issue' (default) =
+   *  office actually issues it (vehicle/driver modal → QR → Factory gate). */
+  mode?: 'request' | 'issue';
 }
 
-export const NipponGatePassButton: React.FC<Props> = ({ order, clientName, onIssued, size = 'md', showSlipButton = true }) => {
+export const NipponGatePassButton: React.FC<Props> = ({ order, clientName, onIssued, size = 'md', showSlipButton = true, mode = 'issue' }) => {
   const stampUser = useAuthStore(s => s.profile?.fullName || s.profile?.email || s.user?.email || 'store');
   const [open, setOpen] = useState(false);
   const [issuing, setIssuing] = useState(false);
+  const [requesting, setRequesting] = useState(false);
   const [showSlip, setShowSlip] = useState(false);
   const [form, setForm] = useState({ vehicleNo: '', driverName: '', driverPhone: '', isReturnable: false, instructions: '' });
+
+  // Store side: mark the order as needing a gate pass; the office picks it up in
+  // Logistics → Gate Pass and issues it. No vehicle/driver here.
+  const requestGatePass = async (): Promise<void> => {
+    setRequesting(true);
+    try {
+      const updated: Quotation = {
+        ...order,
+        gatePassRequested: true,
+        gatePassRequestedAt: new Date().toISOString(),
+        gatePassRequestedBy: stampUser,
+      };
+      const res = await AsyncSalesService.saveQuotations([updated]);
+      if (res?.error) { toast.error(`Request not saved — ${res.error}`, { duration: 8000 }); return; }
+      toast.success('Gate pass requested — the office will issue it from Logistics.');
+      onIssued?.(updated);
+    } catch (err) {
+      toast.error(`Request failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally { setRequesting(false); }
+  };
 
   const pad = size === 'sm' ? 'px-3 py-1.5' : 'px-4 py-2';
 
@@ -92,10 +116,27 @@ export const NipponGatePassButton: React.FC<Props> = ({ order, clientName, onIss
 
   return (
     <>
-      <button onClick={openModal}
-        className={`flex items-center gap-1.5 ${pad} rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${order.gatePass ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' : 'bg-slate-700 hover:bg-slate-800 text-white'}`}>
-        <Truck size={13}/> {order.gatePass ? 'Gate Pass ✓' : 'Issue Gate Pass'}
-      </button>
+      {mode === 'request' ? (
+        order.gatePass ? (
+          <span className={`inline-flex items-center gap-1.5 ${pad} rounded-xl text-[10px] font-black uppercase tracking-widest bg-indigo-100 text-indigo-700`}>
+            <Truck size={13}/> Gate Pass Issued ✓
+          </span>
+        ) : order.gatePassRequested ? (
+          <span className={`inline-flex items-center gap-1.5 ${pad} rounded-xl text-[10px] font-black uppercase tracking-widest bg-amber-100 text-amber-700`}>
+            <Truck size={13}/> Gate Pass Requested
+          </span>
+        ) : (
+          <button onClick={requestGatePass} disabled={requesting}
+            className={`flex items-center gap-1.5 ${pad} rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-700 hover:bg-slate-800 disabled:opacity-50 text-white transition-all`}>
+            {requesting ? <Loader2 size={13} className="animate-spin"/> : <Truck size={13}/>} {requesting ? 'Requesting…' : 'Request Gate Pass'}
+          </button>
+        )
+      ) : (
+        <button onClick={openModal}
+          className={`flex items-center gap-1.5 ${pad} rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${order.gatePass ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' : 'bg-slate-700 hover:bg-slate-800 text-white'}`}>
+          <Truck size={13}/> {order.gatePass ? 'Gate Pass ✓' : 'Issue Gate Pass'}
+        </button>
+      )}
       {showSlipButton && order.gatePass && (
         <button onClick={() => setShowSlip(true)}
           className={`flex items-center gap-1.5 ${pad} rounded-xl text-[10px] font-black uppercase tracking-widest bg-amber-100 text-amber-800 hover:bg-amber-200 transition-all`}>

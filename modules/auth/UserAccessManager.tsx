@@ -71,7 +71,7 @@ const ROLE_DEFAULTS: Record<string, { companies: string[]; modules: string[] }> 
   gtk_admin:           { companies: ['GTK','GTI'],                              modules: [] },
   glassco_admin:       { companies: ['Glassco'],                                modules: [] },
   glassco_production:  { companies: ['Glassco'],                                modules: ['production','inventory','logistics','requisitions'] },
-  nippon_admin:        { companies: ['Nippon'],                                 modules: ['sales','inventory','hr','accounts','requisitions'] },
+  nippon_admin:        { companies: ['Nippon'],                                 modules: ['sales','inventory','store-issue','logistics','hr','accounts','requisitions'] },
   customer:            { companies: ['Nippon'],                                 modules: ['customer-portal'] },
   gatekeeper:          { companies: ['Factory'],                                modules: ['gatekeeper'] },
 };

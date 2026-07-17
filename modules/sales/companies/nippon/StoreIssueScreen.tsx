@@ -253,7 +253,7 @@ const StoreIssueScreen: React.FC = () => {
               className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-[10px] font-black uppercase tracking-widest">
               <PackageCheck size={13}/> Mark Picked
             </button>
-            <NipponGatePassButton order={detailOrder} clientName={cli?.name || (detailOrder as { clientName?: string }).clientName || ''} onIssued={onGatePassIssued} />
+            <NipponGatePassButton mode="request" order={detailOrder} clientName={cli?.name || (detailOrder as { clientName?: string }).clientName || ''} onIssued={onGatePassIssued} />
             <button onClick={() => doIssue(detailOrder)} disabled={busy === detailOrder.id || saving}
               className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm">
               {busy === detailOrder.id ? <Loader2 size={13} className="animate-spin"/> : <PackageCheck size={13}/>} Issue / Deliver

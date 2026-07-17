@@ -2,6 +2,7 @@ import React from 'react';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { Truck } from 'lucide-react';
 import CompanyLogistics from '@/modules/procurement/companies/glassco/GlasscoLogistics';
+import NipponLogisticsGatePass from '@/modules/procurement/companies/nippon/NipponLogisticsGatePass';
 
 // God Mode audit (Phase 2): Logistics is glass-factory only —
 // gate passes, vehicle trips, dispatch planner, geofence alerts,
@@ -13,10 +14,16 @@ import CompanyLogistics from '@/modules/procurement/companies/glassco/GlasscoLog
 // deep-links to /#/procurement?tab=logistics or switches company
 // while on this page, we want a defensive stub — NOT a crashing
 // GlasscoLogistics trying to render with no production_pieces.
-const NON_GLASS_COMPANIES = new Set(['Nippon', 'GTK', 'GTI', 'Factory']);
+const NON_GLASS_COMPANIES = new Set(['GTK', 'GTI', 'Factory']);
 
 const LogisticsModule: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
+
+  // Nippon (trading) uses Logistics only for the office Gate Pass desk — the store
+  // requests a pass, the office issues it here and it's pushed to the Factory gate.
+  if (company === 'Nippon') {
+    return <NipponLogisticsGatePass />;
+  }
 
   if (NON_GLASS_COMPANIES.has(company as string)) {
     return (
