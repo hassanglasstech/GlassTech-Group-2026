@@ -26,6 +26,7 @@ import { useAuthStore } from '../../auth/authStore';
 import { toast } from 'sonner';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 import { errMsg } from '@/modules/shared/services/utils';
+import { isFinanceGLEnabled } from '@/modules/shared/services/featureFlagService';
 
 const SalesOrders: React.FC = () => {
     const company = useAppStore(state => state.selectedCompany);
@@ -324,14 +325,23 @@ const SalesOrders: React.FC = () => {
                 { duration: 8000 }
             );
         } else if (validIsoDate && !alreadyInvoiced) {
-            try {
-                const result = await generateDeliveryInvoice(updatedOrder as any, company, 0);
-                if (!result.alreadyInvoiced) {
-                    toast.success(`Invoice ${result.invoiceId} generated — PKR ${result.grandTotal.toLocaleString('en-PK')}`);
+            // GO-LIVE GATE (P0-3): generateDeliveryInvoice posts a real invoice +
+            // Dr AR / Cr Revenue via post_invoice_atomic UNCONDITIONALLY. Under a
+            // single-entry, finance-OFF go-live we must NOT auto-post from the Orders
+            // tab — that silently breaches the "books off" guarantee. Only auto-invoice
+            // when Finance GL is enabled for the company (mirrors BillingHub's gate).
+            if (!isFinanceGLEnabled(company)) {
+                toast.success('Delivery details saved. Invoice & GL will post once Finance GL is enabled for this company.', { duration: 5000 });
+            } else {
+                try {
+                    const result = await generateDeliveryInvoice(updatedOrder as any, company, 0);
+                    if (!result.alreadyInvoiced) {
+                        toast.success(`Invoice ${result.invoiceId} generated — PKR ${result.grandTotal.toLocaleString('en-PK')}`);
+                    }
+                } catch (err: unknown) {
+                    // Phase-2 F3: credit-limit failures now THROW — surface them so user knows why invoice didn't post.
+                    toast.error(`Invoice generation failed: ${errMsg(err)}`, { duration: 8000 });
                 }
-            } catch (err: unknown) {
-                // Phase-2 F3: credit-limit failures now THROW — surface them so user knows why invoice didn't post.
-                toast.error(`Invoice generation failed: ${errMsg(err)}`, { duration: 8000 });
             }
         }
 

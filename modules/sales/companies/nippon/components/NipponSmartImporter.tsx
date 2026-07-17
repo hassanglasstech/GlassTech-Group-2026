@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Product, StoreItem } from '@/modules/procurement/types/inventory';
 import { SalesService } from '@/modules/sales/services/salesService';
+import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { toast } from 'sonner';
 import { 
@@ -397,15 +398,26 @@ const NipponSmartImporter: React.FC<{ onComplete: () => void }> = ({ onComplete 
     }
   };
 
-  const handleSaveAll = () => {
+  const [saving, setSaving] = useState(false);
+
+  const handleSaveAll = async () => {
+    if (saving) return;
+    setSaving(true);
+    // P1-e: DEDUPE instead of blind append. A Nippon product already present
+    // (same id, OR same normalized description+unit) is REPLACED by the incoming
+    // row — so re-running the Smart importer no longer piles up duplicates the way
+    // the old `[...existing, ...finalData]` append did.
+    const norm = (s?: string): string => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
     const existingProducts = SalesService.getProducts();
-    const otherCompanyProducts = existingProducts.filter(p => p.company !== 'Nippon');
-    const nipponProducts = existingProducts.filter(p => p.company === 'Nippon');
-    
-    // Merge or append? Let's append for now but check for duplicates by modelNo if possible
-    const updatedProducts = [...existingProducts, ...finalData];
-    
-    // Also update Store
+    const incomingIds = new Set(finalData.map(p => p.id));
+    const incomingKeys = new Set(finalData.map(p => `${norm(p.description)}|${norm(p.unit)}`));
+    const keptProducts = existingProducts.filter(p =>
+      !incomingIds.has(p.id) &&
+      !(p.company === 'Nippon' && incomingKeys.has(`${norm(p.description)}|${norm(p.unit)}`))
+    );
+    const updatedProducts = [...keptProducts, ...finalData];
+
+    // Store: same id-dedupe so stock rows don't duplicate on re-import.
     const existingStore = InventoryService.getStore();
     const newStoreItems: StoreItem[] = finalData.map(p => ({
       id: p.id,
@@ -426,11 +438,23 @@ const NipponSmartImporter: React.FC<{ onComplete: () => void }> = ({ onComplete 
       storageBin: 'Imported',
       lastMovementDate: new Date().toISOString()
     }));
+    const keptStore = existingStore.filter(s => !incomingIds.has(s.id));
 
+    // Optimistic local write, THEN await the cloud round-trip — only declare
+    // success once the cloud actually accepted it (was: fire-and-forget +
+    // premature "imported ✓" while the cloud may have got a subset).
     SalesService.saveProducts(updatedProducts);
-    InventoryService.saveStore([...existingStore, ...newStoreItems]);
-    
-    toast.success(`Successfully imported ${finalData.length} products.`);
+    InventoryService.saveStore([...keptStore, ...newStoreItems]);
+    const { error } = await AsyncSalesService.saveProducts(updatedProducts);
+    setSaving(false);
+    if (error) {
+      toast.error(
+        `Cloud save failed — ${error}. Products are saved locally; do NOT re-run the importer yet — retry when back online.`,
+        { duration: 9000 },
+      );
+      return;
+    }
+    toast.success(`Imported ${finalData.length} products.`);
     onComplete();
   };
 

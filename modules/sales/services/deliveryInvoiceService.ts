@@ -146,6 +146,17 @@ function buildNipponTradingCOGSPlan(params: {
   // COGS line understates COGS and overstates gross profit. Better the user
   // knows than the books silently drift.
   if (unmatched.length > 0) {
+    // P1-a GO-LIVE GATE: in books mode (finance GL ON) NEVER post revenue without
+    // its matching COGS — that permanently overstates gross profit. Mirror the
+    // Glassco pieces-gate: hard-block so the operator receives stock (GRN) first.
+    // When GL is OFF (single-entry go-live), warn + continue exactly as before.
+    if (isFinanceGLEnabled(company)) {
+      throw new Error(
+        `Invoice blocked for "${orderId}": ${unmatched.length} line(s) have no matching stock ` +
+        `item (zero COGS): ${unmatched.join(', ')}. Receive them via Hardware GRN first — otherwise ` +
+        `revenue would post with no cost and gross profit would be overstated.`
+      );
+    }
     console.warn(
       `[Nippon COGS] ${unmatched.length} line(s) had no matching stock item — ` +
       `COGS excluded for: ${unmatched.join(', ')}`
