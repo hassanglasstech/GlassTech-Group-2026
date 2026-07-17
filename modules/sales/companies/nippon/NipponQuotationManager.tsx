@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useNipponQuotations } from './useNipponQuotations';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
+import { useUnsavedGuard } from '@/modules/shared/hooks/useUnsavedGuard';
 
 const NipponQuotationManager: React.FC = () => {
   const [nipponPrintType, setNipponPrintType] = React.useState<'KinLong' | 'Glasstech' | 'General'>('Glasstech');
@@ -75,6 +76,8 @@ const NipponQuotationManager: React.FC = () => {
   // diverges, warn before leaving. Snapshot is taken in openEditor().
   const editSnapshotRef = React.useRef<string>('');
   const isDirty = view === 'edit' && JSON.stringify(formData) !== editSnapshotRef.current;
+  // Guard in-app navigation while the editor has unsaved edits (save/draft alert).
+  useUnsavedGuard(isDirty);
 
   const openEditor = (q: Partial<Quotation>, revise: boolean) => {
     setReviseMode(revise);

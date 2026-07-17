@@ -71,6 +71,47 @@ const ROLE_DEFAULTS: Record<string, { companies: string[]; modules: string[] }> 
   nippon_admin:        { companies: ['Nippon'],                                 modules: ['sales','inventory','hr','accounts','requisitions'] },
 };
 
+// The full module catalog + which companies actually run each module. When an
+// admin grants access, only the SELECTED companies' real modules are shown — a
+// trading company (Nippon) has no Production/Logistics/Factory Desk, an aluminium
+// fab has no Store Issue, and so on.
+const MODULE_CATALOG: { key: string; label: string }[] = [
+  { key: 'sales',            label: 'Sales' },
+  { key: 'hr',               label: 'HR / HCM' },
+  { key: 'inventory',        label: 'Inventory' },
+  { key: 'store-issue',      label: 'Store Issue' },
+  { key: 'requisitions',     label: 'Procurement' },
+  { key: 'production',       label: 'Production' },
+  { key: 'accounts',         label: 'Finance / FICO' },
+  { key: 'logistics',        label: 'Logistics' },
+  { key: 'vendors',          label: 'Vendors' },
+  { key: 'projects',         label: 'Projects' },
+  { key: 'hub',              label: 'Supply Hub' },
+  { key: 'md-dashboard',     label: 'MD Dashboard' },
+  { key: 'factory-incharge', label: 'Factory Desk' },
+  { key: 'admin',            label: 'Admin / Basis' },
+];
+
+const PRODUCTION_CO = ['sales','hr','inventory','requisitions','production','accounts','logistics','vendors','projects','hub','md-dashboard','factory-incharge','admin'];
+const COMPANY_MODULES: Record<string, string[]> = {
+  GTK:     PRODUCTION_CO,
+  GTI:     PRODUCTION_CO,
+  Glassco: PRODUCTION_CO,
+  // Nippon = trading: Store Issue instead of Production; no Logistics/Factory Desk.
+  Nippon:  ['sales','hr','inventory','store-issue','requisitions','accounts','vendors','projects','hub','md-dashboard','admin'],
+  // Factory = ops/logistics hub.
+  Factory: ['inventory','logistics','requisitions','hub','md-dashboard','factory-incharge','admin'],
+};
+
+/** Modules to offer for the selected companies (union). No company picked yet →
+ *  show the whole catalog so the admin isn't blocked before choosing a company. */
+const modulesForCompanies = (companies: string[]): { key: string; label: string }[] => {
+  if (!companies || companies.length === 0) return MODULE_CATALOG;
+  const allowed = new Set<string>();
+  companies.forEach(c => (COMPANY_MODULES[c] || MODULE_CATALOG.map(m => m.key)).forEach(k => allowed.add(k)));
+  return MODULE_CATALOG.filter(m => allowed.has(m.key));
+};
+
 // Real lifecycle states (more granular than before — see auth_status_label()).
 //   no_auth        → profile row exists but no auth.users row (orphan)
 //   invite_pending → auth user created, but invite link not clicked yet
@@ -1336,22 +1377,7 @@ export default function UserAccessManager() {
                   Sirf woh modules tick karen jo is user ko chahiye. Empty = sirf Dashboard.
                 </p>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
-                  {[
-                    { key: 'sales',           label: 'Sales' },
-                    { key: 'hr',              label: 'HR / HCM' },
-                    { key: 'inventory',       label: 'Inventory' },
-                    { key: 'store-issue',     label: 'Store Issue' },
-                    { key: 'requisitions',    label: 'Procurement' },
-                    { key: 'production',      label: 'Production' },
-                    { key: 'accounts',        label: 'Finance / FICO' },
-                    { key: 'logistics',       label: 'Logistics' },
-                    { key: 'vendors',         label: 'Vendors' },
-                    { key: 'projects',        label: 'Projects' },
-                    { key: 'hub',             label: 'Supply Hub' },
-                    { key: 'md-dashboard',    label: 'MD Dashboard' },
-                    { key: 'factory-incharge',label: 'Factory Desk' },
-                    { key: 'admin',           label: 'Admin / Basis' },
-                  ].map(m => (
+                  {modulesForCompanies(inviteCompanies).map(m => (
                     <button key={m.key}
                       onClick={() => setInviteModules(prev => toggleInList(prev, m.key))}
                       className={`text-left px-3 py-2 rounded-lg text-[11px] font-bold border transition-all ${inviteModules.includes(m.key) ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
@@ -1485,22 +1511,7 @@ export default function UserAccessManager() {
                 </div>
                 <p className="text-[10px] text-slate-400">Sirf woh modules tick karen jo is user ko chahiye. Empty = sirf Dashboard.</p>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
-                  {[
-                    { key: 'sales',           label: 'Sales' },
-                    { key: 'hr',              label: 'HR / HCM' },
-                    { key: 'inventory',       label: 'Inventory' },
-                    { key: 'store-issue',     label: 'Store Issue' },
-                    { key: 'requisitions',    label: 'Procurement' },
-                    { key: 'production',      label: 'Production' },
-                    { key: 'accounts',        label: 'Finance / FICO' },
-                    { key: 'logistics',       label: 'Logistics' },
-                    { key: 'vendors',         label: 'Vendors' },
-                    { key: 'projects',        label: 'Projects' },
-                    { key: 'hub',             label: 'Supply Hub' },
-                    { key: 'md-dashboard',    label: 'MD Dashboard' },
-                    { key: 'factory-incharge',label: 'Factory Desk' },
-                    { key: 'admin',           label: 'Admin / Basis' },
-                  ].map(m => (
+                  {modulesForCompanies(editCompanies).map(m => (
                     <button key={m.key}
                       onClick={() => setEditModules(prev => toggleInList(prev, m.key))}
                       className={`text-left px-3 py-2 rounded-lg text-[11px] font-bold border transition-all ${editModules.includes(m.key) ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>

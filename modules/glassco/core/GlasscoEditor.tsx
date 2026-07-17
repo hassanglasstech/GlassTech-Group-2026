@@ -9,6 +9,7 @@ import NotchHoleDrawingTab from '@/modules/glassco/core/NotchHoleDrawingTab';
 import AttachmentsTab from '@/modules/glassco/core/AttachmentsTab';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
+import { useUnsavedGuard } from '@/modules/shared/hooks/useUnsavedGuard';
 import { toast } from 'sonner';
 
 interface GlasscoEditorProps {
@@ -58,6 +59,8 @@ export const GlasscoEditor: React.FC<GlasscoEditorProps> = ({
 
     const [activeTab, setActiveTab] = useState<'items' | 'drawing' | 'attachments' | 'wastage'>('items');
     const [isDirty, setIsDirty] = useState(false);
+    // Guard in-app navigation while there are unsaved edits (save/draft alert).
+    useUnsavedGuard(isDirty);
     const [isSaving, setIsSaving] = useState(false);
     const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; idx: number } | null>(null);
     // Sprint 2 — surfaces version_conflict from update_with_version RPC.

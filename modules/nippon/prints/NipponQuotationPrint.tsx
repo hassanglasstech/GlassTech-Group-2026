@@ -58,7 +58,7 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                         <p className="text-[8px] font-bold text-slate-800">Contact: 0300-8716303</p>
                     </div>
                     <div className="text-right">
-                        <svg viewBox="0 0 250 80" className="h-12 w-auto inline-block" xmlns="http://www.w3.org/2000/svg">
+                        <svg viewBox="0 0 250 80" width="150" height="48" preserveAspectRatio="xMidYMid meet" className="inline-block" xmlns="http://www.w3.org/2000/svg">
                           <text x="0" y="35" fontFamily="Arial, sans-serif" fontSize="38" fontWeight="900" fill="#0055A5" letterSpacing="-1">KIN LONG</text>
                           <text x="180" y="33" fontFamily="sans-serif" fontSize="30" fontWeight="bold" fill="#0055A5">坚朗</text>
                           <text x="0" y="55" fontFamily="Arial, sans-serif" fontSize="12" fontWeight="bold" fill="#000">Construction Hardware Expert</text>
