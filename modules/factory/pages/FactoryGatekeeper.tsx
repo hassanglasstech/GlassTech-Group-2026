@@ -22,10 +22,10 @@ import {
 } from '@/modules/shared/services/crossCompanyNotifService';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { supabase } from '@/src/services/supabaseClient';
-import { ShieldCheck, LogIn, LogOut, RefreshCw, Loader2, Truck, Clock, CheckCircle2, Mic, Square } from 'lucide-react';
+import { ShieldCheck, LogIn, LogOut, RefreshCw, Loader2, Truck, Clock, CheckCircle2, Mic, Square, Camera } from 'lucide-react';
 import { toast } from 'sonner';
 
-interface GateLogEntry { inAt?: string; outAt?: string; returnedAt?: string }
+interface GateLogEntry { inAt?: string; outAt?: string; returnedAt?: string; approvedAt?: string; photo?: string }
 type GateLog = Record<string, GateLogEntry>;
 
 const LOG_KEY = 'gk_gate_log';
@@ -139,6 +139,35 @@ const FactoryGatekeeper: React.FC = () => {
   };
   const stopRec = () => { recRef.current?.mr.stop(); recRef.current = null; setRecId(null); };
 
+  // Gatekeeper approval — the guard verifies the vehicle against the physical gate
+  // pass, snaps a photo of the paper slip and approves. Photo → gatepass-photos
+  // bucket (graceful if missing); approval + photo logged locally + pushed to office.
+  const approveWithPhoto = async (p: CrossCompanyNotification, file: File) => {
+    setBusy(p.id);
+    try {
+      const approvedAt = new Date().toISOString();
+      let photoUrl: string | undefined;
+      const path = `${p.referenceId || p.id}-${new Date().getTime()}.jpg`;
+      const { error } = await supabase.storage.from('gatepass-photos').upload(path, file, { contentType: file.type || 'image/jpeg', upsert: true });
+      if (error) {
+        toast.warning(`Photo not uploaded (ask admin for a public 'gatepass-photos' bucket) — approval still logged. ${error.message}`, { duration: 9000 });
+      } else {
+        photoUrl = supabase.storage.from('gatepass-photos').getPublicUrl(path).data.publicUrl;
+      }
+      const next: GateLog = { ...log, [p.id]: { ...log[p.id], approvedAt, photo: photoUrl } };
+      setLog(next); writeLog(next);
+      await pushCrossCompanyNotif({
+        targetCompany: p.fromCompany, fromCompany: 'Factory',
+        title: `Gate pass approved — ${p.title.replace(/^Gate Pass — /i, '')}`,
+        message: `Verified against the physical gate pass + approved at the gate by ${guard}.${photoUrl ? ' Photo attached — tap to view.' : ''}`,
+        type: 'general', referenceId: p.referenceId, link: photoUrl,
+      });
+      toast.success('Gate pass approved · office notified.');
+    } catch (e) {
+      toast.error(`Approve failed: ${e instanceof Error ? e.message : 'error'}`);
+    } finally { setBusy(null); }
+  };
+
   // Gate Pass E — a returnable vehicle comes back: stamp the gate-in-back time.
   const returnIn = (p: CrossCompanyNotification) => {
     const next: GateLog = { ...log, [p.id]: { ...log[p.id], returnedAt: new Date().toISOString() } };
@@ -208,6 +237,18 @@ const FactoryGatekeeper: React.FC = () => {
                       {busy === p.id ? <Loader2 size={18} className="animate-spin"/> : <LogOut size={18}/>} Gate Out
                     </button>
                   </div>
+                  {gp.approvedAt ? (
+                    <div className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest bg-emerald-50 text-emerald-600">
+                      <CheckCircle2 size={14}/> Approved {hhmm(gp.approvedAt)}
+                      {gp.photo && <a href={gp.photo} target="_blank" rel="noreferrer" className="underline decoration-dotted">photo</a>}
+                    </div>
+                  ) : (
+                    <label className={`w-full mt-2 flex items-center justify-center gap-2 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest active:scale-95 transition-all cursor-pointer ${busy === p.id ? 'bg-blue-300 text-white' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
+                      {busy === p.id ? <Loader2 size={14} className="animate-spin"/> : <Camera size={14}/>} Approve + Photo
+                      <input type="file" accept="image/*" capture="environment" className="hidden" disabled={busy === p.id}
+                        onChange={e => e.target.files?.[0] && approveWithPhoto(p, e.target.files[0])} />
+                    </label>
+                  )}
                   <button onClick={() => (recId === p.id ? stopRec() : startRec(p))}
                     className={`w-full mt-2 flex items-center justify-center gap-2 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest active:scale-95 transition-all ${recId === p.id ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                     {recId === p.id ? <><Square size={14}/> Stop &amp; send</> : <><Mic size={14}/> Voice note</>}
