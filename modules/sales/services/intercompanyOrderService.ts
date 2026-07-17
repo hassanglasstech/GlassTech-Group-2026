@@ -22,6 +22,7 @@ import { Client, Quotation, QuotationItem } from '@/modules/shared/types';
 import { AsyncSalesService } from './asyncSalesService';
 import { SalesService } from './salesService';
 import { ProjectService } from '@/modules/projects/services/projectService';
+import { pushCrossCompanyNotif } from '@/modules/shared/services/crossCompanyNotifService';
 import { Logger } from '@/modules/shared/services/logger';
 
 export interface ICOrderLine {
@@ -125,6 +126,20 @@ export const raiseIntercompanyOrder = async (
     const res = await AsyncSalesService.saveQuotations([quo]);
     if (res?.error) return { error: res.error };
 
+    // IC-P3: order-time real-time push to the supplier so they see the demand
+    // instantly (in addition to it appearing in their Sales + Store queue).
+    try {
+      await pushCrossCompanyNotif({
+        targetCompany: supplierCompany,
+        fromCompany: buyerCompany,
+        title: `New IC order — ${orderNo}`,
+        message: `${buyerCompany} raised ${items.length} line${items.length === 1 ? '' : 's'} · PKR ${total.toLocaleString()}${projectTitle ? ` · ${projectTitle}` : ''}. Now in your Sales & Store queue.`,
+        type: 'general',
+        referenceId: id,
+        link: '#/store-issue',
+      });
+    } catch { /* non-fatal */ }
+
     // Record the demand on the buyer's project timeline (best-effort).
     if (projectId) {
       try {
@@ -144,4 +159,27 @@ export const raiseIntercompanyOrder = async (
     Logger.error('IntercompanyOrder', 'raiseIntercompanyOrder failed', err);
     return { error: err instanceof Error ? err.message : 'Unknown error' };
   }
+};
+
+/**
+ * IC-P3 live status handshake — the supplier pushes each fulfilment state change
+ * (Picked / Delivered / …) back to the buyer company so its project/procurement
+ * timeline updates in real time. No-op for non-intercompany orders.
+ */
+export const notifyBuyerOfStatus = async (params: {
+  order: Quotation; status: string; note?: string; actor?: string;
+}): Promise<void> => {
+  const { order, status, note, actor } = params;
+  if (!order.intercompany || !order.sourceCompany) return;
+  try {
+    await pushCrossCompanyNotif({
+      targetCompany: order.sourceCompany,
+      fromCompany: order.company,
+      title: `IC ${order.orderNo || order.id} — ${status}`,
+      message: `${order.company} marked it ${status}${order.sourceProjectTitle ? ` · ${order.sourceProjectTitle}` : ''}${note ? ` — ${note}` : ''}${actor ? ` · ${actor}` : ''}.`,
+      type: 'general',
+      referenceId: order.id,
+      link: '#/hub',
+    });
+  } catch { /* non-fatal */ }
 };

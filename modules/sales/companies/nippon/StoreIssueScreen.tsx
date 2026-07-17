@@ -25,6 +25,7 @@ import { ProductImage } from '@/modules/shared/components/ProductImage';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import { issueNipponOrder, isPendingIssue } from './nipponFulfilmentService';
 import { pushCrossCompanyNotif } from '@/modules/shared/services/crossCompanyNotifService';
+import { notifyBuyerOfStatus } from '@/modules/sales/services/intercompanyOrderService';
 import { toast } from 'sonner';
 import { PackageCheck, Loader2, RefreshCw, ClipboardList, ArrowLeft, MapPin, Save, Zap, Info, Truck, QrCode, X } from 'lucide-react';
 
@@ -116,6 +117,8 @@ const StoreIssueScreen: React.FC = () => {
       const res = await AsyncSalesService.saveQuotations([updated]);
       if (res?.error) { toast.error(`Pick not saved to cloud — ${res.error}`, { duration: 8000 }); return false; }
       setOrders(prev => prev.map(o => (o.id === q.id ? updated : o)));
+      // IC-P3: on an intercompany order, hand the "Picked" status back to the buyer.
+      if (markPicked && updated.intercompany) void notifyBuyerOfStatus({ order: updated, status: 'Picked', actor: stampUser });
       return true;
     } catch (err) {
       toast.error(`Pick save failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -193,6 +196,8 @@ const StoreIssueScreen: React.FC = () => {
     if (res.invoiceId) toast.success(`Issued — ${res.orderNo} delivered · invoice ${res.invoiceId} posted.`);
     else if (res.invoiceError) toast.warning(`Issued — ${res.orderNo} delivered, but invoice failed: ${res.invoiceError}`, { duration: 9000 });
     else toast.success(`Issued — ${res.orderNo} marked Delivered.`);
+    // IC-P3: hand the "Delivered" status back to the buyer's project timeline.
+    if (q.intercompany) void notifyBuyerOfStatus({ order: q, status: 'Delivered', actor: stampUser });
     closeDetail();
     await load();
   };

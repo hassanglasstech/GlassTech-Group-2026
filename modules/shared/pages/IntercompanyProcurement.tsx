@@ -8,15 +8,16 @@
  * buyer's project. Mounted as a tab in the Intercompany Hub.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Company } from '@/modules/shared/types/core';
-import { Project, Product } from '@/modules/shared/types';
+import { Project, Product, Quotation } from '@/modules/shared/types';
 import { ProjectService } from '@/modules/projects/services/projectService';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { raiseIntercompanyOrder, ICOrderLine } from '@/modules/sales/services/intercompanyOrderService';
+import { getCrossCompanyNotifs, CrossCompanyNotification } from '@/modules/shared/services/crossCompanyNotifService';
 import { toast } from 'sonner';
-import { Plus, Trash2, Search, Send, Building2, FolderOpen, Package } from 'lucide-react';
+import { Plus, Trash2, Search, Send, Building2, FolderOpen, Package, History, ArrowRight, Radio } from 'lucide-react';
 
 const BUYERS: Company[] = ['GTK', 'GTI'];
 const SUPPLIERS: Company[] = ['Glassco', 'Nippon'];
@@ -34,6 +35,20 @@ const IntercompanyProcurement: React.FC = () => {
   const [pickerRow, setPickerRow] = useState<number | null>(null);
   const [pickerSearch, setPickerSearch] = useState('');
   const [raising, setRaising] = useState(false);
+  // Buyer lens (IC-P3): the orders this buyer has raised (from the all-company
+  // local cache) + the live status feed pushed back by suppliers.
+  const [myOrders, setMyOrders] = useState<Quotation[]>([]);
+  const [feed, setFeed] = useState<CrossCompanyNotification[]>([]);
+
+  const loadBuyerLens = useCallback(async () => {
+    setMyOrders(SalesService.getQuotations()
+      .filter(q => q.intercompany && q.sourceCompany === buyer)
+      .sort((a, b) => String(b.id).localeCompare(String(a.id))));
+    const notifs = await getCrossCompanyNotifs(buyer);
+    setFeed(notifs.filter(n => (n.title || '').startsWith('IC ')).slice(0, 8));
+  }, [buyer]);
+
+  useEffect(() => { loadBuyerLens(); }, [loadBuyerLens]);
 
   useEffect(() => {
     setProjects(ProjectService.getProjects().filter(p => p.company === buyer));
@@ -84,6 +99,16 @@ const IntercompanyProcurement: React.FC = () => {
     if (res.error) { toast.error(`Could not raise IC order — ${res.error}`, { duration: 8000 }); return; }
     toast.success(`IC order ${res.orderNo} raised on ${supplier} — now in their Sales & Store queue.`, { duration: 7000 });
     setLines([blankLine()]);
+    loadBuyerLens();
+  };
+
+  const statusColor = (s?: string): string => {
+    switch (s) {
+      case 'Delivered': return 'bg-emerald-100 text-emerald-700';
+      case 'Invoiced': case 'Paid': case 'Partial Payment': return 'bg-blue-100 text-blue-700';
+      case 'Void': return 'bg-rose-100 text-rose-600';
+      default: return 'bg-amber-100 text-amber-700';
+    }
   };
 
   return (
@@ -191,6 +216,63 @@ const IntercompanyProcurement: React.FC = () => {
       <p className="text-[10px] text-slate-400 font-bold px-1">
         The order appears instantly in {supplier}'s <span className="text-slate-600">Sales Orders</span> and <span className="text-slate-600">Store Issue</span> queue (tagged intercompany). GL posts at delivery, not now.
       </p>
+
+      {/* IC-P3 · Buyer lens — the same orders GTK/GTI raised, with live status. */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 bg-white rounded-2xl border shadow-sm overflow-hidden">
+          <div className="px-5 py-3 bg-slate-50 border-b flex items-center gap-2">
+            <History size={14} className="text-slate-500"/>
+            <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">{buyer} · my intercompany orders ({myOrders.length})</span>
+          </div>
+          <div className="max-h-[46vh] overflow-y-auto">
+            {myOrders.length === 0 ? (
+              <div className="p-10 text-center text-slate-300 italic font-bold text-xs">No IC orders raised yet.</div>
+            ) : (
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-100 text-[9px] font-black uppercase text-slate-400 tracking-widest"><tr>
+                  <th className="px-4 py-2">Order</th><th className="px-4 py-2">Supplier</th>
+                  <th className="px-4 py-2">Project</th><th className="px-4 py-2 text-right">Value</th>
+                  <th className="px-4 py-2 text-center">Status</th>
+                </tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {myOrders.map(o => {
+                    const val = (o.items || []).reduce((s, i) => s + (Number(i.amount) || 0), 0);
+                    return (
+                      <tr key={o.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-2 font-black text-indigo-600 uppercase whitespace-nowrap">{o.orderNo || o.id}</td>
+                        <td className="px-4 py-2 font-bold text-slate-700">{o.company}</td>
+                        <td className="px-4 py-2 text-slate-500 truncate max-w-[140px]">{o.sourceProjectTitle || '—'}</td>
+                        <td className="px-4 py-2 text-right font-black tabular-nums">{val.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center"><span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${statusColor(o.status as string)}`}>{o.status}</span></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+          <div className="px-5 py-3 bg-slate-50 border-b flex items-center gap-2">
+            <Radio size={14} className="text-emerald-500"/>
+            <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Live status feed</span>
+          </div>
+          <div className="max-h-[46vh] overflow-y-auto divide-y divide-slate-50">
+            {feed.length === 0 ? (
+              <div className="p-8 text-center text-slate-300 italic font-bold text-xs">No supplier updates yet.</div>
+            ) : feed.map(n => (
+              <div key={n.id} className="px-4 py-2.5">
+                <div className="flex items-center gap-1.5 text-[11px] font-black text-slate-700 uppercase">
+                  <ArrowRight size={11} className="text-emerald-500 shrink-0"/>{n.title.replace(/^IC /, '')}
+                </div>
+                <p className="text-[10px] text-slate-500 font-medium mt-0.5 leading-snug">{n.message}</p>
+                <p className="text-[9px] text-slate-300 font-bold mt-0.5">{new Date(n.date).toLocaleString()}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
