@@ -57,11 +57,12 @@ const NipponQuotationManager: React.FC = () => {
   // docTab in the URL (?doc=) so Back / refresh / deep-link work at this level too
   // — the parent Sales tab uses ?tab=, so a distinct key avoids any collision.
   const [docParams, setDocParams] = useSearchParams();
-  const DOC_TABS = ['quotations', 'orders', 'issue'] as const;
+  const DOC_TABS = ['quotations', 'queries', 'orders', 'issue'] as const;
+  type DocTab = typeof DOC_TABS[number];
   const docRaw = docParams.get('doc');
-  const docTab: 'quotations' | 'orders' | 'issue' =
-    (DOC_TABS as readonly string[]).includes(docRaw || '') ? (docRaw as 'quotations' | 'orders' | 'issue') : 'quotations';
-  const setDocTab = (t: 'quotations' | 'orders' | 'issue'): void => {
+  const docTab: DocTab =
+    (DOC_TABS as readonly string[]).includes(docRaw || '') ? (docRaw as DocTab) : 'quotations';
+  const setDocTab = (t: DocTab): void => {
     const next = new URLSearchParams(docParams);
     next.set('doc', t);
     setDocParams(next);
@@ -131,10 +132,19 @@ const NipponQuotationManager: React.FC = () => {
     }
   }, [subTotal, formData.isSample, formData.sampleType, formData.discountAmount, setFormData]);
 
+  // Customer queries (portal-placed, not yet an order) get their OWN tab — they no
+  // longer clutter the office "Quotations" tab. quotations = office drafts only;
+  // queries = customerPlaced drafts; orders = approved-and-beyond.
+  const isOrderStatus = (q: Quotation): boolean => ORDER_STATUSES.includes(q.status as string);
+  const isCustomerQuery = (q: Quotation): boolean => !!q.customerPlaced && !isOrderStatus(q);
+
   const filteredQuotations = useMemo(() => {
-    let result = quotations.filter(q => docTab === 'orders'
-      ? ORDER_STATUSES.includes(q.status as string)
-      : !ORDER_STATUSES.includes(q.status as string));
+    let result = quotations.filter(q => {
+      if (docTab === 'orders') return isOrderStatus(q);
+      if (docTab === 'queries') return isCustomerQuery(q);
+      // 'quotations' tab: office-created drafts only (exclude customer queries).
+      return !isOrderStatus(q) && !q.customerPlaced;
+    });
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
       result = result.filter(q =>
@@ -239,11 +249,15 @@ const NipponQuotationManager: React.FC = () => {
       {view === 'list' ? (
         <>
         <div className="no-print flex items-center gap-2">
-          {([['quotations', 'Quotations'], ['orders', 'Sales Orders'], ['issue', 'Store Issue']] as const).map(([key, label]) => {
-            const count = key === 'issue'
-              ? quotations.filter(q => q.status === 'Approved' && !(q as { issuedAt?: string }).issuedAt).length
-              : quotations.filter(q => key === 'orders' ? ORDER_STATUSES.includes(q.status as string) : !ORDER_STATUSES.includes(q.status as string)).length;
-            const activeCls = key === 'issue' ? 'bg-amber-600 text-white border-amber-600 shadow' : 'bg-blue-600 text-white border-blue-600 shadow';
+          {([['quotations', 'Quotations'], ['queries', 'Customer Queries'], ['orders', 'Sales Orders'], ['issue', 'Store Issue']] as const).map(([key, label]) => {
+            const count =
+              key === 'issue' ? quotations.filter(q => q.status === 'Approved' && !(q as { issuedAt?: string }).issuedAt).length
+              : key === 'orders' ? quotations.filter(isOrderStatus).length
+              : key === 'queries' ? quotations.filter(isCustomerQuery).length
+              : quotations.filter(q => !isOrderStatus(q) && !q.customerPlaced).length;
+            const activeCls = key === 'issue' ? 'bg-amber-600 text-white border-amber-600 shadow'
+              : key === 'queries' ? 'bg-teal-600 text-white border-teal-600 shadow'
+              : 'bg-blue-600 text-white border-blue-600 shadow';
             return (
               <button key={key} onClick={() => setDocTab(key)}
                 className={`px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest border transition-all flex items-center ${docTab === key ? activeCls : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300'}`}>
@@ -302,6 +316,9 @@ const NipponQuotationManager: React.FC = () => {
         ) : (
           <SharedQuotationList
             companyName="Nippon"
+            title={docTab === 'queries' ? 'Customer Queries' : undefined}
+            subtitle={docTab === 'queries' ? 'Placed by customers via the portal — open to review, price & convert to a quotation' : undefined}
+            hideCreate={docTab === 'queries'}
             quotations={filteredQuotations}
             clients={clients}
             searchTerm={searchTerm}
@@ -356,7 +373,7 @@ const NipponQuotationManager: React.FC = () => {
                     disabled={isLocked} 
                     type="text" 
                     placeholder="e.g. 0001"
-                    className={`sap-input w-full font-black ${quotations.some(q => q.company === 'Nippon' && q.manualSerial === formData.manualSerial && q.id !== formData.id) ? 'border-red-500 text-red-600' : 'text-blue-600'}`} 
+                    className={`sap-input w-full font-black ${formData.manualSerial && quotations.some(q => q.company === 'Nippon' && q.manualSerial === formData.manualSerial && q.id !== formData.id) ? 'border-red-500 text-red-600' : 'text-blue-600'}`}
                     value={formData.manualSerial || ''} 
                     onChange={e => setFormData({...formData, manualSerial: e.target.value})} 
                   />

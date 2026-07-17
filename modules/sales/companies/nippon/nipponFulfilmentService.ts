@@ -67,11 +67,14 @@ export async function issueNipponOrder(
     });
     InventoryService.saveStore(updated);
 
+    const nowIso = new Date().toISOString();
     const issued = {
       ...(order as Quotation),
       status: 'Delivered' as Quotation['status'],
-      issuedAt: new Date().toISOString(),
+      issuedAt: nowIso,
       issuedBy: stampBy,
+      // Customer-portal "Dispatched" milestone — the moment goods leave the store.
+      dispatchedAt: (order as Quotation).dispatchedAt || nowIso,
     } as Quotation;
     const res = await AsyncSalesService.saveQuotations([...all.filter(x => x.id !== orderId), issued]);
     if (res?.error) return { error: res.error };

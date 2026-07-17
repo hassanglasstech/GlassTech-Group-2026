@@ -172,6 +172,20 @@ export interface Quotation {
   /** Customer portal — this quotation was placed by the customer themselves via
    *  the self-service portal (Draft, awaiting Nippon review). Round-trips via data jsonb. */
   customerPlaced?: boolean;
+  // ── Customer-portal order-lifecycle timestamps (ISO). All ride in the
+  //    quotations `data` jsonb (no migration) so the customer sees each milestone
+  //    with a time, in separate columns, as the order moves through the desk. ──
+  /** Customer submitted the query via the self-service portal. */
+  queryPlacedAt?: string;
+  /** Nippon desk prepared the query into a real quotation (PDF now downloadable). */
+  quotedAt?: string;
+  /** Order approved / confirmed by the desk. */
+  approvedAt?: string;
+  /** Goods issued from the store / out for delivery. */
+  dispatchedAt?: string;
+  /** Store-issue audit stamp — goods physically left (mirrors dispatchedAt). */
+  issuedAt?: string;
+  issuedBy?: string;
   /** True when this Sales Order was raised by another group company's project. */
   intercompany?: boolean;
   /** The buyer company that raised it (e.g. 'GTK'). */

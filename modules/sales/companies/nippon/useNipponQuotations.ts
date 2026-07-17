@@ -397,12 +397,19 @@ export const useNipponQuotations = () => {
       const prevRev = (src.orderNo || '').match(/-R(\d+)$/);
       const revisedRef = `${baseRef}-R${prevRev ? Number(prevRev[1]) + 1 : 1}`;
 
+      const nowIso = now.toISOString();
       const finalQuo: Quotation = {
         ...(src as Quotation),
         id: finalId!,
         company,
         status: (revise || approve) ? 'Approved' : 'Draft',
         orderNo: revise ? revisedRef : (approve ? `SO-${mmyy}-${src.manualSerial}` : undefined),
+        // Customer-portal lifecycle stamps (ride in the data jsonb). quotedAt is
+        // set the first time the desk saves a customer query as a real quotation —
+        // that's the "Quoted" milestone the customer sees (and unlocks their PDF).
+        // approvedAt is the "Approved" milestone. Both preserved once set.
+        quotedAt: src.customerPlaced ? (src.quotedAt || nowIso) : src.quotedAt,
+        approvedAt: (approve || revise) ? (src.approvedAt || nowIso) : src.approvedAt,
       };
 
       // The quotations→clients FK rejects the insert unless a client row with THIS

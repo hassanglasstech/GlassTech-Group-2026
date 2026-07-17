@@ -4,6 +4,12 @@ import { Plus, Search, Edit2, Trash2, Printer, FileCheck, Eye, Download, FileJso
 
 interface SharedQuotationListProps {
   companyName: string;
+  /** Overrides the "Quotations" heading (e.g. "Customer Queries"). */
+  title?: string;
+  /** Overrides the "{company} Sales Desk" sub-heading. */
+  subtitle?: string;
+  /** Hide the "Create Quote" button (e.g. on a read-only customer-queries queue). */
+  hideCreate?: boolean;
   quotations: Quotation[];
   clients: Client[];
   searchTerm: string;
@@ -25,6 +31,9 @@ interface SharedQuotationListProps {
 
 export const SharedQuotationList: React.FC<SharedQuotationListProps> = ({
   companyName,
+  title,
+  subtitle,
+  hideCreate,
   quotations,
   clients,
   searchTerm,
@@ -48,8 +57,8 @@ export const SharedQuotationList: React.FC<SharedQuotationListProps> = ({
       <div className="sales-page-head no-print">
         <div className="flex items-center space-x-4">
           <div>
-            <h2 className="sales-page-title">Quotations</h2>
-            <p className="sales-page-sub">{companyName} Sales Desk</p>
+            <h2 className="sales-page-title">{title || 'Quotations'}</h2>
+            <p className="sales-page-sub">{subtitle || `${companyName} Sales Desk`}</p>
           </div>
           <div className="relative w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
@@ -79,9 +88,11 @@ export const SharedQuotationList: React.FC<SharedQuotationListProps> = ({
             </label>
           )}
 
-          <button onClick={onNew} className="sap-btn-primary flex items-center space-x-2">
-            <Plus size={14} /><span>Create Quote</span>
-          </button>
+          {!hideCreate && (
+            <button onClick={onNew} className="sap-btn-primary flex items-center space-x-2">
+              <Plus size={14} /><span>Create Quote</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -180,7 +191,11 @@ export const SharedQuotationList: React.FC<SharedQuotationListProps> = ({
             {quotations.length === 0 && (
               <tr>
                 <td colSpan={6} className="sales-empty">
-                  {searchTerm ? `No quotations match “${searchTerm}”.` : 'No quotations yet — click “Create Quote” to add your first one.'}
+                  {searchTerm
+                    ? `No ${(title || 'quotations').toLowerCase()} match “${searchTerm}”.`
+                    : hideCreate
+                      ? 'No customer queries yet — they appear here the moment a customer places an order from the portal.'
+                      : 'No quotations yet — click “Create Quote” to add your first one.'}
                 </td>
               </tr>
             )}

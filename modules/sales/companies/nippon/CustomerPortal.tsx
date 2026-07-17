@@ -23,8 +23,10 @@ import { ProductImage } from '@/modules/shared/components/ProductImage';
 import { NipponPriceList, resolveClientRate } from './nipponPricing';
 import { getNicknames, setNickname, NicknameMap } from './customerNicknames';
 import { CustomerStatementModal } from '@/modules/finance/components/CustomerStatementModal';
+import { NipponDocPreview } from '@/modules/nippon/prints/NipponDocPreview';
+import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 import { toast } from 'sonner';
-import { Search, ShoppingCart, Plus, Minus, Trash2, Send, Tag, Package, Loader2, History, Store, BadgeCheck, FileText, Truck } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, Trash2, Send, Tag, Package, Loader2, History, Store, BadgeCheck, FileText, Truck, Eye, CheckCircle2, Clock, X, Download } from 'lucide-react';
 
 interface CartLine { productId: string; name: string; nick?: string; unit: string; qty: number; rate: number }
 
@@ -46,6 +48,13 @@ const CustomerPortal: React.FC = () => {
   const [view, setView] = useState<'catalogue' | 'orders'>('catalogue');
   const [sending, setSending] = useState(false);
   const [showStatement, setShowStatement] = useState(false);   // ledger / payments (task A)
+  const [detailOrder, setDetailOrder] = useState<Quotation | null>(null);  // click a row → original query view
+  const [pdfOrder, setPdfOrder] = useState<Quotation | null>(null);        // download quotation PDF
+
+  // Live: when the Nippon desk quotes / approves / dispatches an order, the
+  // customer's list updates without a manual refresh (same realtime bus the
+  // product master uses).
+  const { refreshKey } = useRealtimeRefresh('quotations');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,7 +71,40 @@ const CustomerPortal: React.FC = () => {
       .sort((a, b) => String(b.id).localeCompare(String(a.id))));
     setLoading(false);
   }, [email, userId]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshKey]);
+
+  // Keep an open detail view in sync with the freshest order data (so a live
+  // approve / dispatch reflects while the customer is looking at it).
+  useEffect(() => {
+    if (!detailOrder) return;
+    const fresh = myOrders.find(o => o.id === detailOrder.id);
+    if (fresh && fresh !== detailOrder) setDetailOrder(fresh);
+  }, [myOrders, detailOrder]);
+
+  // Short + full timestamp formatters for the lifecycle columns / timeline.
+  const fmtD = (ts?: string): string => {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? String(ts) : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+  };
+  const fmtDT = (ts?: string): string => {
+    if (!ts) return '—';
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? String(ts)
+      : d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const ORDER_LIKE = ['Approved', 'Delivered', 'Invoiced', 'Partial Payment', 'Paid'];
+  // The four lifecycle milestones the customer tracks, each with its own timestamp.
+  const stagesOf = (o: Quotation) => {
+    const dispatchedAt = o.dispatchedAt || o.issuedAt || (o.status === 'Delivered' ? o.actualDeliveryDate : undefined) || o.gatePass?.issuedAt;
+    return [
+      { key: 'placed', label: 'Placed', at: o.queryPlacedAt || o.date, done: true },
+      { key: 'quoted', label: 'Quoted', at: o.quotedAt, done: !!o.quotedAt },
+      { key: 'approved', label: 'Approved', at: o.approvedAt, done: !!o.approvedAt || ORDER_LIKE.includes(o.status as string) },
+      { key: 'dispatched', label: 'Dispatched', at: dispatchedAt, done: !!dispatchedAt || o.status === 'Delivered' },
+    ];
+  };
 
   // The client this login is linked to (by email).
   const myClient = useMemo(() => clients.find(c => emailOf(c) === email), [clients, email]);
@@ -119,6 +161,7 @@ const CustomerPortal: React.FC = () => {
         architect: '', site: '', subject: `Customer order — ${displayName}`,
         items, serviceCharges: [], discountPercent: 0, discountAmount: 0, glassDiscountPercent: 0,
         status: 'Draft', customerPlaced: true, receivedAmount: 0,
+        queryPlacedAt: now.toISOString(),   // "Placed" milestone (customer-portal tracking)
       };
       const res = await AsyncSalesService.saveQuotations([quo]);
       if (res?.error) { toast.error(`Order not sent — ${res.error}`, { duration: 8000 }); return; }
@@ -175,33 +218,55 @@ const CustomerPortal: React.FC = () => {
           {myOrders.length === 0 ? (
             <div className="p-16 text-center text-slate-300 italic font-bold text-xs">No orders yet.</div>
           ) : (
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-100 text-[9px] font-black uppercase text-slate-400 tracking-widest"><tr>
-                <th className="px-4 py-2">Order</th><th className="px-4 py-2">Date</th><th className="px-4 py-2 text-center">Items</th>
-                <th className="px-4 py-2 text-right">Total</th><th className="px-4 py-2 text-center">Status</th><th className="px-4 py-2">Dispatch</th>
-              </tr></thead>
-              <tbody className="divide-y divide-slate-100">
-                {myOrders.map(o => {
-                  const val = (o.items || []).reduce((s, i) => s + (Number(i.amount) || 0), 0);
-                  return (
-                    <tr key={o.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-2 font-black text-blue-600 uppercase">{o.orderNo || o.id}</td>
-                      <td className="px-4 py-2 text-slate-500">{o.date}</td>
-                      <td className="px-4 py-2 text-center">{(o.items || []).filter(i => !i.isSection).length}</td>
-                      <td className="px-4 py-2 text-right font-black tabular-nums">{val.toLocaleString()}</td>
-                      <td className="px-4 py-2 text-center"><span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{o.customerPlaced && o.status === 'Draft' ? 'Sent' : o.status}</span></td>
-                      <td className="px-4 py-2">
-                        {o.status === 'Delivered'
-                          ? <span className="flex items-center gap-1 text-[10px] font-black text-emerald-600 uppercase"><Truck size={11}/> Delivered{o.actualDeliveryDate ? ` · ${o.actualDeliveryDate}` : ''}</span>
-                          : o.gatePass
-                            ? <span className="flex items-center gap-1 text-[10px] font-black text-indigo-600 uppercase" title={`Driver ${o.gatePass.driverName}${o.gatePass.driverPhone ? ` (${o.gatePass.driverPhone})` : ''}`}><Truck size={11}/> Out · {o.gatePass.vehicleNo}</span>
-                            : <span className="text-[10px] font-bold text-slate-300">—</span>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <>
+            <div className="px-4 py-2.5 bg-slate-50 border-b flex items-center gap-2 text-[10px] font-bold text-slate-500">
+              <Eye size={13} className="text-blue-500"/> Tap any order to see your original query, live status &amp; download the quotation PDF.
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs min-w-[760px]">
+                <thead className="bg-slate-100 text-[9px] font-black uppercase text-slate-400 tracking-widest"><tr>
+                  <th className="px-4 py-2.5">Order</th>
+                  <th className="px-3 py-2.5 text-center">Placed</th>
+                  <th className="px-3 py-2.5 text-center">Quoted</th>
+                  <th className="px-3 py-2.5 text-center">Approved</th>
+                  <th className="px-3 py-2.5 text-center">Dispatched</th>
+                  <th className="px-4 py-2.5 text-right">Total</th>
+                  <th className="px-3 py-2.5"></th>
+                </tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {myOrders.map(o => {
+                    const val = (o.items || []).reduce((s, i) => s + (Number(i.amount) || 0), 0);
+                    return (
+                      <tr key={o.id} onClick={() => setDetailOrder(o)}
+                        className="hover:bg-blue-50/50 cursor-pointer transition-colors">
+                        <td className="px-4 py-2.5">
+                          <div className="font-black text-blue-600 uppercase">{o.orderNo || o.id}</div>
+                          <div className="text-[9px] font-bold text-slate-400 uppercase">{(o.items || []).filter(i => !i.isSection).length} item(s)</div>
+                        </td>
+                        {stagesOf(o).map(s => (
+                          <td key={s.key} className="px-3 py-2.5 text-center">
+                            {s.done ? (
+                              <div className="inline-flex flex-col items-center">
+                                <CheckCircle2 size={13} className="text-emerald-500"/>
+                                <span className="text-[9px] font-bold text-slate-500 mt-0.5">{fmtD(s.at)}</span>
+                              </div>
+                            ) : (
+                              <div className="inline-flex flex-col items-center opacity-50">
+                                <Clock size={13} className="text-slate-300"/>
+                                <span className="text-[9px] font-bold text-slate-300 mt-0.5">—</span>
+                              </div>
+                            )}
+                          </td>
+                        ))}
+                        <td className="px-4 py-2.5 text-right font-black tabular-nums">Rs {val.toLocaleString()}</td>
+                        <td className="px-3 py-2.5 text-right text-slate-300"><Eye size={14}/></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            </>
           )}
         </div>
       ) : (
@@ -281,6 +346,121 @@ const CustomerPortal: React.FC = () => {
 
       {showStatement && myClient && (
         <CustomerStatementModal clientId={myClient.id} clientName={myClient.name} onClose={() => setShowStatement(false)} />
+      )}
+
+      {/* Order detail — the customer's ORIGINAL query + live lifecycle + PDF download */}
+      {detailOrder && (() => {
+        const o = detailOrder;
+        const st = stagesOf(o);
+        const lines = (o.items || []).filter(i => !i.isSection);
+        const val = lines.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+        const statusLabel = o.customerPlaced && o.status === 'Draft' && !o.quotedAt ? 'Sent — awaiting quote'
+          : o.status === 'Draft' && o.quotedAt ? 'Quoted' : o.status;
+        return (
+          <div className="fixed inset-0 z-[400] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-3" onClick={() => setDetailOrder(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="sticky top-0 bg-gradient-to-br from-blue-700 to-indigo-800 text-white px-5 py-4 flex items-center gap-3 z-10">
+                <div>
+                  <div className="text-sm font-black uppercase tracking-tight">{o.orderNo || o.id}</div>
+                  <div className="text-[10px] font-bold text-blue-200 uppercase tracking-widest">{statusLabel} · {lines.length} item(s)</div>
+                </div>
+                <button onClick={() => setDetailOrder(null)} className="ml-auto p-2 rounded-xl bg-white/15 hover:bg-white/25 transition-all"><X size={16}/></button>
+              </div>
+
+              <div className="p-5 space-y-4">
+                {/* Lifecycle timeline — each milestone with its timestamp */}
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
+                  <div className="flex items-start">
+                    {st.map((s, i) => (
+                      <React.Fragment key={s.key}>
+                        <div className="flex-1 flex flex-col items-center text-center px-1">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${s.done ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'}`}>
+                            {s.done ? <CheckCircle2 size={16}/> : <Clock size={16}/>}
+                          </div>
+                          <div className={`text-[10px] font-black uppercase mt-1.5 ${s.done ? 'text-slate-700' : 'text-slate-300'}`}>{s.label}</div>
+                          <div className={`text-[9px] font-bold mt-0.5 ${s.done ? 'text-slate-400' : 'text-slate-300'}`}>{s.done ? fmtDT(s.at) : 'Pending'}</div>
+                        </div>
+                        {i < st.length - 1 && <div className={`h-0.5 flex-1 mt-4 min-w-[8px] ${st[i + 1].done ? 'bg-emerald-400' : 'bg-slate-200'}`} />}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Dispatch details */}
+                {(o.gatePass || o.status === 'Delivered' || o.dispatchedAt) && (
+                  <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 text-xs">
+                    <div className="flex items-center gap-1.5 font-black uppercase text-indigo-700 text-[10px] tracking-widest mb-1.5"><Truck size={13}/> Dispatch</div>
+                    <div className="text-slate-600 font-bold">
+                      {o.status === 'Delivered'
+                        ? `Delivered${o.actualDeliveryDate ? ` · ${o.actualDeliveryDate}` : (o.dispatchedAt || o.issuedAt ? ` · ${fmtDT(o.dispatchedAt || o.issuedAt)}` : '')}`
+                        : 'Out for delivery'}
+                    </div>
+                    {o.gatePass && (
+                      <div className="mt-1 text-slate-500 font-medium">
+                        Vehicle <span className="font-bold text-slate-700">{o.gatePass.vehicleNo}</span>
+                        {o.gatePass.driverName ? <> · Driver <span className="font-bold text-slate-700">{o.gatePass.driverName}</span></> : null}
+                        {o.gatePass.driverPhone ? <> ({o.gatePass.driverPhone})</> : null}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Original query — the items the customer requested */}
+                <div>
+                  <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5">Your request</div>
+                  <div className="border rounded-xl overflow-hidden overflow-x-auto">
+                    <table className="w-full text-xs text-left min-w-[420px]">
+                      <thead className="bg-slate-50 text-[9px] font-black uppercase text-slate-400 tracking-widest"><tr>
+                        <th className="px-3 py-2 w-8">#</th><th className="px-3 py-2">Item</th>
+                        <th className="px-3 py-2 text-center">Qty</th><th className="px-3 py-2 text-right">Rate</th><th className="px-3 py-2 text-right">Amount</th>
+                      </tr></thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {lines.map((it, i) => (
+                          <tr key={it.id || i}>
+                            <td className="px-3 py-2 text-slate-400 font-bold">{i + 1}</td>
+                            <td className="px-3 py-2 font-bold text-slate-700 whitespace-pre-wrap">{it.description}</td>
+                            <td className="px-3 py-2 text-center tabular-nums whitespace-nowrap">{it.qty} {it.glassSize || ''}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{(Number(it.pricePerUnit) || 0).toLocaleString()}</td>
+                            <td className="px-3 py-2 text-right font-black tabular-nums">{(Number(it.amount) || 0).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-slate-50 border-t"><td colSpan={4} className="px-3 py-2 text-right font-black uppercase text-[10px] text-slate-500 tracking-widest">Total</td><td className="px-3 py-2 text-right font-black tabular-nums">Rs {val.toLocaleString()}</td></tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Footer — PDF download once the desk has prepared the quotation */}
+                <div className="flex items-center justify-between gap-2 flex-wrap pt-1">
+                  {o.quotedAt ? (
+                    <button onClick={() => setPdfOrder(o)}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-all">
+                      <Download size={14}/> Download Quotation PDF
+                    </button>
+                  ) : (
+                    <span className="text-[10px] font-bold text-slate-400 italic">Your quotation PDF becomes available once Nippon prepares the quote.</span>
+                  )}
+                  <button onClick={() => setDetailOrder(null)} className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all">Close</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Quotation PDF (reuses the Nippon print pipeline — download / share / print) */}
+      {pdfOrder && (
+        <NipponDocPreview
+          printingQuote={pdfOrder}
+          clients={clients}
+          products={products}
+          printType="Glasstech"
+          fileName={`Quotation-${pdfOrder.orderNo || pdfOrder.manualSerial || pdfOrder.id}`}
+          onClose={() => setPdfOrder(null)}
+        />
       )}
     </div>
   );
