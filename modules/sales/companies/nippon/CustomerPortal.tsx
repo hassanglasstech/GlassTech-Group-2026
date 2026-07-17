@@ -22,8 +22,9 @@ import { Client, Product, Quotation, QuotationItem } from '@/modules/shared/type
 import { ProductImage } from '@/modules/shared/components/ProductImage';
 import { NipponPriceList, resolveClientRate } from './nipponPricing';
 import { getNicknames, setNickname, NicknameMap } from './customerNicknames';
+import { CustomerStatementModal } from '@/modules/finance/components/CustomerStatementModal';
 import { toast } from 'sonner';
-import { Search, ShoppingCart, Plus, Minus, Trash2, Send, Tag, Package, Loader2, History, Store, BadgeCheck } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, Trash2, Send, Tag, Package, Loader2, History, Store, BadgeCheck, FileText, Truck } from 'lucide-react';
 
 interface CartLine { productId: string; name: string; nick?: string; unit: string; qty: number; rate: number }
 
@@ -43,6 +44,7 @@ const CustomerPortal: React.FC = () => {
   const [myOrders, setMyOrders] = useState<Quotation[]>([]);
   const [view, setView] = useState<'catalogue' | 'orders'>('catalogue');
   const [sending, setSending] = useState(false);
+  const [showStatement, setShowStatement] = useState(false);   // ledger / payments (task A)
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -141,9 +143,17 @@ const CustomerPortal: React.FC = () => {
           <h1 className="text-lg font-black uppercase tracking-tight">Nippon Customer Portal</h1>
           <p className="text-[10px] font-bold text-blue-200 uppercase tracking-widest">{displayName}{myClient ? ` · ${myClient.name}` : ''}</p>
         </div>
-        {hasSpecialRates
-          ? <span className="ml-auto flex items-center gap-1.5 text-[10px] font-black uppercase bg-emerald-500/90 px-3 py-1.5 rounded-full"><BadgeCheck size={13}/> Your agreed rates</span>
-          : <span className="ml-auto text-[10px] font-black uppercase bg-white/15 px-3 py-1.5 rounded-full">Standard prices</span>}
+        <div className="ml-auto flex items-center gap-2">
+          {myClient && (
+            <button onClick={() => setShowStatement(true)}
+              className="flex items-center gap-1.5 text-[10px] font-black uppercase bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-full transition-all">
+              <FileText size={13}/> Ledger &amp; Payments
+            </button>
+          )}
+          {hasSpecialRates
+            ? <span className="flex items-center gap-1.5 text-[10px] font-black uppercase bg-emerald-500/90 px-3 py-1.5 rounded-full"><BadgeCheck size={13}/> Your agreed rates</span>
+            : <span className="text-[10px] font-black uppercase bg-white/15 px-3 py-1.5 rounded-full">Standard prices</span>}
+        </div>
       </div>
 
       {!myClient && (
@@ -166,7 +176,7 @@ const CustomerPortal: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-100 text-[9px] font-black uppercase text-slate-400 tracking-widest"><tr>
                 <th className="px-4 py-2">Order</th><th className="px-4 py-2">Date</th><th className="px-4 py-2 text-center">Items</th>
-                <th className="px-4 py-2 text-right">Total</th><th className="px-4 py-2 text-center">Status</th>
+                <th className="px-4 py-2 text-right">Total</th><th className="px-4 py-2 text-center">Status</th><th className="px-4 py-2">Dispatch</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {myOrders.map(o => {
@@ -178,6 +188,13 @@ const CustomerPortal: React.FC = () => {
                       <td className="px-4 py-2 text-center">{(o.items || []).filter(i => !i.isSection).length}</td>
                       <td className="px-4 py-2 text-right font-black tabular-nums">{val.toLocaleString()}</td>
                       <td className="px-4 py-2 text-center"><span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{o.customerPlaced && o.status === 'Draft' ? 'Sent' : o.status}</span></td>
+                      <td className="px-4 py-2">
+                        {o.status === 'Delivered'
+                          ? <span className="flex items-center gap-1 text-[10px] font-black text-emerald-600 uppercase"><Truck size={11}/> Delivered{o.actualDeliveryDate ? ` · ${o.actualDeliveryDate}` : ''}</span>
+                          : o.gatePass
+                            ? <span className="flex items-center gap-1 text-[10px] font-black text-indigo-600 uppercase" title={`Driver ${o.gatePass.driverName}${o.gatePass.driverPhone ? ` (${o.gatePass.driverPhone})` : ''}`}><Truck size={11}/> Out · {o.gatePass.vehicleNo}</span>
+                            : <span className="text-[10px] font-bold text-slate-300">—</span>}
+                      </td>
                     </tr>
                   );
                 })}
@@ -258,6 +275,10 @@ const CustomerPortal: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {showStatement && myClient && (
+        <CustomerStatementModal clientId={myClient.id} clientName={myClient.name} onClose={() => setShowStatement(false)} />
       )}
     </div>
   );

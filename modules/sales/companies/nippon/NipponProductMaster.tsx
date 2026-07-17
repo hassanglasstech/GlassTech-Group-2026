@@ -18,6 +18,7 @@ import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import NipponProductForm from '@/modules/nippon/components/NipponProductForm';
 import NipponDirectImporter from './components/NipponDirectImporter';
 import NipponPriceLists from './NipponPriceLists';
+import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 import * as XLSX from 'xlsx';
 
 const NipponProductMaster: React.FC = () => {
@@ -102,6 +103,17 @@ const NipponProductMaster: React.FC = () => {
     setProducts(allProds);
     setStoreItems(allStore);
   };
+
+  // Real-time: if ANOTHER user adds/deletes/edits a product, refresh this list
+  // immediately (no manual page refresh) and tell the user what changed.
+  const { refreshKey, lastEventType } = useRealtimeRefresh('products');
+  useEffect(() => {
+    if (refreshKey === 0) return;   // skip the initial mount value
+    refreshData();
+    const verb = lastEventType === 'INSERT' ? 'added a product' : lastEventType === 'DELETE' ? 'deleted a product' : 'updated a product';
+    toast.info(`Another user ${verb} — the list has been refreshed.`, { id: 'products-realtime', duration: 5000 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
 
   const getStockLevel = (prodId: string) => {
       const item = storeItems.find(s => s.id === prodId);

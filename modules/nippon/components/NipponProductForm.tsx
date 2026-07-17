@@ -939,11 +939,11 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                         <label className="text-[10px] font-bold uppercase text-slate-400">Cost Price (PKR)</label>
-                        <input type="number" className="sap-input w-full font-black text-emerald-600" value={formData.costPrice} onChange={e => setFormData({...formData, costPrice: Number(e.target.value)})}/>
+                        <input type="number" className="sap-input w-full font-black text-emerald-600" placeholder="0" value={formData.costPrice || ''} onChange={e => setFormData({...formData, costPrice: Number(e.target.value)})}/>
                     </div>
                     <div className="space-y-1">
                         <label className="text-[10px] font-bold uppercase text-slate-400">Sales Price (PKR)</label>
-                        <input type="number" className="sap-input w-full font-black text-blue-600" value={formData.basePrice} onChange={e => setFormData({...formData, basePrice: Number(e.target.value)})}/>
+                        <input type="number" className="sap-input w-full font-black text-blue-600" placeholder="0" value={formData.basePrice || ''} onChange={e => setFormData({...formData, basePrice: Number(e.target.value)})}/>
                     </div>
                 </div>
             </div>
@@ -995,10 +995,11 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                                 <div className="flex gap-2">
                                     <div className="flex-1 space-y-1">
                                         <label className="text-[10px] font-bold uppercase text-slate-400">Qty Per Set</label>
-                                        <input 
-                                            type="number" 
-                                            className="sap-input w-full text-xs" 
-                                            value={newComponent.qtyPerSet} 
+                                        <input
+                                            type="number"
+                                            className="sap-input w-full text-xs"
+                                            placeholder="0"
+                                            value={newComponent.qtyPerSet || ''}
                                             onChange={e => setNewComponent({...newComponent, qtyPerSet: Number(e.target.value)})}
                                         />
                                     </div>
