@@ -128,6 +128,8 @@ export const SharedQuotationList: React.FC<SharedQuotationListProps> = ({
                   </td>
                   <td className="font-black text-blue-600">
                     {q.customerPlaced && <span title="Placed by the customer via the portal — review &amp; approve to forward" className="mr-1.5 text-[8px] font-black uppercase bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded align-middle">Customer</span>}
+                    {q.customerPlaced && q.paymentConfirmed && <span title="Payment confirmed by the office" className="mr-1.5 text-[8px] font-black uppercase bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded align-middle">Paid ✓</span>}
+                    {q.customerPlaced && !q.paymentConfirmed && q.paymentSubmittedAt && <span title="Customer uploaded a payment proof — review &amp; confirm" className="mr-1.5 text-[8px] font-black uppercase bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded align-middle">Pay?</span>}
                     {q.orderNo || q.id}
                   </td>
                   <td className="font-bold text-slate-700">{client?.name || 'Unknown'}</td>

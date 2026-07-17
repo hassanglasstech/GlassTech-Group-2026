@@ -8,6 +8,7 @@ import { Logger } from '@/modules/shared/services/logger';
 import { nipponImageUrl } from '@/modules/shared/components/ProductImage';
 import { issueNipponOrder } from './nipponFulfilmentService';
 import { NipponPriceList, resolveClientRate } from './nipponPricing';
+import { useAuthStore } from '@/modules/auth/authStore';
 
 // TEMP (inventory module not live yet): stock balances are still 0 because GRN /
 // opening-balance intake isn't wired, so a hard stock gate blocks every approval.
@@ -339,6 +340,12 @@ export const useNipponQuotations = () => {
       return toast.error("This is a Sales Order — use Edit / Revise on the Sales Orders tab to amend it.");
     }
 
+    // Hard payment gate: a customer-placed order cannot be approved (i.e. sent to
+    // the store) until the office has confirmed the customer's payment arrived.
+    if (approve && src.customerPlaced && !src.paymentConfirmed) {
+      return toast.error("Payment not confirmed — open the order, review the customer's payment proof and confirm it before approving.", { duration: 8000 });
+    }
+
     setIsSaving(true);
     try {
       // Pre-flight stock check (over-sell guard): validate availability BEFORE
@@ -536,6 +543,33 @@ export const useNipponQuotations = () => {
     }
   };
 
+  // Office confirms the customer's payment actually arrived — the hard gate that
+  // unblocks approval. Persists immediately (not on Save) and returns the updated
+  // order so the editor can flip its state.
+  const confirmPayment = async (order: Quotation): Promise<Quotation | null> => {
+    try {
+      const s = useAuthStore.getState();
+      const by = s.profile?.fullName || s.profile?.email || s.user?.email || 'office';
+      const updated: Quotation = {
+        ...order,
+        paymentConfirmed: true,
+        paymentConfirmedAt: new Date().toISOString(),
+        paymentConfirmedBy: by,
+      };
+      const res = await AsyncSalesService.saveQuotations([updated]);
+      if (res?.error) { toast.error(`Payment confirm not saved — ${res.error}`, { duration: 8000 }); return null; }
+      Logger.action('SALES', 'NIPPON_PAYMENT_CONFIRMED', `${order.id} by ${by}`,
+        { referenceId: order.id, extra: { company } });
+      toast.success('Payment confirmed — you can now approve this order.');
+      await refreshData();
+      return updated;
+    } catch (err) {
+      Logger.error('NipponQuotations', 'confirmPayment failed', err);
+      toast.error(`Payment confirm failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      return null;
+    }
+  };
+
   // EPIC 2 (store issue): the store physically issues an approved order — shared
   // logic lives in nipponFulfilmentService so the dedicated store screen reuses it.
   const issueOrder = async (orderId: string) => {
@@ -656,6 +690,7 @@ export const useNipponQuotations = () => {
     handleDelete,
     handleVoid,
     issueOrder,
+    confirmPayment,
     refreshData,
     selectProduct,
     initialQuotation,

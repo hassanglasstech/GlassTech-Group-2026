@@ -6,7 +6,7 @@ import { SharedQuotationList } from '@/modules/sales/components/SharedQuotationL
 import { getBrandNick } from '@/modules/shared/utils/brandUtils';
 import {
   Printer, X, Plus, Trash2, FileSignature,
-  Search, Calendar, Edit2, FileCheck, Eye, Save, ArrowLeft, Layers, Copy, Gift, PackageCheck
+  Search, Calendar, Edit2, FileCheck, Eye, Save, ArrowLeft, Layers, Copy, Gift, PackageCheck, CheckCircle2
 } from 'lucide-react';
 import { useNipponQuotations } from './useNipponQuotations';
 import { NipponGatePassButton } from './NipponGatePassButton';
@@ -49,11 +49,14 @@ const NipponQuotationManager: React.FC = () => {
     handleDelete,
     handleVoid,
     issueOrder,
+    confirmPayment,
     refreshData,
     selectProduct,
     initialQuotation,
     isSaving,
   } = useNipponQuotations();
+  const [proofView, setProofView] = React.useState<string | null>(null);   // payment-proof lightbox
+  const [confirmingPay, setConfirmingPay] = React.useState(false);
 
   // Quotations vs Sales Orders vs Store Issue tab. Orders = approved-and-beyond
   // (+ voided, kept for audit). Store Issue = approved orders not yet physically
@@ -472,6 +475,36 @@ const NipponQuotationManager: React.FC = () => {
                 </div>
               </div>
 
+              {/* Payment (hard gate) — office reviews the customer's uploaded proof
+                  and confirms before this order can be approved. Customer orders only. */}
+              {formData.customerPlaced && (
+                <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3 flex-wrap shrink-0">
+                  <span className="text-[10px] font-black uppercase text-slate-400 shrink-0">Payment</span>
+                  {formData.paymentProof ? (
+                    <>
+                      <button type="button" onClick={() => setProofView(formData.paymentProof || null)}
+                        className="flex items-center gap-1.5 text-[10px] font-black uppercase text-blue-600 hover:text-blue-800">
+                        <Eye size={13}/> View proof
+                      </button>
+                      <span className="text-[10px] font-bold text-slate-400">
+                        Submitted{formData.paymentSubmittedAt ? ` ${new Date(formData.paymentSubmittedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}
+                      </span>
+                      {formData.paymentConfirmed ? (
+                        <span className="ml-auto flex items-center gap-1 text-[10px] font-black uppercase text-emerald-600"><CheckCircle2 size={13}/> Payment confirmed</span>
+                      ) : (
+                        <button type="button" disabled={confirmingPay}
+                          onClick={async () => { setConfirmingPay(true); const u = await confirmPayment(formData as Quotation); if (u) setFormData(u); setConfirmingPay(false); }}
+                          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-[10px] font-black uppercase tracking-widest">
+                          <CheckCircle2 size={13}/> {confirmingPay ? 'Confirming…' : 'Confirm Payment Received'}
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-[10px] font-bold text-amber-600">Customer ne abhi payment proof upload nahi kiya — approve tab tak block hai.</span>
+                  )}
+                </div>
+              )}
+
               {/* Items Grid */}
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
                 <div className="flex-1 overflow-auto">
@@ -791,6 +824,14 @@ const NipponQuotationManager: React.FC = () => {
                 </div>
               </div>
             </div>
+        </div>
+      )}
+
+      {/* Payment-proof lightbox */}
+      {proofView && (
+        <div className="fixed inset-0 bg-slate-900/80 z-[600] flex items-center justify-center p-4" onClick={() => setProofView(null)}>
+          <img src={proofView} alt="Payment proof" className="max-h-[90vh] max-w-[90vw] rounded-xl shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
+          <button onClick={() => setProofView(null)} className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 rounded-xl text-white"><X size={18} /></button>
         </div>
       )}
 

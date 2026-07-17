@@ -26,7 +26,7 @@ import { CustomerStatementModal } from '@/modules/finance/components/CustomerSta
 import { NipponDocPreview } from '@/modules/nippon/prints/NipponDocPreview';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 import { toast } from 'sonner';
-import { Search, ShoppingCart, Plus, Minus, Trash2, Send, Tag, Package, Loader2, History, Store, BadgeCheck, FileText, Truck, Eye, CheckCircle2, Clock, X, Download } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, Trash2, Send, Tag, Package, Loader2, History, Store, BadgeCheck, FileText, Truck, Eye, CheckCircle2, Clock, X, Download, Upload } from 'lucide-react';
 
 interface CartLine { productId: string; name: string; nick?: string; unit: string; qty: number; rate: number }
 
@@ -50,6 +50,8 @@ const CustomerPortal: React.FC = () => {
   const [showStatement, setShowStatement] = useState(false);   // ledger / payments (task A)
   const [detailOrder, setDetailOrder] = useState<Quotation | null>(null);  // click a row → original query view
   const [pdfOrder, setPdfOrder] = useState<Quotation | null>(null);        // download quotation PDF
+  const [proofView, setProofView] = useState<string | null>(null);         // payment-proof lightbox
+  const [payingId, setPayingId] = useState<string | null>(null);           // upload in progress
 
   // Live: when the Nippon desk quotes / approves / dispatches an order, the
   // customer's list updates without a manual refresh (same realtime bus the
@@ -172,6 +174,30 @@ const CustomerPortal: React.FC = () => {
     } catch (err) {
       toast.error(`Could not send order: ${err instanceof Error ? err.message : 'error'}`);
     } finally { setSending(false); }
+  };
+
+  // Customer uploads a payment screenshot against a quoted order + marks it paid.
+  // Stored as a base64 data URI on the order (zero setup); office confirms it.
+  const uploadPayment = async (order: Quotation, file: File): Promise<void> => {
+    if (!file.type.startsWith('image/')) { toast.error('Please upload an image (screenshot).'); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error('Screenshot must be under 5 MB.'); return; }
+    setPayingId(order.id);
+    try {
+      const dataUri = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result));
+        r.onerror = () => reject(new Error('read failed'));
+        r.readAsDataURL(file);
+      });
+      const updated: Quotation = { ...order, paymentProof: dataUri, paymentSubmittedAt: new Date().toISOString() };
+      const res = await AsyncSalesService.saveQuotations([updated]);
+      if (res?.error) { toast.error(`Payment proof not sent — ${res.error}`, { duration: 8000 }); return; }
+      toast.success('Payment proof sent — Nippon will confirm shortly.', { duration: 7000 });
+      setDetailOrder(updated);
+      await load();
+    } catch (err) {
+      toast.error(`Upload failed: ${err instanceof Error ? err.message : 'error'}`);
+    } finally { setPayingId(null); }
   };
 
   if (loading) {
@@ -406,6 +432,35 @@ const CustomerPortal: React.FC = () => {
                   </div>
                 )}
 
+                {/* Payment — once Nippon has quoted, the customer pays and uploads a screenshot */}
+                {o.quotedAt && !ORDER_LIKE.includes(o.status as string) && (
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+                    <div className="text-[10px] font-black uppercase text-amber-700 tracking-widest mb-1.5 flex items-center gap-1.5"><FileText size={13}/> Payment</div>
+                    {o.paymentConfirmed ? (
+                      <div className="text-xs font-bold text-emerald-700 flex items-center gap-1.5"><CheckCircle2 size={14}/> Payment confirmed by Nippon.</div>
+                    ) : o.paymentProof ? (
+                      <div className="space-y-2">
+                        <div className="text-xs font-bold text-amber-800">Payment proof sent{o.paymentSubmittedAt ? ` · ${fmtDT(o.paymentSubmittedAt)}` : ''} — awaiting Nippon confirmation.</div>
+                        <div className="flex items-center gap-3">
+                          <button onClick={() => setProofView(o.paymentProof || null)} className="text-[10px] font-black uppercase text-blue-600 hover:text-blue-800">View</button>
+                          <label className="text-[10px] font-black uppercase text-slate-500 hover:text-slate-700 cursor-pointer">
+                            {payingId === o.id ? 'Uploading…' : 'Re-upload'}
+                            <input type="file" accept="image/*" className="hidden" disabled={payingId === o.id} onChange={e => e.target.files?.[0] && uploadPayment(o, e.target.files[0])} />
+                          </label>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="text-xs font-bold text-amber-800">Download the quotation PDF, pay, then upload your payment screenshot to mark it paid.</div>
+                        <label className="inline-flex items-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-black uppercase tracking-widest cursor-pointer">
+                          {payingId === o.id ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} {payingId === o.id ? 'Uploading…' : 'Upload Payment Screenshot'}
+                          <input type="file" accept="image/*" className="hidden" disabled={payingId === o.id} onChange={e => e.target.files?.[0] && uploadPayment(o, e.target.files[0])} />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Original query — the items the customer requested */}
                 <div>
                   <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5">Your request</div>
@@ -457,10 +512,18 @@ const CustomerPortal: React.FC = () => {
           printingQuote={pdfOrder}
           clients={clients}
           products={products}
-          printType="Glasstech"
+          printType={myClient?.preferredPrintType || 'KinLong'}
           fileName={`Quotation-${pdfOrder.orderNo || pdfOrder.manualSerial || pdfOrder.id}`}
           onClose={() => setPdfOrder(null)}
         />
+      )}
+
+      {/* Payment-proof lightbox */}
+      {proofView && (
+        <div className="fixed inset-0 bg-slate-900/80 z-[600] flex items-center justify-center p-4" onClick={() => setProofView(null)}>
+          <img src={proofView} alt="Payment proof" className="max-h-[90vh] max-w-[90vw] rounded-xl shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
+          <button onClick={() => setProofView(null)} className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 rounded-xl text-white"><X size={18} /></button>
+        </div>
       )}
     </div>
   );

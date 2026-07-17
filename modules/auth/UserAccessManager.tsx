@@ -54,6 +54,7 @@ const ROLES_LIST = [
   { value: 'nippon_admin',       label: 'Nippon Admin',         desc: 'Nippon full access',                                    color: 'bg-rose-100 text-rose-800 border-rose-200' },
   // ── External ────────────────────────────────────────────────────────
   { value: 'customer',           label: 'Customer (Portal)',    desc: 'Self-service portal — own orders + rates only',         color: 'bg-teal-100 text-teal-800 border-teal-200' },
+  { value: 'gatekeeper',         label: 'Gatekeeper (Factory Gate)', desc: 'Factory gate only — verify passes, gate in/out, photo', color: 'bg-slate-100 text-slate-700 border-slate-200' },
 ];
 
 const ROLE_DEFAULTS: Record<string, { companies: string[]; modules: string[] }> = {
@@ -72,6 +73,7 @@ const ROLE_DEFAULTS: Record<string, { companies: string[]; modules: string[] }> 
   glassco_production:  { companies: ['Glassco'],                                modules: ['production','inventory','logistics','requisitions'] },
   nippon_admin:        { companies: ['Nippon'],                                 modules: ['sales','inventory','hr','accounts','requisitions'] },
   customer:            { companies: ['Nippon'],                                 modules: ['customer-portal'] },
+  gatekeeper:          { companies: ['Factory'],                                modules: ['gatekeeper'] },
 };
 
 // The full module catalog + which companies actually run each module. When an
@@ -93,6 +95,7 @@ const MODULE_CATALOG: { key: string; label: string }[] = [
   { key: 'md-dashboard',     label: 'MD Dashboard' },
   { key: 'factory-incharge', label: 'Factory Desk' },
   { key: 'customer-portal',  label: 'Customer Portal' },
+  { key: 'gatekeeper',       label: 'Factory Gate (Gatekeeper)' },
   { key: 'admin',            label: 'Admin / Basis' },
 ];
 
@@ -101,10 +104,11 @@ const COMPANY_MODULES: Record<string, string[]> = {
   GTK:     PRODUCTION_CO,
   GTI:     PRODUCTION_CO,
   Glassco: PRODUCTION_CO,
-  // Nippon = trading: Store Issue instead of Production; no Logistics/Factory Desk.
-  Nippon:  ['sales','hr','inventory','store-issue','requisitions','accounts','vendors','projects','hub','md-dashboard','customer-portal','admin'],
-  // Factory = ops/logistics hub.
-  Factory: ['inventory','logistics','requisitions','hub','md-dashboard','factory-incharge','admin'],
+  // Nippon = trading: Store Issue instead of Production; Logistics carries the
+  // office Gate Pass tab (gate passes are issued by the office, not the store).
+  Nippon:  ['sales','hr','inventory','store-issue','logistics','requisitions','accounts','vendors','projects','hub','md-dashboard','customer-portal','admin'],
+  // Factory = ops/logistics hub + the cross-company gatekeeper screen.
+  Factory: ['inventory','logistics','requisitions','hub','md-dashboard','factory-incharge','gatekeeper','admin'],
 };
 
 /** Modules to offer for the selected companies (union). No company picked yet →

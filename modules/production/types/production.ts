@@ -113,6 +113,11 @@ export interface GatePassInfo {
   gateInAt?: string;            // stamped by the gatekeeper (the tap IS the record)
   gateOutAt?: string;
   returnedAt?: string;
+  // Factory gatekeeper approval — the guard verifies against the physical gate pass,
+  // approves it and uploads a photo of the paper slip (base64 data URI).
+  approvedAt?: string;
+  approvedBy?: string;
+  photoUrl?: string;
 }
 
 export interface Quotation {
@@ -186,6 +191,21 @@ export interface Quotation {
   /** Store-issue audit stamp — goods physically left (mirrors dispatchedAt). */
   issuedAt?: string;
   issuedBy?: string;
+  // ── Nippon payment loop (hard gate: office must confirm payment before the
+  //    order can be approved/sent to store). All ride in the quotations data jsonb. ──
+  /** Customer-uploaded payment proof (screenshot as a base64 data URI). */
+  paymentProof?: string;
+  /** Customer marked the order paid + uploaded proof (portal). */
+  paymentSubmittedAt?: string;
+  /** Office verified the payment actually arrived — unblocks approval. */
+  paymentConfirmed?: boolean;
+  paymentConfirmedAt?: string;
+  paymentConfirmedBy?: string;
+  // ── Gate pass is REQUESTED by the store, then ISSUED by the office in Logistics. ──
+  /** Store asked the office to issue a gate pass for this (delivered/ready) order. */
+  gatePassRequested?: boolean;
+  gatePassRequestedAt?: string;
+  gatePassRequestedBy?: string;
   /** True when this Sales Order was raised by another group company's project. */
   intercompany?: boolean;
   /** The buyer company that raised it (e.g. 'GTK'). */

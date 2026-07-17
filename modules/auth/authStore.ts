@@ -17,7 +17,8 @@ export type UserRole =
   | 'glassco_production'
   | 'nippon_admin'
   | 'gtk_admin'
-  | 'customer';         // external Nippon customer — self-service portal only
+  | 'customer'          // external Nippon customer — self-service portal only
+  | 'gatekeeper';       // Factory gate guard — cross-company gatekeeper screen only
 
 export interface UserProfile {
   id: string;
@@ -61,6 +62,7 @@ export const ROLE_DEFAULT_COMPANY: Record<UserRole, string> = {
   glassco_production:  'Glassco',
   nippon_admin:        'Nippon',
   customer:            'Nippon',
+  gatekeeper:          'Factory',
 };
 
 // Empty array = all modules allowed
@@ -80,6 +82,7 @@ export const ROLE_MODULES: Record<UserRole, string[]> = {
   glassco_production: ['production','inventory','logistics','requisitions'],
   nippon_admin:       ['sales','inventory','hr','accounts','requisitions'],
   customer:           ['customer-portal'],
+  gatekeeper:         ['gatekeeper'],
 };
 
 // Default route after login per role
@@ -101,6 +104,7 @@ export const ROLE_DEFAULT_ROUTE: Record<UserRole, string> = {
   glassco_production: '/production/workbench',
   nippon_admin:       '/sales',
   customer:           '/customer-portal',      // external customer → straight to the portal
+  gatekeeper:         '/gatekeeper',            // gate guard → straight to the Factory gate
 };
 
 // Role display labels
@@ -120,6 +124,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   glassco_production: 'Production',
   nippon_admin:       'Nippon Admin',
   customer:           'Customer',
+  gatekeeper:         'Gatekeeper',
 };
 
 export const isOfficeHours = (): boolean => {
