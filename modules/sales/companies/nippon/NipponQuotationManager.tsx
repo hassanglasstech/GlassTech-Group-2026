@@ -9,6 +9,7 @@ import {
   Search, Calendar, Edit2, FileCheck, Eye, Save, ArrowLeft, Layers, Copy, Gift, PackageCheck, CheckCircle2
 } from 'lucide-react';
 import { useNipponQuotations } from './useNipponQuotations';
+import { useAuthStore } from '@/modules/auth/authStore';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import { useUnsavedGuard } from '@/modules/shared/hooks/useUnsavedGuard';
 
@@ -55,6 +56,9 @@ const NipponQuotationManager: React.FC = () => {
   } = useNipponQuotations();
   const [proofView, setProofView] = React.useState<string | null>(null);   // payment-proof lightbox
   const [confirmingPay, setConfirmingPay] = React.useState(false);
+  // Only the owner (or Hassan / super_admin) may approve orders (rule 7).
+  const role = useAuthStore(s => s.profile?.role || s.user?.role || '');
+  const isOwner = ['owner', 'hassan', 'super_admin'].includes(role);
 
   // Quotations vs Sales Orders vs Store Issue tab. Orders = approved-and-beyond
   // (+ voided, kept for audit). Store Issue = approved orders not yet physically
@@ -355,7 +359,7 @@ const NipponQuotationManager: React.FC = () => {
             onNew={() => openEditor(initialQuotation, false)}
             onEdit={(q) => openEditor(q, docTab === 'orders' && q.status !== 'Void')}
             onPrint={promptAndPrint}
-            onApprove={(q) => handleSave(true, q)}
+            onApprove={isOwner ? (q) => handleSave(true, q) : undefined}
             onDelete={handleDelete}
             onVoid={docTab === 'orders' ? handleVoid : undefined}
           />
@@ -808,11 +812,12 @@ const NipponQuotationManager: React.FC = () => {
                         <Save size={16}/> <span>{isSaving ? 'Saving…' : 'Save Quotation'}</span>
                       </button>
                       <button
-                        disabled={isLocked || isSaving}
+                        disabled={isLocked || isSaving || !isOwner}
                         onClick={() => handleSave(true)}
-                        className={`text-[10px] py-2.5 px-8 flex items-center space-x-2 shadow-xl font-black uppercase tracking-widest transition-all rounded-lg ${(isLocked || isSaving) ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-100'}`}
+                        title={!isOwner ? 'Only the owner can approve orders' : undefined}
+                        className={`text-[10px] py-2.5 px-8 flex items-center space-x-2 shadow-xl font-black uppercase tracking-widest transition-all rounded-lg ${(isLocked || isSaving || !isOwner) ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-100'}`}
                       >
-                        <FileCheck size={16}/> <span>{isSaving ? 'Approving…' : 'Approve Order'}</span>
+                        <FileCheck size={16}/> <span>{isSaving ? 'Approving…' : !isOwner ? 'Owner Approves' : 'Approve Order'}</span>
                       </button>
                     </div>
                     )}

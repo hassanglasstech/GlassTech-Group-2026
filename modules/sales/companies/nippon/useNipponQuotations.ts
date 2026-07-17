@@ -340,10 +340,24 @@ export const useNipponQuotations = () => {
       return toast.error("This is a Sales Order — use Edit / Revise on the Sales Orders tab to amend it.");
     }
 
-    // Hard payment gate: a customer-placed order cannot be approved (i.e. sent to
-    // the store) until the office has confirmed the customer's payment arrived.
+    // Owner-only approval (rule 7): only the owner / Hassan / super_admin may approve
+    // an order (or revise an approved one). Payment comes directly to the owner.
+    if (approve || revise) {
+      const st = useAuthStore.getState();
+      const role = st.profile?.role || st.user?.role || '';
+      if (!['owner', 'hassan', 'super_admin'].includes(role)) {
+        return toast.error('Only the owner can approve orders.', { duration: 7000 });
+      }
+    }
+
+    // Hard payment gate (rule 1): a customer-placed order cannot be approved (sent to
+    // the store) until the office confirms the customer's payment — UNLESS the client
+    // is flagged payment-exempt (credit customer) on their master record.
     if (approve && src.customerPlaced && !src.paymentConfirmed) {
-      return toast.error("Payment not confirmed — open the order, review the customer's payment proof and confirm it before approving.", { duration: 8000 });
+      const cli = clients.find(c => c.id === src.clientId);
+      if (!cli?.approveWithoutPayment) {
+        return toast.error("Payment not confirmed — confirm the customer's payment (or mark this client credit-approved) before approving.", { duration: 8000 });
+      }
     }
 
     setIsSaving(true);

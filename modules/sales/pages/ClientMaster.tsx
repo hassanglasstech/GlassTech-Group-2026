@@ -29,6 +29,7 @@ const ClientMaster: React.FC = () => {
     status: 'Active',
     mirrorCompany: null,  // Sprint 2 — explicit IC mirror FK
     preferredPrintType: 'KinLong',  // Nippon — default print header (KinLong)
+    approveWithoutPayment: false,   // Nippon — credit customer (skip payment gate)
   };
 
   const [formData, setFormData] = useState<Partial<Client>>(initialForm);
@@ -56,6 +57,7 @@ const ClientMaster: React.FC = () => {
       status: client.status,
       mirrorCompany: client.mirrorCompany ?? null,
       preferredPrintType: client.preferredPrintType ?? 'KinLong',
+      approveWithoutPayment: client.approveWithoutPayment ?? false,
     });
     setEditingId(client.id);
     setIsModalOpen(true);
@@ -292,6 +294,12 @@ const ClientMaster: React.FC = () => {
                   <option value="Glasstech">Glasstech</option>
                   <option value="General">General</option>
                 </select>
+                <label className="flex items-center gap-2 text-[11px] font-bold text-slate-600 cursor-pointer pt-1">
+                  <input type="checkbox" checked={!!formData.approveWithoutPayment}
+                    onChange={e => setFormData({ ...formData, approveWithoutPayment: e.target.checked })}
+                    className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500" />
+                  Approve orders <span className="text-amber-700 font-black">without payment</span> (credit customer)
+                </label>
               </div>
             )}
             <div className="space-y-1">

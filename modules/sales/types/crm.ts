@@ -26,6 +26,9 @@ export interface Client {
   // default print toggle, and printing with a different header prompts a warning.
   // Rides in the client `data` jsonb (no dedicated column) — zero migration.
   preferredPrintType?: 'KinLong' | 'Glasstech' | 'General';
+  // Nippon — payment-exempt (credit) customer: their orders can be approved WITHOUT
+  // a confirmed payment (skips the hard payment gate). Set at client creation.
+  approveWithoutPayment?: boolean;
   // Sprint 2 — IC mirror FK. NULL/undefined = no mirror entry on invoice.
   mirrorCompany?: 'GTK' | 'GTI' | 'Glassco' | 'Nippon' | 'Factory' | null;
   // Sprint 2 — optimistic concurrency. Server bumps on every write via
