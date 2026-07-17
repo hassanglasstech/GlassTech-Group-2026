@@ -493,7 +493,18 @@ const NipponQuotationManager: React.FC = () => {
                         <span className="ml-auto flex items-center gap-1 text-[10px] font-black uppercase text-emerald-600"><CheckCircle2 size={13}/> Payment confirmed</span>
                       ) : (
                         <button type="button" disabled={confirmingPay}
-                          onClick={async () => { setConfirmingPay(true); const u = await confirmPayment(formData as Quotation); if (u) setFormData(u); setConfirmingPay(false); }}
+                          onClick={async () => {
+                            setConfirmingPay(true);
+                            const u = await confirmPayment(formData as Quotation);
+                            setConfirmingPay(false);
+                            if (u) {
+                              setFormData(u);
+                              // Prepayment popup (rule 6): ask the owner to release goods now.
+                              if (isOwner && await confirmModal(`Payment confirmed for ${u.orderNo || u.manualSerial || u.id}. Is payment enough — approve the order and release goods to the store now?`)) {
+                                handleSave(true, u);
+                              }
+                            }
+                          }}
                           className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-[10px] font-black uppercase tracking-widest">
                           <CheckCircle2 size={13}/> {confirmingPay ? 'Confirming…' : 'Confirm Payment Received'}
                         </button>
