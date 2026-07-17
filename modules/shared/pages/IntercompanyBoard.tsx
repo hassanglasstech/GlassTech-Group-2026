@@ -12,7 +12,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Quotation, Project } from '@/modules/shared/types';
-import { SalesService } from '@/modules/sales/services/salesService';
+import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { ProjectService } from '@/modules/projects/services/projectService';
 import { ArrowRight, TrendingUp, Scale, Layers } from 'lucide-react';
 
@@ -23,8 +23,16 @@ const IntercompanyBoard: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
 
   useEffect(() => {
-    setOrders(SalesService.getQuotations().filter(q => q.intercompany));
+    // Quotations live in the cloud/IDB (not localStorage) — read cloud-first.
+    // Scoped to the active company's visibility (RLS); for super_admin that's the
+    // whole group. IC orders are tagged intercompany.
+    let alive = true;
+    (async () => {
+      const qs = await AsyncSalesService.getQuotations();
+      if (alive) setOrders((qs as Quotation[]).filter(q => q.intercompany));
+    })();
     setProjects(ProjectService.getProjects());
+    return () => { alive = false; };
   }, []);
 
   const orderTotal = (o: Quotation) => (o.items || []).reduce((s, i) => s + (Number(i.amount) || 0), 0);

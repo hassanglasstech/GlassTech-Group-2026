@@ -13,6 +13,7 @@ import { Company } from '@/modules/shared/types/core';
 import { Project, Product, Quotation } from '@/modules/shared/types';
 import { ProjectService } from '@/modules/projects/services/projectService';
 import { SalesService } from '@/modules/sales/services/salesService';
+import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { raiseIntercompanyOrder, ICOrderLine } from '@/modules/sales/services/intercompanyOrderService';
 import { getCrossCompanyNotifs, CrossCompanyNotification } from '@/modules/shared/services/crossCompanyNotifService';
@@ -41,7 +42,9 @@ const IntercompanyProcurement: React.FC = () => {
   const [feed, setFeed] = useState<CrossCompanyNotification[]>([]);
 
   const loadBuyerLens = useCallback(async () => {
-    setMyOrders(SalesService.getQuotations()
+    // Quotations live in the cloud/IDB (not localStorage) — read cloud-first.
+    const qs = await AsyncSalesService.getQuotations();
+    setMyOrders((qs as Quotation[])
       .filter(q => q.intercompany && q.sourceCompany === buyer)
       .sort((a, b) => String(b.id).localeCompare(String(a.id))));
     const notifs = await getCrossCompanyNotifs(buyer);
