@@ -58,11 +58,10 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                         <p className="text-[8px] font-bold text-slate-800">Contact: 0300-8716303</p>
                     </div>
                     <div className="text-right">
-                        <svg viewBox="0 0 300 124" width="170" height="70" preserveAspectRatio="xMidYMid meet" className="inline-block" xmlns="http://www.w3.org/2000/svg">
-                          <text x="2" y="44" fontFamily="Arial, Helvetica, sans-serif" fontSize="44" fontWeight="900" fill="#0055A5" letterSpacing="-1.5">KIN LONG</text>
-                          <text x="206" y="42" fontFamily="'Microsoft YaHei','PingFang SC','Noto Sans SC','SimHei',sans-serif" fontSize="40" fontWeight="700" fill="#0055A5">坚朗</text>
-                          <text x="150" y="82" textAnchor="middle" fontFamily="Georgia,'Times New Roman',serif" fontSize="26" fontStyle="italic" fontWeight="700" fill="#111827">For Better Living</text>
-                          <text x="150" y="112" textAnchor="middle" fontFamily="'Microsoft YaHei','PingFang SC','Noto Sans SC','SimHei',sans-serif" fontSize="17" fill="#111827" textLength="286" lengthAdjust="spacing">一切为了改善人类居住环境</text>
+                        <svg viewBox="0 0 340 116" width="182" height="62" preserveAspectRatio="xMidYMid meet" className="inline-block" xmlns="http://www.w3.org/2000/svg">
+                          <text x="170" y="42" textAnchor="middle" fontFamily="Arial, Helvetica, 'Microsoft YaHei','PingFang SC','Noto Sans SC','SimHei', sans-serif" fontSize="38" fontWeight="900" fill="#0055A5">KIN LONG 坚朗</text>
+                          <text x="170" y="78" textAnchor="middle" fontFamily="Georgia,'Times New Roman',serif" fontSize="25" fontStyle="italic" fontWeight="700" fill="#111827">For Better Living</text>
+                          <text x="170" y="106" textAnchor="middle" fontFamily="'Microsoft YaHei','PingFang SC','Noto Sans SC','SimHei', sans-serif" fontSize="17" fill="#111827" letterSpacing="2">一切为了改善人类居住环境</text>
                         </svg>
                         <p className="text-[8px] font-bold uppercase tracking-widest text-slate-500 mt-1">Authorized Partner</p>
                     </div>
