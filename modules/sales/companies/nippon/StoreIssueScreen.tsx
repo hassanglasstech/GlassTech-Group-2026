@@ -25,7 +25,7 @@ import { ProductImage } from '@/modules/shared/components/ProductImage';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import { issueNipponOrder, isPendingIssue } from './nipponFulfilmentService';
 import { pushCrossCompanyNotif } from '@/modules/shared/services/crossCompanyNotifService';
-import { notifyBuyerOfStatus } from '@/modules/sales/services/intercompanyOrderService';
+import { notifyBuyerOfStatus, bookBuyerProjectCost } from '@/modules/sales/services/intercompanyOrderService';
 import { toast } from 'sonner';
 import { PackageCheck, Loader2, RefreshCw, ClipboardList, ArrowLeft, MapPin, Save, Zap, Info, Truck, QrCode, X } from 'lucide-react';
 
@@ -197,7 +197,8 @@ const StoreIssueScreen: React.FC = () => {
     else if (res.invoiceError) toast.warning(`Issued — ${res.orderNo} delivered, but invoice failed: ${res.invoiceError}`, { duration: 9000 });
     else toast.success(`Issued — ${res.orderNo} marked Delivered.`);
     // IC-P3: hand the "Delivered" status back to the buyer's project timeline.
-    if (q.intercompany) void notifyBuyerOfStatus({ order: q, status: 'Delivered', actor: stampUser });
+    // IC-P4: grow the buyer project's cost (consumed bucket always; WIP GL if enabled).
+    if (q.intercompany) { void notifyBuyerOfStatus({ order: q, status: 'Delivered', actor: stampUser }); bookBuyerProjectCost(q); }
     closeDetail();
     await load();
   };

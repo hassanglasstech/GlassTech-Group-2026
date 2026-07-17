@@ -5,16 +5,17 @@ import { Company, PurchaseOrder, Project, Client } from '../types';
 import { InventoryService } from '../../procurement/services/inventoryService';
 import { SalesService } from '../../sales/services/salesService';
 import { ProjectService } from '../../projects/services/projectService';
-import { Globe, Inbox, CheckCircle2, Clock, Truck, ShieldAlert, Package, MessageCircle, FolderPlus, Folder, ArrowRight, X, RefreshCw, History, FilePlus, AlertTriangle, Search, ArrowUpRight, Info, ArrowRightLeft } from 'lucide-react';
+import { Globe, Inbox, CheckCircle2, Clock, Truck, ShieldAlert, Package, MessageCircle, FolderPlus, Folder, ArrowRight, X, RefreshCw, History, FilePlus, AlertTriangle, Search, ArrowUpRight, Info, ArrowRightLeft, BarChart3 as BarChart3Icon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/appStore';
 import ICOTransferPanel from './ICOTransferPanel';
 import IntercompanyProcurement from './IntercompanyProcurement';
+import IntercompanyBoard from './IntercompanyBoard';
 
 const IntercompanyHub: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'procurement' | 'inbox' | 'history' | 'transfers'>('procurement');
+  const [activeTab, setActiveTab] = useState<'procurement' | 'board' | 'inbox' | 'history' | 'transfers'>('procurement');
   const [inbox, setInbox] = useState<PurchaseOrder[]>([]);
   const [history, setHistory] = useState<PurchaseOrder[]>([]);
   
@@ -159,6 +160,12 @@ const IntercompanyHub: React.FC = () => {
             <FilePlus size={16}/> <span>Project Procurement</span>
           </button>
           <button
+            onClick={() => setActiveTab('board')}
+            className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'board' ? 'bg-slate-800 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <BarChart3Icon size={16}/> <span>IC Board</span>
+          </button>
+          <button
             onClick={() => setActiveTab('transfers')}
             className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'transfers' ? 'bg-indigo-600 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}
           >
@@ -180,6 +187,9 @@ const IntercompanyHub: React.FC = () => {
 
       {/* Project → IC Order (order-time mirror) */}
       {activeTab === 'procurement' && <IntercompanyProcurement />}
+
+      {/* Group IC board — flows + project profitability + elimination */}
+      {activeTab === 'board' && <IntercompanyBoard />}
 
       {/* ICO Transfer Panel */}
       {activeTab === 'transfers' && <ICOTransferPanel company={company} />}

@@ -23,7 +23,10 @@ import { AsyncSalesService } from './asyncSalesService';
 import { SalesService } from './salesService';
 import { ProjectService } from '@/modules/projects/services/projectService';
 import { pushCrossCompanyNotif } from '@/modules/shared/services/crossCompanyNotifService';
+import { isFinanceGLEnabled } from '@/modules/shared/services/featureFlagService';
 import { Logger } from '@/modules/shared/services/logger';
+
+type ProjectCostType = 'Glass' | 'Aluminium' | 'Hardware' | 'Installation' | 'Other';
 
 export interface ICOrderLine {
   productRef?: string;   // supplier Product.id (when picked from the master)
@@ -159,6 +162,54 @@ export const raiseIntercompanyOrder = async (
     Logger.error('IntercompanyOrder', 'raiseIntercompanyOrder failed', err);
     return { error: err instanceof Error ? err.message : 'Unknown error' };
   }
+};
+
+/**
+ * IC-P4 — book the buyer's project cost when an intercompany order is delivered.
+ * Two effects, deliberately decoupled:
+ *   • ALWAYS grows the buyer project's consumed bucket (glass/hardware/other) +
+ *     a timeline entry — operational data, no GL, drives project profitability (P5).
+ *   • Posts project-WIP GL on the buyer side ONLY when finance GL is enabled for
+ *     that company (default OFF) — Dr Project-WIP / Cr Project-Accruals via the
+ *     existing ProjectService.postProjectCost. Keeps go-live safe.
+ * No-op unless the order is intercompany and tagged with a source project.
+ */
+export const bookBuyerProjectCost = (order: Quotation): void => {
+  if (!order.intercompany || !order.sourceProjectId || !order.sourceCompany) return;
+  const total = (order.items || []).reduce((s, i) => s + (Number(i.amount) || 0), 0);
+  if (total <= 0) return;
+  const costType: ProjectCostType = order.company === 'Glassco' ? 'Glass' : order.company === 'Nippon' ? 'Hardware' : 'Other';
+
+  // Operational: grow the buyer project's consumed bucket + timeline (non-GL).
+  try {
+    const all = ProjectService.getProjects();
+    const idx = all.findIndex(p => p.id === order.sourceProjectId);
+    if (idx >= 0) {
+      const p = { ...all[idx] };
+      if (costType === 'Glass') p.glassConsumed = (p.glassConsumed || 0) + total;
+      else if (costType === 'Hardware') p.hardwareConsumed = (p.hardwareConsumed || 0) + total;
+      else p.otherConsumed = (p.otherConsumed || 0) + total;
+      p.timeline = [...(p.timeline || []), {
+        date: new Date().toISOString().split('T')[0],
+        event: `IC delivery ${order.orderNo || order.id} from ${order.company} — PKR ${total.toLocaleString()} to ${costType}.`,
+        type: 'success' as const,
+      }];
+      all[idx] = p;
+      ProjectService.saveProjects(all);
+    }
+  } catch (e) { Logger.warn('IntercompanyOrder', 'project consumed-bucket update failed', e); }
+
+  // Finance (flag-gated): project-WIP GL on the buyer side. Off by default.
+  try {
+    if (isFinanceGLEnabled(order.sourceCompany)) {
+      ProjectService.postProjectCost({
+        projectId: order.sourceProjectId, company: order.sourceCompany,
+        costType, amount: total,
+        description: `IC ${order.company} ${order.orderNo || order.id}`,
+        referenceId: order.id,
+      });
+    }
+  } catch (e) { Logger.error('IntercompanyOrder', 'project-WIP GL post failed', e); }
 };
 
 /**
