@@ -620,7 +620,8 @@ const App: React.FC = () => {
         .catch(() => {});
       perfMonitor.markBoot('sales_warm');   // marks immediately — async
       BrandingService.prefetchAll().catch(() => {}); // Sprint 33 — warm letterhead/footer cache
-      AppService.checkAndTriggerAutoBackup();
+      // External customers must NOT get the daily DB backup auto-download.
+      if (useAuthStore.getState().user?.role !== 'customer') AppService.checkAndTriggerAutoBackup();
       // Start Realtime AFTER initial fetch — live cross-device sync
       RealtimeService.start();
       // Sprint 3: bridge gtk_realtime_update events into TanStack cache
@@ -815,7 +816,7 @@ const App: React.FC = () => {
               }>
                 <RouteAccessGuard>
                 <Routes>
-                  <Route path="/"             element={<ModuleErrorBoundary moduleName="Dashboard"><Dashboard /></ModuleErrorBoundary>} />
+                  <Route path="/"             element={user?.role === 'customer' ? <Navigate to="/customer-portal" replace /> : <ModuleErrorBoundary moduleName="Dashboard"><Dashboard /></ModuleErrorBoundary>} />
                   <Route path="/hr/*"          element={<ModuleErrorBoundary moduleName="HR"><HRModule /></ModuleErrorBoundary>} />
                   <Route path="/sales/*"       element={<ModuleErrorBoundary moduleName="Sales"><SalesCRM /></ModuleErrorBoundary>} />
                   <Route path="/inventory"     element={<ModuleErrorBoundary moduleName="Inventory"><InventoryModule /></ModuleErrorBoundary>} />

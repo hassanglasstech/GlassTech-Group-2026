@@ -115,7 +115,10 @@ export const SharedQuotationList: React.FC<SharedQuotationListProps> = ({
                       {q.status}
                     </span>
                   </td>
-                  <td className="font-black text-blue-600">{q.orderNo || q.id}</td>
+                  <td className="font-black text-blue-600">
+                    {q.customerPlaced && <span title="Placed by the customer via the portal — review &amp; approve to forward" className="mr-1.5 text-[8px] font-black uppercase bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded align-middle">Customer</span>}
+                    {q.orderNo || q.id}
+                  </td>
                   <td className="font-bold text-slate-700">{client?.name || 'Unknown'}</td>
                   <td className="font-medium text-slate-500 text-xs">{q.date}</td>
                   <td className="font-black text-right">PKR {(Number(total) || 0).toLocaleString()}</td>

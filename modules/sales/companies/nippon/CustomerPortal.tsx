@@ -30,8 +30,9 @@ interface CartLine { productId: string; name: string; nick?: string; unit: strin
 
 const CustomerPortal: React.FC = () => {
   const { user, profile } = useAuthStore();
-  const email = (profile?.email || user?.email || '').toLowerCase();
+  const email = (profile?.email || user?.email || '').trim().toLowerCase();
   const userId = user?.id || email;
+  const emailOf = (c: Client): string => (c.email || '').trim().toLowerCase();
   const displayName = profile?.fullName || email || 'Customer';
 
   const [loading, setLoading] = useState(true);
@@ -56,7 +57,7 @@ const CustomerPortal: React.FC = () => {
     setProducts((ps as Product[]).filter(p => p.company === 'Nippon'));
     setPriceLists((ls as unknown as NipponPriceList[]).filter(l => l.company === 'Nippon'));
     setNicks(getNicknames(userId));
-    const myClientId = (cs as Client[]).find(c => c.company === 'Nippon' && (c.email || '').toLowerCase() === email)?.id;
+    const myClientId = (cs as Client[]).find(c => c.company === 'Nippon' && emailOf(c) === email)?.id;
     setMyOrders((qs as Quotation[]).filter(q => q.company === 'Nippon' && q.clientId === myClientId)
       .sort((a, b) => String(b.id).localeCompare(String(a.id))));
     setLoading(false);
@@ -64,7 +65,7 @@ const CustomerPortal: React.FC = () => {
   useEffect(() => { load(); }, [load]);
 
   // The client this login is linked to (by email).
-  const myClient = useMemo(() => clients.find(c => (c.email || '').toLowerCase() === email), [clients, email]);
+  const myClient = useMemo(() => clients.find(c => emailOf(c) === email), [clients, email]);
   const custRate = useMemo(() => resolveClientRate(myClient?.priceListId, priceLists), [myClient, priceLists]);
   const hasSpecialRates = !!myClient?.priceListId;
 
@@ -158,7 +159,8 @@ const CustomerPortal: React.FC = () => {
 
       {!myClient && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs font-bold text-amber-800">
-          Your login ({email || 'unknown'}) isn't linked to a customer account yet. You can browse, but ordering needs Nippon to link your account.
+          Your login (<span className="font-mono">{email || 'unknown'}</span>) isn't linked to a customer account yet — you can browse, but not order.
+          <span className="block mt-1 font-normal text-amber-700">Nippon staff: in Client Master, set this customer's <b>Email</b> to <span className="font-mono">{email || '—'}</span> to link + apply their rates.</span>
         </div>
       )}
 
