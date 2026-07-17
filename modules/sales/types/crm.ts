@@ -21,6 +21,11 @@ export interface Client {
   // `data` jsonb blob (no dedicated column read/written by the mappers).
   priceListId?: string;
   customerTier?: string;
+  // Nippon — the customer's preferred quotation/SO print header (KinLong / Glasstech
+  // / General). Selected on the customer form; on a Nippon quote it overrides the
+  // default print toggle, and printing with a different header prompts a warning.
+  // Rides in the client `data` jsonb (no dedicated column) — zero migration.
+  preferredPrintType?: 'KinLong' | 'Glasstech' | 'General';
   // Sprint 2 — IC mirror FK. NULL/undefined = no mirror entry on invoice.
   mirrorCompany?: 'GTK' | 'GTI' | 'Glassco' | 'Nippon' | 'Factory' | null;
   // Sprint 2 — optimistic concurrency. Server bumps on every write via

@@ -14,7 +14,9 @@ import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import { useUnsavedGuard } from '@/modules/shared/hooks/useUnsavedGuard';
 
 const NipponQuotationManager: React.FC = () => {
-  const [nipponPrintType, setNipponPrintType] = React.useState<'KinLong' | 'Glasstech' | 'General'>('Glasstech');
+  // Default print header is Kin Long (Nippon's primary supplier). A customer's own
+  // preferred header (set on the customer form) overrides this whenever selected.
+  const [nipponPrintType, setNipponPrintType] = React.useState<'KinLong' | 'Glasstech' | 'General'>('KinLong');
   const {
     quotations,
     clients,
@@ -92,6 +94,28 @@ const NipponQuotationManager: React.FC = () => {
   const leaveEditor = () => {
     if (isDirty && !window.confirm('Discard unsaved changes? Your edits will be lost.')) return;
     setView('list');
+  };
+
+  // A customer's preferred print header overrides the default whenever they are the
+  // selected client in the editor ("always override").
+  React.useEffect(() => {
+    const cli = clients.find(c => c.id === formData.clientId);
+    if (cli?.preferredPrintType) setNipponPrintType(cli.preferredPrintType);
+  }, [formData.clientId, clients]);
+
+  const printLabel = (t: string): string => (t === 'KinLong' ? 'Kin Long' : t);
+  // Print guard: if the chosen header differs from THIS customer's preferred one,
+  // prompt + offer to switch (override still allowed).
+  const promptAndPrint = async (q: Quotation): Promise<void> => {
+    const cli = clients.find(c => c.id === q.clientId);
+    const pref = cli?.preferredPrintType;
+    if (pref && pref !== nipponPrintType) {
+      const switchToPref = await confirmModal(
+        `"${cli?.name}" ke liye preferred print "${printLabel(pref)}" hai, lekin abhi "${printLabel(nipponPrintType)}" selected hai.\n\nOK = "${printLabel(pref)}" pe switch kar ke print · Cancel = "${printLabel(nipponPrintType)}" hi rakho.`,
+      );
+      if (switchToPref) setNipponPrintType(pref);
+    }
+    setPrintingQuote(q);
   };
 
   // "<Client> <Project> <QUT|SO>-<serial4>" — used as the print/PDF filename.
@@ -331,7 +355,7 @@ const NipponQuotationManager: React.FC = () => {
             setSearchTerm={setSearchTerm}
             onNew={() => openEditor(initialQuotation, false)}
             onEdit={(q) => openEditor(q, docTab === 'orders' && q.status !== 'Void')}
-            onPrint={(q) => setPrintingQuote(q)}
+            onPrint={promptAndPrint}
             onApprove={(q) => handleSave(true, q)}
             onDelete={handleDelete}
             onVoid={docTab === 'orders' ? handleVoid : undefined}

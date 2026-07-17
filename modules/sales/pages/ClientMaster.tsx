@@ -28,6 +28,7 @@ const ClientMaster: React.FC = () => {
     creditLimit: 0,
     status: 'Active',
     mirrorCompany: null,  // Sprint 2 — explicit IC mirror FK
+    preferredPrintType: 'KinLong',  // Nippon — default print header (KinLong)
   };
 
   const [formData, setFormData] = useState<Partial<Client>>(initialForm);
@@ -54,6 +55,7 @@ const ClientMaster: React.FC = () => {
       creditLimit: client.creditLimit,
       status: client.status,
       mirrorCompany: client.mirrorCompany ?? null,
+      preferredPrintType: client.preferredPrintType ?? 'KinLong',
     });
     setEditingId(client.id);
     setIsModalOpen(true);
@@ -273,6 +275,25 @@ const ClientMaster: React.FC = () => {
                 <option value="Factory">Factory Ops</option>
               </select>
             </div>
+            {/* Nippon — the customer's preferred print header; overrides the default
+                on their quotes, and printing with another header prompts a warning. */}
+            {company === 'Nippon' && (
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-slate-500">
+                  Preferred Print
+                  <span className="ml-1 text-slate-400 normal-case font-medium">— header used on this customer's quotes / orders</span>
+                </label>
+                <select
+                  className="sap-input w-full font-bold"
+                  value={formData.preferredPrintType ?? 'KinLong'}
+                  onChange={e => setFormData({ ...formData, preferredPrintType: e.target.value as Client['preferredPrintType'] })}
+                >
+                  <option value="KinLong">Kin Long</option>
+                  <option value="Glasstech">Glasstech</option>
+                  <option value="General">General</option>
+                </select>
+              </div>
+            )}
             <div className="space-y-1">
               <label className="text-[10px] font-bold uppercase text-slate-500">Billing Address</label>
               <textarea className="sap-input w-full h-24 font-medium uppercase text-xs" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
