@@ -20,15 +20,14 @@ import { activeCompany } from '@/modules/shared/utils/activeCompany';
 import { SalesService } from '@/modules/sales/services/salesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { useAuthStore } from '@/modules/auth/authStore';
-import { Quotation, Client, Product, QuotationItem, StoreItem, GatePassInfo } from '@/modules/shared/types';
+import { Quotation, Client, Product, QuotationItem, StoreItem } from '@/modules/shared/types';
 import { ProductImage } from '@/modules/shared/components/ProductImage';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import { issueNipponOrder, isPendingIssue } from './nipponFulfilmentService';
-import { pushCrossCompanyNotif } from '@/modules/shared/services/crossCompanyNotifService';
+import { NipponGatePassButton } from './NipponGatePassButton';
 import { notifyBuyerOfStatus, bookBuyerProjectCost } from '@/modules/sales/services/intercompanyOrderService';
-import UrduDriverSlip from '@/modules/shared/components/UrduDriverSlip';
 import { toast } from 'sonner';
-import { PackageCheck, Loader2, RefreshCw, ClipboardList, ArrowLeft, MapPin, Save, Zap, Info, Truck, QrCode, X, FileText } from 'lucide-react';
+import { PackageCheck, Loader2, RefreshCw, ClipboardList, ArrowLeft, MapPin, Save, Zap, Info, Truck } from 'lucide-react';
 
 const StoreIssueScreen: React.FC = () => {
   const stampUser = useAuthStore(s => s.profile?.fullName || s.profile?.email || s.user?.email || 'store');
@@ -44,11 +43,9 @@ const StoreIssueScreen: React.FC = () => {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailItems, setDetailItems] = useState<QuotationItem[]>([]);
 
-  // Gate Pass (B) — issue modal state.
-  const [gpOrder, setGpOrder] = useState<Quotation | null>(null);
-  const [gpForm, setGpForm] = useState({ vehicleNo: '', driverName: '', driverPhone: '', isReturnable: false, instructions: '' });
-  const [gpIssuing, setGpIssuing] = useState(false);
-  const [urduSlipOrder, setUrduSlipOrder] = useState<Quotation | null>(null);   // Gate Pass D
+  // Gate Pass (B) issuance lives in the shared <NipponGatePassButton>. When a pass
+  // is issued we patch it onto the in-memory order so the badge updates at once.
+  const onGatePassIssued = (updated: Quotation) => setOrders(prev => prev.map(o => (o.id === updated.id ? updated : o)));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -135,57 +132,6 @@ const StoreIssueScreen: React.FC = () => {
     if (await savePick(q, true)) { toast.success('Order staged — ready for gate pass.'); closeDetail(); }
   };
 
-  // Gate Pass (B) — office issues a QR-verified pass from a staged order and pushes
-  // it cross-company to the Factory gatekeeper (who stamps IN/OUT at the shared gate).
-  const openGpModal = (q: Quotation) => {
-    const gp = q.gatePass;
-    setGpForm({
-      vehicleNo: gp?.vehicleNo || '', driverName: gp?.driverName || '',
-      driverPhone: gp?.driverPhone || '', isReturnable: gp?.isReturnable || false,
-      instructions: gp?.instructions || q.specialInstructions || '',
-    });
-    setGpOrder(q);
-  };
-  const issueGatePass = async () => {
-    if (!gpOrder) return;
-    if (!gpForm.vehicleNo.trim() || !gpForm.driverName.trim()) { toast.error('Vehicle no. and driver name are required.'); return; }
-    setGpIssuing(true);
-    try {
-      const qrToken = `GP-${gpOrder.id}-${Date.now().toString(36).toUpperCase()}`;
-      const gatePass: GatePassInfo = {
-        qrToken,
-        vehicleNo: gpForm.vehicleNo.trim().toUpperCase(),
-        driverName: gpForm.driverName.trim(),
-        driverPhone: gpForm.driverPhone.trim() || undefined,
-        isReturnable: gpForm.isReturnable,
-        instructions: gpForm.instructions.trim() || undefined,
-        issuedAt: new Date().toISOString(),
-        issuedBy: stampUser,
-        status: 'Issued',
-      };
-      const updated: Quotation = { ...gpOrder, gatePass };
-      const res = await AsyncSalesService.saveQuotations([updated]);
-      if (res?.error) { toast.error(`Gate pass not saved — ${res.error}`, { duration: 8000 }); return; }
-      setOrders(prev => prev.map(o => (o.id === gpOrder.id ? updated : o)));
-      // Real-time push to the Factory gatekeeper (cross-company). The gatekeeper
-      // screen (phase C) reads these + scans the qrToken to clear the vehicle.
-      const cli = clients.find(c => c.id === gpOrder.clientId);
-      await pushCrossCompanyNotif({
-        targetCompany: 'Factory',
-        fromCompany: activeCompany(),
-        title: `Gate Pass — ${gpOrder.orderNo || gpOrder.id}`,
-        message: `${cli?.name || 'Customer'} · Vehicle ${gatePass.vehicleNo} · Driver ${gatePass.driverName}${gatePass.driverPhone ? ` (${gatePass.driverPhone})` : ''}${gatePass.isReturnable ? ' · RETURNABLE' : ''} · QR ${qrToken}`,
-        type: 'general',
-        referenceId: gpOrder.id,
-        link: `#/gatekeeper`,
-      });
-      toast.success(`Gate pass issued for ${gpOrder.orderNo || gpOrder.id} — pushed to the Factory gate.`);
-      setGpOrder(null);
-    } catch (err) {
-      toast.error(`Gate pass failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    } finally { setGpIssuing(false); }
-  };
-
   const doIssue = async (q: Quotation) => {
     const ok = await confirmModal(`Issue goods for ${q.orderNo || q.id}? On-hand stock will be reduced and the order marked Delivered.`);
     if (!ok) return;
@@ -210,63 +156,6 @@ const StoreIssueScreen: React.FC = () => {
     const cls = s === 'Picked' ? 'bg-emerald-100 text-emerald-700' : s === 'Picking' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500';
     return <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${cls}`}>{s}</span>;
   };
-
-  // Gate-pass issue modal — rendered in both views (opened from either).
-  const gpModalEl = gpOrder && (
-    <div className="fixed inset-0 bg-slate-900/60 z-[600] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-        <div className="bg-slate-800 text-white px-5 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2"><Truck size={16}/><span className="text-sm font-black uppercase">Issue Gate Pass</span></div>
-          <button onClick={() => setGpOrder(null)} className="p-1 hover:bg-white/10 rounded"><X size={16}/></button>
-        </div>
-        <div className="p-5 space-y-3">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{gpOrder.orderNo || gpOrder.id} · authorises goods to leave the gate</p>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Vehicle No *</label>
-              <input value={gpForm.vehicleNo} onChange={e => setGpForm(f => ({ ...f, vehicleNo: e.target.value }))} className="sap-input w-full text-xs font-black uppercase" placeholder="ABC-123"/>
-            </div>
-            <div>
-              <label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Driver Name *</label>
-              <input value={gpForm.driverName} onChange={e => setGpForm(f => ({ ...f, driverName: e.target.value }))} className="sap-input w-full text-xs font-bold"/>
-            </div>
-            <div>
-              <label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Driver Phone</label>
-              <input value={gpForm.driverPhone} onChange={e => setGpForm(f => ({ ...f, driverPhone: e.target.value }))} className="sap-input w-full text-xs font-bold" placeholder="03xx-xxxxxxx"/>
-            </div>
-            <div className="flex items-end">
-              <label className="flex items-center gap-2 text-xs font-black uppercase text-slate-600 cursor-pointer pb-1.5">
-                <input type="checkbox" checked={gpForm.isReturnable} onChange={e => setGpForm(f => ({ ...f, isReturnable: e.target.checked }))} className="w-4 h-4"/> Returnable
-              </label>
-            </div>
-          </div>
-          <div>
-            <label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Driver / Gate Instructions</label>
-            <input value={gpForm.instructions} onChange={e => setGpForm(f => ({ ...f, instructions: e.target.value }))} className="sap-input w-full text-xs" placeholder="Fragile · call before delivery · deliver by…"/>
-          </div>
-          <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 flex items-center gap-2">
-            <QrCode size={16} className="text-indigo-600"/>
-            <span className="text-[10px] font-bold text-indigo-800">A QR-verified pass is generated + pushed to the Factory gatekeeper in real time.</span>
-          </div>
-        </div>
-        <div className="px-5 py-3 bg-slate-50 border-t flex justify-end gap-2">
-          <button onClick={() => setGpOrder(null)} className="px-4 py-2 text-xs font-bold text-slate-500 border rounded-lg">Cancel</button>
-          <button onClick={issueGatePass} disabled={gpIssuing} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-black uppercase hover:bg-slate-900 flex items-center gap-1.5 disabled:opacity-50">
-            {gpIssuing ? <Loader2 size={13} className="animate-spin"/> : <Truck size={13}/>} Issue Pass
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Urdu driver slip (Gate Pass D) — rendered in both views.
-  const urduSlipEl = urduSlipOrder && (
-    <UrduDriverSlip
-      order={urduSlipOrder}
-      clientName={clients.find(c => c.id === urduSlipOrder.clientId)?.name || (urduSlipOrder as { clientName?: string }).clientName || ''}
-      onClose={() => setUrduSlipOrder(null)}
-    />
-  );
 
   // ── Detail (pick) view ────────────────────────────────────────────────────
   if (detailOrder) {
@@ -364,24 +253,13 @@ const StoreIssueScreen: React.FC = () => {
               className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-[10px] font-black uppercase tracking-widest">
               <PackageCheck size={13}/> Mark Picked
             </button>
-            <button onClick={() => openGpModal(detailOrder)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${detailOrder.gatePass ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' : 'bg-slate-700 hover:bg-slate-800 text-white'}`}>
-              <Truck size={13}/> {detailOrder.gatePass ? 'Gate Pass ✓' : 'Issue Gate Pass'}
-            </button>
-            {detailOrder.gatePass && (
-              <button onClick={() => setUrduSlipOrder(detailOrder)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-amber-100 text-amber-800 hover:bg-amber-200">
-                <FileText size={13}/> اردو پرچی
-              </button>
-            )}
+            <NipponGatePassButton order={detailOrder} clientName={cli?.name || (detailOrder as { clientName?: string }).clientName || ''} onIssued={onGatePassIssued} />
             <button onClick={() => doIssue(detailOrder)} disabled={busy === detailOrder.id || saving}
               className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm">
               {busy === detailOrder.id ? <Loader2 size={13} className="animate-spin"/> : <PackageCheck size={13}/>} Issue / Deliver
             </button>
           </div>
         </div>
-        {gpModalEl}
-        {urduSlipEl}
       </div>
     );
   }
@@ -435,8 +313,6 @@ const StoreIssueScreen: React.FC = () => {
           })}
         </div>
       )}
-      {gpModalEl}
-      {urduSlipEl}
     </div>
   );
 };

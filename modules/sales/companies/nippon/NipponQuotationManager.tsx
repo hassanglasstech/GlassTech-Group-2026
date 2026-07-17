@@ -9,6 +9,7 @@ import {
   Search, Calendar, Edit2, FileCheck, Eye, Save, ArrowLeft, Layers, Copy, Gift, PackageCheck
 } from 'lucide-react';
 import { useNipponQuotations } from './useNipponQuotations';
+import { NipponGatePassButton } from './NipponGatePassButton';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import { useUnsavedGuard } from '@/modules/shared/hooks/useUnsavedGuard';
 
@@ -46,6 +47,7 @@ const NipponQuotationManager: React.FC = () => {
     handleDelete,
     handleVoid,
     issueOrder,
+    refreshData,
     selectProduct,
     initialQuotation,
     isSaving,
@@ -297,12 +299,16 @@ const NipponQuotationManager: React.FC = () => {
                             <td className="px-5 py-3 font-bold text-slate-700 text-xs uppercase">{cli?.name || (q as { clientName?: string }).clientName || '—'}</td>
                             <td className="px-5 py-3 text-center text-xs font-bold text-slate-600">{nLines}</td>
                             <td className="px-5 py-3 text-right text-xs font-black tabular-nums">{Number(val).toLocaleString()}</td>
-                            <td className="px-5 py-3 text-right">
+                            <td className="px-5 py-3">
+                              <div className="flex items-center justify-end gap-2 flex-wrap">
+                              {/* Issue the QR gate pass here (pushed to the Factory gate) BEFORE delivering. */}
+                              <NipponGatePassButton order={q} clientName={cli?.name || (q as { clientName?: string }).clientName || ''} onIssued={() => refreshData()} size="sm" />
                               <button
                                 onClick={async () => { if (await confirmModal(`Issue goods for ${q.orderNo || q.id}? On-hand stock will be reduced and the order marked Delivered.`)) issueOrder(q.id); }}
                                 className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-black uppercase text-[10px] tracking-widest inline-flex items-center gap-1.5 transition-all">
                                 <PackageCheck size={13}/> Issue / Deliver
                               </button>
+                              </div>
                             </td>
                           </tr>
                         );
