@@ -11,6 +11,7 @@ import {
 import { useNipponQuotations } from './useNipponQuotations';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { recordAdvanceReceipt } from './nipponAdvanceReceiptService';
+import NipponReceiptsList from './NipponReceiptsList';
 import { NipponReceiptPrint } from '@/modules/nippon/prints/NipponReceiptPrint';
 import { NipponAdvanceReceipt } from '@/modules/production/types/production';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
@@ -75,7 +76,7 @@ const NipponQuotationManager: React.FC = () => {
   // docTab in the URL (?doc=) so Back / refresh / deep-link work at this level too
   // — the parent Sales tab uses ?tab=, so a distinct key avoids any collision.
   const [docParams, setDocParams] = useSearchParams();
-  const DOC_TABS = ['quotations', 'queries', 'orders', 'issue'] as const;
+  const DOC_TABS = ['quotations', 'queries', 'orders', 'issue', 'receipts'] as const;
   type DocTab = typeof DOC_TABS[number];
   const docRaw = docParams.get('doc');
   const docTab: DocTab =
@@ -320,14 +321,16 @@ const NipponQuotationManager: React.FC = () => {
       {view === 'list' ? (
         <>
         <div className="no-print flex items-center gap-2">
-          {([['quotations', 'Quotations'], ['queries', 'Customer Queries'], ['orders', 'Sales Orders'], ['issue', 'Store Issue']] as const).map(([key, label]) => {
+          {([['quotations', 'Quotations'], ['queries', 'Customer Queries'], ['orders', 'Sales Orders'], ['issue', 'Store Issue'], ['receipts', 'Receipts']] as const).map(([key, label]) => {
             const count =
               key === 'issue' ? quotations.filter(q => q.status === 'Approved' && !(q as { issuedAt?: string }).issuedAt).length
               : key === 'orders' ? quotations.filter(isOrderStatus).length
               : key === 'queries' ? quotations.filter(isCustomerQuery).length
+              : key === 'receipts' ? quotations.reduce((s, q) => s + (q.advanceReceipts?.length || 0), 0)
               : quotations.filter(q => !isOrderStatus(q) && !q.customerPlaced).length;
             const activeCls = key === 'issue' ? 'bg-amber-600 text-white border-amber-600 shadow'
               : key === 'queries' ? 'bg-teal-600 text-white border-teal-600 shadow'
+              : key === 'receipts' ? 'bg-emerald-600 text-white border-emerald-600 shadow'
               : 'bg-blue-600 text-white border-blue-600 shadow';
             return (
               <button key={key} onClick={() => setDocTab(key)}
@@ -338,7 +341,9 @@ const NipponQuotationManager: React.FC = () => {
             );
           })}
         </div>
-        {docTab === 'issue' ? (
+        {docTab === 'receipts' ? (
+          <NipponReceiptsList />
+        ) : docTab === 'issue' ? (
           (() => {
             const pending = quotations.filter(q => q.status === 'Approved' && !(q as { issuedAt?: string }).issuedAt);
             return (

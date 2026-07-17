@@ -118,3 +118,76 @@ export async function recordAdvanceReceipt(
     return { error: err instanceof Error ? err.message : 'Unknown error' };
   }
 }
+
+/**
+ * Reverse / refund a posted advance receipt. Receipts are immutable, so a mistake
+ * or a cancelled order is corrected with a REVERSAL (never an edit/delete):
+ *      Dr  Client Advance      (unwinds the liability)
+ *      Cr  Cash / Bank         (money paid back / never really received)
+ * A negative-amount reversal row is appended and the advance held (receivedAmount)
+ * is reduced. If nothing is left held, paymentConfirmed is cleared.
+ */
+export async function reverseAdvanceReceipt(params: {
+  order: Quotation; company: Company; clientName: string;
+  receipt: NipponAdvanceReceipt; by: string; reason?: string;
+}): Promise<{ data?: { order: Quotation; glPosted: boolean }; error?: string }> {
+  const { order, company, clientName, receipt, by, reason } = params;
+  if (!order?.id) return { error: 'Order is missing.' };
+  if (!receipt || receipt.amount <= 0) return { error: 'Only a positive receipt can be reversed.' };
+
+  const alreadyReversed = (order.advanceReceipts || []).some(
+    r => (r.reference || '').startsWith(`Reversal of ${receipt.receiptNo}`),
+  );
+  if (alreadyReversed) return { error: 'This receipt has already been reversed.' };
+
+  try {
+    const seq = await allocateSerial(company, 'RCPT', new Date().getFullYear(), 1);
+    const revNo = buildReceiptNo(seq);
+    const dateIso = new Date().toISOString();
+
+    let glTxId: string | undefined;
+    let glPosted = false;
+    if (isFinanceGLEnabled(company)) {
+      const cashAcc = resolveCashAccount(company, receipt.method);
+      const advAcc = resolveClientAdvanceAccount(company, clientName);
+      glTxId = `GL-RCPTREV-${revNo}`;
+      const tx: LedgerTransaction = {
+        id: glTxId, company, docType: 'KR',
+        docDate: dateIso.slice(0, 10), date: dateIso.slice(0, 10),
+        description: `Advance reversal ${revNo} of ${receipt.receiptNo} — ${clientName} — PKR ${receipt.amount.toLocaleString('en-PK')}${reason ? ' · ' + reason : ''}`,
+        referenceId: revNo, status: 'Posted', reqId: order.id, createdBy: 'system-auto',
+        details: [
+          { accountId: advAcc.id, debit: receipt.amount, credit: 0, text: `Advance reversed — ${clientName}` },
+          { accountId: cashAcc.id, debit: 0, credit: receipt.amount, text: `Refund via ${receipt.method}${reason ? ' · ' + reason : ''}` },
+        ],
+      } as unknown as LedgerTransaction;
+      FinanceService.assertGLBalance(tx);
+      FinanceService.saveLedger([...FinanceService.getLedger(), tx]);
+      glPosted = true;
+    }
+
+    const reversal: NipponAdvanceReceipt = {
+      receiptNo: revNo, amount: -receipt.amount, method: receipt.method,
+      reference: `Reversal of ${receipt.receiptNo}${reason ? ' · ' + reason : ''}`,
+      date: dateIso, by, glTxId,
+    };
+    const newReceived = Math.max(0, (Number(order.receivedAmount) || 0) - receipt.amount);
+    const updated: Quotation = {
+      ...order,
+      advanceReceipts: [...(order.advanceReceipts || []), reversal],
+      receivedAmount: newReceived,
+      paymentConfirmed: newReceived > 0 ? order.paymentConfirmed : false,
+    };
+    const res = await AsyncSalesService.saveQuotations([updated]);
+    if (res?.error) return { error: `Reversal not saved — ${res.error}` };
+
+    Logger.action('SALES', 'NIPPON_ADVANCE_REVERSED',
+      `${revNo} reverses ${receipt.receiptNo} — ${clientName} — PKR ${receipt.amount}`,
+      { referenceId: revNo, amount: receipt.amount, extra: { company, glPosted } });
+
+    return { data: { order: updated, glPosted } };
+  } catch (err) {
+    Logger.error('NipponAdvanceReceipt', 'reverseAdvanceReceipt failed', err);
+    return { error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}

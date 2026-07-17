@@ -637,6 +637,11 @@ export const useNipponQuotations = () => {
     if (['Invoiced', 'Partial Payment', 'Paid'].includes(order.status as string)) {
       return toast.error('This order is already invoiced/paid — reverse it with a Credit Note, not Void.');
     }
+    // A held customer advance is a liability — it must be refunded (receipt reversed)
+    // before the order can be voided, or the advance would sit orphaned on the books.
+    if ((Number(order.receivedAmount) || 0) > 0) {
+      return toast.error(`This order holds PKR ${(Number(order.receivedAmount) || 0).toLocaleString()} customer advance — reverse/refund the receipt(s) in the Receipts tab first, then void.`, { duration: 9000 });
+    }
     if (!confirm(`Void Sales Order ${order.orderNo || id}? The stock it consumed will be returned to inventory.`)) return;
     try {
       // Persist the Void to the cloud FIRST, then return stock only on a confirmed
