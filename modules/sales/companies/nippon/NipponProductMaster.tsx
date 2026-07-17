@@ -10,9 +10,10 @@ import {
   Plus, Search, Edit2, Trash2, Package, Filter, Download,
   FileJson, UploadCloud, Printer, Layers,
   Image as ImageIcon, Wrench, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { bumpImageCacheToken } from '@/modules/shared/utils/imageCache';
 import { findSimilarProducts, similarityMessage } from '@/modules/shared/utils/productSimilarity';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import NipponProductForm from '@/modules/nippon/components/NipponProductForm';
@@ -895,6 +896,11 @@ const NipponProductMaster: React.FC = () => {
                          {[
                            { label: 'Backup (JSON)',          icon: FileJson,        on: handleExportJson },
                            { label: 'Export by Category',     icon: Layers,          on: handleExportCategoryWise },
+                           // After replacing a picture in the product-images bucket, the URL is
+                           // unchanged so browsers keep the OLD one. Bump the cache token → every
+                           // product image re-fetches fresh (then caches again). Refresh so the
+                           // new token applies immediately in this view.
+                           { label: 'Refresh Images (after re-upload)', icon: RefreshCw, on: () => { bumpImageCacheToken(); refreshData(); toast.success('Product images refreshed — new pictures will now load.'); } },
                          ].map(({ label, icon: Icon, on }) => (
                            <button key={label} onClick={() => { setShowTools(false); on(); }} className="w-full flex items-center gap-2.5 px-4 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50 transition-all">
                                <Icon size={14} className="text-slate-400"/> {label}

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Package } from 'lucide-react';
+import { withImageCacheBust } from '@/modules/shared/utils/imageCache';
 
 const SUPA = (import.meta as any).env?.VITE_SUPABASE_URL || '';
 
@@ -29,7 +30,7 @@ export const ProductImage: React.FC<Props> = ({ id, code, url, alt, className, i
     bucketImageUrl(id, 'jpg'),
     nipponImageUrl(code, 'png'),
     nipponImageUrl(code, 'jpg'),
-  ].filter(Boolean))];
+  ].filter(Boolean))].map(withImageCacheBust);
   const [idx, setIdx] = useState(0);
   if (idx >= candidates.length) return <Package size={iconSize} className="text-slate-300" />;
   return (

@@ -680,8 +680,17 @@ const App: React.FC = () => {
         const currentHash = window.location.hash;
         const isRoot = currentHash === '' || currentHash === '#' || currentHash === '#/';
         const target = ROLE_DEFAULT_ROUTE[user.role];
-        if (isRoot && target && target !== '/') {
-          window.location.hash = `#${target}`;
+        // Escape a STALE / BLOCKED route on login. A previous session can leave the
+        // hash pointing at a module this user can't open (e.g. a customer landing on
+        // #/sales) — without this they hit the Access-Denied wall on first paint and
+        // have to click a nav item to get in. Redirect them to their landing page.
+        const hashPath = currentHash.replace(/^#/, '').split('?')[0] || '/';
+        const mKey = pathToModuleKey(hashPath);
+        const routeBlocked = !FULL_ACCESS_ROLES.includes(user.role)
+          && !!mKey && !(user.allowedModules || []).includes(mKey);
+        const landing = (target && target !== '/') ? `#${target}` : '#/';
+        if ((isRoot && target && target !== '/') || routeBlocked) {
+          window.location.hash = landing;
         }
       } catch { /* noop */ }
 
