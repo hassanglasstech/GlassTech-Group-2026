@@ -1,0 +1,78 @@
+/* Gate Pass D — Urdu (Noori Nastaliq) driver slip.
+ *
+ * Self-hosted Nastaliq web font so the slip renders true Urdu calligraphy on ANY
+ * phone (no OS dependency). Drop the woff2 at public/fonts/ and it activates; until
+ * then the slip still renders Urdu in whatever Urdu font the device has (Naskh
+ * fallback) — never blank. Get a free license build of Jameel Noori Nastaleeq /
+ * Alvi Nastaleeq and place it at public/fonts/JameelNooriNastaleeq.woff2. */
+@font-face {
+  font-family: 'Jameel Noori Nastaleeq';
+  src: url('/fonts/JameelNooriNastaleeq.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+.urdu-slip {
+  direction: rtl;
+  text-align: right;
+  font-family: 'Jameel Noori Nastaleeq', 'Noto Nastaliq Urdu', 'Urdu Typesetting', 'Nafees Nastaleeq', serif;
+  line-height: 2.4;
+  color: #0f172a;
+}
+
+.urdu-slip .us-title {
+  font-size: 2rem;
+  line-height: 2.2;
+  text-align: center;
+  border-bottom: 3px double #1e293b;
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.urdu-slip .us-row {
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 0.75rem;
+  align-items: baseline;
+  border-bottom: 1px dashed #cbd5e1;
+  padding: 0.35rem 0;
+}
+
+.urdu-slip .us-label {
+  font-size: 1.15rem;
+  color: #475569;
+  min-width: 6.5rem;
+}
+
+.urdu-slip .us-value {
+  font-size: 1.45rem;
+  font-weight: 600;
+  flex: 1;
+}
+
+.urdu-slip .us-items {
+  font-size: 1.25rem;
+}
+
+.urdu-slip .us-instructions {
+  background: #fef3c7;
+  border: 2px solid #f59e0b;
+  border-radius: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 1.35rem;
+  margin-top: 0.5rem;
+}
+
+.urdu-slip .us-phone {
+  direction: ltr;
+  unicode-bidi: embed;
+  display: inline-block;
+  font-family: system-ui, sans-serif;
+  font-weight: 700;
+}
+
+@media print {
+  .no-print { display: none !important; }
+  .urdu-slip { color: #000; }
+}

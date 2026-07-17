@@ -26,8 +26,9 @@ import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import { issueNipponOrder, isPendingIssue } from './nipponFulfilmentService';
 import { pushCrossCompanyNotif } from '@/modules/shared/services/crossCompanyNotifService';
 import { notifyBuyerOfStatus, bookBuyerProjectCost } from '@/modules/sales/services/intercompanyOrderService';
+import UrduDriverSlip from '@/modules/shared/components/UrduDriverSlip';
 import { toast } from 'sonner';
-import { PackageCheck, Loader2, RefreshCw, ClipboardList, ArrowLeft, MapPin, Save, Zap, Info, Truck, QrCode, X } from 'lucide-react';
+import { PackageCheck, Loader2, RefreshCw, ClipboardList, ArrowLeft, MapPin, Save, Zap, Info, Truck, QrCode, X, FileText } from 'lucide-react';
 
 const StoreIssueScreen: React.FC = () => {
   const stampUser = useAuthStore(s => s.profile?.fullName || s.profile?.email || s.user?.email || 'store');
@@ -47,6 +48,7 @@ const StoreIssueScreen: React.FC = () => {
   const [gpOrder, setGpOrder] = useState<Quotation | null>(null);
   const [gpForm, setGpForm] = useState({ vehicleNo: '', driverName: '', driverPhone: '', isReturnable: false, instructions: '' });
   const [gpIssuing, setGpIssuing] = useState(false);
+  const [urduSlipOrder, setUrduSlipOrder] = useState<Quotation | null>(null);   // Gate Pass D
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -257,6 +259,15 @@ const StoreIssueScreen: React.FC = () => {
     </div>
   );
 
+  // Urdu driver slip (Gate Pass D) — rendered in both views.
+  const urduSlipEl = urduSlipOrder && (
+    <UrduDriverSlip
+      order={urduSlipOrder}
+      clientName={clients.find(c => c.id === urduSlipOrder.clientId)?.name || (urduSlipOrder as { clientName?: string }).clientName || ''}
+      onClose={() => setUrduSlipOrder(null)}
+    />
+  );
+
   // ── Detail (pick) view ────────────────────────────────────────────────────
   if (detailOrder) {
     const cli = clients.find(c => c.id === detailOrder.clientId);
@@ -357,6 +368,12 @@ const StoreIssueScreen: React.FC = () => {
               className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${detailOrder.gatePass ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' : 'bg-slate-700 hover:bg-slate-800 text-white'}`}>
               <Truck size={13}/> {detailOrder.gatePass ? 'Gate Pass ✓' : 'Issue Gate Pass'}
             </button>
+            {detailOrder.gatePass && (
+              <button onClick={() => setUrduSlipOrder(detailOrder)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-amber-100 text-amber-800 hover:bg-amber-200">
+                <FileText size={13}/> اردو پرچی
+              </button>
+            )}
             <button onClick={() => doIssue(detailOrder)} disabled={busy === detailOrder.id || saving}
               className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm">
               {busy === detailOrder.id ? <Loader2 size={13} className="animate-spin"/> : <PackageCheck size={13}/>} Issue / Deliver
@@ -364,6 +381,7 @@ const StoreIssueScreen: React.FC = () => {
           </div>
         </div>
         {gpModalEl}
+        {urduSlipEl}
       </div>
     );
   }
@@ -418,6 +436,7 @@ const StoreIssueScreen: React.FC = () => {
         </div>
       )}
       {gpModalEl}
+      {urduSlipEl}
     </div>
   );
 };

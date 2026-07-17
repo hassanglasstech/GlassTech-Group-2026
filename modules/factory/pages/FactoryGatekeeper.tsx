@@ -16,12 +16,13 @@
  * through the same notification channel (a status push-back).
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CrossCompanyNotification, getCrossCompanyNotifs, markCrossCompanyNotifRead, pushCrossCompanyNotif,
 } from '@/modules/shared/services/crossCompanyNotifService';
 import { useAuthStore } from '@/modules/auth/authStore';
-import { ShieldCheck, LogIn, LogOut, RefreshCw, Loader2, Truck, Clock, CheckCircle2 } from 'lucide-react';
+import { supabase } from '@/src/services/supabaseClient';
+import { ShieldCheck, LogIn, LogOut, RefreshCw, Loader2, Truck, Clock, CheckCircle2, Mic, Square } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface GateLogEntry { inAt?: string; outAt?: string }
@@ -47,6 +48,9 @@ const FactoryGatekeeper: React.FC = () => {
   const [log, setLog] = useState<GateLog>(readLog());
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  // Gate Pass D — guard voice note (MediaRecorder → gatepass-voice bucket → office).
+  const [recId, setRecId] = useState<string | null>(null);
+  const recRef = useRef<{ mr: MediaRecorder; chunks: Blob[]; stream: MediaStream } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -85,6 +89,42 @@ const FactoryGatekeeper: React.FC = () => {
       toast.error(`Could not stamp out: ${err instanceof Error ? err.message : 'error'}`);
     } finally { setBusy(null); }
   };
+
+  // Gate Pass D — record a short voice note and push it to the issuing office.
+  // Built for a guard who won't type ("2 box kam hain", "plate number alag hai").
+  const uploadVoice = async (p: CrossCompanyNotification, blob: Blob, stream: MediaStream) => {
+    stream.getTracks().forEach(t => t.stop());
+    try {
+      const path = `${p.referenceId || p.id}-${new Date().getTime()}.webm`;
+      const { error } = await supabase.storage.from('gatepass-voice').upload(path, blob, { contentType: 'audio/webm', upsert: true });
+      if (error) { toast.error(`Voice upload failed — ask admin to create a public 'gatepass-voice' bucket. (${error.message})`, { duration: 9000 }); return; }
+      const { data } = supabase.storage.from('gatepass-voice').getPublicUrl(path);
+      await pushCrossCompanyNotif({
+        targetCompany: p.fromCompany, fromCompany: 'Factory',
+        title: `Gate voice note — ${p.title.replace(/^Gate Pass — /i, '')}`,
+        message: `${guard} recorded a voice note at the gate. Tap to play.`,
+        type: 'general', referenceId: p.referenceId, link: data.publicUrl,
+      });
+      toast.success('Voice note sent to the office.');
+    } catch (e) {
+      toast.error(`Voice note failed: ${e instanceof Error ? e.message : 'error'}`);
+    }
+  };
+  const startRec = async (p: CrossCompanyNotification) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+      mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+      mr.onstop = () => uploadVoice(p, new Blob(chunks, { type: 'audio/webm' }), stream);
+      recRef.current = { mr, chunks, stream };
+      mr.start();
+      setRecId(p.id);
+    } catch {
+      toast.error('Microphone unavailable or permission denied.');
+    }
+  };
+  const stopRec = () => { recRef.current?.mr.stop(); recRef.current = null; setRecId(null); };
 
   const active = useMemo(() => passes.filter(p => !log[p.id]?.outAt), [passes, log]);
 
@@ -135,6 +175,10 @@ const FactoryGatekeeper: React.FC = () => {
                       {busy === p.id ? <Loader2 size={18} className="animate-spin"/> : <LogOut size={18}/>} Gate Out
                     </button>
                   </div>
+                  <button onClick={() => (recId === p.id ? stopRec() : startRec(p))}
+                    className={`w-full mt-2 flex items-center justify-center gap-2 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest active:scale-95 transition-all ${recId === p.id ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                    {recId === p.id ? <><Square size={14}/> Stop &amp; send</> : <><Mic size={14}/> Voice note</>}
+                  </button>
                 </div>
               </div>
             );
