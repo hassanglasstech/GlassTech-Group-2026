@@ -1,12 +1,18 @@
 /* Gate Pass D — Urdu (Noori Nastaliq) driver slip.
  *
- * Self-hosted Nastaliq web font so the slip renders true Urdu calligraphy on ANY
- * phone (no OS dependency). Drop the woff2 at public/fonts/ and it activates; until
- * then the slip still renders Urdu in whatever Urdu font the device has (Naskh
- * fallback) — never blank. Get a free license build of Jameel Noori Nastaleeq /
- * Alvi Nastaleeq and place it at public/fonts/JameelNooriNastaleeq.woff2. */
+ * The slip ships with a SELF-HOSTED Nastaliq web font (Noto Nastaliq Urdu, SIL OFL
+ * — free to embed) so it renders true Urdu calligraphy on ANY device with zero OS
+ * dependency. System Nastaliq fonts (Urdu Typesetting on Windows, Noto on Android)
+ * and an optional Jameel Noori Nastaleeq override follow as fallbacks. */
 @font-face {
-  font-family: 'Jameel Noori Nastaleeq';
+  font-family: 'GT Nastaliq';                              /* self-hosted — always available */
+  src: url('/fonts/NotoNastaliqUrdu.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'GT Nastaliq';                              /* optional founder override, if present */
   src: url('/fonts/JameelNooriNastaleeq.woff2') format('woff2');
   font-weight: normal;
   font-style: normal;
@@ -16,7 +22,7 @@
 .urdu-slip {
   direction: rtl;
   text-align: right;
-  font-family: 'Jameel Noori Nastaleeq', 'Noto Nastaliq Urdu', 'Urdu Typesetting', 'Nafees Nastaleeq', serif;
+  font-family: 'GT Nastaliq', 'Noto Nastaliq Urdu', 'Urdu Typesetting', 'Jameel Noori Nastaleeq', serif;
   line-height: 2.4;
   color: #0f172a;
 }
