@@ -25,6 +25,7 @@ import { getNicknames, setNickname, NicknameMap } from './customerNicknames';
 import { CustomerStatementModal } from '@/modules/finance/components/CustomerStatementModal';
 import { NipponDocPreview } from '@/modules/nippon/prints/NipponDocPreview';
 import { AlertService } from '@/modules/shared/services/alertService';
+import { BrandingService } from '@/modules/shared/services/brandingService';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 import { toast } from 'sonner';
 import { Search, ShoppingCart, Plus, Minus, Trash2, Send, Tag, Package, Loader2, History, Store, BadgeCheck, FileText, Truck, Eye, CheckCircle2, Clock, X, Download, Upload } from 'lucide-react';
@@ -54,6 +55,8 @@ const CustomerPortal: React.FC = () => {
   const [proofView, setProofView] = useState<string | null>(null);         // payment-proof lightbox
   const [payingId, setPayingId] = useState<string | null>(null);           // upload in progress
   const [payAmount, setPayAmount] = useState<string>('');                  // customer's claimed amount
+  const [payRef, setPayRef] = useState<string>('');                        // customer's bank transfer reference
+  const nipponBank = useMemo(() => { try { return BrandingService.getCachedBranding('Nippon'); } catch { return null; } }, []);
 
   // Live: when the Nippon desk quotes / approves / dispatches an order, the
   // customer's list updates without a manual refresh (same realtime bus the
@@ -187,7 +190,7 @@ const CustomerPortal: React.FC = () => {
       const updated: Quotation = { ...order, accepted: true, acceptedAt: new Date().toISOString() };
       const res = await AsyncSalesService.saveQuotations([updated]);
       if (res?.error) { toast.error(`Not saved — ${res.error}`, { duration: 8000 }); return; }
-      toast.success('Quotation accepted. Ab payment kar ke screenshot upload karein.');
+      toast.success('Quotation accepted. Please pay to our bank account, then submit the amount & transfer reference below.');
       setDetailOrder(updated);
       await load();
     } catch (err) {
@@ -201,7 +204,7 @@ const CustomerPortal: React.FC = () => {
     if (!file.type.startsWith('image/')) { toast.error('Please upload an image (screenshot).'); return; }
     if (file.size > 5 * 1024 * 1024) { toast.error('Screenshot must be under 5 MB.'); return; }
     const amt = Number(payAmount) || Number(order.paymentClaimAmount) || 0;
-    if (amt <= 0) { toast.error('Pehle payment amount (PKR) enter karein.'); return; }
+    if (amt <= 0) { toast.error('Please enter the amount you paid (PKR).'); return; }
     setPayingId(order.id);
     try {
       const dataUri = await new Promise<string>((resolve, reject) => {
@@ -210,7 +213,8 @@ const CustomerPortal: React.FC = () => {
         r.onerror = () => reject(new Error('read failed'));
         r.readAsDataURL(file);
       });
-      const updated: Quotation = { ...order, paymentProof: dataUri, paymentClaimAmount: amt, paymentSubmittedAt: new Date().toISOString() };
+      const ref = payRef.trim();
+      const updated: Quotation = { ...order, paymentProof: dataUri, paymentClaimAmount: amt, paymentReference: ref || undefined, paymentSubmittedAt: new Date().toISOString() };
       const res = await AsyncSalesService.saveQuotations([updated]);
       if (res?.error) { toast.error(`Payment proof not sent — ${res.error}`, { duration: 8000 }); return; }
       // Best-effort alert to the Nippon office (RLS may block a customer insert → silent).
@@ -462,7 +466,7 @@ const CustomerPortal: React.FC = () => {
                     <div className="text-[10px] font-black uppercase text-amber-700 tracking-widest flex items-center gap-1.5"><FileText size={13}/> Accept &amp; Pay</div>
                     {!o.accepted ? (
                       <div className="space-y-2">
-                        <div className="text-xs font-bold text-amber-800">Quotation PDF review karein, phir accept karein.</div>
+                        <div className="text-xs font-bold text-amber-800">Review the quotation PDF, then accept to proceed.</div>
                         <button onClick={() => acceptQuotation(o)} className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-black uppercase tracking-widest">
                           <CheckCircle2 size={13} /> Accept Quotation
                         </button>
@@ -488,7 +492,7 @@ const CustomerPortal: React.FC = () => {
                           </div>
                         ) : o.paymentProof ? (
                           <div className="space-y-1.5">
-                            <div className="text-xs font-bold text-amber-800">Payment submitted{o.paymentClaimAmount ? ` · PKR ${Number(o.paymentClaimAmount).toLocaleString()}` : ''}{o.paymentSubmittedAt ? ` · ${fmtDT(o.paymentSubmittedAt)}` : ''} — awaiting Nippon confirmation.</div>
+                            <div className="text-xs font-bold text-amber-800">Payment submitted{o.paymentClaimAmount ? ` · PKR ${Number(o.paymentClaimAmount).toLocaleString()}` : ''}{o.paymentReference ? ` · Ref: ${o.paymentReference}` : ''}{o.paymentSubmittedAt ? ` · ${fmtDT(o.paymentSubmittedAt)}` : ''} — awaiting Nippon confirmation.</div>
                             <div className="flex items-center gap-3">
                               <button onClick={() => setProofView(o.paymentProof || null)} className="text-[10px] font-black uppercase text-blue-600 hover:text-blue-800">View</button>
                               <label className="text-[10px] font-black uppercase text-slate-500 hover:text-slate-700 cursor-pointer">
@@ -499,15 +503,29 @@ const CustomerPortal: React.FC = () => {
                           </div>
                         ) : (
                           <div className="space-y-2">
-                            <div className="text-xs font-bold text-amber-800">Payment amount enter karein + screenshot upload karein. <span className="text-slate-400 font-bold">(Order total: Rs {val.toLocaleString()})</span></div>
+                            <div className="text-xs font-bold text-amber-800">Pay the order total to our bank account, then enter the amount &amp; transfer reference and attach your deposit slip. <span className="text-slate-400 font-bold">(Order total: Rs {val.toLocaleString()})</span></div>
+                            {nipponBank && (nipponBank.bankName || '').trim() && (
+                              <div className="bg-white border border-amber-200 rounded-lg p-2.5 text-[11px] font-bold text-slate-600 leading-relaxed">
+                                <div className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-0.5">Pay to</div>
+                                {[
+                                  nipponBank.bankAccountTitle && `Title: ${nipponBank.bankAccountTitle}`,
+                                  nipponBank.bankName && `Bank: ${nipponBank.bankName}`,
+                                  nipponBank.bankAccountNo && `A/C: ${nipponBank.bankAccountNo}`,
+                                  nipponBank.bankIban && `IBAN: ${nipponBank.bankIban}`,
+                                ].filter(Boolean).map((line, i) => <div key={i}>{line}</div>)}
+                              </div>
+                            )}
                             <div className="flex items-center gap-2 flex-wrap">
-                              <input type="number" min={0} value={payAmount} placeholder="Amount (PKR)"
-                                onChange={e => setPayAmount(e.target.value)} className="sap-input w-40 text-xs font-black" />
+                              <input type="number" min={0} value={payAmount} placeholder="Amount paid (PKR)"
+                                onChange={e => setPayAmount(e.target.value)} className="sap-input w-36 text-xs font-black" />
+                              <input type="text" value={payRef} placeholder="Bank transfer ref / Txn ID"
+                                onChange={e => setPayRef(e.target.value)} className="sap-input w-52 text-xs font-bold" />
                               <label className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest cursor-pointer ${payingId === o.id ? 'bg-emerald-300 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}>
-                                {payingId === o.id ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} {payingId === o.id ? 'Uploading…' : 'Upload Screenshot & Submit'}
+                                {payingId === o.id ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} {payingId === o.id ? 'Sending…' : 'Submit Payment'}
                                 <input type="file" accept="image/*" className="hidden" disabled={payingId === o.id} onChange={e => e.target.files?.[0] && submitPayment(o, e.target.files[0])} />
                               </label>
                             </div>
+                            <div className="text-[10px] text-slate-400 font-bold">Deposit slip / screenshot required to submit.</div>
                           </div>
                         )}
                       </>

@@ -4,6 +4,8 @@ import { X, Download, Printer, Loader2 } from 'lucide-react';
 import { exportElementToPdf } from '../../shared/utils/pdfExport';
 import { Quotation, Client } from '../../shared/types';
 import { NipponAdvanceReceipt } from '../../production/types/production';
+import { getNipponCompanyInfo } from '../constants/nipponCompanyInfo';
+import { NipponBankFooter } from './NipponLetterhead';
 import { toast } from 'sonner';
 
 interface Props {
@@ -27,6 +29,7 @@ export const NipponReceiptPrint: React.FC<Props> = ({ receipt, order, clients, p
   const client = clients.find(c => c.id === order.clientId);
   const clientName = client?.name || (order as { clientName?: string }).clientName || '—';
   const hd = HEADER[printType] || HEADER.General;
+  const info = getNipponCompanyInfo();
   const docName = `Receipt-${receipt.receiptNo}`;
   const dateStr = new Date(receipt.date).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -64,6 +67,13 @@ export const NipponReceiptPrint: React.FC<Props> = ({ receipt, order, clients, p
           <div className="text-center border-b-2 border-slate-800 pb-3 mb-4">
             <div className="text-2xl font-black tracking-tight text-slate-900">{hd.title}</div>
             <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-0.5">{hd.sub}</div>
+            {info.address && <div className="text-[9px] font-bold text-slate-600 mt-1">{info.address}</div>}
+            {[info.phone && `Tel: ${info.phone}`, info.email].filter(Boolean).length > 0 && (
+              <div className="text-[9px] font-bold text-slate-600">{[info.phone && `Tel: ${info.phone}`, info.email].filter(Boolean).join('   ·   ')}</div>
+            )}
+            {(info.ntn || info.strn) && (
+              <div className="text-[9px] font-bold text-slate-600">{[info.ntn && `NTN: ${info.ntn}`, info.strn && `STRN: ${info.strn}`].filter(Boolean).join('   ·   ')}</div>
+            )}
           </div>
           <div className="text-center mb-4">
             <span className="inline-block text-sm font-black uppercase tracking-[0.2em] text-slate-800 border border-slate-300 rounded px-4 py-1">Payment Receipt</span>
@@ -88,6 +98,8 @@ export const NipponReceiptPrint: React.FC<Props> = ({ receipt, order, clients, p
             <span className="text-[11px] font-black uppercase tracking-widest">Amount Received</span>
             <span className="text-xl font-black tabular-nums">PKR {Number(receipt.amount).toLocaleString('en-PK')}</span>
           </div>
+
+          <NipponBankFooter />
 
           {/* Footer */}
           <div className="flex items-end justify-between mt-10">

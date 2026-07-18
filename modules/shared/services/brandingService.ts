@@ -37,7 +37,9 @@ export interface CompanyBranding {
   ntn:                  string;
   strn:                 string;
   cnic:                 string;
-  logoDataUrl:          string;            // base64 PNG/SVG (cap 150 KB)
+  logoDataUrl:          string;            // base64 PNG/SVG (cap 150 KB) — own/General
+  logoGlasstechDataUrl: string;            // header logo for the "Glasstech" print variant
+  logoKinlongDataUrl:   string;            // header logo for the "KinLong" print variant
   signatureBlock:       string;            // multi-line text
   bankName:             string;
   bankBranch:           string;
@@ -73,6 +75,8 @@ const _empty = (company: string): CompanyBranding => ({
   strn:                 '',
   cnic:                 '',
   logoDataUrl:          '',
+  logoGlasstechDataUrl: '',
+  logoKinlongDataUrl:   '',
   signatureBlock:       'Authorised Signatory',
   bankName:             '',
   bankBranch:           '',
@@ -106,6 +110,8 @@ const _fromRow = (r: any): CompanyBranding => ({
   strn:                 r.strn                   || '',
   cnic:                 r.cnic                   || '',
   logoDataUrl:          r.logo_data_url          || '',
+  logoGlasstechDataUrl: r.logo_glasstech_data_url || '',
+  logoKinlongDataUrl:   r.logo_kinlong_data_url   || '',
   signatureBlock:       r.signature_block        || 'Authorised Signatory',
   bankName:             r.bank_name              || '',
   bankBranch:           r.bank_branch            || '',
@@ -139,6 +145,8 @@ const _toRow = (b: CompanyBranding): any => ({
   strn:                     b.strn                  || null,
   cnic:                     b.cnic                  || null,
   logo_data_url:            b.logoDataUrl           || null,
+  logo_glasstech_data_url:  b.logoGlasstechDataUrl  || null,
+  logo_kinlong_data_url:    b.logoKinlongDataUrl    || null,
   signature_block:          b.signatureBlock        || null,
   bank_name:                b.bankName              || null,
   bank_branch:              b.bankBranch            || null,

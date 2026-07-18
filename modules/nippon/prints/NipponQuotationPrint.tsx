@@ -2,6 +2,7 @@
 import React, { useMemo } from 'react';
 import { Quotation, Product } from '../../shared/types';
 import { ProductImage } from '../../shared/components/ProductImage';
+import { NipponLetterhead, NipponBankFooter } from './NipponLetterhead';
 
 interface Props {
     quote: Quotation;
@@ -49,54 +50,10 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
         return stats;
     }, [items]);
 
-    const renderHeader = () => {
-        if (printType === 'KinLong') {
-            return (
-                <div className="flex justify-between items-center mb-2">
-                    <div>
-                        <h2 className="text-2xl font-bold tracking-tighter text-slate-900">NIPPON HARDWARE</h2>
-                        <p className="text-[8px] font-bold text-slate-800">Contact: 0300-8716303</p>
-                    </div>
-                    <div className="text-right">
-                        <svg viewBox="0 0 340 116" width="182" height="62" preserveAspectRatio="xMidYMid meet" className="inline-block" xmlns="http://www.w3.org/2000/svg">
-                          <text x="170" y="42" textAnchor="middle" fontFamily="Arial, Helvetica, 'Microsoft YaHei','PingFang SC','Noto Sans SC','SimHei', sans-serif" fontSize="38" fontWeight="900" fill="#0055A5">KIN LONG 坚朗</text>
-                          <text x="170" y="78" textAnchor="middle" fontFamily="Georgia,'Times New Roman',serif" fontSize="25" fontStyle="italic" fontWeight="700" fill="#111827">For Better Living</text>
-                          <text x="170" y="106" textAnchor="middle" fontFamily="'Microsoft YaHei','PingFang SC','Noto Sans SC','SimHei', sans-serif" fontSize="17" fill="#111827" letterSpacing="2">一切为了改善人类居住环境</text>
-                        </svg>
-                        <p className="text-[8px] font-bold uppercase tracking-widest text-slate-500 mt-1">Authorized Partner</p>
-                    </div>
-                </div>
-            );
-        }
-
-        if (printType === 'General') {
-            return (
-                <div className="flex justify-between items-start mb-2">
-                    <div>
-                        <h2 className="text-2xl font-bold tracking-tighter text-slate-900">NIPPON HARDWARE</h2>
-                        <p className="text-[8px] font-bold text-slate-800">Contact: 0300-8716303</p>
-                    </div>
-                    <div className="text-right">
-                        {/* Empty Right Side */}
-                    </div>
-                </div>
-            );
-        }
-
-        // Default: Glasstech
-        return (
-            <div className="flex justify-between items-start mb-2">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tighter text-slate-900">GlassTech</h1>
-                    <p className="text-[8px] font-bold uppercase tracking-widest text-slate-500">Nippon Hardware Division</p>
-                </div>
-                <div className="text-right">
-                    <h2 className="text-2xl font-bold tracking-tighter text-slate-900">NIPPON HARDWARE</h2>
-                    <p className="text-[8px] font-bold text-slate-800">Contact: 0300-8716303</p>
-                </div>
-            </div>
-        );
-    };
+    // Header is the shared, branded <NipponLetterhead> (rendered in the JSX
+    // below) — one letterhead across quote / SO / receipt, fed by Admin →
+    // Branding Settings (logo, address, email, NTN/STRN). Replaces the old
+    // text-only header + hand-typed KinLong SVG.
 
     return (
         <div className="print-only bg-white text-black p-0 font-sans leading-tight shadow-2xl print:shadow-none mx-auto print:m-0" style={{ width: '210mm', minHeight: '297mm' }}>
@@ -171,8 +128,8 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
             `}</style>
             
             <div className="print-container p-[10mm]">
-                {/* Header Section */}
-                {renderHeader()}
+                {/* Header Section — shared branded letterhead */}
+                <NipponLetterhead printType={printType} />
 
                 {/* Pill Title - Compact */}
                 <div className="flex justify-center my-2">
@@ -337,7 +294,7 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                     <div className="flex justify-between items-start">
                         <div className="w-[60%]">
                             <h4 className="text-[8px] font-black uppercase tracking-widest text-slate-900 mb-1 border-b border-slate-100 pb-0.5">Protocol & Terms</h4>
-                            <ul className="text-[7.5px] space-y-0.5 text-slate-600 font-bold leading-tight">
+                            <ul className="text-[9px] space-y-0.5 text-slate-600 font-bold leading-tight">
                                 <li className="flex items-start space-x-1">
                                     <span className="text-slate-300">•</span>
                                     <span>100% Cash Deposit before Delivery.</span>
@@ -375,8 +332,10 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                         </div>
                     </div>
 
+                    <NipponBankFooter />
+
                     <div className="mt-6 text-center">
-                        <p className="text-[7px] font-black uppercase tracking-[0.2em] text-slate-300 italic">
+                        <p className="text-[8.5px] font-black uppercase tracking-[0.2em] text-slate-400 italic">
                             Computer generated document. No signature required.
                         </p>
                     </div>

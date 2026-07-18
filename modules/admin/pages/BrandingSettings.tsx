@@ -83,25 +83,27 @@ const BrandingSettings: React.FC = () => {
     setData({ ...data, [k]: v });
   };
 
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !data) return;
-    if (!/^image\/(png|jpeg|jpg|svg\+xml|webp)$/.test(file.type)) {
-      toast.error('Logo must be PNG / JPEG / SVG / WebP.');
-      return;
-    }
-    if (file.size > MAX_LOGO_BYTES) {
-      toast.error(`Logo too large (${Math.round(file.size / 1024)} KB). Max ${MAX_LOGO_BYTES / 1024} KB. Compress at tinypng.com or similar.`);
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const url = String(reader.result || '');
-      handleField('logoDataUrl', url);
-      toast.success(`Logo loaded (${Math.round(file.size / 1024)} KB). Click Save to persist.`);
+  const uploadLogoTo = (field: 'logoDataUrl' | 'logoGlasstechDataUrl' | 'logoKinlongDataUrl') =>
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file || !data) return;
+      if (!/^image\/(png|jpeg|jpg|svg\+xml|webp)$/.test(file.type)) {
+        toast.error('Logo must be PNG / JPEG / SVG / WebP.');
+        return;
+      }
+      if (file.size > MAX_LOGO_BYTES) {
+        toast.error(`Logo too large (${Math.round(file.size / 1024)} KB). Max ${MAX_LOGO_BYTES / 1024} KB. Compress at tinypng.com or similar.`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        handleField(field, String(reader.result || ''));
+        toast.success(`Logo loaded (${Math.round(file.size / 1024)} KB). Click Save to persist.`);
+      };
+      reader.readAsDataURL(file);
+      e.target.value = '';
     };
-    reader.readAsDataURL(file);
-  };
+  const handleLogoUpload = uploadLogoTo('logoDataUrl');
 
   const handleSave = async () => {
     if (!data) return;
@@ -207,6 +209,46 @@ const BrandingSettings: React.FC = () => {
               </div>
             </div>
           </Section>
+
+          {/* Dual header logos — Nippon prints under two brand headers */}
+          {data.company === 'Nippon' && (
+            <Section title="Header Logos — KinLong / GlassTech" icon={<ImageIcon size={14}/>}>
+              <p className="text-[11px] text-slate-500 font-bold mb-3">
+                Nippon prints under two brand headers. Upload each brand&apos;s logo — the quotation / sales-order / receipt
+                letterhead shows the matching one for the chosen print type (KinLong or GlassTech). The &quot;General&quot;
+                variant uses the main Logo above.
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                {([
+                  { field: 'logoKinlongDataUrl',   label: 'KinLong header logo' },
+                  { field: 'logoGlasstechDataUrl', label: 'GlassTech header logo' },
+                ] as const).map(({ field, label }) => (
+                  <div key={field} className="border border-slate-200 rounded-xl p-3">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">{label}</div>
+                    <div className="flex items-start gap-3">
+                      <div className="w-20 h-20 border-2 border-dashed border-slate-300 rounded-lg flex items-center justify-center bg-slate-50 shrink-0">
+                        {data[field]
+                          ? <img src={data[field]} alt={`${label} preview`} className="w-full h-full object-contain p-1"/>
+                          : <ImageIcon size={22} className="text-slate-300"/>}
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <label className="inline-flex items-center gap-2 bg-slate-900 text-white px-3 py-2 rounded-lg text-[11px] font-black uppercase hover:bg-slate-800 cursor-pointer">
+                          <Upload size={12}/> Upload
+                          <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={uploadLogoTo(field)} className="hidden"/>
+                        </label>
+                        {data[field] && (
+                          <button onClick={() => handleField(field, '')}
+                            className="block bg-rose-50 text-rose-700 border border-rose-200 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase hover:bg-rose-100">
+                            <X size={12} className="inline -mt-0.5 mr-1"/> Clear
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
 
           {/* Bank */}
           <Section title="Bank Details" icon={<Banknote size={14}/>}>

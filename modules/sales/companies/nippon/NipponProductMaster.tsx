@@ -10,7 +10,7 @@ import {
   Plus, Search, Edit2, Trash2, Package, Filter, Download,
   FileJson, UploadCloud, Printer, Layers,
   Image as ImageIcon, Wrench, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown,
-  ChevronLeft, ChevronRight, RefreshCw
+  ChevronLeft, ChevronRight, RefreshCw, ImageOff, MoreHorizontal, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { bumpImageCacheToken } from '@/modules/shared/utils/imageCache';
@@ -907,7 +907,7 @@ const NipponProductMaster: React.FC = () => {
                            </button>
                          ))}
                          <div className="my-1 border-t border-slate-100" />
-                         <div className="px-4 pt-1 pb-1 text-[9px] font-black uppercase tracking-widest text-rose-300">⚠ Admin · careful</div>
+                         <div className="px-4 pt-1 pb-1 text-[9px] font-black uppercase tracking-widest text-rose-300 flex items-center gap-1"><AlertTriangle size={10} /> Admin · careful</div>
                          {[
                            { label: 'Restore (JSON)',              icon: UploadCloud, on: () => jsonInputRef.current?.click(),   confirm: 'Restore products from a JSON backup? Existing products with the same code can be overwritten.' },
                            { label: 'Remove Duplicates',           icon: Wrench,      on: handleDedupe,                          confirm: 'Remove duplicate products? Duplicate rows will be permanently deleted.' },
@@ -967,7 +967,7 @@ const NipponProductMaster: React.FC = () => {
                onClick={() => setImageFilter('missing')}
                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1 ${imageFilter === 'missing' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-400'}`}
              >
-               ❌ {missingImgCount}
+               <ImageOff size={10} /> {missingImgCount}
              </button>
            </div>
            
@@ -1151,7 +1151,7 @@ const NipponProductMaster: React.FC = () => {
                                             <div className="mt-1">
                                                 <button onClick={() => handleSetOpeningBalance(p)} title="No stock-take yet — enter opening balance (stamped)"
                                                     className="text-[8px] font-black uppercase text-rose-600 bg-rose-50 border border-rose-200 rounded px-1.5 py-0.5 hover:bg-rose-100 transition-all">
-                                                    ⚠ OB pending · set
+                                                    <AlertTriangle size={9} className="inline-block align-[-1px] mr-0.5" /> OB pending · set
                                                 </button>
                                             </div>
                                         );
@@ -1161,7 +1161,7 @@ const NipponProductMaster: React.FC = () => {
                                     {/* Actions reveal on row hover (focus-within keeps them keyboard-reachable);
                                         a faint ⋯ hints they're there until you hover. */}
                                     <div className="relative flex items-center justify-end h-6">
-                                        <span className="text-slate-300 group-hover:opacity-0 transition-opacity select-none">⋯</span>
+                                        <span className="text-slate-300 group-hover:opacity-0 transition-opacity select-none flex items-center"><MoreHorizontal size={14} /></span>
                                         <div className="absolute right-0 flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                                             <button onClick={() => handleAddVariant(p)} title="Add colour/direction variant" className="p-1.5 text-slate-400 hover:text-amber-600 bg-white border border-slate-200 rounded transition-all"><Layers size={12}/></button>
                                             <button onClick={() => handleEdit(p)} title="Edit" className="p-1.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded transition-all"><Edit2 size={12}/></button>

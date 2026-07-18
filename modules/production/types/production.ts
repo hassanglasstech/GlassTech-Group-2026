@@ -213,6 +213,8 @@ export interface Quotation {
   paymentProof?: string;
   /** Amount the customer SAYS they paid (a CLAIM — the owner's receipt is the record). */
   paymentClaimAmount?: number;
+  /** Bank transfer reference / transaction id the customer entered with the claim. */
+  paymentReference?: string;
   /** Customer marked the order paid + uploaded proof (portal). */
   paymentSubmittedAt?: string;
   /** Office verified the payment actually arrived — unblocks approval. */
