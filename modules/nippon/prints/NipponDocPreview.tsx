@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Download, Printer, Loader2, Share2 } from 'lucide-react';
 import { NipponPrintTemplate } from './NipponPrintTemplate';
@@ -26,6 +26,32 @@ export const NipponDocPreview: React.FC<Props> = ({
 }) => {
   const sheetRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
+
+  // Preview-only A4 page guides. Measure the rendered sheet and mark where each
+  // A4 boundary falls (297mm expressed in the sheet's own px-per-mm), so the user
+  // can SEE how many pages the document prints to while scrolling. The markers are
+  // siblings of the sheet (never captured by html2canvas) and .no-print.
+  const [pageBreaks, setPageBreaks] = useState<number[]>([]);
+  const [pageCount, setPageCount] = useState(1);
+  useLayoutEffect(() => {
+    const el = sheetRef.current;
+    if (!el) return;
+    const measure = (): void => {
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      const pageH = (r.width * 297) / 210;                 // A4 height in the sheet's own px
+      const count = Math.max(1, Math.ceil(r.height / pageH - 0.02));
+      const lines: number[] = [];
+      for (let k = 1; k < count; k++) lines.push(Math.round(k * pageH));
+      setPageBreaks(lines);
+      setPageCount(count);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener('resize', measure);
+    return () => { ro.disconnect(); window.removeEventListener('resize', measure); };
+  }, [printingQuote]);
 
   const isSO = printMode === 'SalesOrder' || printingQuote.status === 'Approved';
   const docName = fileName || `${isSO ? 'SalesOrder' : 'Quotation'}-${printingQuote.orderNo || printingQuote.id}`;
@@ -111,14 +137,36 @@ export const NipponDocPreview: React.FC<Props> = ({
           on print (see .pdf-preview-scroll @media print) so only the sheet prints.
           The sheet is at natural A4 width; the PDF is generated from this node. */}
       <div className="pdf-preview-scroll fixed inset-0 z-[10000] overflow-auto pt-16 pb-6 px-2 sm:px-6">
-        <div ref={sheetRef} className="pdf-preview mx-auto w-fit bg-white shadow-2xl">
-          <NipponPrintTemplate
-            printingQuote={printingQuote}
-            clients={clients}
-            products={products}
-            printType={printType}
-            printMode={printMode}
-          />
+        <div className="relative mx-auto w-fit">
+          <div ref={sheetRef} className="pdf-preview w-fit bg-white shadow-2xl">
+            <NipponPrintTemplate
+              printingQuote={printingQuote}
+              clients={clients}
+              products={products}
+              printType={printType}
+              printMode={printMode}
+            />
+          </div>
+
+          {/* A4 page guides — PREVIEW ONLY. Siblings of the sheet, so html2canvas
+              (which captures sheetRef) never draws them into the PDF; .no-print
+              keeps them out of the browser print. Purely to show where pages split. */}
+          <div aria-hidden className="no-print pointer-events-none absolute inset-0">
+            {pageBreaks.map((top, i) => (
+              <div key={i} className="absolute inset-x-0 flex items-center gap-2" style={{ top }}>
+                <div className="flex-1 border-t-2 border-dashed border-blue-400/80" />
+                <span className="shrink-0 rounded-full bg-blue-600 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-white shadow">
+                  Page {i + 1} ends · Page {i + 2} ↓
+                </span>
+                <div className="flex-1 border-t-2 border-dashed border-blue-400/80" />
+              </div>
+            ))}
+          </div>
+
+          {/* Page-count badge */}
+          <div className="no-print pointer-events-none absolute -top-3 right-1 rounded-full bg-slate-900 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white shadow-lg">
+            A4 · {pageCount} page{pageCount > 1 ? 's' : ''}
+          </div>
         </div>
       </div>
     </>,

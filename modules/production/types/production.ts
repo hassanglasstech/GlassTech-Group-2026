@@ -153,6 +153,10 @@ export interface Quotation {
   serviceCharges: GlassServiceCharge[];
   discountPercent: number;
   discountAmount?: number;
+  /** Nippon — GST / sales-tax % applied on (gross − discount) for the printed
+   *  quotation / sales-order total. Rides in the quotations `data` jsonb
+   *  (zero-migration). 0 / undefined ⇒ no GST line is printed. */
+  taxPercent?: number;
   glassDiscountPercent: number;
   status: QuotationStatus;
   expiryDate?: string;        // YYYY-MM-DD — quotation valid until

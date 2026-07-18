@@ -28,7 +28,10 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
     const discountAmount = quote.discountAmount !== undefined && quote.discountAmount > 0
         ? quote.discountAmount
         : (subTotal * (quote.discountPercent || 0)) / 100;
-    const netAmount = subTotal - discountAmount;
+    const taxPercent = quote.taxPercent || 0;
+    const taxableBase = subTotal - discountAmount;
+    const taxAmount = Math.round((taxableBase * taxPercent) / 100);
+    const netAmount = taxableBase + taxAmount;
     const advanceAmount = netAmount * 1.0; // Nippon usually 100% cash per terms
 
     const displayId = quote.orderNo || quote.id;
@@ -294,23 +297,32 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                     })()}
                 </div>
 
-                {/* Totals — right-aligned, directly after the items */}
+                {/* Totals — right-aligned, values in ONE tabular column flush with the
+                    Amount column. Gross/Disc/GST readable; Net Payable is the emphasis
+                    line (solid rule above, accounting double-rule below). */}
                 <div className="mt-3 flex justify-end break-inside-avoid">
-                    <div className="w-[42%] space-y-1">
-                        <div className="flex justify-between text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
-                            <span>Gross:</span>
-                            <span>PKR {subTotal.toLocaleString()}</span>
+                    <div className="w-[48%] min-w-[62mm]">
+                        <div className="flex justify-between items-baseline py-[3px] text-[11px] font-bold text-slate-600">
+                            <span className="uppercase tracking-wide">Gross Amount</span>
+                            <span className="tabular-nums text-[12px] text-slate-900">PKR {subTotal.toLocaleString()}</span>
                         </div>
                         {discountAmount > 0 && (
-                            <div className="flex justify-between text-[9px] font-bold text-rose-600 uppercase tracking-tighter">
-                                <span>Disc {quote.discountPercent ? `${Number(quote.discountPercent.toFixed(2))}%` : ''}:</span>
-                                <span>- {discountAmount.toLocaleString()}</span>
+                            <div className="flex justify-between items-baseline py-[3px] text-[11px] font-bold text-rose-600">
+                                <span className="uppercase tracking-wide">Discount{quote.discountPercent ? ` (${Number(quote.discountPercent.toFixed(2))}%)` : ''}</span>
+                                <span className="tabular-nums text-[12px]">− {discountAmount.toLocaleString()}</span>
                             </div>
                         )}
-                        <div className="flex justify-between items-end pt-1 border-t border-slate-200">
-                            <span className="text-[10px] font-black uppercase text-slate-900 tracking-tighter">Net:</span>
-                            <span className="text-lg font-black text-slate-900">PKR {netAmount.toLocaleString()}</span>
+                        {taxAmount > 0 && (
+                            <div className="flex justify-between items-baseline py-[3px] text-[11px] font-bold text-slate-600">
+                                <span className="uppercase tracking-wide">GST ({Number(taxPercent.toFixed(2))}%)</span>
+                                <span className="tabular-nums text-[12px] text-slate-900">+ {taxAmount.toLocaleString()}</span>
+                            </div>
+                        )}
+                        <div className="mt-1 flex justify-between items-baseline border-t-2 border-slate-900 pt-2">
+                            <span className="text-[13px] font-black uppercase tracking-wide text-slate-900">Net Payable</span>
+                            <span className="text-[20px] leading-none font-black tabular-nums text-slate-900 whitespace-nowrap">PKR {netAmount.toLocaleString()}</span>
                         </div>
+                        <div className="mt-1 border-b-4 border-double border-slate-900" />
                     </div>
                 </div>
 
