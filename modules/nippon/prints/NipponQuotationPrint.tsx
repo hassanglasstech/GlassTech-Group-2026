@@ -57,7 +57,7 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
     // text-only header + hand-typed KinLong SVG.
 
     return (
-        <div className="print-only flex flex-col bg-white text-black p-0 font-sans leading-tight shadow-2xl print:shadow-none mx-auto print:m-0" style={{ width: '210mm', minHeight: '297mm' }}>
+        <div className="print-only bg-white text-black p-0 font-sans leading-tight shadow-2xl print:shadow-none mx-auto print:m-0" style={{ width: '210mm', minHeight: '297mm' }}>
             <style>{`
                 @media screen {
                     .print-only { display: none !important; }
@@ -128,7 +128,7 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                 .font-pill { border: 1.5px solid #1e293b; border-radius: 9999px; padding: 2px 30px; font-weight: 900; letter-spacing: 0.1em; }
             `}</style>
             
-            <div className="print-container flex-1 flex flex-col p-[10mm]">
+            <div className="print-container flex flex-col box-border min-h-[297mm] print:min-h-0 p-[10mm]">
                 {/* Header Section — shared branded letterhead */}
                 <NipponLetterhead printType={printType} />
 
