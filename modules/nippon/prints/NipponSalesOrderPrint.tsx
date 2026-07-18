@@ -185,7 +185,11 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                 <div className="mt-2">
                     {(() => {
                         let serialNum = 0;
-                        const MAX_ROWS = 10;
+                        // Single continuous table → natural CSS pagination: the print CSS
+                        // repeats <thead> on every page and never splits a row
+                        // (tr { page-break-inside: avoid }). No hardcoded row-count, so it
+                        // never needs re-alignment as the item count grows.
+                        const MAX_ROWS = Number.MAX_SAFE_INTEGER;
                         const itemsToChunk = items;
                         const chunks: typeof items[] = [];
                         let currentChunk: typeof items = [];
@@ -289,44 +293,45 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                     })()}
                 </div>
 
-                {/* Footer Section */}
-                <div className="mt-2 pt-2 border-t border-slate-200 break-inside-avoid">
-                    <div className="flex justify-between items-start">
-                        <div className="w-[60%]">
-                            <h4 className="text-[8px] font-black uppercase tracking-widest text-slate-900 mb-1 border-b border-slate-100 pb-0.5">Protocol & Terms</h4>
-                            <ul className="text-[9px] space-y-0.5 text-slate-600 font-bold leading-tight">
-                                {getNipponTerms('salesOrder').map((t, i) => (
-                                    <li key={i} className="flex items-start space-x-1">
-                                        <span className="text-slate-300">•</span>
-                                        <span>{t}</span>
-                                    </li>
-                                ))}
-                            </ul>
+                {/* Totals — right-aligned, directly after the items */}
+                <div className="mt-3 flex justify-end break-inside-avoid">
+                    <div className="w-[42%] space-y-1">
+                        <div className="flex justify-between text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
+                            <span>Gross:</span>
+                            <span>PKR {subTotal.toLocaleString()}</span>
                         </div>
-
-                        <div className="w-[35%] space-y-1">
-                            <div className="flex justify-between text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
-                                <span>Gross:</span>
-                                <span>PKR {subTotal.toLocaleString()}</span>
+                        {discountAmount > 0 && (
+                            <div className="flex justify-between text-[9px] font-bold text-rose-600 uppercase tracking-tighter">
+                                <span>Disc {quote.discountPercent ? `${Number(quote.discountPercent.toFixed(2))}%` : ''}:</span>
+                                <span>- {discountAmount.toLocaleString()}</span>
                             </div>
-                            {discountAmount > 0 && (
-                                <div className="flex justify-between text-[9px] font-bold text-rose-600 uppercase tracking-tighter">
-                                    <span>Disc {quote.discountPercent ? `${Number(quote.discountPercent.toFixed(2))}%` : ''}:</span>
-                                    <span>- {discountAmount.toLocaleString()}</span>
-                                </div>
-                            )}
-                            <div className="flex justify-between items-end pt-1 border-t border-slate-200">
-                                <span className="text-[10px] font-black uppercase text-slate-900 tracking-tighter">Net:</span>
-                                <span className="text-lg font-black text-slate-900">PKR {netAmount.toLocaleString()}</span>
-                            </div>
+                        )}
+                        <div className="flex justify-between items-end pt-1 border-t border-slate-200">
+                            <span className="text-[10px] font-black uppercase text-slate-900 tracking-tighter">Net:</span>
+                            <span className="text-lg font-black text-slate-900">PKR {netAmount.toLocaleString()}</span>
                         </div>
                     </div>
+                </div>
 
+                {/* Terms — full width, at the bottom */}
+                <div className="mt-3 pt-2 border-t border-slate-200 break-inside-avoid">
+                    <h4 className="text-[8px] font-black uppercase tracking-widest text-slate-900 mb-1">Protocol & Terms</h4>
+                    <ul className="text-[9px] grid grid-cols-2 gap-x-6 gap-y-0.5 text-slate-600 font-bold leading-tight">
+                        {getNipponTerms('salesOrder').map((t, i) => (
+                            <li key={i} className="flex items-start space-x-1">
+                                <span className="text-slate-300">•</span>
+                                <span>{t}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+
+                {/* Footer identity — contact + bank + catalogue QR + system line */}
+                <div className="break-inside-avoid">
                     <NipponContactFooter emailKind="sales" showCatalogueQr />
-
-                    <div className="mt-6 text-center">
+                    <div className="mt-3 text-center">
                         <p className="text-[8.5px] font-black uppercase tracking-[0.2em] text-slate-400 italic">
-                            Computer generated document. No signature required.
+                            Generated by Nippon ERP v1.0
                         </p>
                     </div>
                 </div>
