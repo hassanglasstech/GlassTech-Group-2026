@@ -2,7 +2,7 @@
 import React, { useMemo } from 'react';
 import { Quotation, Product } from '../../shared/types';
 import { ProductImage } from '../../shared/components/ProductImage';
-import { NipponLetterhead, NipponBankFooter } from './NipponLetterhead';
+import { NipponLetterhead, NipponContactFooter } from './NipponLetterhead';
 import { getNipponTerms } from '../constants/nipponCompanyInfo';
 
 interface Props {
@@ -322,7 +322,7 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                         </div>
                     </div>
 
-                    <NipponBankFooter />
+                    <NipponContactFooter emailKind="sales" />
 
                     <div className="mt-6 text-center">
                         <p className="text-[8.5px] font-black uppercase tracking-[0.2em] text-slate-400 italic">
