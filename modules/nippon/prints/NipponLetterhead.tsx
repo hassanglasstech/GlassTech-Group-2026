@@ -37,13 +37,13 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
   const partnerLine =
     printType === 'Glasstech' ? 'A GlassTech Group Company'
     : printType === 'General' ? ''
-    : 'Authorized KIN LONG Partner';
+    : 'Authorized KIN LONG Distributor';
 
   return (
-    <div className="mb-3 pb-2 border-b-2 border-slate-800 flex items-start justify-between gap-4">
+    <div className="mb-3 pb-2 border-b-2 border-slate-800 flex items-center justify-between gap-4">
       {/* LEFT — Nippon Hardware (fixed) */}
       <div className="flex items-center gap-3 min-w-0">
-        {ownLogo ? <img src={ownLogo} alt="" className="h-12 w-auto max-w-[110px] object-contain shrink-0" /> : null}
+        {ownLogo ? <img src={ownLogo} alt="" className="h-16 w-auto max-w-[130px] object-contain shrink-0" /> : null}
         <div className="min-w-0">
           <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-none">Nippon Hardware</h1>
           {info.tagline && (
@@ -55,12 +55,13 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
         </div>
       </div>
 
-      {/* RIGHT — partner logo per variant (light placeholder until uploaded) */}
-      <div className="flex items-center justify-end shrink-0 min-w-[120px]">
+      {/* RIGHT — partner logo per variant, sized to match the Nippon block
+          (light placeholder until the logo is uploaded) */}
+      <div className="flex items-center justify-end shrink-0 min-w-[140px]">
         {partnerLogo
-          ? <img src={partnerLogo} alt="" className="h-14 w-auto max-w-[200px] object-contain" />
+          ? <img src={partnerLogo} alt="" className="h-16 w-auto max-w-[300px] object-contain" />
           : partnerName
-            ? <span className="text-xl font-black tracking-tight text-slate-300 select-none">{partnerName}</span>
+            ? <span className="text-2xl font-black tracking-tight text-slate-300 select-none">{partnerName}</span>
             : null}
       </div>
     </div>
