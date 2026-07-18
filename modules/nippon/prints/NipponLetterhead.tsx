@@ -40,29 +40,29 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
     : 'Authorized KIN LONG Distributor';
 
   return (
-    <div className="mb-3 pb-2 border-b-2 border-slate-800 flex items-center justify-between gap-4">
+    <div className="mb-3 pb-2 border-b-2 border-slate-800 flex items-center justify-between gap-6">
       {/* LEFT — Nippon Hardware (fixed) */}
       <div className="flex items-center gap-3 min-w-0">
-        {ownLogo ? <img src={ownLogo} alt="" className="h-16 w-auto max-w-[130px] object-contain shrink-0" /> : null}
+        {ownLogo ? <img src={ownLogo} alt="" className="h-14 w-auto max-w-[120px] object-contain shrink-0" /> : null}
         <div className="min-w-0">
           <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-none">Nippon Hardware</h1>
           {info.tagline && (
-            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 mt-0.5">{info.tagline}</p>
-          )}
-          {partnerLine && (
-            <p className="text-[8px] font-black uppercase tracking-widest text-blue-700 mt-0.5">{partnerLine}</p>
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 mt-1">{info.tagline}</p>
           )}
         </div>
       </div>
 
-      {/* RIGHT — partner logo per variant, sized to match / outweigh the Nippon
-          block (light placeholder until the logo is uploaded) */}
-      <div className="flex items-center justify-end shrink-0 min-w-[160px]">
+      {/* RIGHT — partner logo (per variant) with its distributor/group line beneath.
+          Light placeholder until the logo is uploaded in Branding. */}
+      <div className="flex flex-col items-end justify-center shrink-0 text-right">
         {partnerLogo
-          ? <img src={partnerLogo} alt="" className="h-24 w-auto max-w-[380px] object-contain object-right" />
+          ? <img src={partnerLogo} alt="" className="h-20 w-auto max-w-[280px] object-contain" />
           : partnerName
-            ? <span className="text-3xl font-black tracking-tight text-slate-300 select-none">{partnerName}</span>
+            ? <span className="text-3xl font-black tracking-tight text-slate-300 select-none leading-none">{partnerName}</span>
             : null}
+        {partnerLine && (
+          <p className="text-[8px] font-black uppercase tracking-widest text-blue-700 mt-1">{partnerLine}</p>
+        )}
       </div>
     </div>
   );
