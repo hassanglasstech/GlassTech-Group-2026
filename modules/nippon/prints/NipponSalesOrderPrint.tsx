@@ -322,7 +322,7 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                         </div>
                     </div>
 
-                    <NipponContactFooter emailKind="sales" />
+                    <NipponContactFooter emailKind="sales" showCatalogueQr />
 
                     <div className="mt-6 text-center">
                         <p className="text-[8.5px] font-black uppercase tracking-[0.2em] text-slate-400 italic">

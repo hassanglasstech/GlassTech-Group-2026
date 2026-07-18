@@ -16,6 +16,7 @@
 import React from 'react';
 import { getNipponCompanyInfo } from '../constants/nipponCompanyInfo';
 import { BrandingService, CompanyBranding } from '../../shared/services/brandingService';
+import QrTag from '../../glassco/core/QrTag';
 
 export type NipponPrintType = 'KinLong' | 'Glasstech' | 'General';
 
@@ -73,7 +74,7 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
  * document footer. `emailKind` picks the sales email (quotation/SO) or accounts
  * email (invoice/receipt). Renders only the lines that are configured.
  */
-export const NipponContactFooter: React.FC<{ emailKind?: 'sales' | 'accounts' }> = ({ emailKind = 'sales' }) => {
+export const NipponContactFooter: React.FC<{ emailKind?: 'sales' | 'accounts'; showCatalogueQr?: boolean }> = ({ emailKind = 'sales', showCatalogueQr = false }) => {
   const info = getNipponCompanyInfo();
   const b = branding();
   const email = emailKind === 'accounts' ? (info.accountsEmail || info.email) : info.email;
@@ -87,15 +88,36 @@ export const NipponContactFooter: React.FC<{ emailKind?: 'sales' | 'accounts' }>
     b.bankIban && `IBAN: ${b.bankIban}`,
   ].filter(Boolean) : [];
 
-  if (!contact && !reg && bankParts.length === 0) return null;
+  const site = (info.website || 'www.nipponhardware.com.pk').trim();
+  const catalogueUrl = /^https?:\/\//i.test(site) ? site : `https://${site}`;
+  const withQr = showCatalogueQr && !!site;
 
-  return (
-    <div className="mt-2 pt-1.5 border-t border-slate-200 text-center text-[9px] font-bold text-slate-500 leading-snug space-y-0.5">
+  if (!contact && !reg && bankParts.length === 0 && !withQr) return null;
+
+  const infoBlock = (
+    <div className="flex-1 text-center text-[9px] font-bold text-slate-500 leading-snug space-y-0.5">
       {contact && <div>{contact}</div>}
       {reg && <div className="text-slate-600">{reg}</div>}
       {bankParts.length > 0 && (
         <div className="text-slate-600"><span className="uppercase tracking-widest text-slate-400 mr-1">Bank</span>{bankParts.join('   ·   ')}</div>
       )}
+    </div>
+  );
+
+  if (!withQr) {
+    return <div className="mt-2 pt-1.5 border-t border-slate-200">{infoBlock}</div>;
+  }
+
+  // QR (left) + centred contact block + a matching spacer (right) so the text
+  // stays visually centred. Scans to the full online catalogue.
+  return (
+    <div className="mt-2 pt-1.5 border-t border-slate-200 flex items-center justify-between gap-3">
+      <div className="w-14 shrink-0 flex flex-col items-center">
+        <QrTag value={catalogueUrl} sizeMm={15} />
+        <span className="text-[6px] font-black uppercase tracking-widest text-slate-400 mt-0.5 text-center leading-tight">Scan for<br/>catalogue</span>
+      </div>
+      {infoBlock}
+      <div className="w-14 shrink-0" aria-hidden="true" />
     </div>
   );
 };
