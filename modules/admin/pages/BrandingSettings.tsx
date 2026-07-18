@@ -169,9 +169,11 @@ const BrandingSettings: React.FC = () => {
             </div>
             <div className="grid grid-cols-3 gap-3">
               <Field label="Phone"   value={data.phone}   onChange={v => handleField('phone', v)}/>
-              <Field label="Email"   value={data.email}   onChange={v => handleField('email', v)}/>
+              <Field label="Email (sales / general)"   value={data.email}   onChange={v => handleField('email', v)}/>
               <Field label="Website" value={data.website} onChange={v => handleField('website', v)}/>
+              <Field label="Accounts Email (invoices / receipts)" value={data.accountsEmail} onChange={v => handleField('accountsEmail', v)}/>
             </div>
+            <p className="text-[10px] text-slate-400 font-bold mt-1">Quotations &amp; sales orders show the sales email; invoices &amp; receipts show the accounts email (falls back to the sales email if left blank).</p>
           </Section>
 
           {/* Logo */}

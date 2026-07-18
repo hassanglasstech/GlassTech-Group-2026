@@ -18,7 +18,8 @@ export const NIPPON_COMPANY_INFO = {
   name: 'Nippon Hardware',
   tagline: 'Architectural Hardware & Accessories',
   phone: '0300-8716303',
-  email: '',    // ← Admin → Branding Settings (Nippon)
+  email: '',          // sales / general — quotation & sales order
+  accountsEmail: '',  // accounts / billing — invoice & receipt (falls back to email)
   website: '',  // ← Admin → Branding Settings (Nippon)
   address: '',  // ← Admin → Branding Settings (Nippon)
   ntn: '',      // ← Admin → Branding Settings (FBR NTN)
@@ -47,6 +48,7 @@ export function getNipponCompanyInfo(): NipponCompanyInfo {
       tagline: NIPPON_COMPANY_INFO.tagline,
       phone:   (b.phone   || '').trim() || NIPPON_COMPANY_INFO.phone,
       email:   (b.email   || '').trim() || NIPPON_COMPANY_INFO.email,
+      accountsEmail: (b.accountsEmail || '').trim() || NIPPON_COMPANY_INFO.accountsEmail,
       website: (b.website || '').trim() || NIPPON_COMPANY_INFO.website,
       address: address                  || NIPPON_COMPANY_INFO.address,
       ntn:     (b.ntn     || '').trim() || NIPPON_COMPANY_INFO.ntn,

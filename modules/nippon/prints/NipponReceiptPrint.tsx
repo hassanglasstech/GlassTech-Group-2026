@@ -30,6 +30,7 @@ export const NipponReceiptPrint: React.FC<Props> = ({ receipt, order, clients, p
   const clientName = client?.name || (order as { clientName?: string }).clientName || '—';
   const hd = HEADER[printType] || HEADER.General;
   const info = getNipponCompanyInfo();
+  const acctEmail = info.accountsEmail || info.email; // receipts show accounts email
   const docName = `Receipt-${receipt.receiptNo}`;
   const dateStr = new Date(receipt.date).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -68,8 +69,8 @@ export const NipponReceiptPrint: React.FC<Props> = ({ receipt, order, clients, p
             <div className="text-2xl font-black tracking-tight text-slate-900">{hd.title}</div>
             <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-0.5">{hd.sub}</div>
             {info.address && <div className="text-[9px] font-bold text-slate-600 mt-1">{info.address}</div>}
-            {[info.phone && `Tel: ${info.phone}`, info.email].filter(Boolean).length > 0 && (
-              <div className="text-[9px] font-bold text-slate-600">{[info.phone && `Tel: ${info.phone}`, info.email].filter(Boolean).join('   ·   ')}</div>
+            {[info.phone && `Tel: ${info.phone}`, acctEmail].filter(Boolean).length > 0 && (
+              <div className="text-[9px] font-bold text-slate-600">{[info.phone && `Tel: ${info.phone}`, acctEmail].filter(Boolean).join('   ·   ')}</div>
             )}
             {(info.ntn || info.strn) && (
               <div className="text-[9px] font-bold text-slate-600">{[info.ntn && `NTN: ${info.ntn}`, info.strn && `STRN: ${info.strn}`].filter(Boolean).join('   ·   ')}</div>

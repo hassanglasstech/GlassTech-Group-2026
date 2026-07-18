@@ -32,7 +32,8 @@ export interface CompanyBranding {
   city:                 string;
   country:              string;
   phone:                string;
-  email:                string;
+  email:                string;            // sales / general — shown on quotation & sales order
+  accountsEmail:        string;            // accounts / billing — shown on invoice & receipt
   website:              string;
   ntn:                  string;
   strn:                 string;
@@ -70,6 +71,7 @@ const _empty = (company: string): CompanyBranding => ({
   country:              'Pakistan',
   phone:                '',
   email:                '',
+  accountsEmail:        '',
   website:              '',
   ntn:                  '',
   strn:                 '',
@@ -105,6 +107,7 @@ const _fromRow = (r: any): CompanyBranding => ({
   country:              r.country                || 'Pakistan',
   phone:                r.phone                  || '',
   email:                r.email                  || '',
+  accountsEmail:        r.accounts_email         || '',
   website:              r.website                || '',
   ntn:                  r.ntn                    || '',
   strn:                 r.strn                   || '',
@@ -140,6 +143,7 @@ const _toRow = (b: CompanyBranding): any => ({
   country:                  b.country               || 'Pakistan',
   phone:                    b.phone                 || null,
   email:                    b.email                 || null,
+  accounts_email:           b.accountsEmail         || null,
   website:                  b.website               || null,
   ntn:                      b.ntn                   || null,
   strn:                     b.strn                  || null,
