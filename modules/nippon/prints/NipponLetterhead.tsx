@@ -55,13 +55,13 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
         </div>
       </div>
 
-      {/* RIGHT — partner logo per variant, sized to match the Nippon block
-          (light placeholder until the logo is uploaded) */}
-      <div className="flex items-center justify-end shrink-0 min-w-[140px]">
+      {/* RIGHT — partner logo per variant, sized to match / outweigh the Nippon
+          block (light placeholder until the logo is uploaded) */}
+      <div className="flex items-center justify-end shrink-0 min-w-[160px]">
         {partnerLogo
-          ? <img src={partnerLogo} alt="" className="h-16 w-auto max-w-[300px] object-contain" />
+          ? <img src={partnerLogo} alt="" className="h-24 w-auto max-w-[380px] object-contain object-right" />
           : partnerName
-            ? <span className="text-2xl font-black tracking-tight text-slate-300 select-none">{partnerName}</span>
+            ? <span className="text-3xl font-black tracking-tight text-slate-300 select-none">{partnerName}</span>
             : null}
       </div>
     </div>
