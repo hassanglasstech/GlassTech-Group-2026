@@ -4,6 +4,7 @@ import { Quotation, Product } from '../../shared/types';
 import { ProductImage } from '../../shared/components/ProductImage';
 import { NipponLetterhead, NipponContactFooter } from './NipponLetterhead';
 import { getNipponTerms } from '../constants/nipponCompanyInfo';
+import { BrandingService } from '../../shared/services/brandingService';
 
 interface Props {
     quote: Quotation;
@@ -28,7 +29,8 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
     const discountAmount = quote.discountAmount !== undefined && quote.discountAmount > 0
         ? quote.discountAmount
         : (subTotal * (quote.discountPercent || 0)) / 100;
-    const taxPercent = quote.taxPercent || 0;
+    // Per-quote override wins; otherwise the company default GST (Admin → Branding).
+    const taxPercent = quote.taxPercent ?? (BrandingService.getCachedBranding(quote.company)?.gstPercent || 0);
     const taxableBase = subTotal - discountAmount;
     const taxAmount = Math.round((taxableBase * taxPercent) / 100);
     const netAmount = taxableBase + taxAmount;
