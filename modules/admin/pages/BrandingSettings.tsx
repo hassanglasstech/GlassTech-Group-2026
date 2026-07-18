@@ -26,6 +26,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { BrandingService, CompanyBranding } from '@/modules/shared/services/brandingService';
+import { NIPPON_DEFAULT_TERMS } from '@/modules/nippon/constants/nipponCompanyInfo';
 import PrintHeader from '@/modules/shared/components/prints/PrintHeader';
 import PrintFooter from '@/modules/shared/components/prints/PrintFooter';
 import { toast } from 'sonner';
@@ -34,7 +35,7 @@ import {
   ImageIcon, Settings, Eye,
 } from 'lucide-react';
 
-const COMPANIES = ['Glassco', 'GTK', 'GTI', 'Nippon', 'Factory'] as const;
+// Branding is scoped to the active company (sidebar switcher) — no all-companies picker.
 const TERMS_TABS = [
   { key: 'termsQuotation',       label: 'Quotation' },
   { key: 'termsInvoice',         label: 'Tax Invoice' },
@@ -52,7 +53,9 @@ const BrandingSettings: React.FC = () => {
 
   const ALLOWED = new Set(['super_admin', 'owner', 'hassan', 'admin', 'glassco_admin']);
 
-  const [company, setCompany] = useState<string>(appCompany || 'Glassco');
+  // Scoped to the ACTIVE company (sidebar switcher). To edit a different company's
+  // branding, switch company in the sidebar — no all-companies dropdown here.
+  const company = appCompany || 'Glassco';
   const [data, setData] = useState<CompanyBranding | null>(null);
   const [activeTab, setActiveTab] = useState<typeof TERMS_TABS[number]['key']>('termsInvoice');
   const [saving, setSaving] = useState(false);
@@ -60,6 +63,12 @@ const BrandingSettings: React.FC = () => {
 
   const reload = useCallback(async () => {
     const b = await BrandingService.loadBranding(company);
+    // Seed the footer T&C with the current defaults when blank, so the terms that
+    // print today are visible (and editable) here instead of an empty box.
+    if (company === 'Nippon') {
+      if (!(b.termsQuotation || '').trim()) b.termsQuotation = NIPPON_DEFAULT_TERMS.quotation;
+      if (!(b.termsInvoice   || '').trim()) b.termsInvoice   = NIPPON_DEFAULT_TERMS.salesOrder;
+    }
     setData(b);
   }, [company]);
 
@@ -132,13 +141,9 @@ const BrandingSettings: React.FC = () => {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <select
-            value={company}
-            onChange={e => setCompany(e.target.value)}
-            className="bg-white/10 hover:bg-white/15 text-white border border-white/20 rounded-xl px-3 py-2 text-sm font-black"
-          >
-            {COMPANIES.map(c => <option key={c} value={c} className="text-slate-900">{c}</option>)}
-          </select>
+          <div className="bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-sm font-black flex items-center gap-2" title="Switch company from the sidebar to edit its branding">
+            <Building2 size={14}/> {company}
+          </div>
           <button
             onClick={handleSave}
             disabled={saving}

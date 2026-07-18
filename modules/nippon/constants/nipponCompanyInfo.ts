@@ -58,3 +58,39 @@ export function getNipponCompanyInfo(): NipponCompanyInfo {
     return NIPPON_COMPANY_INFO;
   }
 }
+
+/**
+ * Default footer Terms & Conditions for Nippon documents. These are the terms
+ * that were previously hard-coded on the quotation / sales-order prints — now
+ * they seed the Admin → Branding Settings T&C fields, and the prints fall back
+ * to them when branding is blank. Edit in Branding to override.
+ */
+export const NIPPON_DEFAULT_TERMS = {
+  quotation: [
+    '100% Cash Deposit before Delivery.',
+    'Quotation valid for 2 days only.',
+    'Check samples carefully, no return or exchange.',
+    'Prices exclusive of Transportation and Taxes.',
+  ].join('\n'),
+  salesOrder: [
+    '100% Cash Deposit before Delivery.',
+    'Check samples carefully, no return or exchange.',
+    'Prices exclusive of Transportation and Taxes.',
+  ].join('\n'),
+};
+
+/**
+ * Live footer terms for a Nippon document as an array of bullet lines. Reads the
+ * admin-configured branding T&C (quotation → termsQuotation, salesOrder →
+ * termsInvoice), falling back to NIPPON_DEFAULT_TERMS when blank.
+ */
+export function getNipponTerms(kind: 'quotation' | 'salesOrder'): string[] {
+  let stored = '';
+  try {
+    const b = BrandingService.getCachedBranding('Nippon');
+    stored = (kind === 'quotation' ? b.termsQuotation : b.termsInvoice) || '';
+  } catch { /* use defaults */ }
+  const raw = stored.trim()
+    || (kind === 'quotation' ? NIPPON_DEFAULT_TERMS.quotation : NIPPON_DEFAULT_TERMS.salesOrder);
+  return raw.split('\n').map(s => s.replace(/^[•\-\s]+/, '').trim()).filter(Boolean);
+}

@@ -3,6 +3,7 @@ import React, { useMemo } from 'react';
 import { Quotation, Product } from '../../shared/types';
 import { ProductImage } from '../../shared/components/ProductImage';
 import { NipponLetterhead, NipponBankFooter } from './NipponLetterhead';
+import { getNipponTerms } from '../constants/nipponCompanyInfo';
 
 interface Props {
     quote: Quotation;
@@ -295,22 +296,12 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                         <div className="w-[60%]">
                             <h4 className="text-[8px] font-black uppercase tracking-widest text-slate-900 mb-1 border-b border-slate-100 pb-0.5">Protocol & Terms</h4>
                             <ul className="text-[9px] space-y-0.5 text-slate-600 font-bold leading-tight">
-                                <li className="flex items-start space-x-1">
-                                    <span className="text-slate-300">•</span>
-                                    <span>100% Cash Deposit before Delivery.</span>
-                                </li>
-                                <li className="flex items-start space-x-1">
-                                    <span className="text-slate-300">•</span>
-                                    <span>Quotation valid for 2 days only.</span>
-                                </li>
-                                <li className="flex items-start space-x-1">
-                                    <span className="text-slate-300">•</span>
-                                    <span>Check samples carefully, no return or exchange.</span>
-                                </li>
-                                <li className="flex items-start space-x-1">
-                                    <span className="text-slate-300">•</span>
-                                    <span>Prices exclusive of Transportation and Taxes.</span>
-                                </li>
+                                {getNipponTerms('quotation').map((t, i) => (
+                                    <li key={i} className="flex items-start space-x-1">
+                                        <span className="text-slate-300">•</span>
+                                        <span>{t}</span>
+                                    </li>
+                                ))}
                             </ul>
                         </div>
 
