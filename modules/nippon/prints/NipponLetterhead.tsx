@@ -54,15 +54,20 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
       </div>
 
       {/* RIGHT — partner logo (per variant) with its distributor/group line beneath.
-          Light placeholder until the logo is uploaded in Branding. */}
-      <div className="flex flex-col items-end justify-center shrink-0 text-right">
-        {partnerLogo
-          ? <img src={partnerLogo} alt="" className="h-20 w-auto max-w-[280px] object-contain" />
-          : partnerName
-            ? <span className="text-3xl font-black tracking-tight text-slate-300 select-none leading-none">{partnerName}</span>
-            : null}
-        {partnerLine && (
-          <p className="text-[8px] font-black uppercase tracking-widest text-blue-700 mt-1">{partnerLine}</p>
+          The line hugs the logo and is locked to the logo's width: `w-0 min-w-full`
+          keeps the column sized by the logo (not the text), so the caption spans
+          exactly the logo width and never runs wider. Light placeholder until a
+          logo is uploaded in Branding. */}
+      <div className="flex flex-col items-end justify-center shrink-0">
+        {(partnerLogo || partnerName) && (
+          <div className="inline-flex flex-col items-center w-fit">
+            {partnerLogo
+              ? <img src={partnerLogo} alt="" className="h-20 w-auto max-w-[280px] object-contain" />
+              : <span className="text-3xl font-black tracking-tight text-slate-300 select-none leading-none">{partnerName}</span>}
+            {partnerLine && (
+              <p className="w-0 min-w-full text-center text-[10px] font-bold uppercase tracking-tight text-blue-700 leading-tight">{partnerLine}</p>
+            )}
+          </div>
         )}
       </div>
     </div>

@@ -29,8 +29,10 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
     const discountAmount = quote.discountAmount !== undefined && quote.discountAmount > 0
         ? quote.discountAmount
         : (subTotal * (quote.discountPercent || 0)) / 100;
-    // Per-quote override wins; otherwise the company default GST (Admin → Branding).
-    const taxPercent = quote.taxPercent ?? (BrandingService.getCachedBranding(quote.company)?.gstPercent || 0);
+    // GST prints ONLY when the company's "Show GST on prints" toggle is ON
+    // (Admin → Branding). Then a per-quote override wins over the company rate.
+    const _brand = BrandingService.getCachedBranding(quote.company);
+    const taxPercent = _brand?.showGstOnInvoice ? (quote.taxPercent ?? (_brand.gstPercent || 0)) : 0;
     const taxableBase = subTotal - discountAmount;
     const taxAmount = Math.round((taxableBase * taxPercent) / 100);
     const netAmount = taxableBase + taxAmount;

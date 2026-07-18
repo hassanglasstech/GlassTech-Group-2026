@@ -166,7 +166,15 @@ const BrandingSettings: React.FC = () => {
               <Field label="STRN (Sales Tax Reg #)" value={data.strn} onChange={v => handleField('strn', v)} mono placeholder="e.g. 32-12-3456-789-12"/>
             </div>
             <Field label="CNIC (sole proprietor)" value={data.cnic} onChange={v => handleField('cnic', v)} mono optional/>
-            <Field label="Default GST % on prints (0 = no GST line)" value={data.gstPercent ? String(data.gstPercent) : ''} onChange={v => handleField('gstPercent', Math.max(0, Math.min(100, Number(v) || 0)))} mono placeholder="e.g. 18"/>
+            <div className="flex items-end gap-3">
+              <label className="flex items-center gap-2 text-xs font-bold text-slate-700 whitespace-nowrap pb-2">
+                <input type="checkbox" checked={data.showGstOnInvoice} onChange={e => handleField('showGstOnInvoice', e.target.checked)}/>
+                Show GST on prints
+              </label>
+              <div className="flex-1">
+                <Field label="GST % (Sales Tax)" value={data.gstPercent ? String(data.gstPercent) : ''} onChange={v => handleField('gstPercent', Math.max(0, Math.min(100, Number(v) || 0)))} mono placeholder="e.g. 18"/>
+              </div>
+            </div>
             <Field label="Address Line 1" value={data.addressLine1} onChange={v => handleField('addressLine1', v)}/>
             <Field label="Address Line 2" value={data.addressLine2} onChange={v => handleField('addressLine2', v)} optional/>
             <div className="grid grid-cols-2 gap-3">

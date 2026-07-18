@@ -58,6 +58,7 @@ export interface CompanyBranding {
   showBankOnInvoice:    boolean;
   showQrOnInvoice:      boolean;
   gstPercent:           number;            // company-default GST / sales-tax % printed on quotes & invoices (0 = no GST line). Rides in the `data` jsonb (zero-migration).
+  showGstOnInvoice:     boolean;           // master switch — GST line prints only when this is ON. Rides in `data` jsonb.
 }
 
 const CACHE_KEY = 'gtk_erp_company_branding';
@@ -97,6 +98,7 @@ const _empty = (company: string): CompanyBranding => ({
   showBankOnInvoice:    true,
   showQrOnInvoice:      false,
   gstPercent:           0,
+  showGstOnInvoice:     false,
 });
 
 const _fromRow = (r: any): CompanyBranding => ({
@@ -134,6 +136,7 @@ const _fromRow = (r: any): CompanyBranding => ({
   showBankOnInvoice:    r.show_bank_on_invoice !== false,
   showQrOnInvoice:      !!r.show_qr_on_invoice,
   gstPercent:           Number((r.data && r.data.gstPercent) ?? 0) || 0,
+  showGstOnInvoice:     !!(r.data && r.data.showGst),
 });
 
 const _toRow = (b: CompanyBranding): any => ({
@@ -171,7 +174,7 @@ const _toRow = (b: CompanyBranding): any => ({
   show_bank_on_invoice:     b.showBankOnInvoice,
   show_qr_on_invoice:       b.showQrOnInvoice,
   // Zero-migration extras ride in the existing `data` jsonb column.
-  data:                     { gstPercent: b.gstPercent ?? 0 },
+  data:                     { gstPercent: b.gstPercent ?? 0, showGst: !!b.showGstOnInvoice },
   updated_at:               new Date().toISOString(),
 });
 
