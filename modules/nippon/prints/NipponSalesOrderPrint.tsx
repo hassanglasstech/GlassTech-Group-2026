@@ -132,10 +132,11 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                     tr { page-break-inside: avoid; page-break-after: auto; }
                     .page-break-before { page-break-before: always; }
                 }
-                /* Fixed height + flex centring instead of padding/line-height:
-                   html2canvas mis-centres text in a padded inline box, which made
-                   the oval's label drift in the downloaded PDF. */
-                .font-pill { display: inline-flex; align-items: center; justify-content: center; height: 20px; padding: 0 30px; line-height: 1; border: 1.5px solid #1e293b; border-radius: 9999px; font-weight: 900; letter-spacing: 0.1em; }
+                /* Vertical centring via line-height ONLY — no flex, no vertical padding.
+                   html2canvas resolves neither flex centring nor padding+line-height
+                   reliably, which made the oval's label drift in the PDF; a line box
+                   that IS the content height is the one thing it always gets right. */
+                .font-pill { display: inline-block; padding: 0 30px; line-height: 19px; border: 1.5px solid #1e293b; border-radius: 9999px; font-weight: 900; letter-spacing: 0.1em; }
             `}</style>
             
             <div className="print-container flex flex-col box-border min-h-[297mm] print:min-h-0 p-[10mm]">
@@ -231,7 +232,10 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                                                     <th className="py-2 px-2 text-right w-24">Amount</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-slate-200">
+                                            {/* border-b per row, NOT divide-y: divide-y only draws
+                                                BETWEEN rows, so the last row on a page had no bottom
+                                                line and its box never closed at the page break. */}
+                                            <tbody>
                                                 {chunk.map((item, idx) => {
                                                     if (!item.isSection) serialNum++;
 
@@ -246,7 +250,7 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                                                     }
 
                                                     return (
-                                                        <tr key={idx}>
+                                                        <tr key={idx} className="border-b border-slate-200">
                                                             <td className="py-2 px-2 text-center text-slate-400 font-bold">{serialNum}</td>
                                                             <td className="py-2 px-2 text-center">
                                                                 {/* Robust: stored url → bucket by product id (productRef →
