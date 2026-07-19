@@ -14,7 +14,6 @@
  *   Branding), so nothing fake is shown. Email switches sales↔accounts by doc.
  */
 import React from 'react';
-import { MapPin, Phone, Mail, Globe } from 'lucide-react';
 import { getNipponCompanyInfo } from '../constants/nipponCompanyInfo';
 import { BrandingService, CompanyBranding } from '../../shared/services/brandingService';
 import QrTag from '../../glassco/core/QrTag';
@@ -112,15 +111,17 @@ export const NipponContactFooter: React.FC<{ emailKind?: 'sales' | 'accounts'; s
     <div className="flex-1 text-center text-[9px] font-bold text-slate-500 leading-snug space-y-0.5">
       {hasContact && (
         // Each contact detail gets its own glyph so the footer scans at a glance.
-        // `block` on each glyph + leading-none on the row: an inline <svg> carries a
-        // baseline descender gap that html2canvas bakes in, which is what pushed the
-        // icons above their text in the PDF. Block removes the gap so items-center
-        // actually centres.
-        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 leading-none">
-          {info.address && <span className="inline-flex items-center gap-1 leading-none"><MapPin size={10} className="block shrink-0 text-slate-400" />{info.address}</span>}
-          {info.phone   && <span className="inline-flex items-center gap-1 leading-none"><Phone  size={10} className="block shrink-0 text-slate-400" />{info.phone}</span>}
-          {email        && <span className="inline-flex items-center gap-1 leading-none"><Mail   size={10} className="block shrink-0 text-slate-400" />{email}</span>}
-          {info.website && <span className="inline-flex items-center gap-1 leading-none"><Globe  size={10} className="block shrink-0 text-slate-400" />{info.website}</span>}
+        // Plain text, deliberately NOT icons. html2canvas cannot place an inline
+        // <svg> against its text: flex align-items, inline vertical-align,
+        // table-cell and a clone-only positional nudge were each measured off the
+        // real rasterised canvas and every one left the glyph ~7px high (the DOM
+        // itself was correct to 1px in all four). Text is laid out by the same
+        // engine that renders the rest of this sheet flawlessly, so it always
+        // aligns. Revisit icons only if the PDF engine changes.
+        <div>
+          {[info.address, info.phone && `Tel: ${info.phone}`, email, info.website]
+            .filter(Boolean)
+            .join('   ·   ')}
         </div>
       )}
       {reg && <div className="text-slate-600">{reg}</div>}
