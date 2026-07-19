@@ -40,44 +40,51 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
     : printType === 'General' ? ''
     : 'Authorized Distributor';
 
+  // TABLE layout, deliberately NOT flex. html2canvas does not implement flex
+  // alignment, so `items-center` here made it compute a different header height
+  // than the browser — measured: the QUOTATION oval below rendered 22px too high
+  // in the PDF. It never showed while the partner mark was TEXT (both columns were
+  // the same height, so getting flex wrong changed nothing); the PNG made the right
+  // column taller and the error became visible. Tables it does lay out correctly —
+  // that is why the items grid has always been right.
   return (
-    <div className="mb-3 pb-2 border-b-2 border-slate-800 flex items-center justify-between gap-6">
-      {/* LEFT — Nippon Hardware (fixed) */}
-      <div className="flex items-center gap-3 min-w-0">
-        {ownLogo ? <img src={ownLogo} alt="" className="h-14 w-auto max-w-[120px] object-contain shrink-0" /> : null}
-        <div className="min-w-0">
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-none">Nippon Hardware</h1>
-          {info.tagline && (
-            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 mt-1">{info.tagline}</p>
-          )}
-        </div>
-      </div>
-
-      {/* RIGHT — partner logo (per variant) with its distributor/group line beneath.
-          The line hugs the logo and is locked to the logo's width: `w-0 min-w-full`
-          keeps the column sized by the logo (not the text), so the caption spans
-          exactly the logo width and never runs wider. Light placeholder until a
-          logo is uploaded in Branding. */}
-      <div className="flex flex-col items-end justify-center shrink-0">
-        {(partnerLogo || partnerName) && (
-          // FIXED SLOT — deliberately NOT sized by the asset. The box is a constant
-          // 186x72 and the caption a constant 186 wide; any logo (square, ultra-wide,
-          // tall, or padded) is centred inside via object-contain. This is what makes
-          // the letterhead immune to whatever aspect ratio gets uploaded next — the
-          // earlier `w-fit`/`w-auto` version inherited the asset's shape, so every new
-          // upload shifted the header and re-wrapped the caption.
-          <div className="inline-flex w-[140px] flex-col items-center">
-            <div className="flex h-[54px] w-full items-center justify-center">
-              {partnerLogo
-                ? <img src={partnerLogo} alt="" className="max-h-full max-w-full object-contain" />
-                : <span className="text-2xl font-black tracking-tight text-slate-300 select-none leading-none">{partnerName}</span>}
-            </div>
-            {partnerLine && (
-              <p className="mt-1 w-full text-center text-[10px] font-bold uppercase tracking-tight text-blue-700 leading-tight">{partnerLine}</p>
+    <div className="mb-3 pb-2 border-b-2 border-slate-800">
+      <table className="w-full border-collapse">
+        <tbody>
+          <tr>
+            {ownLogo && (
+              <td className="w-[120px] pr-3 align-middle">
+                <img src={ownLogo} alt="" className="max-h-[56px] max-w-[120px]" />
+              </td>
             )}
-          </div>
-        )}
-      </div>
+            <td className="align-middle">
+              <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-none">Nippon Hardware</h1>
+              {info.tagline && (
+                <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 mt-1">{info.tagline}</p>
+              )}
+            </td>
+
+            {/* FIXED SLOT — a constant 140x54 box with a constant 140-wide caption,
+                so the header is immune to whatever logo aspect gets uploaded next.
+                The mark is centred by line-height + align-middle (the one centring
+                construct html2canvas reproduces exactly — verified on the oval),
+                and sized by max-width/max-height rather than object-fit, which
+                html2canvas does not support. */}
+            {(partnerLogo || partnerName) && (
+              <td className="w-[140px] align-middle">
+                <div className="h-[54px] w-[140px] text-center leading-[54px]">
+                  {partnerLogo
+                    ? <img src={partnerLogo} alt="" className="inline-block max-h-[54px] max-w-[140px] align-middle" />
+                    : <span className="align-middle text-2xl font-black tracking-tight text-slate-300 select-none">{partnerName}</span>}
+                </div>
+                {partnerLine && (
+                  <p className="mt-1 w-[140px] text-center text-[10px] font-bold uppercase tracking-tight text-blue-700 leading-tight">{partnerLine}</p>
+                )}
+              </td>
+            )}
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 };

@@ -144,7 +144,7 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                 <NipponLetterhead printType={printType} />
 
                 {/* Pill Title - Compact */}
-                <div className="flex justify-center my-2">
+                <div className="my-2 text-center">
                     <div className="font-pill text-[10px] uppercase text-slate-900">S A L E S &nbsp; O R D E R</div>
                 </div>
 

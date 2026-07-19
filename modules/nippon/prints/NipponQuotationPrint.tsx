@@ -144,7 +144,7 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                 <NipponLetterhead printType={printType} />
 
                 {/* Pill Title - Compact */}
-                <div className="flex justify-center my-2">
+                <div className="my-2 text-center">
                     <div className="font-pill text-[10px] uppercase text-slate-900">Q U O T A T I O N</div>
                 </div>
 
