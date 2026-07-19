@@ -2,7 +2,7 @@ import React, { useRef, useState, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Download, Printer, Loader2, Share2 } from 'lucide-react';
 import { NipponPrintTemplate } from './NipponPrintTemplate';
-import { exportElementToPdf, elementToPdfFile } from '../../shared/utils/pdfExport';
+import { exportElementToPdf, elementToPdfFile, PDF_CONTENT_H_MM, PDF_PAGE_W_MM } from '../../shared/utils/pdfExport';
 import { Quotation, Client, Product } from '../../shared/types';
 import { toast } from 'sonner';
 
@@ -39,12 +39,20 @@ export const NipponDocPreview: React.FC<Props> = ({
     const measure = (): void => {
       const r = el.getBoundingClientRect();
       if (!r.width || !r.height) return;
-      const pageH = (r.width * 297) / 210;                 // A4 height in the sheet's own px
-      const count = Math.max(1, Math.ceil(r.height / pageH - 0.02));
+      // Same geometry the PDF writer uses, so a guide sits exactly where the PDF
+      // splits — including the column header the PDF repeats on continuation pages
+      // (page 1 gets a full page; later pages give up the header's height).
+      const pageH = (r.width * PDF_CONTENT_H_MM) / PDF_PAGE_W_MM;
+      const thead = el.querySelector('thead');
+      const headH = thead ? thead.getBoundingClientRect().height : 0;
       const lines: number[] = [];
-      for (let k = 1; k < count; k++) lines.push(Math.round(k * pageH));
+      let consumed = pageH;
+      while (consumed < r.height - 2 && lines.length < 40) {
+        lines.push(Math.round(consumed));
+        consumed += Math.max(1, pageH - headH);
+      }
       setPageBreaks(lines);
-      setPageCount(count);
+      setPageCount(lines.length + 1);
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -156,7 +164,7 @@ export const NipponDocPreview: React.FC<Props> = ({
               <div key={i} className="absolute inset-x-0 flex items-center gap-2" style={{ top }}>
                 <div className="flex-1 border-t-2 border-dashed border-blue-400/80" />
                 <span className="shrink-0 rounded-full bg-blue-600 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-white shadow">
-                  Page {i + 1} ends · Page {i + 2} ↓
+                  End of page {i + 1} / {pageCount} · {i + 2} ↓
                 </span>
                 <div className="flex-1 border-t-2 border-dashed border-blue-400/80" />
               </div>

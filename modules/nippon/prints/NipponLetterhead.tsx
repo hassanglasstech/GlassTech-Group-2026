@@ -14,6 +14,7 @@
  *   Branding), so nothing fake is shown. Email switches sales↔accounts by doc.
  */
 import React from 'react';
+import { MapPin, Phone, Mail, Globe } from 'lucide-react';
 import { getNipponCompanyInfo } from '../constants/nipponCompanyInfo';
 import { BrandingService, CompanyBranding } from '../../shared/services/brandingService';
 import QrTag from '../../glassco/core/QrTag';
@@ -62,10 +63,10 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
         {(partnerLogo || partnerName) && (
           <div className="inline-flex flex-col items-center w-fit">
             {partnerLogo
-              ? <img src={partnerLogo} alt="" className="h-20 w-auto max-w-[280px] object-contain" />
+              ? <img src={partnerLogo} alt="" className="h-16 w-auto max-w-[300px] object-contain" />
               : <span className="text-3xl font-black tracking-tight text-slate-300 select-none leading-none">{partnerName}</span>}
             {partnerLine && (
-              <p className="w-0 min-w-full text-center text-[10px] font-bold uppercase tracking-tight text-blue-700 leading-tight">{partnerLine}</p>
+              <p className="w-0 min-w-full text-center text-[10px] font-bold uppercase tracking-tight text-blue-700 leading-tight mt-1">{partnerLine}</p>
             )}
           </div>
         )}
@@ -84,7 +85,7 @@ export const NipponContactFooter: React.FC<{ emailKind?: 'sales' | 'accounts'; s
   const b = branding();
   const email = emailKind === 'accounts' ? (info.accountsEmail || info.email) : info.email;
 
-  const contact = [info.address, info.phone && `Tel: ${info.phone}`, email, info.website].filter(Boolean).join('   ·   ');
+  const hasContact = !!(info.address || info.phone || email || info.website);
   const reg = [info.ntn && `NTN: ${info.ntn}`, info.strn && `STRN: ${info.strn}`].filter(Boolean).join('   ·   ');
   const bankParts = b && b.showBankOnInvoice !== false ? [
     b.bankName && `Bank: ${b.bankName}`,
@@ -97,11 +98,19 @@ export const NipponContactFooter: React.FC<{ emailKind?: 'sales' | 'accounts'; s
   const catalogueUrl = /^https?:\/\//i.test(site) ? site : `https://${site}`;
   const withQr = showCatalogueQr && !!site;
 
-  if (!contact && !reg && bankParts.length === 0 && !withQr) return null;
+  if (!hasContact && !reg && bankParts.length === 0 && !withQr) return null;
 
   const infoBlock = (
     <div className="flex-1 text-center text-[9px] font-bold text-slate-500 leading-snug space-y-0.5">
-      {contact && <div>{contact}</div>}
+      {hasContact && (
+        // Each contact detail gets its own glyph so the footer scans at a glance.
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5">
+          {info.address && <span className="inline-flex items-center gap-1"><MapPin size={9} className="shrink-0 text-slate-400" />{info.address}</span>}
+          {info.phone   && <span className="inline-flex items-center gap-1"><Phone  size={9} className="shrink-0 text-slate-400" />{info.phone}</span>}
+          {email        && <span className="inline-flex items-center gap-1"><Mail   size={9} className="shrink-0 text-slate-400" />{email}</span>}
+          {info.website && <span className="inline-flex items-center gap-1"><Globe  size={9} className="shrink-0 text-slate-400" />{info.website}</span>}
+        </div>
+      )}
       {reg && <div className="text-slate-600">{reg}</div>}
       {bankParts.length > 0 && (
         <div className="text-slate-600"><span className="uppercase tracking-widest text-slate-400 mr-1">Bank</span>{bankParts.join('   ·   ')}</div>
