@@ -61,12 +61,20 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
           logo is uploaded in Branding. */}
       <div className="flex flex-col items-end justify-center shrink-0">
         {(partnerLogo || partnerName) && (
-          <div className="inline-flex flex-col items-center w-fit">
-            {partnerLogo
-              ? <img src={partnerLogo} alt="" className="h-24 w-auto max-w-[340px] object-contain" />
-              : <span className="text-3xl font-black tracking-tight text-slate-300 select-none leading-none">{partnerName}</span>}
+          // FIXED SLOT — deliberately NOT sized by the asset. The box is a constant
+          // 186x72 and the caption a constant 186 wide; any logo (square, ultra-wide,
+          // tall, or padded) is centred inside via object-contain. This is what makes
+          // the letterhead immune to whatever aspect ratio gets uploaded next — the
+          // earlier `w-fit`/`w-auto` version inherited the asset's shape, so every new
+          // upload shifted the header and re-wrapped the caption.
+          <div className="inline-flex w-[186px] flex-col items-center">
+            <div className="flex h-[72px] w-full items-center justify-center">
+              {partnerLogo
+                ? <img src={partnerLogo} alt="" className="max-h-full max-w-full object-contain" />
+                : <span className="text-2xl font-black tracking-tight text-slate-300 select-none leading-none">{partnerName}</span>}
+            </div>
             {partnerLine && (
-              <p className="w-0 min-w-full text-center text-[10px] font-bold uppercase tracking-tight text-blue-700 leading-tight mt-1">{partnerLine}</p>
+              <p className="mt-1 w-full text-center text-[10px] font-bold uppercase tracking-tight text-blue-700 leading-tight">{partnerLine}</p>
             )}
           </div>
         )}
