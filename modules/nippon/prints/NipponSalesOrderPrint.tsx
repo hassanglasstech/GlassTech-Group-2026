@@ -132,7 +132,10 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                     tr { page-break-inside: avoid; page-break-after: auto; }
                     .page-break-before { page-break-before: always; }
                 }
-                .font-pill { border: 1.5px solid #1e293b; border-radius: 9999px; padding: 2px 30px; font-weight: 900; letter-spacing: 0.1em; }
+                /* Fixed height + flex centring instead of padding/line-height:
+                   html2canvas mis-centres text in a padded inline box, which made
+                   the oval's label drift in the downloaded PDF. */
+                .font-pill { display: inline-flex; align-items: center; justify-content: center; height: 20px; padding: 0 30px; line-height: 1; border: 1.5px solid #1e293b; border-radius: 9999px; font-weight: 900; letter-spacing: 0.1em; }
             `}</style>
             
             <div className="print-container flex flex-col box-border min-h-[297mm] print:min-h-0 p-[10mm]">

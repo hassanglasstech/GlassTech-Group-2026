@@ -67,8 +67,8 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
           // the letterhead immune to whatever aspect ratio gets uploaded next — the
           // earlier `w-fit`/`w-auto` version inherited the asset's shape, so every new
           // upload shifted the header and re-wrapped the caption.
-          <div className="inline-flex w-[186px] flex-col items-center">
-            <div className="flex h-[72px] w-full items-center justify-center">
+          <div className="inline-flex w-[140px] flex-col items-center">
+            <div className="flex h-[54px] w-full items-center justify-center">
               {partnerLogo
                 ? <img src={partnerLogo} alt="" className="max-h-full max-w-full object-contain" />
                 : <span className="text-2xl font-black tracking-tight text-slate-300 select-none leading-none">{partnerName}</span>}

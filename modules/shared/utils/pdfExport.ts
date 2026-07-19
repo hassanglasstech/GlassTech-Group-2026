@@ -14,6 +14,9 @@ export const PDF_PAGE_W_MM = 210;
 export const PDF_PAGE_H_MM = 297;
 /** Height of the footer band reserved on every page for the "Page n / N" stamp. */
 export const PDF_FOOTER_H_MM = 12;
+/** Top margin on CONTINUATION pages, above the repeated column header. Page 1
+ *  doesn't need it — the sheet carries its own 10mm padding. */
+export const PDF_TOP_MARGIN_MM = 10;
 /** Sheet height shown per PDF page. The preview draws its page-break guides at
  *  multiples of this, so what the user sees is exactly where the PDF splits. */
 export const PDF_CONTENT_H_MM = PDF_PAGE_H_MM - PDF_FOOTER_H_MM;
@@ -126,29 +129,32 @@ async function renderElementToPdf(el: HTMLElement): Promise<JsPdf> {
   // full contentH; continuation pages give up `headerH` to the repeated header.
   const elRect = el.getBoundingClientRect();
   const pxToMm = PDF_PAGE_W_MM / (elRect.width || 1);
+  // Continuation pages lose a top margin + the repeated header before content.
+  const contOffset = headerImg ? PDF_TOP_MARGIN_MM + headerH : PDF_TOP_MARGIN_MM;
   const cutsMm = computePageCutsPx(
     el,
     contentH / pxToMm,
-    Math.max(1, contentH - headerH) / pxToMm,
+    Math.max(1, contentH - contOffset) / pxToMm,
   ).map((p) => p * pxToMm);
   const total = cutsMm.length + 1;
 
   for (let i = 0; i < total; i++) {
     if (i > 0) pdf.addPage();
-    const headH = i === 0 ? 0 : headerH;
+    const offset = i === 0 ? 0 : contOffset;
     const start = i === 0 ? 0 : cutsMm[i - 1];
     const end = i < cutsMm.length ? cutsMm[i] : imgH;
 
     // Place the sheet so `start` lines up just below the repeated header.
-    pdf.addImage(imgData, 'JPEG', 0, headH - start, imgW, imgH, undefined, 'FAST');
-    if (i > 0 && headerImg) {
+    pdf.addImage(imgData, 'JPEG', 0, offset - start, imgW, imgH, undefined, 'FAST');
+    if (i > 0) {
+      // Clear the reserved strip, then drop the header in BELOW the top margin.
       pdf.setFillColor(255, 255, 255);
-      pdf.rect(0, 0, PDF_PAGE_W_MM, headH, 'F');
-      pdf.addImage(headerImg, 'JPEG', 0, 0, imgW, headerH, undefined, 'FAST');
+      pdf.rect(0, 0, PDF_PAGE_W_MM, offset, 'F');
+      if (headerImg) pdf.addImage(headerImg, 'JPEG', 0, PDF_TOP_MARGIN_MM, imgW, headerH, undefined, 'FAST');
     }
     // White-out below this page's last full row (kills the partial next row) and
     // through the footer band, then stamp the page number into that clean strip.
-    const contentBottom = Math.min(contentH, headH + (end - start));
+    const contentBottom = Math.min(contentH, offset + (end - start));
     pdf.setFillColor(255, 255, 255);
     pdf.rect(0, contentBottom, PDF_PAGE_W_MM, PDF_PAGE_H_MM - contentBottom, 'F');
     pdf.setFontSize(8);

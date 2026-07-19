@@ -2,7 +2,7 @@ import React, { useRef, useState, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Download, Printer, Loader2, Share2 } from 'lucide-react';
 import { NipponPrintTemplate } from './NipponPrintTemplate';
-import { exportElementToPdf, elementToPdfFile, computePageCutsPx, PDF_CONTENT_H_MM, PDF_PAGE_W_MM } from '../../shared/utils/pdfExport';
+import { exportElementToPdf, elementToPdfFile, computePageCutsPx, PDF_CONTENT_H_MM, PDF_PAGE_W_MM, PDF_TOP_MARGIN_MM } from '../../shared/utils/pdfExport';
 import { Quotation, Client, Product } from '../../shared/types';
 import { toast } from 'sonner';
 
@@ -40,14 +40,30 @@ export const NipponDocPreview: React.FC<Props> = ({
       const r = el.getBoundingClientRect();
       if (!r.width || !r.height) return;
       // Exactly the PDF writer's own pagination — row-aware seams, page 1 full
-      // height, continuation pages minus the repeated column header — so a guide
-      // sits precisely where the PDF splits.
-      const pageH = (r.width * PDF_CONTENT_H_MM) / PDF_PAGE_W_MM;
+      // height, continuation pages minus the top margin + repeated column header —
+      // so a guide sits precisely where the PDF splits.
+      const pxPerMm = r.width / PDF_PAGE_W_MM;
+      const pageH = PDF_CONTENT_H_MM * pxPerMm;
       const thead = el.querySelector('thead');
       const headH = thead ? thead.getBoundingClientRect().height : 0;
-      const cuts = computePageCutsPx(el, pageH, Math.max(1, pageH - headH));
+      const contOffset = PDF_TOP_MARGIN_MM * pxPerMm + headH;
+      const firstCap = pageH;
+      const contCap = Math.max(1, pageH - contOffset);
+      const cuts = computePageCutsPx(el, firstCap, contCap);
       setPageBreaks(cuts.map((c) => Math.round(c)));
       setPageCount(cuts.length + 1);
+
+      // Snap the sheet so the LAST page is exactly full. Without this the sheet
+      // ends wherever the content ends, the flex spacer inside .print-container
+      // has nothing to give, and the terms/contact footer strands itself right
+      // under the totals instead of sitting at the bottom of the final page.
+      const container = el.querySelector('.print-container') as HTMLElement | null;
+      if (container) {
+        const lastStart = cuts.length ? cuts[cuts.length - 1] : 0;
+        const desired = Math.round(lastStart + (cuts.length ? contCap : firstCap));
+        const current = Math.round(parseFloat(container.style.minHeight || '0'));
+        if (Math.abs(current - desired) > 1) container.style.minHeight = `${desired}px`;
+      }
     };
     measure();
     const ro = new ResizeObserver(measure);
