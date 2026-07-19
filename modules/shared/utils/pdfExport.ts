@@ -19,6 +19,46 @@ export const PDF_FOOTER_H_MM = 12;
 export const PDF_CONTENT_H_MM = PDF_PAGE_H_MM - PDF_FOOTER_H_MM;
 
 /**
+ * Y offsets (px, relative to `el`) where a page may break WITHOUT slicing through
+ * a table row. One entry per row bottom — those are the only clean seams.
+ */
+function rowSeamsPx(el: HTMLElement): number[] {
+  const top = el.getBoundingClientRect().top;
+  return Array.from(el.querySelectorAll('tbody tr'))
+    .map((tr) => (tr as HTMLElement).getBoundingClientRect().bottom - top)
+    .sort((a, b) => a - b);
+}
+
+/**
+ * Page cut offsets (px from the top of `el`) that never split a product row:
+ * for each page, take the LAST row seam that still fits in the remaining height.
+ * Page 1 gets `firstCapPx`; continuation pages get `contCapPx` (they give up
+ * height to the repeated column header). Falls back to a hard cut only when a
+ * single block is taller than a whole page.
+ */
+export function computePageCutsPx(el: HTMLElement, firstCapPx: number, contCapPx: number): number[] {
+  const totalH = el.getBoundingClientRect().height;
+  const seams = rowSeamsPx(el);
+  const cuts: number[] = [];
+  let start = 0;
+  let cap = firstCapPx;
+  let guard = 0;
+  while (start + cap < totalH - 1 && guard++ < 200) {
+    const target = start + cap;
+    let cut = -1;
+    for (const s of seams) {
+      if (s > start + 20 && s <= target) cut = s;
+      else if (s > target) break;
+    }
+    if (cut < 0) cut = target;            // block taller than a page — hard cut
+    cuts.push(cut);
+    start = cut;
+    cap = contCapPx;
+  }
+  return cuts;
+}
+
+/**
  * Render `el` to a multi-page A4 jsPDF document (natural 210mm width, sliced
  * across A4 pages when taller than one page). Shared by the download + share
  * paths so both produce an identical file.
@@ -82,29 +122,38 @@ async function renderElementToPdf(el: HTMLElement): Promise<JsPdf> {
     }
   } catch { /* repeating the header is a nicety — never block the export */ }
 
-  // Page 1 shows a full contentH; continuation pages give up `headerH` to the
-  // repeated column header.
-  const total = imgH <= contentH
-    ? 1
-    : 1 + Math.ceil((imgH - contentH) / Math.max(1, contentH - headerH) - 0.02);
+  // Break pages on row seams so a product is never sliced in half. Page 1 gets a
+  // full contentH; continuation pages give up `headerH` to the repeated header.
+  const elRect = el.getBoundingClientRect();
+  const pxToMm = PDF_PAGE_W_MM / (elRect.width || 1);
+  const cutsMm = computePageCutsPx(
+    el,
+    contentH / pxToMm,
+    Math.max(1, contentH - headerH) / pxToMm,
+  ).map((p) => p * pxToMm);
+  const total = cutsMm.length + 1;
 
-  let consumed = 0;                       // mm of the sheet already rendered
   for (let i = 0; i < total; i++) {
     if (i > 0) pdf.addPage();
     const headH = i === 0 ? 0 : headerH;
-    // Place the sheet so that `consumed` lines up just below the repeated header.
-    pdf.addImage(imgData, 'JPEG', 0, headH - consumed, imgW, imgH, undefined, 'FAST');
+    const start = i === 0 ? 0 : cutsMm[i - 1];
+    const end = i < cutsMm.length ? cutsMm[i] : imgH;
+
+    // Place the sheet so `start` lines up just below the repeated header.
+    pdf.addImage(imgData, 'JPEG', 0, headH - start, imgW, imgH, undefined, 'FAST');
     if (i > 0 && headerImg) {
       pdf.setFillColor(255, 255, 255);
       pdf.rect(0, 0, PDF_PAGE_W_MM, headH, 'F');
       pdf.addImage(headerImg, 'JPEG', 0, 0, imgW, headerH, undefined, 'FAST');
     }
+    // White-out below this page's last full row (kills the partial next row) and
+    // through the footer band, then stamp the page number into that clean strip.
+    const contentBottom = Math.min(contentH, headH + (end - start));
     pdf.setFillColor(255, 255, 255);
-    pdf.rect(0, contentH, PDF_PAGE_W_MM, PDF_PAGE_H_MM - contentH, 'F');
+    pdf.rect(0, contentBottom, PDF_PAGE_W_MM, PDF_PAGE_H_MM - contentBottom, 'F');
     pdf.setFontSize(8);
     pdf.setTextColor(130);
     pdf.text(`Page ${i + 1} / ${total}`, PDF_PAGE_W_MM / 2, contentH + 7, { align: 'center' });
-    consumed += contentH - headH;
   }
   return pdf;
 }

@@ -39,7 +39,7 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
   const partnerLine =
     printType === 'Glasstech' ? 'A GlassTech Group Company'
     : printType === 'General' ? ''
-    : 'Authorized KIN LONG Distributor';
+    : 'Authorized Distributor';
 
   return (
     <div className="mb-3 pb-2 border-b-2 border-slate-800 flex items-center justify-between gap-6">
@@ -63,7 +63,7 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
         {(partnerLogo || partnerName) && (
           <div className="inline-flex flex-col items-center w-fit">
             {partnerLogo
-              ? <img src={partnerLogo} alt="" className="h-16 w-auto max-w-[300px] object-contain" />
+              ? <img src={partnerLogo} alt="" className="h-24 w-auto max-w-[340px] object-contain" />
               : <span className="text-3xl font-black tracking-tight text-slate-300 select-none leading-none">{partnerName}</span>}
             {partnerLine && (
               <p className="w-0 min-w-full text-center text-[10px] font-bold uppercase tracking-tight text-blue-700 leading-tight mt-1">{partnerLine}</p>

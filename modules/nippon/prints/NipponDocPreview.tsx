@@ -2,7 +2,7 @@ import React, { useRef, useState, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Download, Printer, Loader2, Share2 } from 'lucide-react';
 import { NipponPrintTemplate } from './NipponPrintTemplate';
-import { exportElementToPdf, elementToPdfFile, PDF_CONTENT_H_MM, PDF_PAGE_W_MM } from '../../shared/utils/pdfExport';
+import { exportElementToPdf, elementToPdfFile, computePageCutsPx, PDF_CONTENT_H_MM, PDF_PAGE_W_MM } from '../../shared/utils/pdfExport';
 import { Quotation, Client, Product } from '../../shared/types';
 import { toast } from 'sonner';
 
@@ -39,20 +39,15 @@ export const NipponDocPreview: React.FC<Props> = ({
     const measure = (): void => {
       const r = el.getBoundingClientRect();
       if (!r.width || !r.height) return;
-      // Same geometry the PDF writer uses, so a guide sits exactly where the PDF
-      // splits — including the column header the PDF repeats on continuation pages
-      // (page 1 gets a full page; later pages give up the header's height).
+      // Exactly the PDF writer's own pagination — row-aware seams, page 1 full
+      // height, continuation pages minus the repeated column header — so a guide
+      // sits precisely where the PDF splits.
       const pageH = (r.width * PDF_CONTENT_H_MM) / PDF_PAGE_W_MM;
       const thead = el.querySelector('thead');
       const headH = thead ? thead.getBoundingClientRect().height : 0;
-      const lines: number[] = [];
-      let consumed = pageH;
-      while (consumed < r.height - 2 && lines.length < 40) {
-        lines.push(Math.round(consumed));
-        consumed += Math.max(1, pageH - headH);
-      }
-      setPageBreaks(lines);
-      setPageCount(lines.length + 1);
+      const cuts = computePageCutsPx(el, pageH, Math.max(1, pageH - headH));
+      setPageBreaks(cuts.map((c) => Math.round(c)));
+      setPageCount(cuts.length + 1);
     };
     measure();
     const ro = new ResizeObserver(measure);

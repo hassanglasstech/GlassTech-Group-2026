@@ -26,6 +26,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { useAppStore } from '@/modules/shared/store/appStore';
 import { BrandingService, CompanyBranding } from '@/modules/shared/services/brandingService';
+import { trimImagePadding } from '@/modules/shared/utils/imageTrim';
 import { NIPPON_DEFAULT_TERMS } from '@/modules/nippon/constants/nipponCompanyInfo';
 import PrintHeader from '@/modules/shared/components/prints/PrintHeader';
 import PrintFooter from '@/modules/shared/components/prints/PrintFooter';
@@ -105,9 +106,17 @@ const BrandingSettings: React.FC = () => {
         return;
       }
       const reader = new FileReader();
-      reader.onload = () => {
-        handleField(field, String(reader.result || ''));
-        toast.success(`Logo loaded (${Math.round(file.size / 1024)} KB). Click Save to persist.`);
+      reader.onload = async () => {
+        const raw = String(reader.result || '');
+        // Logos usually ship on a padded square canvas; the print sizes the <img>
+        // by that canvas, so untrimmed padding renders the artwork tiny.
+        const trimmed = await trimImagePadding(raw);
+        handleField(field, trimmed);
+        toast.success(
+          trimmed !== raw
+            ? 'Logo loaded — blank padding trimmed. Click Save to persist.'
+            : `Logo loaded (${Math.round(file.size / 1024)} KB). Click Save to persist.`,
+        );
       };
       reader.readAsDataURL(file);
       e.target.value = '';
