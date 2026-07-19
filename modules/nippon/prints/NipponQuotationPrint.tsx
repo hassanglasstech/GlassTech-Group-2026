@@ -89,7 +89,14 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                         overflow: visible !important;
                         background: white !important;
                     }
-                    /* HIDE EVERYTHING ELSE */
+                    /* HIDE EVERYTHING ELSE.
+                       visibility:hidden hides but STILL OCCUPIES SPACE. Once the
+                       preview drops out of fixed positioning for printing, the hidden
+                       app root (~910px) sat in the flow ahead of the sheet and the
+                       browser printed a blank page before any content. Take the app
+                       chrome out of the flow entirely so the sheet starts at the top
+                       and still paginates normally (position:fixed would break that). */
+                    #root, .no-print { display: none !important; }
                     body * {
                         visibility: hidden;
                     }
