@@ -68,6 +68,12 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
             <style>{`
                 @media screen {
                     .print-only { display: none !important; }
+                    /* Sheet snaps to a whole number of PDF pages so the flex spacer can
+                       push the footer to the bottom of the last page. NipponDocPreview
+                       publishes --snap-h; it must be a custom property and NOT an inline
+                       min-height, or it outranks the @media print reset below and the
+                       browser's own Print path emits blank pages. */
+                    .print-container { min-height: var(--snap-h, 297mm); }
                 }
                 @media print {
                     @page { 
@@ -111,10 +117,11 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                             overflow: visible !important;
                         }
                     }
-                    .print-container { 
-                        width: 100% !important; 
-                        padding: 8mm !important; 
+                    .print-container {
+                        width: 100% !important;
+                        padding: 8mm !important;
                         box-sizing: border-box !important;
+                        min-height: 0 !important;   /* never carry the screen snap into paper */
                     }
                     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                     
@@ -139,7 +146,7 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                 .font-pill { display: inline-block; padding: 0 30px; line-height: 19px; border: 1.5px solid #1e293b; border-radius: 9999px; font-weight: 900; letter-spacing: 0.1em; }
             `}</style>
             
-            <div className="print-container flex flex-col box-border min-h-[297mm] print:min-h-0 p-[10mm]">
+            <div className="print-container flex flex-col box-border p-[10mm]">
                 {/* Header Section — shared branded letterhead */}
                 <NipponLetterhead printType={printType} />
 

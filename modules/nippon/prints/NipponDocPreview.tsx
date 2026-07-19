@@ -61,8 +61,12 @@ export const NipponDocPreview: React.FC<Props> = ({
       if (container) {
         const lastStart = cuts.length ? cuts[cuts.length - 1] : 0;
         const desired = Math.round(lastStart + (cuts.length ? contCap : firstCap));
-        const current = Math.round(parseFloat(container.style.minHeight || '0'));
-        if (Math.abs(current - desired) > 1) container.style.minHeight = `${desired}px`;
+        // Publish as a CUSTOM PROPERTY, never as an inline `min-height`. An inline
+        // min-height outranks any class, so `print:min-h-0` could not switch it off
+        // and the browser's own Print path emitted blank pages. A custom property is
+        // only read by the screen-media rule, so @media print still wins.
+        const current = Math.round(parseFloat(container.style.getPropertyValue('--snap-h') || '0'));
+        if (Math.abs(current - desired) > 1) container.style.setProperty('--snap-h', `${desired}px`);
       }
     };
     measure();
