@@ -148,48 +148,60 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                     <div className="font-pill text-[10px] uppercase text-slate-900">Q U O T A T I O N</div>
                 </div>
 
-                {/* Inquiry Info Row - Compact */}
-                <div className="flex justify-between mb-3 text-[9px]">
-                    <div className="space-y-0.5">
-                        <p className="text-slate-400 font-bold uppercase tracking-tighter text-[7px]">INQUIRY FROM:</p>
-                        <h3 className="text-lg font-black text-slate-900 leading-none uppercase">{clientName}</h3>
-                        <p className="text-blue-700 font-black uppercase text-[8px]">{quote.projectName || 'STANDARD ORDER'}</p>
-                    </div>
-                    <div className="text-right space-y-0.5">
-                        <div className="flex justify-end space-x-2">
-                            <span className="text-slate-400 font-bold uppercase">REF NO:</span>
-                            <span className="text-blue-700 font-black">{displayId}</span>
-                        </div>
-                        {quote.isSample && (
-                            <div className="flex justify-end">
-                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${quote.sampleType === 'Free' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>
-                                    {quote.sampleType === 'Free' ? 'FREE SAMPLE' : 'PAID SAMPLE'}
-                                </span>
-                            </div>
-                        )}
-                        <div className="flex justify-end space-x-2">
-                            <span className="text-slate-400 font-bold uppercase">DATE:</span>
-                            <span className="font-black text-slate-700">{quote.date}</span>
-                        </div>
-                    </div>
-                </div>
+                {/* Inquiry Info Row — table + explicit line-heights, deliberately not
+                    flex/space-y/leading-none. html2canvas ignores flex and guesses at
+                    auto leading, which is what closed up the client-name → project gap
+                    in the PDF while the preview stayed correct. */}
+                <table className="mb-3 w-full border-collapse text-[9px]">
+                    <tbody>
+                        <tr>
+                            <td className="align-top">
+                                <p className="text-slate-400 font-bold uppercase tracking-tighter text-[7px] leading-[9px]">INQUIRY FROM:</p>
+                                <h3 className="mt-[4px] text-lg font-black text-slate-900 uppercase leading-[21px]">{clientName}</h3>
+                                <p className="mt-[4px] text-blue-700 font-black uppercase text-[8px] leading-[10px]">{quote.projectName || 'STANDARD ORDER'}</p>
+                            </td>
+                            <td className="align-top text-right">
+                                <p className="leading-[12px]">
+                                    <span className="text-slate-400 font-bold uppercase">REF NO:&nbsp;&nbsp;</span>
+                                    <span className="text-blue-700 font-black">{displayId}</span>
+                                </p>
+                                {quote.isSample && (
+                                    <p className="mt-[4px] leading-[14px]">
+                                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${quote.sampleType === 'Free' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>
+                                            {quote.sampleType === 'Free' ? 'FREE SAMPLE' : 'PAID SAMPLE'}
+                                        </span>
+                                    </p>
+                                )}
+                                <p className="mt-[4px] leading-[12px]">
+                                    <span className="text-slate-400 font-bold uppercase">DATE:&nbsp;&nbsp;</span>
+                                    <span className="font-black text-slate-700">{quote.date}</span>
+                                </p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
 
                 {/* Summary Metrics Bar - Compact */}
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 mb-3 flex items-center justify-between">
-                    <div className="flex space-x-4 border-r border-slate-200 pr-4">
-                        <div>
-                            <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Total Items</p>
-                            <p className="text-sm font-black text-slate-900">{summary.totalQty} <span className="text-[8px] text-slate-400 font-normal">Units</span></p>
-                        </div>
-                    </div>
-                    <div className="flex flex-wrap gap-x-2 gap-y-0.5 justify-end flex-1 pl-4">
-                        {Object.entries(summary.breakdown).map(([key, val]) => (
-                            <div key={key} className="flex items-center space-x-1 bg-white border border-slate-100 rounded px-1.5 py-0.5">
-                                <span className="text-[7px] font-black text-slate-400 uppercase">{key}:</span>
-                                <span className="text-[8px] font-black text-slate-700">{val}</span>
-                            </div>
-                        ))}
-                    </div>
+                {/* Summary bar — table cells, not flex (see the inquiry row note). */}
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 mb-3">
+                    <table className="w-full border-collapse">
+                        <tbody>
+                            <tr>
+                                <td className="w-[110px] border-r border-slate-200 pr-4 align-middle">
+                                    <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-[9px]">Total Items</p>
+                                    <p className="mt-[2px] text-sm font-black text-slate-900 leading-[16px]">{summary.totalQty} <span className="text-[8px] text-slate-400 font-normal">Units</span></p>
+                                </td>
+                                <td className="pl-4 text-right align-middle leading-[14px]">
+                                    {Object.entries(summary.breakdown).map(([key, val]) => (
+                                        <span key={key} className="ml-1 inline-block bg-white border border-slate-100 rounded px-1.5 py-0.5 align-middle">
+                                            <span className="text-[7px] font-black text-slate-400 uppercase">{key}:&nbsp;</span>
+                                            <span className="text-[8px] font-black text-slate-700">{val}</span>
+                                        </span>
+                                    ))}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
 
                 {/* Main Items Table */}

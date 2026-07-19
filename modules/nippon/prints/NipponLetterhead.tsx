@@ -58,9 +58,13 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
               </td>
             )}
             <td className="align-middle">
-              <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-none">Nippon Hardware</h1>
+              {/* Explicit line-heights, never `leading-none`. html2canvas reproduces a
+                  box whose line-height IS its content height exactly, but GUESSES when
+                  the leading is none/normal — which is what squeezed the gap under the
+                  wordmark in the PDF while the preview looked right. */}
+              <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-[26px]">Nippon Hardware</h1>
               {info.tagline && (
-                <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 mt-1">{info.tagline}</p>
+                <p className="mt-[3px] text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 leading-[11px]">{info.tagline}</p>
               )}
             </td>
 
