@@ -4,7 +4,7 @@ import { Company, Client, Quotation, QuotationItem, Product } from '@/modules/sh
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { StoreItem } from '@/modules/procurement/types/inventory';
-import { snapshotSetComponents } from '@/modules/nippon/utils/productSets';
+import { snapshotSetComponents, stockMovesForLine } from '@/modules/nippon/utils/productSets';
 import { Logger } from '@/modules/shared/services/logger';
 import { nipponImageUrl } from '@/modules/shared/components/ProductImage';
 import { issueNipponOrder } from './nipponFulfilmentService';
@@ -418,21 +418,10 @@ export const useNipponQuotations = () => {
         const updatedStore = [...currentStore];
         const uncostedItems: string[] = [];   // names sold with no product-master cost
 
-        finalQuo.items.forEach(item => {
-          if (item.isSection) return;
-          // Resolve the REAL product id. productRef should hold it, but a manually
-          // typed line only carries locationCode (the visible code) — match that
-          // back to a product so we decrement the existing seeded row
-          // (id = NIP-KL-…) instead of creating an orphan row keyed by the bare
-          // code, which would otherwise show up under "Uncategorized" in stock.
-          const matched = products.find(p =>
-            (item.productRef && p.id === item.productRef) ||
-            (item.locationCode && (p.id === item.locationCode || p.modelNo === item.locationCode || p.profileCode === item.locationCode))
-          );
-          const refId = matched?.id || item.productRef || item.locationCode;
-          if (!refId) return;
+        // A SET line reserves its components, not itself — same resolver the
+        // store issue and the void use, so the three can never disagree.
+        finalQuo.items.flatMap(item => stockMovesForLine(item, products)).forEach(({ refId, need, product: matched }) => {
           const storeIdx = updatedStore.findIndex(s => s.id === refId);
-          const need = Number(item.qty) || 0;
           if (storeIdx !== -1) {
             // EPIC 1 — approve = RESERVE, not physical issue. Move qty from
             // available (unrestrictedQty) into reservedQty; the physical on-hand
@@ -456,17 +445,17 @@ export const useNipponQuotations = () => {
             // seed 0 and flag it (warning after the loop) so it's stock-taken +
             // costed; COGS books 0 on these lines until the real GRN cost lands.
             const seedCost = Number(matched?.costPrice) || 0;
-            if (seedCost <= 0) uncostedItems.push(matched?.description || item.description || refId);
+            if (seedCost <= 0) uncostedItems.push(matched?.description || refId);
             updatedStore.push({
               id: refId,
               company,
-              name: matched?.description || item.description || refId,
+              name: matched?.description || refId,
               category: (matched?.category as string) || 'Hardware',
               // Reserved against an item with no on-hand → physical 0, available
               // negative (oversold, needs GRN), reservation records the commitment.
               quantity: 0, unrestrictedQty: -need,
               qiQty: 0, blockedQty: 0, reservedQty: need, consignmentQty: 0,
-              unit: (matched?.unit || item.glassSize || 'PCS') as StoreItem['unit'],
+              unit: (matched?.unit || 'PCS') as StoreItem['unit'],
               minLevel: 10, reorderPoint: 5,
               movingAveragePrice: seedCost,
               totalValue: 0, storageBin: 'New',
@@ -596,22 +585,26 @@ export const useNipponQuotations = () => {
         toast.error(`Void NOT saved to cloud — stock left unchanged. ${voidRes.error}`, { duration: 9000 });
         return;
       }
-      // Reverse the approval stock decrement (add each line's qty back).
+      // Undo exactly what this order DID to stock — no more, no less.
+      //
+      // Approve only RESERVES (unrestricted → reserved, physical untouched); the
+      // physical goods leave later, at issue. So an order voided before issue
+      // must release the reservation and nothing else. The old code added the qty
+      // back to BOTH unrestricted and physical while never clearing reservedQty,
+      // so voiding an unissued order invented stock that never left and left a
+      // reservation stuck against it forever.
+      const wasIssued = !!(order as { issuedAt?: string }).issuedAt;
       const store = InventoryService.getStore();
-      (order.items || []).forEach(item => {
-        if (item.isSection) return;
-        const matched = products.find(p =>
-          (item.productRef && p.id === item.productRef) ||
-          (item.locationCode && (p.id === item.locationCode || p.modelNo === item.locationCode || p.profileCode === item.locationCode)));
-        const refId = matched?.id || item.productRef || item.locationCode;
-        if (!refId) return;
+      (order.items || []).flatMap(item => stockMovesForLine(item, products)).forEach(({ refId, need }) => {
         const idx = store.findIndex(s => s.id === refId);
         if (idx === -1) return;
-        const qty = Number(item.qty) || 0;
         store[idx] = {
           ...store[idx],
-          unrestrictedQty: (store[idx].unrestrictedQty || 0) + qty,
-          quantity: (store[idx].quantity || 0) + qty,
+          unrestrictedQty: (store[idx].unrestrictedQty || 0) + need,
+          // Reservation released either way: issue consumed it, void cancels it.
+          reservedQty: wasIssued ? (store[idx].reservedQty || 0) : Math.max(0, (store[idx].reservedQty || 0) - need),
+          // Physical comes back ONLY if it physically left.
+          quantity: wasIssued ? (store[idx].quantity || 0) + need : (store[idx].quantity || 0),
           lastMovementDate: new Date().toISOString(),
         };
       });

@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  componentsValue, explodeSetLine, isSetLine, setsOf, snapshotSetComponents,
+  componentsValue, explodeSetLine, isSetLine, setsOf, snapshotSetComponents, stockMovesForLine,
 } from '@/modules/nippon/utils/productSets';
 import type { Product } from '@/modules/procurement/types/inventory';
 import type { QuotationItem } from '@/modules/production/types/production';
@@ -83,11 +83,13 @@ describe('Nippon sets — quotation line', () => {
   });
 
   it('relieves the components, never a phantom set stock row', () => {
-    // Mirrors nipponFulfilmentService: a set line issues its components.
-    const issued = explodeSetLine(line().setComponents, 3)
-      .map(c => ({ refId: c.productId, need: c.totalQty }));
-    expect(issued).toEqual([{ refId: 'H1', need: 3 }, { refId: 'HG1', need: 12 }]);
-    expect(issued.some(i => i.refId === 'SET-DOOR-01')).toBe(false);
+    const moves = stockMovesForLine(line(), [HANDLE, HINGE, DOOR_SET]);
+    expect(moves.map(m => ({ refId: m.refId, need: m.need })))
+      .toEqual([{ refId: 'H1', need: 3 }, { refId: 'HG1', need: 12 }]);
+    expect(moves.some(m => m.refId === 'SET-DOOR-01')).toBe(false);
+    // The catalogue product comes back with the move so a missing stock row can
+    // be seeded with the right name/unit/cost.
+    expect(moves[0].product?.description).toBe('HANDLE');
   });
 
   it('treats a plain product as a normal line', () => {
@@ -98,5 +100,44 @@ describe('Nippon sets — quotation line', () => {
 
   it('survives a zero/blank qty without inventing stock movement', () => {
     expect(explodeSetLine(line().setComponents, 0).every(c => c.totalQty === 0)).toBe(true);
+  });
+});
+
+describe('stockMovesForLine — approve / issue / void must agree', () => {
+  const ALL = [HANDLE, HINGE, DOOR_SET];
+
+  it('matches a hand-typed line back to its product by visible code', () => {
+    // Only locationCode is set — no productRef. Must still land on the real row,
+    // not create an orphan keyed by the bare code.
+    const typed = { qty: 2, locationCode: 'H1' };
+    expect(stockMovesForLine(typed, ALL)).toEqual([{ refId: 'H1', need: 2, product: HANDLE }]);
+  });
+
+  it('moves nothing for a section heading', () => {
+    expect(stockMovesForLine({ isSection: true, qty: 5, productRef: 'H1' }, ALL)).toEqual([]);
+  });
+
+  it('drops set components that lost their product link (legacy free-text sets)', () => {
+    const legacy = {
+      qty: 2,
+      setComponents: [
+        { description: 'TYPED BY HAND', unit: 'PCS', qtyPerSet: 3 },     // no productId
+        { productId: 'HG1', description: 'HINGE', unit: 'PCS', qtyPerSet: 1 },
+      ],
+    };
+    // The unlinked one cannot move stock — there is no row to move. It must be
+    // skipped, never guessed at, or the wrong item gets relieved.
+    expect(stockMovesForLine(legacy, ALL)).toEqual([{ refId: 'HG1', need: 2, product: HINGE }]);
+  });
+
+  it('gives approve and issue the identical move list', () => {
+    const l = {
+      qty: 3, locationCode: 'SET-DOOR-01', productRef: 'SET-DOOR-01',
+      setComponents: snapshotSetComponents(DOOR_SET),
+    };
+    // Approve reserves these, issue relieves these, void returns these. One
+    // resolver → the three can never drift apart.
+    expect(stockMovesForLine(l, ALL)).toEqual(stockMovesForLine({ ...l }, ALL));
+    expect(stockMovesForLine(l, ALL).map(m => m.need)).toEqual([3, 12]);
   });
 });

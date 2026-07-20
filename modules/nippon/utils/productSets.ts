@@ -51,3 +51,57 @@ export const explodeSetLine = (
 /** True when this quotation line is a set sold as one priced bundle. */
 export const isSetLine = (item: { setComponents?: QuoteSetComponent[] }): boolean =>
   (item.setComponents?.length || 0) > 0;
+
+/** One stock row a line touches, and by how much. */
+export interface StockMove {
+  /** store_items id to move — always a real product, never a set. */
+  refId: string;
+  /** Units moved. Sign is the caller's business (reserve, issue, return). */
+  need: number;
+  /** Catalogue product behind refId, when one matched. */
+  product?: Product;
+}
+
+/**
+ * What stock a quotation line actually moves — the ONE place that answers it.
+ *
+ * Approve (reserve), issue (relieve) and void (return) must agree exactly, or
+ * inventory drifts: reserve the set id but relieve the components and every
+ * number is wrong in both directions. They each used to carry their own copy of
+ * the product-matching logic; now they share this.
+ *
+ * A set moves its COMPONENTS, never itself — a set is assembled at issue, so
+ * there is no set on a shelf to move.
+ */
+export const stockMovesForLine = (
+  item: {
+    isSection?: boolean;
+    qty?: number;
+    productRef?: string;
+    locationCode?: string;
+    setComponents?: QuoteSetComponent[];
+  },
+  products: Product[],
+): StockMove[] => {
+  if (item.isSection) return [];
+  const qty = Number(item.qty) || 0;
+
+  if (isSetLine(item)) {
+    return explodeSetLine(item.setComponents, qty)
+      .filter(c => !!c.productId)
+      .map(c => ({
+        refId: c.productId as string,
+        need: c.totalQty,
+        product: products.find(p => p.id === c.productId),
+      }));
+  }
+
+  // A manually typed line carries only locationCode (the visible code), so match
+  // that back to a product — otherwise the move lands on an orphan row keyed by
+  // the bare code and the real stock row never changes.
+  const matched = products.find(p =>
+    (item.productRef && p.id === item.productRef)
+    || (item.locationCode && (p.id === item.locationCode || p.modelNo === item.locationCode || p.profileCode === item.locationCode)));
+  const refId = matched?.id || item.productRef || item.locationCode;
+  return refId ? [{ refId, need: qty, product: matched }] : [];
+};
