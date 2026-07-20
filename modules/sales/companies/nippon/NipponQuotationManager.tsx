@@ -646,12 +646,27 @@ const NipponQuotationManager: React.FC = () => {
                                  // name / ERP code / KinLong code / nick — even with no stock row).
                                  // Stock qty is joined from store_items just for display.
                                  const storeById = new Map(storeItems.map(s => [s.id, s]));
+                                 // A product that has variants is a CATALOGUE GROUPING, not a
+                                 // sellable item — you order the length, not "the profile".
+                                 // Standard everywhere (SAP generic article, NetSuite matrix
+                                 // item, D365 product master, Odoo template): the parent is
+                                 // non-transactable, stock and price live on the variant.
+                                 // It stays SEARCHABLE though — typing the parent's code
+                                 // surfaces its variants, so old codes still lead somewhere.
+                                 const productById = new Map(products.map(p => [p.id, p]));
+                                 const parentIds = new Set(
+                                   products.map(p => p.variantOf).filter(Boolean) as string[],
+                                 );
+                                 const hay = (p: typeof products[number]) => [
+                                   p.description, p.name, p.modelNo, p.itemCode, p.profileCode, p.brand,
+                                   (p as { nickName?: string }).nickName,
+                                 ].filter(Boolean).join(' ').toLowerCase();
                                  const matches = products.filter(p => {
-                                   const haystack = [
-                                     p.description, p.name, p.modelNo, p.itemCode, p.profileCode, p.brand,
-                                     (p as { nickName?: string }).nickName,
-                                   ].filter(Boolean).join(' ').toLowerCase();
-                                   return !q || haystack.includes(q);
+                                   if (parentIds.has(p.id)) return false;        // grouping row, not orderable
+                                   if (!q) return true;
+                                   if (hay(p).includes(q)) return true;
+                                   const parent = p.variantOf ? productById.get(p.variantOf) : null;
+                                   return parent ? hay(parent).includes(q) : false;
                                  }).slice(0, 60);
                                  return (
                                    <div ref={dropdownRef} className="absolute z-50 w-[360px] mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-[420px] overflow-y-auto">
@@ -664,6 +679,11 @@ const NipponQuotationManager: React.FC = () => {
                                        const unit = p.unit || s?.unit || 'PCS';
                                        const price = p.price || p.basePrice || s?.movingAveragePrice || 0;
                                        const brand = p.brand || '';
+                                       const parentOf = p.variantOf ? productById.get(p.variantOf) : null;
+                                       const vAttrs = (p as { variantAttributes?: Record<string, string> }).variantAttributes;
+                                       const variantLabel = vAttrs
+                                         ? Object.entries(vAttrs).map(([k, v]) => `${k} ${v}`).join(' · ')
+                                         : '';
                                        return (
                                          <div
                                            key={p.id}
@@ -675,13 +695,28 @@ const NipponQuotationManager: React.FC = () => {
                                          >
                                            <div className="flex items-center justify-between gap-2">
                                              <div className="font-bold text-slate-800 uppercase text-xs leading-tight truncate">{displayName}</div>
+                                             {/* Variants sit in the same list as standalone products,
+                                                 badged with the axis value that distinguishes them. */}
+                                             {parentOf && (
+                                               <span className="shrink-0 text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded">
+                                                 {variantLabel || 'Variant'}
+                                               </span>
+                                             )}
                                              {brand && (
                                                <span className="shrink-0 text-[8px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
                                                  {getBrandNick(brand)}
                                                </span>
                                              )}
                                            </div>
-                                           <div className="text-[9px] text-slate-400 font-medium mt-0.5 truncate">{getProductSpecs(p)}</div>
+                                           <div className="text-[9px] text-slate-400 font-medium mt-0.5 truncate">
+                                             {parentOf && (
+                                               <span className="font-bold text-amber-600">
+                                                 ↳ {parentOf.profileCode || parentOf.modelNo || parentOf.id}
+                                                 {getProductSpecs(p) ? ' · ' : ''}
+                                               </span>
+                                             )}
+                                             {getProductSpecs(p)}
+                                           </div>
                                            <div className="flex justify-between text-[10px] text-slate-500 mt-0.5">
                                              <div className="flex items-center gap-2">
                                                <span className="font-mono font-bold text-blue-600">{code}</span>
