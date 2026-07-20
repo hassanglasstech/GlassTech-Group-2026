@@ -1,0 +1,106 @@
+# Store Issue — Audit & Phased Fix Plan
+**Date:** 2026-07-20 · **Screen:** `modules/sales/companies/nippon/StoreIssueScreen.tsx`
+**Route:** `#/store-issue` (store-only role, module `store-issue`)
+
+---
+
+## The headline
+
+The picking screen is, today, **record-keeping theatre**. It asks the picker for a
+partial quantity, a bin and a note, saves all three to the cloud — and then issues
+stock using the *ordered* quantity, ignoring every one of them.
+
+`pickedQty` is written and read **only inside this one file**. Nothing downstream
+consumes it.
+
+> Picker enters 8 of 10 → **10** leave stock, the order is marked fully
+> **Delivered**, and (once `finance.gl_enabled` is on) the invoice bills **10**.
+> Two pieces left on paper but not off the shelf.
+
+---
+
+## Decision taken (founder did not answer; recommended default applied)
+
+**Partial pick → issue what was picked, keep the order open.**
+Short lines stay in the store queue with the remainder outstanding. This is
+standard WMS behaviour and the only IFRS-defensible one: inventory is relieved
+when control actually transfers, so what never left the building is still ours.
+
+Consequence, deliberate: **a partial issue does NOT generate an invoice.** Billing
+waits for full delivery, otherwise the customer is charged for goods still on our
+shelf. (Moot while `finance.gl_enabled` is OFF, but the gate is written now so
+flipping the flag later stays safe.)
+
+Reverse this by changing `PARTIAL_ISSUE_KEEPS_ORDER_OPEN` in the plan below.
+
+---
+
+## Phases
+
+### P0 — data integrity & audit truth  ✅ DONE (commit 3b5b0b1)
+| # | Finding | Fix |
+|---|---|---|
+| P0-1 | `pickedQty` never reaches the stock movement — issue uses ordered qty | Issue moves the **picked** qty; per-line `issuedQty` accumulates; order closes only when every line is fully issued |
+| P0-2 | Counter lies: `openDetail` pre-fills `pickedQty` = full qty, so the header reads "Picked 10/10" before a shelf is touched | Picked starts **empty**; "Pick all" is one explicit click |
+| P0-3 | `pickedBy`/`pickedAt` stamped on Save Progress *and* on issue — so the stamp means "last edited", not "picked" | Stamp only on a real Mark Picked; issue records `issuedBy`/`issuedAt` separately |
+
+### P1 — the ceremony is bypassable / data can be blank
+| # | Finding | Fix |
+|---|---|---|
+| P1-1 | List-row **Issue** skips picking entirely (`:306`) | Require a pick, or make the shortcut open the pick sheet |
+| P1-2 | Gate pass is advisory end-to-end — zero guards anywhere in sales services | Warn in the issue confirm when no pass exists |
+| P1-3 | Cold boot shows on-hand 0 / blank images for a store-only user — screen uses sync localStorage reads while the rest of the app is async | Use `InventoryService.getStoreAsync()` + async products |
+
+### P2 — correctness under concurrency / discoverability
+| # | Finding | Fix |
+|---|---|---|
+| P2-1 | `savePick` writes the whole order from stale state — Sales revising while the store picks = silent clobber. `version` exists, unused | Optimistic lock on `version` |
+| P2-2 | `ProcurementHub.tsx:91` hides Logistics for Nippon, but the store's own toast says "the office will issue it from Logistics" | Resolve the contradiction one way |
+
+### P3 — UI / workflow polish
+| # | Finding | Fix |
+|---|---|---|
+| P3-1 | Card `<button>` contains the Issue `<button>` (`:295`+`:306`) — invalid HTML, breaks keyboard nav | Card → `<div role="button">` or restructure |
+| P3-2 | Mark Picked closes the sheet, but Request Gate Pass lives in that same toolbar | Keep the sheet open |
+| P3-3 | Issued orders vanish — no way to reprint a gate pass | "Issued today" section |
+| P3-4 | Bin corrections stay on the order, never reach the product's master bin | Write back to `store_items.storage_bin` |
+
+---
+
+## P0 implementation notes
+
+**New field:** `QuotationItem.issuedQty?: number` — cumulative, rides the items
+jsonb, no migration (same precedent as `pickedQty`, `setComponents`, `taxPercent`).
+
+**`stockMovesForLine(item, products, qtyOverride?)`** gained an override so the
+issue path can pass the picked-and-remaining qty while approve/void keep using the
+ordered qty. Reserve is still made against the full order — the customer committed
+to 10, so 10 stays reserved until the order closes or is voided.
+
+**Order lifecycle**
+
+```
+Approved ──issue(full)──────────────► Delivered   (issuedAt set, invoice if GL on)
+   │
+   └────issue(partial)──► Approved    (issuedAt NOT set → stays in the store queue,
+                                       pickStatus reset to Pending, remainder shown)
+```
+
+**Idempotency:** the old guard was `if (issuedAt) return 'already issued'`. That
+still holds for a fully-delivered order. A partially-issued order has no
+`issuedAt`, so it can legitimately be issued again — for the remainder only, which
+`remainingQty` enforces. Double-clicking Issue on a fully-picked order moves
+nothing the second time because the remainder is 0.
+
+---
+
+## Not fixed here, deliberately
+
+- Nippon store issue moves stock **locally then syncs** — it is not an atomic RPC
+  like `consume_glass_stock`. Two devices issuing the same order concurrently can
+  both move stock. Out of P0 scope; P2-1's optimistic lock narrows it.
+- The Factory gatekeeper reads gate passes from **notification titles**
+  (`FactoryGatekeeper.tsx:68-74`, matches the literal prefix `gate pass`), not from
+  `quotation.gatePass`. Renaming that toast silently empties the gate queue. Its
+  IN/OUT stamps live in `localStorage` (`gk_gate_log`) — per-device, lost on cache
+  clear. Both are real, both are outside this screen.

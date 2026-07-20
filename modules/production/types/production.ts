@@ -108,8 +108,14 @@ export interface QuotationItem {
    *  (store_items.storage_bin); the store can override per line. */
   binLocation?: string;
   /** Qty the store physically picked (partial-pick support). Undefined = not yet
-   *  picked; defaults to the ordered qty when the picker opens the line. */
+   *  picked — it starts EMPTY on purpose, so a number here always means a human
+   *  counted something off a shelf. */
   pickedQty?: number;
+  /** Cumulative qty actually ISSUED to the customer across one or more partial
+   *  issues. What the store handed over, as opposed to `qty` (what was ordered)
+   *  and `pickedQty` (what is staged right now). `qty - issuedQty` is what the
+   *  order still owes. Rides the items jsonb — no migration. */
+  issuedQty?: number;
   /** Store incharge's note for this line ("2 pcs damaged, substituted"). */
   storeNote?: string;
 }

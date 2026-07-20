@@ -527,7 +527,10 @@ export const useNipponQuotations = () => {
   const issueOrder = async (orderId: string) => {
     const res = await issueNipponOrder(orderId);
     if (res.error) { toast.error(`Issue failed — ${res.error}`, { duration: 9000 }); return; }
-    if (res.invoiceId) {
+    if (res.fullyIssued === false) {
+      // A short pick leaves the order open — never let the toast claim delivery.
+      toast.warning(`Part-issued — ${res.issuedQty} unit(s) out, ${res.remainingQty} still owed. ${res.orderNo} stays pending issue.`, { duration: 9000 });
+    } else if (res.invoiceId) {
       toast.success(`Goods issued — ${res.orderNo} delivered · invoice ${res.invoiceId} posted.`);
     } else if (res.invoiceError) {
       toast.warning(`Goods issued — ${res.orderNo} delivered, but invoice failed: ${res.invoiceError}`, { duration: 9000 });
@@ -587,26 +590,37 @@ export const useNipponQuotations = () => {
       }
       // Undo exactly what this order DID to stock — no more, no less.
       //
-      // Approve only RESERVES (unrestricted → reserved, physical untouched); the
-      // physical goods leave later, at issue. So an order voided before issue
-      // must release the reservation and nothing else. The old code added the qty
-      // back to BOTH unrestricted and physical while never clearing reservedQty,
-      // so voiding an unissued order invented stock that never left and left a
-      // reservation stuck against it forever.
-      const wasIssued = !!(order as { issuedAt?: string }).issuedAt;
+      // Approve RESERVES the ordered qty (unrestricted → reserved, physical
+      // untouched). Issue moves the ISSUED qty out (physical −, reservation −).
+      // An order can sit part-issued, so the reversal is per-line arithmetic,
+      // not a was-it-issued flag:
+      //
+      //   unrestricted += ordered            (whatever was set aside is free again)
+      //   reserved     -= ordered − issued   (release what is still only reserved)
+      //   quantity     += issued             (physical comes back only if it left)
+      //
+      // Collapses correctly at both ends: never issued → reservation released and
+      // no phantom physical; fully issued → goods returned, nothing left reserved.
       const store = InventoryService.getStore();
-      (order.items || []).flatMap(item => stockMovesForLine(item, products)).forEach(({ refId, need }) => {
-        const idx = store.findIndex(s => s.id === refId);
-        if (idx === -1) return;
-        store[idx] = {
-          ...store[idx],
-          unrestrictedQty: (store[idx].unrestrictedQty || 0) + need,
-          // Reservation released either way: issue consumed it, void cancels it.
-          reservedQty: wasIssued ? (store[idx].reservedQty || 0) : Math.max(0, (store[idx].reservedQty || 0) - need),
-          // Physical comes back ONLY if it physically left.
-          quantity: wasIssued ? (store[idx].quantity || 0) + need : (store[idx].quantity || 0),
-          lastMovementDate: new Date().toISOString(),
-        };
+      (order.items || []).forEach(item => {
+        if (item.isSection) return;
+        const gone = Number(item.issuedQty) || 0;
+        // Set lines explode to components, so ask the shared resolver for both
+        // slices rather than doing the arithmetic on the header qty.
+        const ordered = stockMovesForLine(item, products);
+        const issuedOut = new Map(stockMovesForLine(item, products, gone).map(m => [m.refId, m.need]));
+        ordered.forEach(({ refId, need }) => {
+          const idx = store.findIndex(s => s.id === refId);
+          if (idx === -1) return;
+          const back = issuedOut.get(refId) || 0;
+          store[idx] = {
+            ...store[idx],
+            unrestrictedQty: (store[idx].unrestrictedQty || 0) + need,
+            reservedQty: Math.max(0, (store[idx].reservedQty || 0) - (need - back)),
+            quantity: (store[idx].quantity || 0) + back,
+            lastMovementDate: new Date().toISOString(),
+          };
+        });
       });
       InventoryService.saveStore(store);
       Logger.action('SALES', 'NIPPON_ORDER_VOIDED', `${order.orderNo || id} (${company})`,

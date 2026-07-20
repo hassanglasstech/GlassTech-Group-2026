@@ -23,7 +23,7 @@ import { useAuthStore } from '@/modules/auth/authStore';
 import { Quotation, Client, Product, QuotationItem, StoreItem } from '@/modules/shared/types';
 import { ProductImage } from '@/modules/shared/components/ProductImage';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
-import { issueNipponOrder, isPendingIssue } from './nipponFulfilmentService';
+import { issueNipponOrder, isPendingIssue, remainingQty, issueQtyFor } from './nipponFulfilmentService';
 import { NipponGatePassButton } from './NipponGatePassButton';
 import { notifyBuyerOfStatus, bookBuyerProjectCost } from '@/modules/sales/services/intercompanyOrderService';
 import { toast } from 'sonner';
@@ -85,15 +85,23 @@ const StoreIssueScreen: React.FC = () => {
   const detailOrder = orders.find(q => q.id === detailId) || null;
 
   const openDetail = (q: Quotation) => {
-    // Seed an editable copy: bin from the store bin, picked qty defaulting to the
-    // ordered qty (a full pick) unless a prior partial pick was saved.
+    // Seed an editable copy: bin from the store bin. Picked qty is left EMPTY —
+    // it used to default to the ordered qty, so the header read "Picked 10/10"
+    // before anyone had walked to a shelf, and a picker who just hit Issue
+    // recorded a perfect full pick that never happened. A number here now always
+    // means a human counted something. "Pick all" below makes the honest full
+    // pick one click.
     const seeded = (q.items || []).map(it => it.isSection ? it : ({
       ...it,
       binLocation: it.binLocation || (storeItemFor(it)?.storageBin ?? ''),
-      pickedQty: it.pickedQty ?? (Number(it.qty) || 0),
     }));
     setDetailItems(seeded);
     setDetailId(q.id);
+  };
+
+  /** Fill every line with what it still owes — the honest one-click full pick. */
+  const pickAll = () => {
+    setDetailItems(prev => prev.map(it => (it.isSection ? it : { ...it, pickedQty: remainingQty(it) })));
   };
   const closeDetail = () => { setDetailId(null); setDetailItems([]); };
 
@@ -103,6 +111,11 @@ const StoreIssueScreen: React.FC = () => {
 
   // Persist pick progress (bin + picked qty + notes) onto the order. markPicked
   // stamps it 'Picked' (fully staged, ready for gate pass); otherwise 'Picking'.
+  //
+  // pickedBy/pickedAt are stamped ONLY on a completed pick. They used to be
+  // written on every Save Progress and again by the issue path, which made them
+  // mean "last edited by" — useless as an audit trail when the question is who
+  // actually pulled the goods.
   const savePick = async (q: Quotation, markPicked: boolean): Promise<boolean> => {
     setSaving(true);
     try {
@@ -110,8 +123,7 @@ const StoreIssueScreen: React.FC = () => {
         ...q,
         items: detailItems,
         pickStatus: markPicked ? 'Picked' : 'Picking',
-        pickedBy: stampUser,
-        pickedAt: new Date().toISOString(),
+        ...(markPicked ? { pickedBy: stampUser, pickedAt: new Date().toISOString() } : {}),
       };
       const res = await AsyncSalesService.saveQuotations([updated]);
       if (res?.error) { toast.error(`Pick not saved to cloud — ${res.error}`, { duration: 8000 }); return false; }
@@ -133,15 +145,32 @@ const StoreIssueScreen: React.FC = () => {
   };
 
   const doIssue = async (q: Quotation) => {
-    const ok = await confirmModal(`Issue goods for ${q.orderNo || q.id}? On-hand stock will be reduced and the order marked Delivered.`);
+    // Say plainly what is about to leave. When the sheet is open the picked
+    // numbers drive it, so a short pick must not read as a full delivery.
+    const inSheet = detailId === q.id;
+    const lines = (inSheet ? detailItems : (q.items || [])).filter(i => !i.isSection);
+    const out = lines.reduce((s, i) => s + issueQtyFor(i), 0);
+    const owed = lines.reduce((s, i) => s + remainingQty(i), 0);
+    const short = out < owed;
+    const ok = await confirmModal(
+      short
+        ? `Part-issue ${q.orderNo || q.id}?\n\n${out} of ${owed} outstanding unit(s) will leave the store. ` +
+          `The order STAYS OPEN for the remaining ${owed - out} and is not invoiced until it is fully delivered.`
+        : `Issue goods for ${q.orderNo || q.id}?\n\n${out} unit(s) will leave the store and the order will be marked Delivered.`,
+    );
     if (!ok) return;
     setBusy(q.id);
-    // Capture the pick (bin/qty/notes) before the stock-out so the record is complete.
-    if (detailId === q.id) await savePick(q, true);
+    // Persist the pick (bin/qty/notes) BEFORE the stock-out — issueNipponOrder
+    // re-reads the saved order, so an unsaved picked qty would be ignored.
+    // Saved as 'Picking', not 'Picked': issuing is not evidence of a completed
+    // pick, and only Mark Picked may claim that.
+    if (inSheet) await savePick(q, false);
     const res = await issueNipponOrder(q.id);
     setBusy(null);
     if (res.error) { toast.error(`Issue failed — ${res.error}`, { duration: 8000 }); return; }
-    if (res.invoiceId) toast.success(`Issued — ${res.orderNo} delivered · invoice ${res.invoiceId} posted.`);
+    if (res.fullyIssued === false) {
+      toast.warning(`Part-issued — ${res.issuedQty} unit(s) out, ${res.remainingQty} still owed. ${res.orderNo} stays in the queue.`, { duration: 9000 });
+    } else if (res.invoiceId) toast.success(`Issued — ${res.orderNo} delivered · invoice ${res.invoiceId} posted.`);
     else if (res.invoiceError) toast.warning(`Issued — ${res.orderNo} delivered, but invoice failed: ${res.invoiceError}`, { duration: 9000 });
     else toast.success(`Issued — ${res.orderNo} marked Delivered.`);
     // IC-P3: hand the "Delivered" status back to the buyer's project timeline.
@@ -164,7 +193,10 @@ const StoreIssueScreen: React.FC = () => {
     // Bin-sorted walk path so the picker crosses the aisle once.
     const walk = [...lines].sort((a, b) => (binFor(a) || 'zzzz').localeCompare(binFor(b) || 'zzzz'));
     const pickedTotal = lines.reduce((s, i) => s + (Number(i.pickedQty) || 0), 0);
-    const needTotal = lines.reduce((s, i) => s + (Number(i.qty) || 0), 0);
+    // What this visit owes — the outstanding remainder, not the original order,
+    // so a part-issued order reads against what is actually left to pull.
+    const needTotal = lines.reduce((s, i) => s + remainingQty(i), 0);
+    const alreadyOut = lines.reduce((s, i) => s + (Number(i.issuedQty) || 0), 0);
     return (
       <div className="space-y-4 max-w-5xl mx-auto">
         <div className="bg-slate-900 text-white p-4 rounded-2xl flex items-center gap-3">
@@ -180,6 +212,9 @@ const StoreIssueScreen: React.FC = () => {
           <div className="ml-auto text-right shrink-0">
             <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Picked</p>
             <p className="text-sm font-black tabular-nums">{pickedTotal}<span className="text-slate-500">/{needTotal}</span></p>
+            {alreadyOut > 0 && (
+              <p className="text-[9px] font-bold text-amber-400 uppercase tracking-widest">{alreadyOut} already out</p>
+            )}
           </div>
         </div>
 
@@ -210,9 +245,13 @@ const StoreIssueScreen: React.FC = () => {
                   const p = prodFor(item);
                   const code = p?.profileCode || p?.modelNo || item.locationCode || '—';
                   const have = onHand(item);
-                  const need = Number(item.qty) || 0;
+                  // "Need" is what is still outstanding on this line, so a
+                  // part-issued line asks for the remainder, not the original qty.
+                  const need = remainingQty(item);
+                  const alreadyIssued = Number(item.issuedQty) || 0;
+                  const untouched = item.pickedQty === undefined || item.pickedQty === null;
                   const picked = Number(item.pickedQty) || 0;
-                  const short = picked < need;
+                  const short = !untouched && picked < need;
                   return (
                     <tr key={item.id} className="hover:bg-slate-50">
                       <td className="px-4 py-2">
@@ -228,11 +267,19 @@ const StoreIssueScreen: React.FC = () => {
                         <div className="text-xs font-bold text-slate-800 uppercase leading-tight">{item.description || p?.description || '—'}</div>
                         <div className="font-mono text-[10px] font-bold text-slate-400 uppercase">{code}</div>
                       </td>
-                      <td className="px-4 py-2 text-right text-sm font-black text-slate-900 tabular-nums">{need}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">
+                        <div className="text-sm font-black text-slate-900">{need}</div>
+                        {alreadyIssued > 0 && (
+                          <div className="text-[9px] font-bold text-amber-600 uppercase tracking-wide">{alreadyIssued} out</div>
+                        )}
+                      </td>
                       <td className={`px-4 py-2 text-right text-xs font-black tabular-nums ${have < need ? 'text-rose-500' : 'text-slate-400'}`}>{have}</td>
                       <td className="px-4 py-2">
-                        <input type="number" min={0} value={item.pickedQty ?? ''} onChange={e => updateLine(item.id, 'pickedQty', Number(e.target.value))}
-                          className={`sap-input w-20 py-1 text-center text-sm font-black tabular-nums ${short ? 'text-amber-700 bg-amber-50 border border-amber-300' : 'text-emerald-700'}`}/>
+                        <input type="number" min={0} max={need} value={item.pickedQty ?? ''} placeholder="—"
+                          onChange={e => updateLine(item.id, 'pickedQty', Number(e.target.value))}
+                          className={`sap-input w-20 py-1 text-center text-sm font-black tabular-nums ${
+                            untouched ? 'text-slate-400' : short ? 'text-amber-700 bg-amber-50 border border-amber-300' : 'text-emerald-700'
+                          }`}/>
                       </td>
                       <td className="px-4 py-2">
                         <input value={item.storeNote || ''} onChange={e => updateLine(item.id, 'storeNote', e.target.value)}
@@ -245,6 +292,11 @@ const StoreIssueScreen: React.FC = () => {
             </table>
           </div>
           <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 flex-wrap">
+            {/* The honest full pick: one click, but a deliberate one. */}
+            <button onClick={pickAll} disabled={saving}
+              className="mr-auto flex items-center gap-1.5 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-50 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600">
+              <PackageCheck size={13}/> Pick All ({needTotal})
+            </button>
             <button onClick={() => handleSaveProgress(detailOrder)} disabled={saving}
               className="flex items-center gap-1.5 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-50 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600">
               {saving ? <Loader2 size={13} className="animate-spin"/> : <Save size={13}/>} Save Progress

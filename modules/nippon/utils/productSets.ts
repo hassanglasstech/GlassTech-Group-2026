@@ -82,9 +82,15 @@ export const stockMovesForLine = (
     setComponents?: QuoteSetComponent[];
   },
   products: Product[],
+  /**
+   * Move this many instead of the ordered qty. The issue path passes what was
+   * actually picked (which can be less); approve and void pass nothing and get
+   * the ordered qty, because the customer committed to the whole order.
+   */
+  qtyOverride?: number,
 ): StockMove[] => {
   if (item.isSection) return [];
-  const qty = Number(item.qty) || 0;
+  const qty = qtyOverride !== undefined ? Number(qtyOverride) || 0 : Number(item.qty) || 0;
 
   if (isSetLine(item)) {
     return explodeSetLine(item.setComponents, qty)
