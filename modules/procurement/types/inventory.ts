@@ -83,11 +83,27 @@ export interface PriceHistoryEntry {
   reason?: string;                 // optional: why rate changed
 }
 
+/**
+ * One line of a product SET (kit): "this set contains N of that item".
+ *
+ * `productId` links the line to a real catalogue product, which is what makes a
+ * set orderable rather than decorative — it lets the store pick against real
+ * stock and lets costing roll up from real rates. It is optional only so the
+ * older free-text components (authored before sets could search the catalogue)
+ * keep loading; new components always carry it.
+ */
 export interface ProductComponent {
   id: string;
+  /** Catalogue product this component IS. Absent on legacy free-text components. */
+  productId?: string;
+  /** Visible item code (model no / supplier code) — shown on the printed set breakdown. */
+  code?: string;
   description: string;
   unit: string;
   qtyPerSet: number;
+  /** Component's own unit rate at the time it was added — used to suggest the
+   *  set price and to show what the bundle is worth if sold loose. Never printed. */
+  rate?: number;
 }
 
 export interface StoreItem {

@@ -3,7 +3,8 @@ import { toast } from 'sonner';
 import { Company, Client, Quotation, QuotationItem, Product } from '@/modules/shared/types';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
-import { StoreItem, ProductComponent } from '@/modules/procurement/types/inventory';
+import { StoreItem } from '@/modules/procurement/types/inventory';
+import { snapshotSetComponents } from '@/modules/nippon/utils/productSets';
 import { Logger } from '@/modules/shared/services/logger';
 import { nipponImageUrl } from '@/modules/shared/components/ProductImage';
 import { issueNipponOrder } from './nipponFulfilmentService';
@@ -146,65 +147,6 @@ export const useNipponQuotations = () => {
       next[index] = item;
       return { ...prev, items: next };
     });
-    // ── Set suggestion: if product is part of a set, prompt user ──
-    // `prod` was orphaned from an earlier refactor — would have crashed at
-    // runtime as ReferenceError. Resolve from the value when the field
-    // looks like a product selection; bail out otherwise.
-    const maybeProduct = (field === 'productId' || field === 'product') ? value : null;
-    const prod = maybeProduct as Product | null;
-    if (prod && prod.isSet && prod.setComponents && prod.setComponents.length > 0) {
-      setPendingSetSuggestion({
-        index,
-        setProduct: prod,
-        remainingComponents: prod.setComponents,
-      });
-    }
-  };
-
-  // ── Set suggestion state ───────────────────────────────────────────
-  const [pendingSetSuggestion, setPendingSetSuggestion] = useState<{
-    index: number;
-    setProduct: Product;
-    remainingComponents: ProductComponent[];
-  } | null>(null);
-
-  const addFullSet = (index: number, setProduct: Product, allProducts: Product[]) => {
-    // Find all products that belong to this set (by setId / profileCode match)
-    const setMembers = allProducts.filter(p =>
-      p.setId === setProduct.id || p.id === setProduct.id ||
-      ((setProduct.setComponents as Array<{ id?: string; description?: string }> | undefined) || []).some((c) => c.id === p.id || c.description === p.description)
-    );
-    setFormData(prev => {
-      const newItems = [...(prev.items || [])];
-      const setHeading = {
-        id: `SET-HDR-${Date.now()}`,
-        description: `${setProduct.description} (SET)`,
-        isSection: true,
-        qty: 0, width: 0, height: 0, totalSqFt: 0,
-        pricePerUnit: 0, amount: 0,
-        locationCode: '', glazingSpecs: '', glassSize: '',
-        isSetHeader: true,
-        setId: setProduct.id,
-      };
-      // Replace current line with set header + members
-      const memberItems = setMembers.map((mp: Product, mi: number) => ({
-        id: `SET-ITM-${Date.now()}-${mi}`,
-        description: mp.description,
-        locationCode: mp.profileCode || '',
-        glazingSpecs: mp.brand || '',
-        glassSize: mp.unit || 'PCS',
-        qty: 1,
-        width: 0, height: 0, totalSqFt: 0,
-        pricePerUnit: mp.basePrice || 0,
-        amount: mp.basePrice || 0,
-        attachedImage: mp.imageUrl || nipponImageUrl(mp.modelNo || mp.profileCode),
-        setId: setProduct.id,
-        isSetMember: true,
-      }));
-      newItems.splice(index, 1, setHeading, ...memberItems);
-      return { ...prev, items: newItems };
-    });
-    setPendingSetSuggestion(null);
   };
 
   const selectProduct = (index: number, prod: Product) => {
@@ -231,13 +173,13 @@ export const useNipponQuotations = () => {
       // Nippon: clean description only — no specs in parens, no internal ID prefix.
       // locationCode = modelNo (visible item code on print/editor).
       // productRef  = prod.id  (internal ID used for inventory decrement — never shown).
-      let desc = prod.description || prod.name || '';
-      if (prod.isSet && prod.setComponents && prod.setComponents.length > 0) {
-          const compNames = (prod.setComponents as Array<{ description?: string; qtyPerSet?: number; unit?: string }>).map((c) => `${c.description} (${c.qtyPerSet} ${c.unit})`).join(', ');
-          desc += `\n[Includes: ${compNames}]`;
-      }
-
-      item.description = desc;
+      item.description = prod.description || prod.name || '';
+      // A SET is sold as ONE priced line. Freeze its contents onto the line so
+      // the document can show what is inside and how many of each, while the
+      // money stays on the set alone. Always reassign (empty for a non-set) —
+      // re-picking a plain product onto a row that held a set must not leave
+      // the old set's contents behind.
+      item.setComponents = prod.isSet ? snapshotSetComponents(prod) : undefined;
       // Show the same code the dropdown showed: ERP model no first, then the
       // KinLong/item code, then the id. Was modelNo-only, so it came up blank
       // for store rows whose product wasn't matched (stub) or had no modelNo.
@@ -704,9 +646,6 @@ export const useNipponQuotations = () => {
     lastSerial,
     handleAddSection,
     handleAddItem,
-    pendingSetSuggestion,
-    setPendingSetSuggestion,
-    addFullSet,
     updateItem,
     applyClientPricing,
     toggleItemSample,

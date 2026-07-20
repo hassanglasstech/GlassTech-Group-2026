@@ -19,6 +19,7 @@ import { withoutVariantParents } from '@/modules/nippon/utils/variantGrouping';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import NipponProductForm from '@/modules/nippon/components/NipponProductForm';
 import NipponDirectImporter from './components/NipponDirectImporter';
+import NipponSetBuilder from '@/modules/nippon/components/NipponSetBuilder';
 import NipponPriceLists from './NipponPriceLists';
 import { useRealtimeRefresh } from '@/modules/shared/hooks/useRealtimeRefresh';
 import * as XLSX from 'xlsx';
@@ -40,7 +41,7 @@ const NipponProductMaster: React.FC = () => {
   const [imageFilter, setImageFilter] = useState<'all' | 'has' | 'missing'>(_view0.imageFilter || 'all');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [variantParent, setVariantParent] = useState<Product | null>(null);   // "Add variant" source
-  const [activeTab, setActiveTab] = useState<'list' | 'direct' | 'pricing'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'direct' | 'pricing' | 'sets'>('list');
   // Sorting — click any column header to sort; click again to flip direction.
   type SortKey = 'profileCode' | 'modelNo' | 'description' | 'mainCategory' | 'brand' | 'basePrice' | 'stock';
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>(_view0.sortConfig || { key: 'profileCode', dir: 'asc' });
@@ -317,31 +318,87 @@ const NipponProductMaster: React.FC = () => {
     return onHand;
   };
 
-  // P0-5 (referential integrity / IAS-audit): a product referenced by any saved
-  // quotation/order/invoice must NOT be hard-deleted — it would orphan that
-  // history (broken reprints, lost audit trail). Count references by matching the
-  // product's id / model / supplier code against each line's productRef /
-  // locationCode. (Full soft-delete/archive needs a `products.archived` column —
-  // founder SQL; until then we BLOCK the destructive delete, which is the safe
-  // half of the standard.)
-  const countProductReferences = async (p: Product | undefined, id: string): Promise<number> => {
+  // P0-5 (referential integrity / IAS-audit): a product referenced by a saved
+  // quotation/order/invoice must NOT be silently hard-deleted — it would orphan
+  // that history (broken reprints, lost audit trail).
+  //
+  // But "referenced" is not one thing. A LIVE document (approved, invoiced,
+  // delivered, paid) is real trading history and must never lose its lines. An
+  // abandoned DRAFT or a rejected/void test document is not history — refusing
+  // to clean up junk because a scratch quote once touched it is how a catalogue
+  // fills with items nobody can remove. So: report exactly which documents hold
+  // the product, block on live ones, and let the user decide about drafts.
+  //
+  // Also counts SET membership: a product inside a set is referenced too, and
+  // deleting it would leave the set quoting contents that no longer exist.
+  const LIVE_STATUSES = new Set<string>(['Approved', 'Delivered', 'Invoiced', 'Partial Payment', 'Paid']);
+
+  interface ProductRef { label: string; live: boolean }
+
+  const findProductReferences = async (p: Product | undefined, id: string): Promise<{
+    docs: ProductRef[];
+    sets: Product[];
+  }> => {
     const codes = new Set([id, p?.modelNo, p?.profileCode].filter(Boolean).map(s => String(s).toUpperCase()));
-    const hit = (items?: Array<{ productRef?: string; locationCode?: string }>) =>
-      (items || []).some(it => [it.productRef, it.locationCode]
-        .filter(Boolean).some(r => codes.has(String(r).toUpperCase())));
+    const hit = (items?: Array<{ productRef?: string; locationCode?: string; setComponents?: Array<{ productId?: string }> }>) =>
+      (items || []).some(it =>
+        [it.productRef, it.locationCode].filter(Boolean).some(r => codes.has(String(r).toUpperCase()))
+        // a set line delivers its components, so it references them too
+        || (it.setComponents || []).some(c => c.productId && codes.has(String(c.productId).toUpperCase())));
+
     const [qs, invs] = await Promise.all([AsyncSalesService.getQuotations(), AsyncSalesService.getInvoices()]);
-    const q = qs.filter(x => x.company === company && hit((x as { items?: Array<{ productRef?: string; locationCode?: string }> }).items)).length;
-    const i = invs.filter(x => x.company === company && hit((x as { items?: Array<{ productRef?: string; locationCode?: string }> }).items)).length;
-    return q + i;
+    type Doc = { company?: string; status?: string; quoteNumber?: string; invoiceNumber?: string; id?: string;
+                 items?: Array<{ productRef?: string; locationCode?: string; setComponents?: Array<{ productId?: string }> }> };
+    const collect = (rows: unknown[], kind: string): ProductRef[] =>
+      (rows as Doc[])
+        .filter(x => x.company === company && hit(x.items))
+        .map(x => ({
+          label: `${kind} ${x.quoteNumber || x.invoiceNumber || x.id || '?'} (${x.status || 'Draft'})`,
+          live: LIVE_STATUSES.has(String(x.status || '')),
+        }));
+
+    return {
+      docs: [...collect(qs, 'Quotation'), ...collect(invs, 'Invoice')],
+      sets: products.filter(s => s.isSet && (s.setComponents || []).some(c => c.productId === id)),
+    };
   };
 
   const handleDelete = async (id: string) => {
       const prod = products.find(p => p.id === id);
-      const refs = await countProductReferences(prod, id);
-      if (refs > 0) {
-        toast.error(`Can't delete — this product is on ${refs} saved quotation/invoice document(s). Hard-deleting would orphan that history. Keep it (archive support is coming).`, { duration: 9000 });
+      const { docs, sets } = await findProductReferences(prod, id);
+
+      // A set that contains this item would start quoting a phantom component.
+      // Always block: the fix is to edit the set, which the user can do himself.
+      if (sets.length) {
+        toast.error(
+          `Can't delete — this item is inside ${sets.length} set(s): ${sets.map(s => s.description).join(', ')}. ` +
+          `Remove it from the set(s) first (Sets tab).`,
+          { duration: 9000 },
+        );
         return;
       }
+
+      const live = docs.filter(d => d.live);
+      if (live.length) {
+        toast.error(
+          `Can't delete — this product is on ${live.length} live document(s): ${live.slice(0, 3).map(d => d.label).join(', ')}` +
+          `${live.length > 3 ? ` +${live.length - 3} more` : ''}. Deleting would orphan real trading history.`,
+          { duration: 10000 },
+        );
+        return;
+      }
+
+      // Only drafts / rejected / void reference it — deletable, but say so plainly.
+      if (docs.length) {
+        const ok = await confirmModal(
+          `This product appears on ${docs.length} unconfirmed document(s):\n\n` +
+          docs.slice(0, 8).map(d => `  • ${d.label}`).join('\n') +
+          (docs.length > 8 ? `\n  • …and ${docs.length - 8} more` : '') +
+          `\n\nNone of them is approved or invoiced, so no trading history is lost — but those lines will print with a code that no longer exists in the catalogue.\n\nDelete the product anyway?`,
+        );
+        if (!ok) return;
+      }
+
       const row = storeItems.find(s => s.id === id);
       const onHand = Number(row?.quantity) || 0;
       const warn = onHand > 0
@@ -822,13 +879,15 @@ const NipponProductMaster: React.FC = () => {
   const bulkDelete = async () => {
     const ids = Array.from(selectedIds);
     if (!ids.length) return;
-    if (!window.confirm(`Delete ${ids.length} product(s)? This removes them from the cloud as well.`)) return;
+    if (!(await confirmModal(`Delete ${ids.length} product(s)? This removes them from the cloud as well.`))) return;
     let ok = 0, fail = 0, blocked = 0;
     const deletedIds: string[] = [];
     for (const id of ids) {
-      // P0-5: never hard-delete a product with saved quotation/invoice history.
-      const refs = await countProductReferences(products.find(p => p.id === id), id);
-      if (refs > 0) { blocked++; continue; }
+      // P0-5: never hard-delete a product with real trading history. Bulk stays
+      // stricter than the single-row delete — it keeps anything referenced at
+      // all, because there is no per-item dialog here to judge a draft on.
+      const { docs, sets } = await findProductReferences(products.find(p => p.id === id), id);
+      if (docs.length || sets.length) { blocked++; continue; }
       const { error } = await AsyncSalesService.deleteProduct(id);
       if (error) fail++; else { ok++; deletedIds.push(id); }
     }
@@ -857,6 +916,12 @@ const NipponProductMaster: React.FC = () => {
           Bulk Import
         </button>
         <button
+          onClick={() => setActiveTab('sets')}
+          className={`px-6 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${activeTab === 'sets' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          Sets
+        </button>
+        <button
           onClick={() => setActiveTab('pricing')}
           className={`px-6 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${activeTab === 'pricing' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
         >
@@ -874,6 +939,10 @@ const NipponProductMaster: React.FC = () => {
 
       {activeTab === 'pricing' ? (
         <NipponPriceLists />
+      ) : activeTab === 'sets' ? (
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <NipponSetBuilder products={products} onChanged={refreshData} />
+        </div>
       ) : activeTab === 'direct' ? (
         <NipponDirectImporter onComplete={() => {
           setActiveTab('list');

@@ -18,6 +18,7 @@ import { useAuthStore } from '@/modules/auth/authStore';
 import { isFinanceGLEnabled } from '@/modules/shared/services/featureFlagService';
 import { loadTaxSettings } from '@/modules/admin/services/taxSettingsService';
 import { generateDeliveryInvoice } from '@/modules/sales/services/deliveryInvoiceService';
+import { explodeSetLine, isSetLine } from '@/modules/nippon/utils/productSets';
 import { Quotation, Company } from '@/modules/shared/types';
 
 /** Resolve the acting user for the audit stamp (works outside React). */
@@ -47,15 +48,29 @@ export async function issueNipponOrder(
     const products = SalesService.getProducts().filter(p => p.company === company);
     const store = InventoryService.getStore();
     const updated = [...store];
+    // What physically leaves the store, per line. A SET is not stocked as a unit —
+    // it is assembled from loose hardware at issue — so a set line relieves its
+    // COMPONENTS (qty per set × sets ordered), never a phantom "set" row. Relieving
+    // the set id instead would leave every component's on-hand overstated forever.
+    const issueLines: Array<{ refId: string; need: number }> = [];
     (order.items || []).forEach(item => {
       if (item.isSection) return;
+      const setQty = Number(item.qty) || 0;
+      if (isSetLine(item)) {
+        explodeSetLine(item.setComponents, setQty).forEach(c => {
+          if (c.productId) issueLines.push({ refId: c.productId, need: c.totalQty });
+        });
+        return;
+      }
       const matched = products.find(p =>
         (item.productRef && p.id === item.productRef) ||
         (item.locationCode && (p.id === item.locationCode || p.modelNo === item.locationCode || p.profileCode === item.locationCode)));
       const refId = matched?.id || item.productRef || item.locationCode;
-      if (!refId) return;
+      if (refId) issueLines.push({ refId, need: setQty });
+    });
+
+    issueLines.forEach(({ refId, need }) => {
       const idx = updated.findIndex(s => s.id === refId);
-      const need = Number(item.qty) || 0;
       if (idx !== -1) {
         updated[idx] = {
           ...updated[idx],

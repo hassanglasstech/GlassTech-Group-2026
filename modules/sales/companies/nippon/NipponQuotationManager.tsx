@@ -5,6 +5,7 @@ import { NipponDocPreview } from '@/modules/nippon/prints/NipponDocPreview';
 import { SharedQuotationList } from '@/modules/sales/components/SharedQuotationList';
 import { getBrandNick } from '@/modules/shared/utils/brandUtils';
 import { variantParentIds, variantLabelOf } from '@/modules/nippon/utils/variantGrouping';
+import { explodeSetLine, isSetLine } from '@/modules/nippon/utils/productSets';
 import {
   Printer, X, Plus, Trash2, FileSignature,
   Search, Calendar, Edit2, FileCheck, Eye, Save, ArrowLeft, Layers, Copy, Gift, PackageCheck, CheckCircle2, Loader2
@@ -43,9 +44,6 @@ const NipponQuotationManager: React.FC = () => {
     lastSerial,
     handleAddSection,
     handleAddItem,
-    pendingSetSuggestion,
-    setPendingSetSuggestion,
-    addFullSet,
     updateItem,
     applyClientPricing,
     toggleItemSample,
@@ -246,37 +244,6 @@ const NipponQuotationManager: React.FC = () => {
       ...(p.technicalSpecs ? Object.values(p.technicalSpecs) : [])
     ].filter(Boolean).join(' | ');
     return specs;
-  };
-
-  const handleAddSetComponents = () => {
-    if (!pendingSetSuggestion) return;
-    const idx = pendingSetSuggestion.index;
-    const comps = pendingSetSuggestion.remainingComponents;
-    const newLines = comps.map((c, ci) => {
-      const matchProd = products.find((p) =>
-        p.id === c.id || p.description.toUpperCase() === c.description.toUpperCase()
-      );
-      const qtyPerSet = c.qtyPerSet || 1;
-      return {
-        id: `SET-ADD-${Date.now()}-${ci}`,
-        description: matchProd ? matchProd.description : c.description,
-        locationCode: matchProd?.profileCode || '',
-        glazingSpecs: matchProd?.brand || '',
-        glassSize: c.unit || 'PCS',
-        qty: qtyPerSet,
-        width: 0, height: 0, totalSqFt: 0,
-        pricePerUnit: matchProd?.basePrice || 0,
-        amount: qtyPerSet * (matchProd?.basePrice || 0),
-        isSetMember: true,
-        setId: pendingSetSuggestion.setProduct.id,
-      } as QuotationItem;
-    });
-    setFormData((prev: Partial<Quotation>) => {
-      const next = [...(prev.items || [])];
-      next.splice(idx + 1, 0, ...newLines);
-      return { ...prev, items: next };
-    });
-    setPendingSetSuggestion(null);
   };
 
   return (
@@ -698,6 +665,13 @@ const NipponQuotationManager: React.FC = () => {
                                                  {variantLabel || 'Variant'}
                                                </span>
                                              )}
+                                             {/* A set is one priced bundle — flag it so the seller knows
+                                                 the rate covers everything inside, not a single piece. */}
+                                             {p.isSet && (p.setComponents?.length || 0) > 0 && (
+                                               <span className="shrink-0 text-[8px] font-black uppercase tracking-wider bg-amber-500 text-white px-1.5 py-0.5 rounded">
+                                                 Set of {p.setComponents!.length}
+                                               </span>
+                                             )}
                                              {brand && (
                                                <span className="shrink-0 text-[8px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
                                                  {getBrandNick(brand)}
@@ -733,6 +707,24 @@ const NipponQuotationManager: React.FC = () => {
                                    </div>
                                  );
                                })()}
+                               {/* SET contents — what the customer receives for this one price.
+                                   Quantities are shown as delivered (per set × line qty), which
+                                   is what the store picks and what the customer counts. */}
+                               {isSetLine(item) && (
+                                 <div className="mt-1 border-l-2 border-amber-300 pl-2 space-y-0.5">
+                                   <div className="text-[9px] font-black uppercase tracking-wider text-amber-600">
+                                     Set contains
+                                   </div>
+                                   {explodeSetLine(item.setComponents, item.qty).map((c, ci) => (
+                                     <div key={ci} className="flex items-baseline justify-between gap-2 text-[10px]">
+                                       <span className="font-bold text-slate-600 uppercase truncate">{c.description}</span>
+                                       <span className="shrink-0 font-black text-slate-500 tabular-nums">
+                                         {c.totalQty} {c.unit}
+                                       </span>
+                                     </div>
+                                   ))}
+                                 </div>
+                               )}
                             </td>
                             <td className="w-32">
                                 <input readOnly={isLocked} type="text" placeholder="Brand" className="sap-input w-full py-0.5 text-xs font-bold uppercase" value={item.glazingSpecs || ''} onChange={e => updateItem(idx, 'glazingSpecs', e.target.value)} />
@@ -967,53 +959,6 @@ const NipponQuotationManager: React.FC = () => {
           printType={clients.find(c => c.id === printReceipt.order.clientId)?.preferredPrintType || nipponPrintType}
           onClose={() => setPrintReceipt(null)}
         />
-      )}
-
-      {/* ══════════════════════════════════════════════════════════
-           SET SUGGESTION MODAL — appears when set product selected
-      ══════════════════════════════════════════════════════════ */}
-      {pendingSetSuggestion && (
-        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-[500]">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in duration-200">
-            <div className="bg-amber-600 text-white px-7 py-5">
-              <h4 className="font-black uppercase tracking-tight text-base">Set Product Detected</h4>
-              <p className="text-[10px] text-amber-100 mt-0.5 font-bold uppercase">
-                {pendingSetSuggestion.setProduct.description}
-              </p>
-            </div>
-            <div className="p-6 space-y-4">
-              <p className="text-xs text-slate-600 font-medium">This product is part of a set with {pendingSetSuggestion.remainingComponents.length} components:</p>
-              <div className="bg-slate-50 rounded-xl p-3 space-y-1.5 border border-slate-200">
-                {pendingSetSuggestion.remainingComponents.map((c, ci) => (
-                  <div key={ci} className="flex justify-between text-xs">
-                    <span className="font-bold text-slate-800 uppercase">{c.description}</span>
-                    <span className="text-slate-500 font-medium">{c.qtyPerSet} {c.unit}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="grid grid-cols-3 gap-3 pt-2">
-                <button
-                  onClick={() => setPendingSetSuggestion(null)}
-                  className="col-span-1 py-2.5 text-xs font-bold text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors uppercase"
-                >
-                  This Item Only
-                </button>
-                <button
-                  onClick={handleAddSetComponents}
-                  className="col-span-1 py-2.5 text-xs font-bold text-blue-700 border border-blue-200 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors uppercase"
-                >
-                  Add Other Items
-                </button>
-                <button
-                  onClick={() => addFullSet(pendingSetSuggestion.index, pendingSetSuggestion.setProduct, products)}
-                  className="col-span-1 py-2.5 text-xs font-bold text-white bg-amber-600 rounded-xl hover:bg-amber-700 transition-colors uppercase shadow-md"
-                >
-                  Add Full Set
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

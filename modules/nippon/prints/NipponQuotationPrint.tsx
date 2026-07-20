@@ -5,6 +5,7 @@ import { ProductImage } from '../../shared/components/ProductImage';
 import { NipponLetterhead, NipponContactFooter } from './NipponLetterhead';
 import { getNipponTerms } from '../constants/nipponCompanyInfo';
 import { BrandingService } from '../../shared/services/brandingService';
+import { explodeSetLine, isSetLine } from '../utils/productSets';
 
 interface Props {
     quote: Quotation;
@@ -312,8 +313,30 @@ export const NipponQuotationPrint: React.FC<Props> = ({ quote, clientName, print
                                                                             )}
                                                                             <p className="font-black text-slate-800 uppercase leading-tight text-[10px] whitespace-pre-wrap">
                                                                                 {cleanName}
+                                                                                {isSetLine(item) && <span className="ml-1.5 text-[7px] font-black uppercase tracking-widest bg-amber-500 text-white px-1 py-0.5 rounded align-middle">Set</span>}
                                                                                 {item.isSample && <span className="ml-1.5 text-[7px] font-black uppercase tracking-widest bg-amber-100 text-amber-700 px-1 py-0.5 rounded align-middle">Free Sample</span>}
                                                                             </p>
+                                                                            {/* SET breakdown — the bundle is ONE priced line, so the
+                                                                                contents are listed here with the quantity actually
+                                                                                delivered (per set x line qty) and NO amount of their
+                                                                                own. A table, not flex: html2canvas does not implement
+                                                                                flex alignment, so the PDF would drift from the preview. */}
+                                                                            {isSetLine(item) && (
+                                                                                <table className="w-full border-collapse mt-1">
+                                                                                    <tbody>
+                                                                                        {explodeSetLine(item.setComponents, item.qty).map((c, ci) => (
+                                                                                            <tr key={ci}>
+                                                                                                <td className="py-[1px] pr-2 text-[8px] font-bold uppercase text-slate-500 leading-[11px] align-top">
+                                                                                                    &bull; {c.description}{c.code ? ` (${c.code})` : ''}
+                                                                                                </td>
+                                                                                                <td className="py-[1px] w-14 text-right text-[8px] font-black text-slate-600 leading-[11px] align-top whitespace-nowrap">
+                                                                                                    {c.totalQty} {c.unit}
+                                                                                                </td>
+                                                                                            </tr>
+                                                                                        ))}
+                                                                                    </tbody>
+                                                                                </table>
+                                                                            )}
                                                                         </>
                                                                     );
                                                                 })()}

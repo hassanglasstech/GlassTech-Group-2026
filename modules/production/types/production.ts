@@ -13,6 +13,19 @@ export interface HoleLocation {
   type: 'Hole' | 'Notch' | 'Cutout';
 }
 
+/** A component of a set, frozen onto the quotation/order line that sold it. */
+export interface QuoteSetComponent {
+  /** Catalogue product id — what the store actually picks. */
+  productId?: string;
+  /** Visible item code, printed beside the component name. */
+  code?: string;
+  description: string;
+  unit: string;
+  /** How many of this component are in ONE set. Multiply by the line qty for
+   *  the delivered quantity. */
+  qtyPerSet: number;
+}
+
 export interface QuotationItem {
   id: string;
   description: string;
@@ -70,7 +83,19 @@ export interface QuotationItem {
   /** Nippon: stores the product.id (NIP-KL-...) for inventory lookup.
    *  locationCode is repurposed to hold the visible model_no on Nippon quotes. */
   productRef?: string;
-  /** Nippon set-feature flags carried at runtime: header row + member lines of a product set. */
+  /**
+   * Nippon SET line — the bundle is ONE priced line. Its components are
+   * snapshotted here so the document prints what is inside the set (each with
+   * its quantity) while the money stays on the set line alone.
+   *
+   * Snapshot, not a live lookup, on purpose: re-opening a six-month-old quote
+   * must show the set as it was sold, even after the set has been re-specced.
+   * Rides in the items jsonb — no migration.
+   */
+  setComponents?: QuoteSetComponent[];
+  /** Legacy set scaffolding: a header row plus separately-priced member lines.
+   *  Superseded by `setComponents` (one priced line); kept so old saved
+   *  quotations that used it still render. */
   isSetHeader?: boolean;
   isSetMember?: boolean;
   setId?: string;
