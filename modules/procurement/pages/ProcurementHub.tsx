@@ -80,15 +80,19 @@ const ProcurementHub: React.FC = () => {
   const company = useAppStore(state => state.selectedCompany);
 
   // God Mode audit (Day 1): hide tabs that have no business meaning for the
-  // active company. Nippon is a hardware trader — no factory logistics
-  // (gate passes, vehicle trips, dispatch planner) and the SCMDashboard
-  // is glass-factory analytics; the IntercompanyHub stays because Nippon
-  // legitimately sells to GTK/GTI (intercompany transfers).
+  // active company. SCMDashboard is glass-factory analytics; the IntercompanyHub
+  // stays because Nippon legitimately sells to GTK/GTI.
+  //
+  // Logistics is NOT hidden for Nippon any more. The original note ("hardware
+  // trader — no factory logistics") was true of vehicle trips and the dispatch
+  // planner, but LogisticsModule short-circuits for Nippon and renders ONLY the
+  // office Gate Pass desk — the other half of the store's "Request Gate Pass".
+  // Hiding it here left the store told to go somewhere Procurement did not show.
   const TABS = useMemo(() => {
     return ALL_TABS.filter(t => {
       if (company === 'Nippon') {
-        // Hide: logistics (factory-only), scm (glass-only analytics)
-        if (t.id === 'logistics' || t.id === 'scm') return false;
+        // Hide: scm (glass-only analytics)
+        if (t.id === 'scm') return false;
       }
       // Rate chart is feature-flagged (phased launch)
       if (t.id === 'ratechart' && !hasFeature('proc.rate_chart')) return false;

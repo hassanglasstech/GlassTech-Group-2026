@@ -35,6 +35,8 @@ import { PackageCheck, Loader2, RefreshCw, ClipboardList, ArrowLeft, MapPin, Sav
 const StoreIssueScreen: React.FC = () => {
   const stampUser = useAuthStore(s => s.profile?.fullName || s.profile?.email || s.user?.email || 'store');
   const [orders, setOrders] = useState<Quotation[]>([]);
+  /** Issued in the last 24h — kept visible so a gate pass can still be reprinted. */
+  const [issuedToday, setIssuedToday] = useState<Quotation[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [store, setStore] = useState<StoreItem[]>([]);
@@ -63,7 +65,18 @@ const StoreIssueScreen: React.FC = () => {
       AsyncSalesService.getProducts(),
       InventoryService.getStoreAsync(),
     ]);
-    setOrders(qs.filter(q => q.company === company && isPendingIssue(q)));
+    const mine = qs.filter(q => q.company === company);
+    setOrders(mine.filter(isPendingIssue));
+    // Today's issued orders. The queue drops an order the moment it is issued,
+    // which left the store with no way to re-open the gate pass or reprint the
+    // driver slip for goods still on the loading bay.
+    const since = Date.now() - 24 * 60 * 60 * 1000;
+    setIssuedToday(
+      mine.filter(q => {
+        const at = (q as { issuedAt?: string }).issuedAt;
+        return !!at && new Date(at).getTime() >= since;
+      }).sort((a, b) => String((b as { issuedAt?: string }).issuedAt).localeCompare(String((a as { issuedAt?: string }).issuedAt))),
+    );
     setClients(cs.filter(c => c.company === company));
     setProducts(ps.filter(p => p.company === company));
     setStore(st.filter(s => !s.company || s.company === company));
@@ -121,6 +134,33 @@ const StoreIssueScreen: React.FC = () => {
     setDetailItems(prev => prev.map(it => (it.id === lineId ? { ...it, [field]: value } : it)));
   };
 
+  /**
+   * A bin the picker corrected is knowledge about the WAREHOUSE, not about this
+   * order — so it belongs on the stock row. Without this the same wrong bin is
+   * printed on every future pick list and the picker re-corrects it forever.
+   * Fire-and-forget: a failed bin sync must never fail the pick save.
+   */
+  const persistBinCorrections = async (): Promise<void> => {
+    try {
+      const rows = InventoryService.getStore();
+      let changed = 0;
+      detailItems.filter(i => !i.isSection).forEach(item => {
+        const bin = (item.binLocation || '').trim();
+        if (!bin) return;
+        const row = storeItemFor(item);
+        if (!row || (row.storageBin || '').trim() === bin) return;
+        const idx = rows.findIndex(s => s.id === row.id);
+        if (idx === -1) return;
+        rows[idx] = { ...rows[idx], storageBin: bin };
+        changed++;
+      });
+      if (changed) {
+        InventoryService.saveStore(rows);
+        setStore(rows.filter(s => !s.company || s.company === activeCompany()));
+      }
+    } catch { /* bin sync is a convenience — never block the pick */ }
+  };
+
   // Persist pick progress (bin + picked qty + notes) onto the order. markPicked
   // stamps it 'Picked' (fully staged, ready for gate pass); otherwise 'Picking'.
   //
@@ -131,14 +171,36 @@ const StoreIssueScreen: React.FC = () => {
   const savePick = async (q: Quotation, markPicked: boolean): Promise<boolean> => {
     setSaving(true);
     try {
+      // Re-read the order rather than posting back the copy this screen loaded
+      // minutes ago. The store owns exactly three things on a line — bin, picked
+      // qty, note — plus the pick status. Price, client, the line set itself all
+      // belong to Sales, and writing a stale whole-order snapshot silently
+      // reverted whatever Sales changed while the picker walked the aisle.
+      const fresh = (await AsyncSalesService.getQuotations()).find(x => x.id === q.id);
+      if (!fresh) {
+        toast.error('This order no longer exists — it may have been voided. Refresh the queue.', { duration: 9000 });
+        return false;
+      }
+      const staged = new Map(detailItems.filter(i => !i.isSection).map(i => [i.id, i]));
+      const freshLines = (fresh.items || []).filter(i => !i.isSection);
+      // Lines added or removed → the sheet is describing a different order, and
+      // merging by id would quietly drop the new ones. Refuse and say why.
+      if (freshLines.length !== staged.size || !freshLines.every(i => staged.has(i.id))) {
+        toast.error('Sales changed the lines on this order while you were picking. Reopen it to pick the current version.', { duration: 10000 });
+        return false;
+      }
       const updated: Quotation = {
-        ...q,
-        items: detailItems,
+        ...fresh,
+        items: (fresh.items || []).map(it => {
+          const s = staged.get(it.id);
+          return s ? { ...it, binLocation: s.binLocation, pickedQty: s.pickedQty, storeNote: s.storeNote } : it;
+        }),
         pickStatus: markPicked ? 'Picked' : 'Picking',
         ...(markPicked ? { pickedBy: stampUser, pickedAt: new Date().toISOString() } : {}),
       };
       const res = await AsyncSalesService.saveQuotations([updated]);
       if (res?.error) { toast.error(`Pick not saved to cloud — ${res.error}`, { duration: 8000 }); return false; }
+      void persistBinCorrections();
       setOrders(prev => prev.map(o => (o.id === q.id ? updated : o)));
       // IC-P3: on an intercompany order, hand the "Picked" status back to the buyer.
       if (markPicked && updated.intercompany) void notifyBuyerOfStatus({ order: updated, status: 'Picked', actor: stampUser });
@@ -153,7 +215,10 @@ const StoreIssueScreen: React.FC = () => {
     if (await savePick(q, false)) toast.success('Pick progress saved.');
   };
   const handleMarkPicked = async (q: Quotation) => {
-    if (await savePick(q, true)) { toast.success('Order staged — ready for gate pass.'); closeDetail(); }
+    // The sheet stays OPEN. Request Gate Pass and Issue live in this same
+    // toolbar and are the literal next steps — closing here forced the picker to
+    // find the order again and reopen it to carry on.
+    if (await savePick(q, true)) toast.success('Order staged — request a gate pass or issue it below.');
   };
 
   const doIssue = async (q: Quotation) => {
@@ -362,9 +427,15 @@ const StoreIssueScreen: React.FC = () => {
             const cli = clients.find(c => c.id === q.clientId);
             const lines = (q.items || []).filter(i => !i.isSection);
             const val = (q as { total?: number }).total ?? lines.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+            // A <div role="button">, not a <button>: the row holds its own Issue
+            // button, and a button inside a button is invalid HTML that browsers
+            // "fix" by splitting the markup — the inner control then falls out of
+            // the tab order. Keyboard parity is restored by hand below.
             return (
-              <button key={q.id} onClick={() => openDetail(q)}
-                className="w-full text-left bg-white rounded-2xl border border-slate-200 shadow-sm hover:border-blue-300 hover:shadow transition-all px-5 py-4 flex items-center gap-3 flex-wrap">
+              <div key={q.id} role="button" tabIndex={0}
+                onClick={() => openDetail(q)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(q); } }}
+                className="w-full text-left bg-white rounded-2xl border border-slate-200 shadow-sm hover:border-blue-300 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 cursor-pointer transition-all px-5 py-4 flex items-center gap-3 flex-wrap">
                 {q.priority === 'Urgent' && <span className="flex items-center gap-1 text-[9px] font-black uppercase bg-rose-500 text-white px-2 py-0.5 rounded-full"><Zap size={10}/> Urgent</span>}
                 {q.intercompany && <span title={`Intercompany order from ${q.sourceCompany}${q.sourceProjectTitle ? ` · ${q.sourceProjectTitle}` : ''}`} className="text-[9px] font-black uppercase bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">IC · {q.sourceCompany}</span>}
                 <span className="font-black text-blue-600 text-sm uppercase">{q.orderNo || q.id}</span>
@@ -390,7 +461,37 @@ const StoreIssueScreen: React.FC = () => {
                     </span>
                   )}
                 </div>
-              </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Issued in the last 24h — the pass and the Urdu driver slip stay
+          reachable while the goods are still on the bay. Read-only otherwise:
+          the queue above is the store's work, this is just the paper trail. */}
+      {issuedToday.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">
+            Issued in the last 24 hours · {issuedToday.length}
+          </p>
+          {issuedToday.map(q => {
+            const cli = clients.find(c => c.id === q.clientId);
+            const at = (q as { issuedAt?: string }).issuedAt;
+            return (
+              <div key={q.id} className="bg-white/70 rounded-2xl border border-slate-200 px-5 py-3 flex items-center gap-3 flex-wrap">
+                <span className="font-black text-slate-500 text-sm uppercase">{q.orderNo || q.id}</span>
+                <span className="text-xs font-bold text-slate-500 uppercase">{cli?.name || (q as { clientName?: string }).clientName || '—'}</span>
+                <span className="text-[10px] font-bold text-slate-400">
+                  {at ? new Date(at).toLocaleString() : ''}{q.issuedBy ? ` · ${q.issuedBy}` : ''}
+                </span>
+                <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Delivered</span>
+                <div className="ml-auto flex items-center gap-2">
+                  <NipponGatePassButton mode="request" size="sm" order={q}
+                    clientName={cli?.name || (q as { clientName?: string }).clientName || ''}
+                    onIssued={(u) => setIssuedToday(prev => prev.map(o => (o.id === u.id ? u : o)))} />
+                </div>
+              </div>
             );
           })}
         </div>

@@ -53,19 +53,19 @@ status, the `issuedAt` stamp and whether an invoice is raised.
 | P1-2 | Gate pass is advisory end-to-end — zero guards anywhere in sales services | The issue confirm now names the missing pass (and says whether one was requested). Still non-blocking, deliberately — the store must not be held hostage to the office |
 | P1-3 | Cold boot shows on-hand 0 / blank images for a store-only user — screen uses sync localStorage reads while the rest of the app is async | Screen **and** `issueNipponOrder` now read async. **This was worse than a display bug**: the service also read the sync store, so on a fresh device every move found no row, changed nothing, and the order was still stamped Delivered — goods out, stock untouched. A guard now refuses the issue when no move lands |
 
-### P2 — correctness under concurrency / discoverability
+### P2 — correctness under concurrency / discoverability  ✅ DONE
 | # | Finding | Fix |
 |---|---|---|
-| P2-1 | `savePick` writes the whole order from stale state — Sales revising while the store picks = silent clobber. `version` exists, unused | Optimistic lock on `version` |
-| P2-2 | `ProcurementHub.tsx:91` hides Logistics for Nippon, but the store's own toast says "the office will issue it from Logistics" | Resolve the contradiction one way |
+| P2-1 | `savePick` writes the whole order from stale state — Sales revising while the store picks = silent clobber | Fixed at the root instead of merely detected: `savePick` re-reads the order and merges back ONLY the three fields the store owns (bin, picked qty, note) + pick status, so a concurrent Sales edit survives. A changed line set is refused with a clear message. See the note below on why `version` was not used |
+| P2-2 | `ProcurementHub.tsx` hides Logistics for Nippon, but the store's own toast says "the office will issue it from Logistics" | Un-hidden. `LogisticsModule` short-circuits for Nippon and renders ONLY the gate-pass desk — the other half of "Request Gate Pass" — so the original "trader has no factory logistics" reasoning did not apply to it |
 
-### P3 — UI / workflow polish
+### P3 — UI / workflow polish  ✅ DONE
 | # | Finding | Fix |
 |---|---|---|
-| P3-1 | Card `<button>` contains the Issue `<button>` (`:295`+`:306`) — invalid HTML, breaks keyboard nav | Card → `<div role="button">` or restructure |
-| P3-2 | Mark Picked closes the sheet, but Request Gate Pass lives in that same toolbar | Keep the sheet open |
-| P3-3 | Issued orders vanish — no way to reprint a gate pass | "Issued today" section |
-| P3-4 | Bin corrections stay on the order, never reach the product's master bin | Write back to `store_items.storage_bin` |
+| P3-1 | Card `<button>` contains the Issue `<button>` — invalid HTML, browsers split the markup and the inner control leaves the tab order | Card → `<div role="button" tabIndex={0}>` with Enter/Space handling and a focus ring |
+| P3-2 | Mark Picked closes the sheet, but Request Gate Pass lives in that same toolbar | Sheet stays open; the toast points at the next step |
+| P3-3 | Issued orders vanish — no way to reprint a gate pass | "Issued in the last 24 hours" section under the queue, with the gate pass + Urdu driver slip still reachable |
+| P3-4 | Bin corrections stay on the order, never reach the product's master bin, so the same wrong bin prints forever | Saving a pick writes a corrected bin back to the stock row (fire-and-forget — a bin sync must never fail the pick) |
 
 ---
 
@@ -98,9 +98,15 @@ nothing the second time because the remainder is 0.
 
 ## Not fixed here, deliberately
 
+- **No true optimistic lock.** `quotations.version` exists and a DB trigger keeps
+  it in sync, but nothing on the write path *checks* it — `saveQuotations` is a
+  plain upsert, and adding a conditional-update RPC needs a migration (founder-run).
+  P2-1 instead removes the clobber by construction: the store only ever writes the
+  three fields it owns. A same-field race (two pickers on one order) is still
+  last-write-wins.
 - Nippon store issue moves stock **locally then syncs** — it is not an atomic RPC
   like `consume_glass_stock`. Two devices issuing the same order concurrently can
-  both move stock. Out of P0 scope; P2-1's optimistic lock narrows it.
+  both move stock. Needs a migration; still open.
 - The Factory gatekeeper reads gate passes from **notification titles**
   (`FactoryGatekeeper.tsx:68-74`, matches the literal prefix `gate pass`), not from
   `quotation.gatePass`. Renaming that toast silently empties the gate queue. Its
