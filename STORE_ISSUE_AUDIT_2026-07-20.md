@@ -31,7 +31,9 @@ waits for full delivery, otherwise the customer is charged for goods still on ou
 shelf. (Moot while `finance.gl_enabled` is OFF, but the gate is written now so
 flipping the flag later stays safe.)
 
-Reverse this by changing `PARTIAL_ISSUE_KEEPS_ORDER_OPEN` in the plan below.
+To reverse it (close the order on a short issue instead), change the `fullyIssued`
+branch in `nipponFulfilmentService.issueNipponOrder` — that one flag decides the
+status, the `issuedAt` stamp and whether an invoice is raised.
 
 ---
 
