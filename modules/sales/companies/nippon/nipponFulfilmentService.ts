@@ -11,7 +11,6 @@
 
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { activeCompany } from '@/modules/shared/utils/activeCompany';
-import { SalesService } from '@/modules/sales/services/salesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { Logger } from '@/modules/shared/services/logger';
 import { useAuthStore } from '@/modules/auth/authStore';
@@ -83,15 +82,25 @@ export async function issueNipponOrder(
       return { error: 'Nothing to issue — no quantity is picked and nothing is outstanding.' };
     }
 
-    const products = SalesService.getProducts().filter(p => p.company === company);
-    const store = InventoryService.getStore();
+    // Both reads are ASYNC on purpose. The sync variants are localStorage-only,
+    // so a store user on a fresh device (the normal case — this screen exists for
+    // a phone in the warehouse) got an EMPTY store cache: every move found no row,
+    // silently changed nothing, and the order was still stamped Delivered. Goods
+    // out, stock untouched.
+    const [products, store] = await Promise.all([
+      AsyncSalesService.getProducts().then(ps => ps.filter(p => p.company === company)),
+      InventoryService.getStoreAsync(),
+    ]);
     const updated = [...store];
     // Per line, what physically leaves. Shared resolver with approve (reserve)
     // and void (return) so the three can never disagree — a SET relieves its
     // COMPONENTS, since a set is assembled here and never sat on a shelf.
-    going.flatMap(({ item, out }) => stockMovesForLine(item, products, out)).forEach(({ refId, need }) => {
+    const moves = going.flatMap(({ item, out }) => stockMovesForLine(item, products, out));
+    let applied = 0;
+    moves.forEach(({ refId, need }) => {
       const idx = updated.findIndex(s => s.id === refId);
       if (idx !== -1) {
+        applied++;
         updated[idx] = {
           ...updated[idx],
           quantity: (updated[idx].quantity || 0) - need,                    // goods physically leave
@@ -100,6 +109,13 @@ export async function issueNipponOrder(
         };
       }
     });
+    // Approve creates a stock row for every line it reserves, so by the time an
+    // order is issuable each move MUST land somewhere. Nothing landing means the
+    // stock list failed to load, not that the goods are free — refuse rather than
+    // mark an order Delivered having moved nothing.
+    if (moves.length > 0 && applied === 0) {
+      return { error: 'Stock list did not load — nothing was issued. Check your connection and try again.' };
+    }
     InventoryService.saveStore(updated);
 
     const nowIso = new Date().toISOString();

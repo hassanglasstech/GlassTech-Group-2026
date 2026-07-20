@@ -46,12 +46,12 @@ status, the `issuedAt` stamp and whether an invoice is raised.
 | P0-2 | Counter lies: `openDetail` pre-fills `pickedQty` = full qty, so the header reads "Picked 10/10" before a shelf is touched | Picked starts **empty**; "Pick all" is one explicit click |
 | P0-3 | `pickedBy`/`pickedAt` stamped on Save Progress *and* on issue — so the stamp means "last edited", not "picked" | Stamp only on a real Mark Picked; issue records `issuedBy`/`issuedAt` separately |
 
-### P1 — the ceremony is bypassable / data can be blank
+### P1 — the ceremony is bypassable / data can be blank  ✅ DONE
 | # | Finding | Fix |
 |---|---|---|
-| P1-1 | List-row **Issue** skips picking entirely (`:306`) | Require a pick, or make the shortcut open the pick sheet |
-| P1-2 | Gate pass is advisory end-to-end — zero guards anywhere in sales services | Warn in the issue confirm when no pass exists |
-| P1-3 | Cold boot shows on-hand 0 / blank images for a store-only user — screen uses sync localStorage reads while the rest of the app is async | Use `InventoryService.getStoreAsync()` + async products |
+| P1-1 | List-row **Issue** skips picking entirely | Shortcut survives only for a `Picked` order; anything else shows "Open Pick List" and opens the sheet |
+| P1-2 | Gate pass is advisory end-to-end — zero guards anywhere in sales services | The issue confirm now names the missing pass (and says whether one was requested). Still non-blocking, deliberately — the store must not be held hostage to the office |
+| P1-3 | Cold boot shows on-hand 0 / blank images for a store-only user — screen uses sync localStorage reads while the rest of the app is async | Screen **and** `issueNipponOrder` now read async. **This was worse than a display bug**: the service also read the sync store, so on a fresh device every move found no row, changed nothing, and the order was still stamped Delivered — goods out, stock untouched. A guard now refuses the issue when no move lands |
 
 ### P2 — correctness under concurrency / discoverability
 | # | Finding | Fix |

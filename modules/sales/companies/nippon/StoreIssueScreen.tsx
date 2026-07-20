@@ -7,17 +7,20 @@
  * price orders (that's Sales).
  *
  * Gate Pass A (store depth): clicking an order opens a bin-sorted pick list —
- * each line shows its WMS bin, ordered qty, image and any office instructions.
- * The picker confirms a picked qty per line (partial-pick), adds store notes,
- * and saves pick progress (persisted so the worklist survives a refresh). On
- * "Issue" the physical stock-out runs (shared nipponFulfilmentService) and the
- * order becomes Delivered — the same path as the Sales "Store Issue" tab.
+ * each line shows its WMS bin, outstanding qty, image and any office
+ * instructions. The picker counts a qty per line, adds store notes, and saves
+ * progress (persisted, so the worklist survives a refresh).
+ *
+ * The picked qty is what MOVES. On "Issue" the shared nipponFulfilmentService
+ * relieves exactly what was counted: a full pick closes the order as Delivered,
+ * a short pick issues that much and leaves the order in this queue for the
+ * remainder (and raises no invoice until it is complete). Same path as the
+ * Sales "Store Issue" tab.
  */
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { AsyncSalesService } from '@/modules/sales/services/asyncSalesService';
 import { activeCompany } from '@/modules/shared/utils/activeCompany';
-import { SalesService } from '@/modules/sales/services/salesService';
 import { InventoryService } from '@/modules/procurement/services/inventoryService';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { Quotation, Client, Product, QuotationItem, StoreItem } from '@/modules/shared/types';
@@ -50,11 +53,20 @@ const StoreIssueScreen: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true);
     const company = activeCompany();
-    const [qs, cs] = await Promise.all([AsyncSalesService.getQuotations(), AsyncSalesService.getClients()]);
+    // All four reads are ASYNC. Products and stock used to come from the
+    // localStorage-only sync helpers, so a store user signing in on a fresh
+    // device — a phone in the warehouse, which is exactly who this screen is
+    // for — saw on-hand 0 on every line (all flagged red "short") and no images.
+    const [qs, cs, ps, st] = await Promise.all([
+      AsyncSalesService.getQuotations(),
+      AsyncSalesService.getClients(),
+      AsyncSalesService.getProducts(),
+      InventoryService.getStoreAsync(),
+    ]);
     setOrders(qs.filter(q => q.company === company && isPendingIssue(q)));
     setClients(cs.filter(c => c.company === company));
-    setProducts(SalesService.getProducts().filter(p => p.company === company));
-    setStore(InventoryService.getStore().filter(s => s.company === company));
+    setProducts(ps.filter(p => p.company === company));
+    setStore(st.filter(s => !s.company || s.company === company));
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -152,11 +164,18 @@ const StoreIssueScreen: React.FC = () => {
     const out = lines.reduce((s, i) => s + issueQtyFor(i), 0);
     const owed = lines.reduce((s, i) => s + remainingQty(i), 0);
     const short = out < owed;
+    // Nothing blocks an issue without a gate pass — deliberately, since the store
+    // must not be held hostage to the office. But the picker should be told, or
+    // goods leave the gate with no pass and nobody notices until they are gone.
+    const noPass = !q.gatePass
+      ? `\n\n⚠ No gate pass has been issued for this order${q.gatePassRequested ? ' yet (requested — the office has not issued it)' : ''}. The goods will have nothing authorising them at the gate.`
+      : '';
     const ok = await confirmModal(
-      short
+      (short
         ? `Part-issue ${q.orderNo || q.id}?\n\n${out} of ${owed} outstanding unit(s) will leave the store. ` +
           `The order STAYS OPEN for the remaining ${owed - out} and is not invoiced until it is fully delivered.`
-        : `Issue goods for ${q.orderNo || q.id}?\n\n${out} unit(s) will leave the store and the order will be marked Delivered.`,
+        : `Issue goods for ${q.orderNo || q.id}?\n\n${out} unit(s) will leave the store and the order will be marked Delivered.`
+      ) + noPass,
     );
     if (!ok) return;
     setBusy(q.id);
@@ -354,11 +373,22 @@ const StoreIssueScreen: React.FC = () => {
                 {q.specialInstructions && <span title={q.specialInstructions} className="flex items-center gap-1 text-[9px] font-black uppercase text-amber-600"><Info size={11}/> Instructions</span>}
                 {q.gatePass && <span title={`Gate pass ${q.gatePass.qrToken} · ${q.gatePass.vehicleNo}`} className="flex items-center gap-1 text-[9px] font-black uppercase text-indigo-600"><Truck size={11}/> Gate Pass</span>}
                 {pickBadge(q)}
+                {/* Straight-to-Issue used to skip picking entirely: no bin walk,
+                    no counted quantity, no gate pass — which made the whole pick
+                    sheet optional and therefore unused. The shortcut survives, but
+                    only for an order the store has actually staged; anything else
+                    opens the sheet instead of quietly issuing it. */}
                 <div className="ml-auto flex items-center gap-2">
-                  <button onClick={(e) => { e.stopPropagation(); doIssue(q); }} disabled={busy === q.id}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-sm transition-all">
-                    {busy === q.id ? <Loader2 size={13} className="animate-spin"/> : <PackageCheck size={13}/>} Issue
-                  </button>
+                  {q.pickStatus === 'Picked' ? (
+                    <button onClick={(e) => { e.stopPropagation(); doIssue(q); }} disabled={busy === q.id}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-sm transition-all">
+                      {busy === q.id ? <Loader2 size={13} className="animate-spin"/> : <PackageCheck size={13}/>} Issue
+                    </button>
+                  ) : (
+                    <span className="flex items-center gap-1.5 px-4 py-2 bg-blue-50 text-blue-700 rounded-xl font-black uppercase text-[10px] tracking-widest">
+                      <ClipboardList size={13}/> Open Pick List
+                    </span>
+                  )}
                 </div>
               </button>
             );
