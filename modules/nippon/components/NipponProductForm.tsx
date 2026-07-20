@@ -132,8 +132,14 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
     if (!isOpen) return;
     const allVendors = SalesService.getVendors();
     setNipponVendors(allVendors.filter(v => v.company === 'Nippon'));
+    // Reset whenever we are NOT explicitly adding a variant. The old
+    // `else if (!editingProduct)` left BOTH branches unrun when opening on an
+    // existing product, so variantMode stayed stuck at whatever the previous
+    // open left it as. Anyone who had used "Add variant" once then hit Edit got
+    // routed into the variant save, which demands axis values — and the axis
+    // input is hidden while editing, so the product could never be saved again.
     if (variantOf) { setVariantMode(true); setSelectedParent(variantOf); }
-    else if (!editingProduct) { setVariantMode(false); setSelectedParent(null); }
+    else { setVariantMode(false); setSelectedParent(null); }
     setAxisType('Length'); setAxisValues(''); setParentSearch('');
   }, [isOpen, editingProduct, variantOf]);
 
@@ -344,7 +350,9 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
   };
 
   const handleSave = async () => {
-      if (variantMode) return handleSaveVariants();
+      // Editing an existing product is ALWAYS a plain update — the variant panel
+      // is hidden in that mode, so routing here could only ever dead-end.
+      if (variantMode && !editingProduct) return handleSaveVariants();
       if (!formData.description || !formData.unit) return toast.error("Description and Unit are required.");
       if (isSaving) return;
       setIsSaving(true);
