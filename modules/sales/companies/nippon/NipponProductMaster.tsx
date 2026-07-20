@@ -15,6 +15,7 @@ import {
 import { toast } from 'sonner';
 import { bumpImageCacheToken } from '@/modules/shared/utils/imageCache';
 import { findSimilarProducts, similarityMessage } from '@/modules/shared/utils/productSimilarity';
+import { withoutVariantParents } from '@/modules/nippon/utils/variantGrouping';
 import { confirmModal } from '@/modules/shared/components/ConfirmDialog';
 import NipponProductForm from '@/modules/nippon/components/NipponProductForm';
 import NipponDirectImporter from './components/NipponDirectImporter';
@@ -550,16 +551,19 @@ const NipponProductMaster: React.FC = () => {
       // ── Summary sheet (first) ─────────────────────────────────────
       const summaryRows = Object.entries(groups)
         .map(([cat, items]) => {
-          const subs = new Set(items.map(p => p.subCategory || '').filter(Boolean));
-          const brands = new Set(items.map(p => p.brand || '').filter(Boolean));
-          const prices = items.map(p => p.basePrice || 0).filter(v => v > 0);
+          // Count the variants, not the grouping parent — otherwise a profile
+          // sold in 3 lengths inflates its category by a 4th phantom product.
+          const counted = withoutVariantParents(items);
+          const subs = new Set(counted.map(p => p.subCategory || '').filter(Boolean));
+          const brands = new Set(counted.map(p => p.brand || '').filter(Boolean));
+          const prices = counted.map(p => p.basePrice || 0).filter(v => v > 0);
           const avg = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : 0;
           return {
             'Main Category': cat,
-            'Products': items.length,
+            'Products': counted.length,
             'Sub Categories': subs.size,
             'Brands': brands.size,
-            'With Image': items.filter(p => p.imageUrl).length,
+            'With Image': counted.filter(p => p.imageUrl).length,
             'Avg Sales Price (PKR)': Math.round(avg),
           };
         })

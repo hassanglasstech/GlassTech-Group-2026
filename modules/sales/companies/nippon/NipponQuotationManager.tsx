@@ -4,6 +4,7 @@ import { Product, Quotation, QuotationItem } from '@/modules/shared/types';
 import { NipponDocPreview } from '@/modules/nippon/prints/NipponDocPreview';
 import { SharedQuotationList } from '@/modules/sales/components/SharedQuotationList';
 import { getBrandNick } from '@/modules/shared/utils/brandUtils';
+import { variantParentIds, variantLabelOf } from '@/modules/nippon/utils/variantGrouping';
 import {
   Printer, X, Plus, Trash2, FileSignature,
   Search, Calendar, Edit2, FileCheck, Eye, Save, ArrowLeft, Layers, Copy, Gift, PackageCheck, CheckCircle2, Loader2
@@ -654,9 +655,7 @@ const NipponQuotationManager: React.FC = () => {
                                  // It stays SEARCHABLE though — typing the parent's code
                                  // surfaces its variants, so old codes still lead somewhere.
                                  const productById = new Map(products.map(p => [p.id, p]));
-                                 const parentIds = new Set(
-                                   products.map(p => p.variantOf).filter(Boolean) as string[],
-                                 );
+                                 const parentIds = variantParentIds(products);
                                  const hay = (p: typeof products[number]) => [
                                    p.description, p.name, p.modelNo, p.itemCode, p.profileCode, p.brand,
                                    (p as { nickName?: string }).nickName,
@@ -680,10 +679,7 @@ const NipponQuotationManager: React.FC = () => {
                                        const price = p.price || p.basePrice || s?.movingAveragePrice || 0;
                                        const brand = p.brand || '';
                                        const parentOf = p.variantOf ? productById.get(p.variantOf) : null;
-                                       const vAttrs = (p as { variantAttributes?: Record<string, string> }).variantAttributes;
-                                       const variantLabel = vAttrs
-                                         ? Object.entries(vAttrs).map(([k, v]) => `${k} ${v}`).join(' · ')
-                                         : '';
+                                       const variantLabel = variantLabelOf(p);
                                        return (
                                          <div
                                            key={p.id}
