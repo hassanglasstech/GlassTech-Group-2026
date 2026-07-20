@@ -37,7 +37,7 @@ Reverse this by changing `PARTIAL_ISSUE_KEEPS_ORDER_OPEN` in the plan below.
 
 ## Phases
 
-### P0 — data integrity & audit truth  ✅ DONE (commit 3b5b0b1)
+### P0 — data integrity & audit truth  ✅ DONE (commit e37f912, on main + GT-Production)
 | # | Finding | Fix |
 |---|---|---|
 | P0-1 | `pickedQty` never reaches the stock movement — issue uses ordered qty | Issue moves the **picked** qty; per-line `issuedQty` accumulates; order closes only when every line is fully issued |
