@@ -102,8 +102,6 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
   const [newSpecKey, setNewSpecKey] = useState('');
   const [newSpecValue, setNewSpecValue] = useState('');
   const [isDragging, setIsDragging] = useState(false);
-  const [isSetModalOpen, setIsSetModalOpen] = useState(false);
-  const [newComponent, setNewComponent] = useState({ description: '', unit: 'PCS', qtyPerSet: 1 });
   const [isSaving, setIsSaving] = useState(false);
   const [customUnits, setCustomUnits] = useState<string[]>(() => {
     const stored = safeParse(CUSTOM_UNITS_KEY, '[]');
@@ -751,32 +749,25 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                     </select>
                 </div>
 
+                {/* Sets are built on the SETS TAB, not here. That tab picks each
+                    component from the real catalogue, which is what lets the store
+                    relieve the right stock at issue. The old checkbox here captured
+                    components as free text with no product behind them — a set built
+                    that way moved no stock at all, so the path is closed rather than
+                    left as a second, broken way to do the same thing. Existing
+                    free-text sets still load and print; re-save one from the Sets tab
+                    to link its components. */}
                 {formData.unit === 'Set' && (
-                    <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 space-y-3">
-                        <div className="flex justify-between items-center">
-                            <div className="flex items-center gap-2">
-                                <input 
-                                    type="checkbox" 
-                                    id="isSet" 
-                                    className="w-4 h-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
-                                    checked={formData.isSet}
-                                    onChange={e => setFormData({...formData, isSet: e.target.checked})}
-                                />
-                                <label htmlFor="isSet" className="text-xs font-black uppercase text-amber-800 cursor-pointer">This is a Product Set</label>
-                            </div>
-                            {formData.isSet && (
-                                <button 
-                                    onClick={() => setIsSetModalOpen(true)}
-                                    className="text-[10px] font-black bg-amber-600 text-white px-3 py-1 rounded-lg uppercase tracking-widest shadow-sm hover:bg-amber-700 transition-all"
-                                >
-                                    Manage Components ({formData.setComponents.length})
-                                </button>
-                            )}
-                        </div>
+                    <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+                        <p className="text-xs font-black uppercase text-amber-800">Selling a bundle?</p>
+                        <p className="text-[11px] font-medium text-amber-700 mt-1">
+                            Build it on the <span className="font-black">Sets</span> tab — search the items that go
+                            inside and give each a quantity. The quotation then shows the contents with one price.
+                        </p>
                         {formData.isSet && formData.setComponents.length > 0 && (
-                            <div className="text-[10px] font-bold text-amber-700 uppercase">
-                                Components: {formData.setComponents.map(c => `${c.description} (${c.qtyPerSet} ${c.unit})`).join(', ')}
-                            </div>
+                            <p className="text-[10px] font-bold text-amber-600 uppercase mt-2">
+                                Currently contains: {formData.setComponents.map(c => `${c.qtyPerSet}× ${c.description}`).join(', ')}
+                            </p>
                         )}
                     </div>
                 )}
@@ -964,100 +955,6 @@ const NipponProductForm: React.FC<NipponProductFormProps> = ({
                 </button>
             </div>
 
-            {/* SET COMPONENTS MODAL */}
-            {isSetModalOpen && (
-                <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 z-[500]">
-                    <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in duration-200">
-                        <div className="px-6 py-4 bg-amber-600 text-white flex justify-between items-center">
-                            <h4 className="text-sm font-black uppercase tracking-widest">Set Components</h4>
-                            <button onClick={() => setIsSetModalOpen(false)}><X size={20}/></button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <div className="space-y-3">
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-bold uppercase text-slate-400">Description</label>
-                                        <input 
-                                            type="text" 
-                                            className="sap-input w-full text-xs" 
-                                            value={newComponent.description} 
-                                            onChange={e => setNewComponent({...newComponent, description: e.target.value})}
-                                            placeholder="e.g. Handle Body"
-                                        />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-bold uppercase text-slate-400">Unit</label>
-                                        <select 
-                                            className="sap-input w-full text-xs" 
-                                            value={newComponent.unit} 
-                                            onChange={e => setNewComponent({...newComponent, unit: e.target.value})}
-                                        >
-                                            <option value="PCS">PCS</option>
-                                            <option value="Set">Set</option>
-                                            <option value="Pair">Pair</option>
-                                            <option value="Box">Box</option>
-                                            <option value="Kg">Kg</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div className="flex gap-2">
-                                    <div className="flex-1 space-y-1">
-                                        <label className="text-[10px] font-bold uppercase text-slate-400">Qty Per Set</label>
-                                        <input
-                                            type="number"
-                                            className="sap-input w-full text-xs"
-                                            placeholder="0"
-                                            value={newComponent.qtyPerSet || ''}
-                                            onChange={e => setNewComponent({...newComponent, qtyPerSet: Number(e.target.value)})}
-                                        />
-                                    </div>
-                                    <button 
-                                        onClick={() => {
-                                            if(newComponent.description) {
-                                                setFormData({
-                                                    ...formData,
-                                                    setComponents: [...formData.setComponents, { ...newComponent, id: `COMP-${Date.now()}` }]
-                                                });
-                                                setNewComponent({ description: '', unit: 'PCS', qtyPerSet: 1 });
-                                            }
-                                        }}
-                                        className="mt-5 bg-amber-600 text-white px-4 rounded-lg font-black text-xs"
-                                    >ADD</button>
-                                </div>
-                            </div>
-
-                            <div className="border-t pt-4 space-y-2 max-h-48 overflow-y-auto">
-                                {formData.setComponents.map((comp, idx) => (
-                                    <div key={comp.id} className="flex justify-between items-center bg-slate-50 p-2 rounded-lg border">
-                                        <div>
-                                            <p className="text-xs font-black uppercase text-slate-700">{comp.description}</p>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase">{comp.qtyPerSet} {comp.unit}</p>
-                                        </div>
-                                        <button 
-                                            onClick={() => {
-                                                setFormData({
-                                                    ...formData,
-                                                    setComponents: formData.setComponents.filter((_, i) => i !== idx)
-                                                });
-                                            }}
-                                            className="text-rose-500 p-1 hover:bg-rose-50 rounded"
-                                        ><X size={14}/></button>
-                                    </div>
-                                ))}
-                                {formData.setComponents.length === 0 && (
-                                    <p className="text-center text-[10px] font-bold text-slate-400 uppercase py-4">No components added yet</p>
-                                )}
-                            </div>
-                        </div>
-                        <div className="px-6 py-4 bg-slate-50 border-t flex justify-end">
-                            <button 
-                                onClick={() => setIsSetModalOpen(false)}
-                                className="bg-slate-800 text-white px-6 py-2 rounded-xl font-black uppercase text-[10px] tracking-widest"
-                            >Done</button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     </div>
   );
