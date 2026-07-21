@@ -374,8 +374,13 @@ input[type=number] { -moz-appearance: textfield; }
 
 /* ── Print — Auto-Pagination System ──────────────────────────────── */
 @media print {
-  /* Hide UI chrome */
-  .print-hidden, .no-print, .bottom-nav,
+  /* Hide UI chrome.
+     `.skip-to-content` matters more than it looks: the print sheets hide the app
+     with `visibility: hidden`, which still RESERVES the element's space. The skip
+     link is not inside any nav/header, so it survived every other rule here and
+     sat ~28px tall in the flow above the sheet — measured 85px of dead space
+     before page 1's content. display:none takes it out of flow entirely. */
+  .print-hidden, .no-print, .bottom-nav, .skip-to-content,
   nav, header, footer, aside,
   button:not(.print-keep),
   select, input, .sap-scroll-container,

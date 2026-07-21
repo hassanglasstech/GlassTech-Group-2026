@@ -68,6 +68,15 @@ const PRINT_STYLES = `
       width: 100% !important; max-width: none !important; margin: 0 !important;
       padding: 0 !important; box-shadow: none !important;
     }
+    /* The preview modal portals its sheet to document.body — a SIBLING of #root,
+       not a descendant. The visibility:hidden rule above hides the app but still
+       RESERVES its space, so #root sat 85px tall above the sheet and shoved
+       page 1's content ~22mm down. #root must therefore leave the flow, but only
+       on this path: the Sales-Order screen renders the same template INSIDE
+       #root, and blanket-hiding it would print an empty page there. The body
+       class (set by NipponDocPreview while it is mounted) is what distinguishes
+       the two, and its specificity (1,1,1) outranks the generic #root rule above. */
+    body.nippon-preview-open #root { display: none !important; }
     #nippon-print-root {
       display: block !important; position: static !important; width: 100% !important;
       height: auto !important; overflow: visible !important; background: white !important;

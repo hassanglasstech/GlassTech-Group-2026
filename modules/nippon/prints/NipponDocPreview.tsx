@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Printer } from 'lucide-react';
 import { NipponPrintTemplate } from './NipponPrintTemplate';
@@ -30,6 +30,15 @@ interface Props {
 export const NipponDocPreview: React.FC<Props> = ({
   printingQuote, clients, products, printType = 'Glasstech', printMode, fileName, onClose,
 }) => {
+  // Marks the body while this portal is mounted, so the print CSS knows the sheet
+  // lives OUTSIDE #root and can take #root out of the flow. Scoped to this
+  // component's lifetime — the Sales-Order screen renders the same template
+  // inside #root and must not be affected. See PRINT_STYLES in NipponPrintTemplate.
+  useEffect(() => {
+    document.body.classList.add('nippon-preview-open');
+    return () => document.body.classList.remove('nippon-preview-open');
+  }, []);
+
   const isSO = printMode === 'SalesOrder' || printingQuote.status === 'Approved';
   const docName = fileName || `${isSO ? 'SalesOrder' : 'Quotation'}-${printingQuote.orderNo || printingQuote.id}`;
 
