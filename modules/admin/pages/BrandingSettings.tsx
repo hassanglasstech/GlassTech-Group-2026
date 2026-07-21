@@ -25,8 +25,8 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { useAppStore } from '@/modules/shared/store/appStore';
-import { BrandingService, CompanyBranding, LOGO_CANVAS_HINT } from '@/modules/shared/services/brandingService';
-import { trimImagePadding } from '@/modules/shared/utils/imageTrim';
+import { BrandingService, CompanyBranding, LOGO_CANVAS, LOGO_CANVAS_HINT } from '@/modules/shared/services/brandingService';
+import { trimImagePadding, fitToCanvas } from '@/modules/shared/utils/imageTrim';
 import { NIPPON_DEFAULT_TERMS } from '@/modules/nippon/constants/nipponCompanyInfo';
 import PrintHeader from '@/modules/shared/components/prints/PrintHeader';
 import PrintFooter from '@/modules/shared/components/prints/PrintFooter';
@@ -105,17 +105,24 @@ const BrandingSettings: React.FC = () => {
         toast.error(`Logo too large (${Math.round(file.size / 1024)} KB). Max ${MAX_LOGO_BYTES / 1024} KB. Compress at tinypng.com or similar.`);
         return;
       }
+      const isQr = field === 'catalogueQrDataUrl';
       const reader = new FileReader();
       reader.onload = async () => {
         const raw = String(reader.result || '');
-        // Logos usually ship on a padded square canvas; the print sizes the <img>
-        // by that canvas, so untrimmed padding renders the artwork tiny.
+        // Trim first: strip a flat backdrop and any padded canvas, leaving the
+        // artwork itself. Then, for LOGOS only, re-centre that artwork on the one
+        // fixed canvas — that is what makes our mark and a partner's print at the
+        // same size no matter how each was exported, and it means nobody has to
+        // hit the canvas by hand. A QR is exempt: it must stay square.
         const trimmed = await trimImagePadding(raw);
-        handleField(field, trimmed);
+        const normalised = isQr
+          ? trimmed
+          : await fitToCanvas(trimmed, LOGO_CANVAS.w, LOGO_CANVAS.h);
+        handleField(field, normalised);
         toast.success(
-          trimmed !== raw
-            ? 'Logo loaded — blank padding trimmed. Click Save to persist.'
-            : `Logo loaded (${Math.round(file.size / 1024)} KB). Click Save to persist.`,
+          isQr
+            ? `QR loaded (${Math.round(file.size / 1024)} KB). Click Save to persist.`
+            : `Logo loaded — backdrop cleared and centred on the ${LOGO_CANVAS.w}x${LOGO_CANVAS.h} canvas. Click Save to persist.`,
         );
       };
       reader.readAsDataURL(file);
@@ -225,12 +232,13 @@ const BrandingSettings: React.FC = () => {
                   </button>
                 )}
                 <p className="text-[10px] font-black text-slate-600">
-                  Required size: {LOGO_CANVAS_HINT}
+                  Prints at: {LOGO_CANVAS_HINT}
                 </p>
                 <p className="text-[10px] text-slate-400 font-bold">
-                  Every letterhead logo — ours and each partner&apos;s — uses this one canvas, so
-                  they always print the same size. Centre the artwork on it with a little breathing
-                  room. A flat off-white backdrop is punched out automatically on upload.
+                  Upload any size — a flat off-white backdrop is cleared and the artwork is
+                  re-centred on that canvas for you. Every letterhead logo lands on the same one,
+                  so ours and a partner&apos;s always print at matching size. Only rule worth
+                  minding: start from a file at least {LOGO_CANVAS.w}px wide so it stays crisp.
                 </p>
                 <label className="flex items-center gap-2 text-xs font-bold text-slate-700 mt-2">
                   <input type="checkbox" checked={data.showLogo} onChange={e => handleField('showLogo', e.target.checked)}/>
@@ -282,11 +290,11 @@ const BrandingSettings: React.FC = () => {
                 letterhead shows the matching one for the chosen print type (KinLong or GlassTech). The &quot;General&quot;
                 variant uses the main Logo above.
               </p>
-              <p className="text-[10px] font-black text-slate-600 mb-1">Required size: {LOGO_CANVAS_HINT}</p>
+              <p className="text-[10px] font-black text-slate-600 mb-1">Prints at: {LOGO_CANVAS_HINT}</p>
               <p className="text-[10px] text-slate-400 font-bold mb-3">
-                Same canvas as the main Logo — that is what keeps a partner mark from out-sizing our own.
-                Place the brand&apos;s real logo file on the canvas and rescale it; never redraw or re-generate
-                it. A partner&apos;s mark only carries weight while it is pixel-faithful.
+                Same canvas as the main Logo, applied automatically — that is what keeps a partner
+                mark from out-sizing our own. Upload the brand&apos;s real logo file; never redraw or
+                re-generate it, a partner&apos;s mark only carries weight while it is pixel-faithful.
               </p>
               <div className="grid grid-cols-2 gap-4">
                 {([

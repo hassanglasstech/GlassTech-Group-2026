@@ -7,6 +7,52 @@
 // under it inherits a uselessly narrow width. Trimming on upload means the
 // stored asset IS the artwork, and every downstream size just works.
 
+/**
+ * Letterbox a trimmed logo onto one fixed transparent canvas.
+ *
+ * The canvas is what makes two logos print at the same size, but asking a human
+ * to hit it is both fiddly and pointless: trimImagePadding crops padding away, so
+ * a hand-built canvas is discarded on the way in and the logos drift apart again.
+ * Normalising HERE means any upload — a tight crop, a square export, a photo of a
+ * business card — lands on the same 3:1 canvas at the same scale, and whoever
+ * uploads never has to think about placement at all.
+ *
+ * Not for QR codes: a QR must stay square.
+ */
+export async function fitToCanvas(
+  dataUrl: string,
+  canvasW: number,
+  canvasH: number,
+  fill = 0.9,             // fraction of the canvas the artwork may occupy
+): Promise<string> {
+  if (!/^data:image\/(png|webp|jpeg|jpg)/i.test(dataUrl)) return dataUrl;   // SVG scales itself
+  try {
+    const img = await new Promise<HTMLImageElement | null>((resolve) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => resolve(null);
+      i.src = dataUrl;
+    });
+    if (!img?.naturalWidth || !img.naturalHeight) return dataUrl;
+
+    const out = document.createElement('canvas');
+    out.width = canvasW;
+    out.height = canvasH;
+    const ctx = out.getContext('2d');
+    if (!ctx) return dataUrl;
+
+    // Contain, never crop — a logo may not lose an edge to fill a box.
+    const scale = Math.min((canvasW * fill) / img.naturalWidth, (canvasH * fill) / img.naturalHeight);
+    const w = Math.round(img.naturalWidth * scale);
+    const h = Math.round(img.naturalHeight * scale);
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, Math.round((canvasW - w) / 2), Math.round((canvasH - h) / 2), w, h);
+    return out.toDataURL('image/png');
+  } catch {
+    return dataUrl;
+  }
+}
+
 /** A pixel counts as blank when it is transparent or effectively white. */
 const isBlankPx = (d: Uint8ClampedArray, i: number): boolean =>
   d[i + 3] < 16 || (d[i] > 245 && d[i + 1] > 245 && d[i + 2] > 245);
