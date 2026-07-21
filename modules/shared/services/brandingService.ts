@@ -90,7 +90,9 @@ export interface CompanyBranding {
  * logo sits ON the paper — an opaque backdrop prints as a grey card (the upload
  * now punches flat backdrops out, but starting transparent is cleaner).
  */
-export const LOGO_CANVAS = { w: 1200, h: 400, ratio: '3:1', maxKb: 150 } as const;
+export const LOGO_CANVAS = { w: 1200, h: 400, ratio: '3:1', maxKb: 500 } as const;
+/** QR canvas. Square — a letterboxed QR will not scan. */
+export const QR_CANVAS = { w: 600, h: 600 } as const;
 /** Human-readable, for the upload hints in Admin -> Branding. */
 export const LOGO_CANVAS_HINT =
   `${LOGO_CANVAS.w} x ${LOGO_CANVAS.h} px (${LOGO_CANVAS.ratio}) · transparent PNG · max ${LOGO_CANVAS.maxKb} KB`;

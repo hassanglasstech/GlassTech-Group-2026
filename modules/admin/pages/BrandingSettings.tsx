@@ -25,7 +25,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { useAppStore } from '@/modules/shared/store/appStore';
-import { BrandingService, CompanyBranding, LOGO_CANVAS, LOGO_CANVAS_HINT } from '@/modules/shared/services/brandingService';
+import { BrandingService, CompanyBranding, LOGO_CANVAS, LOGO_CANVAS_HINT, QR_CANVAS } from '@/modules/shared/services/brandingService';
 import { trimImagePadding, fitToCanvas } from '@/modules/shared/utils/imageTrim';
 import { NIPPON_DEFAULT_TERMS } from '@/modules/nippon/constants/nipponCompanyInfo';
 import PrintHeader from '@/modules/shared/components/prints/PrintHeader';
@@ -46,7 +46,18 @@ const TERMS_TABS = [
   { key: 'termsGrn',             label: 'GRN' },
 ] as const;
 
-const MAX_LOGO_BYTES = 150 * 1024;     // 150 KB; bigger files explode the JSONB blob
+/**
+ * Upload ceiling — 500 KB, raised from 150 KB.
+ *
+ * The old limit guarded the DB: these images are stored base64 in the branding
+ * row, which inflates ~33%, and this project has already been through one
+ * blown storage cap. It is safe to raise now because the UPLOAD size no longer
+ * decides the STORED size — every logo is re-encoded onto the fixed 1200x400
+ * canvas and every QR onto 600x600, so what lands in the row is bounded by the
+ * canvas whatever the operator picks. The limit is now just a sanity guard
+ * against someone dragging in a camera photo.
+ */
+const MAX_LOGO_BYTES = 500 * 1024;
 
 const BrandingSettings: React.FC = () => {
   const user = useAuthStore(s => s.user);
@@ -109,15 +120,19 @@ const BrandingSettings: React.FC = () => {
       const reader = new FileReader();
       reader.onload = async () => {
         const raw = String(reader.result || '');
-        // Trim first: strip a flat backdrop and any padded canvas, leaving the
-        // artwork itself. Then, for LOGOS only, re-centre that artwork on the one
-        // fixed canvas — that is what makes our mark and a partner's print at the
-        // same size no matter how each was exported, and it means nobody has to
-        // hit the canvas by hand. A QR is exempt: it must stay square.
-        const trimmed = await trimImagePadding(raw);
+        // LOGOS: trim first (clears a flat backdrop and any padded canvas,
+        // leaving the artwork), then re-centre on the one fixed canvas. That is
+        // what makes our mark and a partner's print at the same size however each
+        // was exported, and it means nobody has to build the canvas by hand.
+        //
+        // QR: deliberately NOT trimmed. The white margin around a QR is its
+        // "quiet zone" — scanners need it to locate the code — and trimming would
+        // strip exactly that, leaving a code that photographs but will not scan.
+        // It also keeps its white backdrop for contrast, and goes onto a SQUARE
+        // canvas; letterboxing a QR to 3:1 would distort it.
         const normalised = isQr
-          ? trimmed
-          : await fitToCanvas(trimmed, LOGO_CANVAS.w, LOGO_CANVAS.h);
+          ? await fitToCanvas(raw, QR_CANVAS.w, QR_CANVAS.h, 0.86)
+          : await fitToCanvas(await trimImagePadding(raw), LOGO_CANVAS.w, LOGO_CANVAS.h);
         handleField(field, normalised);
         toast.success(
           isQr
