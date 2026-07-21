@@ -40,13 +40,19 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
     : printType === 'General' ? ''
     : 'Authorized Distributor';
 
-  // TABLE layout, deliberately NOT flex. html2canvas does not implement flex
-  // alignment, so `items-center` here made it compute a different header height
-  // than the browser — measured: the QUOTATION oval below rendered 22px too high
-  // in the PDF. It never showed while the partner mark was TEXT (both columns were
-  // the same height, so getting flex wrong changed nothing); the PNG made the right
-  // column taller and the error became visible. Tables it does lay out correctly —
-  // that is why the items grid has always been right.
+  // HISTORY, so nobody re-litigates the logo: this header used flex, and
+  // html2canvas — which does not implement flex alignment — computed a different
+  // header height than the browser, pushing the QUOTATION oval 22px up in the PDF.
+  // It stayed invisible while the partner mark was TEXT (both columns were the same
+  // height, so getting flex wrong changed nothing); the PNG made the right column
+  // taller and exposed it. The logo was never the fault — the rasteriser was.
+  //
+  // That rasteriser is now gone from the quote/SO path (NipponPrintTemplate prints
+  // through the browser, Glassco-style), and the receipt — the one surviving
+  // html2canvas document — imports only NipponContactFooter, not this header. So
+  // the table layout below is no longer a workaround; it is kept simply because it
+  // is correct and stable. The FOOTER's plain-text-no-SVG rule, however, is still
+  // load-bearing: the receipt renders it through html2canvas.
   return (
     <div className="mb-3 pb-2 border-b-2 border-slate-800">
       <table className="w-full border-collapse">
