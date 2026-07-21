@@ -178,7 +178,7 @@ const BrandingSettings: React.FC = () => {
             <div className="flex items-end gap-3">
               <label className="flex items-center gap-2 text-xs font-bold text-slate-700 whitespace-nowrap pb-2">
                 <input type="checkbox" checked={data.showGstOnInvoice} onChange={e => handleField('showGstOnInvoice', e.target.checked)}/>
-                Show GST on prints
+                Show tax on prints
               </label>
               <div className="flex-1">
                 <Field label="GST % (Sales Tax)" value={data.gstPercent ? String(data.gstPercent) : ''} onChange={v => handleField('gstPercent', Math.max(0, Math.min(100, Number(v) || 0)))} mono placeholder="e.g. 18"/>

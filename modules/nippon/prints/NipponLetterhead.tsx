@@ -116,7 +116,14 @@ export const NipponContactFooter: React.FC<{ emailKind?: 'sales' | 'accounts'; s
   const email = emailKind === 'accounts' ? (info.accountsEmail || info.email) : info.email;
 
   const hasContact = !!(info.address || info.phone || email || info.website);
-  const reg = [info.ntn && `NTN: ${info.ntn}`, info.strn && `STRN: ${info.strn}`].filter(Boolean).join('   ·   ');
+  // NTN / STRN ride the SAME switch as the GST line (Admin → Branding). They are
+  // one claim, not three: printing a Sales Tax Registration number on a document
+  // that charges no sales tax tells the buyer we are filing GST when we are not.
+  // Until the founder turns tax on, these documents stay silent about it.
+  const showTaxIdentity = !!b?.showGstOnInvoice;
+  const reg = showTaxIdentity
+    ? [info.ntn && `NTN: ${info.ntn}`, info.strn && `STRN: ${info.strn}`].filter(Boolean).join('   ·   ')
+    : '';
   const bankParts = b && b.showBankOnInvoice !== false ? [
     b.bankName && `Bank: ${b.bankName}`,
     b.bankAccountTitle && `Title: ${b.bankAccountTitle}`,

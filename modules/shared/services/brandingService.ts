@@ -58,7 +58,14 @@ export interface CompanyBranding {
   showBankOnInvoice:    boolean;
   showQrOnInvoice:      boolean;
   gstPercent:           number;            // company-default GST / sales-tax % printed on quotes & invoices (0 = no GST line). Rides in the `data` jsonb (zero-migration).
-  showGstOnInvoice:     boolean;           // master switch — GST line prints only when this is ON. Rides in `data` jsonb.
+  /**
+   * Master switch for TAX IDENTITY on customer-facing documents. When OFF the
+   * print shows no GST line AND no NTN / STRN — they are one claim, and an STRN
+   * on a document that charges no sales tax misrepresents the seller as filing
+   * GST. Rides in the `data` jsonb as `showGst`.
+   * (Name kept for the stored key's sake; it gates more than the GST line.)
+   */
+  showGstOnInvoice:     boolean;
 }
 
 const CACHE_KEY = 'gtk_erp_company_branding';
