@@ -78,24 +78,25 @@ export interface CompanyBranding {
 }
 
 /**
- * ONE canvas spec for every letterhead logo — ours and every partner's.
+ * Source-quality guidance for letterhead logos.
  *
- * The alternative is balancing logos by eye, which is an argument without an end:
- * a near-square mark and a wide wordmark never look equal, and every tweak to one
- * unbalances the other. Author both to the same canvas, print both in the same
- * slot, and the question stops existing.
+ * There is deliberately NO forced canvas any more. Letterboxing every logo onto
+ * one shape looked like it would end the "whose logo is bigger" argument, and it
+ * did the opposite: a 3:1 canvas pads a near-square mark with ~66% empty space,
+ * the print slot then sizes that padding, and our own mark came out at a third
+ * of the partner's area. Uploads are cropped to their artwork and the letterhead
+ * slots do the balancing — by AREA, since that is what the eye actually reads.
  *
- * 3:1 because a letterhead lockup reads horizontally. 1200px wide renders into a
- * 160px slot at ~7.5x, so it stays crisp at any print DPI. Transparent PNG so the
- * logo sits ON the paper — an opaque backdrop prints as a grey card (the upload
- * now punches flat backdrops out, but starting transparent is cleaner).
+ * What still matters is resolution: the logo prints about 1.5in wide, so a
+ * source under ~600px goes soft on paper.
  */
-export const LOGO_CANVAS = { w: 1200, h: 400, ratio: '3:1', maxKb: 500 } as const;
+export const LOGO_MIN_W = 600;
+export const LOGO_MAX_KB = 500;
 /** QR canvas. Square — a letterboxed QR will not scan. */
 export const QR_CANVAS = { w: 600, h: 600 } as const;
 /** Human-readable, for the upload hints in Admin -> Branding. */
 export const LOGO_CANVAS_HINT =
-  `${LOGO_CANVAS.w} x ${LOGO_CANVAS.h} px (${LOGO_CANVAS.ratio}) · transparent PNG · max ${LOGO_CANVAS.maxKb} KB`;
+  `at least ${LOGO_MIN_W}px wide · transparent PNG · max ${LOGO_MAX_KB} KB`;
 
 const CACHE_KEY = 'gtk_erp_company_branding';
 

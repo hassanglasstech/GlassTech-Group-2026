@@ -25,7 +25,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { useAppStore } from '@/modules/shared/store/appStore';
-import { BrandingService, CompanyBranding, LOGO_CANVAS, LOGO_CANVAS_HINT, QR_CANVAS } from '@/modules/shared/services/brandingService';
+import { BrandingService, CompanyBranding, LOGO_CANVAS_HINT, LOGO_MAX_KB, QR_CANVAS } from '@/modules/shared/services/brandingService';
 import { trimImagePadding, fitToCanvas } from '@/modules/shared/utils/imageTrim';
 import { NIPPON_DEFAULT_TERMS } from '@/modules/nippon/constants/nipponCompanyInfo';
 import PrintHeader from '@/modules/shared/components/prints/PrintHeader';
@@ -49,15 +49,14 @@ const TERMS_TABS = [
 /**
  * Upload ceiling — 500 KB, raised from 150 KB.
  *
- * The old limit guarded the DB: these images are stored base64 in the branding
- * row, which inflates ~33%, and this project has already been through one
- * blown storage cap. It is safe to raise now because the UPLOAD size no longer
- * decides the STORED size — every logo is re-encoded onto the fixed 1200x400
- * canvas and every QR onto 600x600, so what lands in the row is bounded by the
- * canvas whatever the operator picks. The limit is now just a sanity guard
- * against someone dragging in a camera photo.
+ * The limit guards the DB: these images are stored base64 in the branding row,
+ * which inflates ~33%, and this project has already been through one blown
+ * storage cap. 500 KB is still a real bound — a logo is cropped to its artwork
+ * on the way in but not re-encoded to a fixed size, so a needlessly huge source
+ * does land in the row. It is generous enough for any real logo and tight enough
+ * to stop someone dragging in a camera photo.
  */
-const MAX_LOGO_BYTES = 500 * 1024;
+const MAX_LOGO_BYTES = LOGO_MAX_KB * 1024;
 
 const BrandingSettings: React.FC = () => {
   const user = useAuthStore(s => s.user);
@@ -120,24 +119,27 @@ const BrandingSettings: React.FC = () => {
       const reader = new FileReader();
       reader.onload = async () => {
         const raw = String(reader.result || '');
-        // LOGOS: trim first (clears a flat backdrop and any padded canvas,
-        // leaving the artwork), then re-centre on the one fixed canvas. That is
-        // what makes our mark and a partner's print at the same size however each
-        // was exported, and it means nobody has to build the canvas by hand.
+        // LOGOS: trim only — clear a flat backdrop and crop to the artwork.
         //
-        // QR: deliberately NOT trimmed. The white margin around a QR is its
-        // "quiet zone" — scanners need it to locate the code — and trimming would
-        // strip exactly that, leaving a code that photographs but will not scan.
-        // It also keeps its white backdrop for contrast, and goes onto a SQUARE
-        // canvas; letterboxing a QR to 3:1 would distort it.
+        // They are deliberately NOT letterboxed onto a shared canvas any more.
+        // That idea backfired: a 3:1 canvas pads a near-square mark with ~66%
+        // transparent space, and the slot then sizes the PADDING rather than the
+        // logo, so our own mark printed at a third of the partner's area. The
+        // artwork is stored at its own aspect and the letterhead slots do the
+        // balancing instead — see LOGO_SLOT in NipponLetterhead.
+        //
+        // QR: not trimmed at all. The white margin around a QR is its "quiet
+        // zone" — scanners need it to locate the code — so trimming leaves a code
+        // that photographs fine and will not scan. It keeps its white backdrop
+        // for contrast and goes onto a SQUARE canvas, since letterboxing distorts it.
         const normalised = isQr
           ? await fitToCanvas(raw, QR_CANVAS.w, QR_CANVAS.h, 0.86)
-          : await fitToCanvas(await trimImagePadding(raw), LOGO_CANVAS.w, LOGO_CANVAS.h);
+          : await trimImagePadding(raw);
         handleField(field, normalised);
         toast.success(
           isQr
             ? `QR loaded (${Math.round(file.size / 1024)} KB). Click Save to persist.`
-            : `Logo loaded — backdrop cleared and centred on the ${LOGO_CANVAS.w}x${LOGO_CANVAS.h} canvas. Click Save to persist.`,
+            : `Logo loaded — backdrop cleared and cropped to the artwork. Click Save to persist.`,
         );
       };
       reader.readAsDataURL(file);
@@ -247,13 +249,13 @@ const BrandingSettings: React.FC = () => {
                   </button>
                 )}
                 <p className="text-[10px] font-black text-slate-600">
-                  Prints at: {LOGO_CANVAS_HINT}
+                  Use: {LOGO_CANVAS_HINT}
                 </p>
                 <p className="text-[10px] text-slate-400 font-bold">
-                  Upload any size — a flat off-white backdrop is cleared and the artwork is
-                  re-centred on that canvas for you. Every letterhead logo lands on the same one,
-                  so ours and a partner&apos;s always print at matching size. Only rule worth
-                  minding: start from a file at least {LOGO_CANVAS.w}px wide so it stays crisp.
+                  Shape does not matter — tall, square or wide all work. A flat off-white backdrop
+                  is cleared and the artwork cropped for you, and the letterhead sizes our mark and
+                  a partner&apos;s to cover the same amount of paper. Resolution is the one thing
+                  worth minding: the logo prints about 1.5in wide.
                 </p>
                 <label className="flex items-center gap-2 text-xs font-bold text-slate-700 mt-2">
                   <input type="checkbox" checked={data.showLogo} onChange={e => handleField('showLogo', e.target.checked)}/>
@@ -305,11 +307,12 @@ const BrandingSettings: React.FC = () => {
                 letterhead shows the matching one for the chosen print type (KinLong or GlassTech). The &quot;General&quot;
                 variant uses the main Logo above.
               </p>
-              <p className="text-[10px] font-black text-slate-600 mb-1">Prints at: {LOGO_CANVAS_HINT}</p>
+              <p className="text-[10px] font-black text-slate-600 mb-1">Use: {LOGO_CANVAS_HINT}</p>
               <p className="text-[10px] text-slate-400 font-bold mb-3">
-                Same canvas as the main Logo, applied automatically — that is what keeps a partner
-                mark from out-sizing our own. Upload the brand&apos;s real logo file; never redraw or
-                re-generate it, a partner&apos;s mark only carries weight while it is pixel-faithful.
+                The letterhead balances this against our own mark by area, so neither out-sizes the
+                other whatever their shapes. Upload the brand&apos;s real logo file and let it be
+                rescaled; never redraw or re-generate it — a partner&apos;s mark only carries weight
+                while it is pixel-faithful.
               </p>
               <div className="grid grid-cols-2 gap-4">
                 {([
