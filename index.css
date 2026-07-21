@@ -401,8 +401,14 @@ input[type=number] { -moz-appearance: textfield; }
     font-size: 10px !important;
   }
 
-  /* Print container takes over full page */
-  .print-only, .print-container, .print-challan, .print-gate-pass {
+  /* The print SHEET takes over the page. Only top-level sheets belong here.
+     `.print-container` was in this list and must never be: it is always an INNER
+     wrapper inside `.print-only` (verified across all ten print components), so
+     absolutely positioning it pulled the sheet's only in-flow content out of
+     flow — the parent collapsed to zero height and the browser printed a blank
+     page. Absolute boxes also do not paginate, so anything past page 1 was lost.
+     It now stays in normal flow and is styled per-print (width/padding). */
+  .print-only, .print-challan, .print-gate-pass {
     display: block !important;
     position: absolute !important;
     top: 0 !important;
@@ -411,6 +417,9 @@ input[type=number] { -moz-appearance: textfield; }
     z-index: 99999 !important;
     background: white !important;
   }
+  /* Nothing is forced on `.print-container` — not even display. It is only ever
+     an inner wrapper, it is never display:none to begin with, and several prints
+     rely on it being `flex flex-col` to push their footer to the page bottom. */
   .print-only *, .print-container *, .print-challan *, .print-gate-pass * {
     visibility: visible !important;
   }

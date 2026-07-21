@@ -5,6 +5,7 @@ import { ProductImage } from '../../shared/components/ProductImage';
 import { NipponLetterhead, NipponContactFooter } from './NipponLetterhead';
 import { getNipponTerms } from '../constants/nipponCompanyInfo';
 import { BrandingService } from '../../shared/services/brandingService';
+import { PDF_CONTENT_H_MM, PDF_PAGE_W_MM } from '../../shared/utils/pdfExport';
 import { explodeSetLine, isSetLine } from '../utils/productSets';
 
 interface Props {
@@ -65,7 +66,12 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
     // text-only header + hand-typed KinLong SVG.
 
     return (
-        <div className="print-only bg-white text-black p-0 font-sans leading-tight shadow-2xl print:shadow-none mx-auto print:m-0" style={{ width: '210mm', minHeight: '297mm' }}>
+        // The sheet is exactly ONE PDF page tall — and a PDF page shows
+        // PDF_CONTENT_H_MM (285mm), not the physical 297mm, because the writer
+        // reserves a 12mm band for the "Page n / N" stamp. This was hardcoded
+        // 297mm, so EVERY document — even an empty one — was 12mm too tall and
+        // spilled onto a second page. Bound to the constant so they cannot drift.
+        <div className="print-only bg-white text-black p-0 font-sans leading-tight shadow-2xl print:shadow-none mx-auto print:m-0" style={{ width: `${PDF_PAGE_W_MM}mm`, minHeight: `${PDF_CONTENT_H_MM}mm` }}>
             <style>{`
                 @media screen {
                     .print-only { display: none !important; }
@@ -74,7 +80,7 @@ export const NipponSalesOrderPrint: React.FC<Props> = ({ quote, clientName, prin
                        publishes --snap-h; it must be a custom property and NOT an inline
                        min-height, or it outranks the @media print reset below and the
                        browser's own Print path emits blank pages. */
-                    .print-container { min-height: var(--snap-h, 297mm); }
+                    .print-container { min-height: var(--snap-h, ${PDF_CONTENT_H_MM}mm); }
                 }
                 @media print {
                     @page { 
