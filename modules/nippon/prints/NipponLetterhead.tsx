@@ -65,21 +65,30 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
                 the stacked one's tagline hold together; at print resolution a
                 ~1600px-wide source lands near 1900dpi there, so it stays crisp
                 even though it looks small on screen. */}
-            {ownLogo && (
-              <td className="w-[124px] pr-3 align-middle">
-                <div className="h-[78px] w-[112px] text-center leading-[78px]">
-                  <img src={ownLogo} alt="" className="inline-block max-h-[78px] max-w-[112px] align-middle" />
-                </div>
-              </td>
-            )}
+            {/* THE LOGO REPLACES THE WORDMARK — it does not sit beside it.
+                An uploaded logo already carries the company name (and, for
+                Nippon's, the tagline too), so printing "Nippon Hardware" next to
+                it says the same thing twice. Whichever exists is the identity:
+                logo if uploaded, text if not. That also means the letterhead can
+                never end up blank — clearing the logo in Branding brings the
+                wordmark straight back, no code change. */}
             <td className="align-middle">
-              {/* Explicit line-heights, never `leading-none`. html2canvas reproduces a
-                  box whose line-height IS its content height exactly, but GUESSES when
-                  the leading is none/normal — which is what squeezed the gap under the
-                  wordmark in the PDF while the preview looked right. */}
-              <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-[26px]">Nippon Hardware</h1>
-              {info.tagline && (
-                <p className="mt-[3px] text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 leading-[11px]">{info.tagline}</p>
+              {ownLogo ? (
+                // Left-aligned in a fixed-height box, capped on both axes so a
+                // wide wordmark and a stacked mark both drop in without the
+                // header lurching. Vertical centring by line-height only.
+                <div className="h-[80px] w-[190px] text-left leading-[80px]">
+                  <img src={ownLogo} alt="" className="inline-block max-h-[80px] max-w-[190px] align-middle" />
+                </div>
+              ) : (
+                <>
+                  {/* Explicit line-heights, never `leading-none` — see the note on
+                      the receipt path in the footer below. */}
+                  <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-[26px]">Nippon Hardware</h1>
+                  {info.tagline && (
+                    <p className="mt-[3px] text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 leading-[11px]">{info.tagline}</p>
+                  )}
+                </>
               )}
             </td>
 
