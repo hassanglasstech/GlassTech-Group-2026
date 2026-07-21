@@ -79,7 +79,13 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
                 <div className="h-[54px] w-[140px] text-center leading-[54px]">
                   {partnerLogo
                     ? <img src={partnerLogo} alt="" className="inline-block max-h-[54px] max-w-[140px] align-middle" />
-                    : <span className="align-middle text-2xl font-black tracking-tight text-slate-300 select-none">{partnerName}</span>}
+                    // The text mark is a FIRST-CLASS alternative to the image, not a
+                    // "no logo yet" placeholder — clearing the logo in Branding is a
+                    // supported way to run this letterhead, and it is the safest one:
+                    // text is laid out by the same engine that renders the rest of
+                    // the sheet, so preview and PDF cannot disagree about its height.
+                    // It was slate-300, which read as something that failed to load.
+                    : <span className="align-middle text-2xl font-black tracking-tight text-slate-800 select-none">{partnerName}</span>}
                 </div>
                 {partnerLine && (
                   <p className="mt-1 w-[140px] text-center text-[10px] font-bold uppercase tracking-tight text-blue-700 leading-tight">{partnerLine}</p>
