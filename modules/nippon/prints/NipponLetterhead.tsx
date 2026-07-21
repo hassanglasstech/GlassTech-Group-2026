@@ -74,11 +74,13 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
                 wordmark straight back, no code change. */}
             <td className="align-middle">
               {ownLogo ? (
-                // Left-aligned in a fixed-height box, capped on both axes so a
-                // wide wordmark and a stacked mark both drop in without the
-                // header lurching. Vertical centring by line-height only.
-                <div className="h-[80px] w-[190px] text-left leading-[80px]">
-                  <img src={ownLogo} alt="" className="inline-block max-h-[80px] max-w-[190px] align-middle" />
+                // LOGO_SLOT — deliberately the SAME box as the partner slot below.
+                // Balancing two logos by eye is an argument with no end; giving both
+                // one canvas spec (see LOGO_CANVAS in brandingService) and one slot
+                // ends it by construction. Capped on both axes so an off-spec upload
+                // still fits instead of wrecking the header.
+                <div className="h-[54px] w-[160px] text-left leading-[54px]">
+                  <img src={ownLogo} alt="" className="inline-block max-h-[54px] max-w-[160px] align-middle" />
                 </div>
               ) : (
                 <>
@@ -99,17 +101,13 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
                 and sized by max-width/max-height rather than object-fit, which
                 html2canvas does not support. */}
             {(partnerLogo || partnerName) && (
-              <td className="w-[118px] align-middle">
-                {/* Sized to sit UNDER our own mark, not beside it as an equal.
-                    Two logos of different shape balance by optical weight, not by
-                    matching one dimension: ours is near-square (renders ~90x80),
-                    KinLong's is a 2.7:1 wordmark, so at the old 140px width it
-                    read 56% wider and dominated the header of our own letterhead.
-                    Capped at 118 wide it lands ~118x44 — the supplier endorsement
-                    it is meant to be. */}
-                <div className="h-[46px] w-[118px] text-center leading-[46px]">
+              <td className="w-[160px] align-middle">
+                {/* Same 160x54 slot as our own mark. Both logos are authored to one
+                    canvas spec, so they print at identical size and the balance
+                    stops being a judgement call. */}
+                <div className="h-[54px] w-[160px] text-center leading-[54px]">
                   {partnerLogo
-                    ? <img src={partnerLogo} alt="" className="inline-block max-h-[46px] max-w-[118px] align-middle" />
+                    ? <img src={partnerLogo} alt="" className="inline-block max-h-[54px] max-w-[160px] align-middle" />
                     // The text mark is a FIRST-CLASS alternative to the image, not a
                     // "no logo yet" placeholder — clearing the logo in Branding is a
                     // supported way to run this letterhead, and it is the safest one:
@@ -119,7 +117,7 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
                     : <span className="align-middle text-2xl font-black tracking-tight text-slate-800 select-none">{partnerName}</span>}
                 </div>
                 {partnerLine && (
-                  <p className="mt-1 w-[118px] text-center text-[9px] font-bold uppercase tracking-tight text-blue-700 leading-tight">{partnerLine}</p>
+                  <p className="mt-1 w-[160px] text-center text-[9px] font-bold uppercase tracking-tight text-blue-700 leading-tight">{partnerLine}</p>
                 )}
               </td>
             )}

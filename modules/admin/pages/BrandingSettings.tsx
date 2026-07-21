@@ -25,7 +25,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/modules/auth/authStore';
 import { useAppStore } from '@/modules/shared/store/appStore';
-import { BrandingService, CompanyBranding } from '@/modules/shared/services/brandingService';
+import { BrandingService, CompanyBranding, LOGO_CANVAS_HINT } from '@/modules/shared/services/brandingService';
 import { trimImagePadding } from '@/modules/shared/utils/imageTrim';
 import { NIPPON_DEFAULT_TERMS } from '@/modules/nippon/constants/nipponCompanyInfo';
 import PrintHeader from '@/modules/shared/components/prints/PrintHeader';
@@ -224,9 +224,13 @@ const BrandingSettings: React.FC = () => {
                     <X size={12}/> Clear
                   </button>
                 )}
+                <p className="text-[10px] font-black text-slate-600">
+                  Required size: {LOGO_CANVAS_HINT}
+                </p>
                 <p className="text-[10px] text-slate-400 font-bold">
-                  Max 150 KB · transparent PNG or SVG recommended · a flat off-white
-                  backdrop is punched out automatically on upload.
+                  Every letterhead logo — ours and each partner&apos;s — uses this one canvas, so
+                  they always print the same size. Centre the artwork on it with a little breathing
+                  room. A flat off-white backdrop is punched out automatically on upload.
                 </p>
                 <label className="flex items-center gap-2 text-xs font-bold text-slate-700 mt-2">
                   <input type="checkbox" checked={data.showLogo} onChange={e => handleField('showLogo', e.target.checked)}/>
@@ -273,10 +277,16 @@ const BrandingSettings: React.FC = () => {
           {/* Dual header logos — Nippon prints under two brand headers */}
           {data.company === 'Nippon' && (
             <Section title="Header Logos — KinLong / GlassTech" icon={<ImageIcon size={14}/>}>
-              <p className="text-[11px] text-slate-500 font-bold mb-3">
+              <p className="text-[11px] text-slate-500 font-bold mb-1">
                 Nippon prints under two brand headers. Upload each brand&apos;s logo — the quotation / sales-order / receipt
                 letterhead shows the matching one for the chosen print type (KinLong or GlassTech). The &quot;General&quot;
                 variant uses the main Logo above.
+              </p>
+              <p className="text-[10px] font-black text-slate-600 mb-1">Required size: {LOGO_CANVAS_HINT}</p>
+              <p className="text-[10px] text-slate-400 font-bold mb-3">
+                Same canvas as the main Logo — that is what keeps a partner mark from out-sizing our own.
+                Place the brand&apos;s real logo file on the canvas and rescale it; never redraw or re-generate
+                it. A partner&apos;s mark only carries weight while it is pixel-faithful.
               </p>
               <div className="grid grid-cols-2 gap-4">
                 {([

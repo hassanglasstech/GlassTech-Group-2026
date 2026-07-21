@@ -77,6 +77,24 @@ export interface CompanyBranding {
   showGstOnInvoice:     boolean;
 }
 
+/**
+ * ONE canvas spec for every letterhead logo — ours and every partner's.
+ *
+ * The alternative is balancing logos by eye, which is an argument without an end:
+ * a near-square mark and a wide wordmark never look equal, and every tweak to one
+ * unbalances the other. Author both to the same canvas, print both in the same
+ * slot, and the question stops existing.
+ *
+ * 3:1 because a letterhead lockup reads horizontally. 1200px wide renders into a
+ * 160px slot at ~7.5x, so it stays crisp at any print DPI. Transparent PNG so the
+ * logo sits ON the paper — an opaque backdrop prints as a grey card (the upload
+ * now punches flat backdrops out, but starting transparent is cleaner).
+ */
+export const LOGO_CANVAS = { w: 1200, h: 400, ratio: '3:1', maxKb: 150 } as const;
+/** Human-readable, for the upload hints in Admin -> Branding. */
+export const LOGO_CANVAS_HINT =
+  `${LOGO_CANVAS.w} x ${LOGO_CANVAS.h} px (${LOGO_CANVAS.ratio}) · transparent PNG · max ${LOGO_CANVAS.maxKb} KB`;
+
 const CACHE_KEY = 'gtk_erp_company_branding';
 
 const _empty = (company: string): CompanyBranding => ({
