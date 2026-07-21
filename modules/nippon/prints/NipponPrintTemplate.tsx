@@ -49,13 +49,26 @@ const PRINT_STYLES = `
     /* The margin lives on @page, so the browser reserves it on EVERY page. Nippon
        used to put it on <body>, which only indents the first page — that is why
        page 2 started hard against the paper edge. */
-    @page { size: A4; margin: 10mm 12mm; }
+    /* The bottom margin is deliberately deeper than the top: it reserves the strip
+       that .page-bottom-footer occupies on every page. Without the reservation a
+       fixed footer overlaps the last rows of a full page. */
+    @page { size: A4; margin: 10mm 12mm 24mm 12mm; }
+    /* Contact / bank / QR strip pinned to the bottom of EVERY page. position:
+       fixed inside a paged context repeats the element per page — the standard
+       way to get a real letterhead footer, and it needs no height prediction,
+       which is what made the old flex-spacer + snapped-sheet approach fragile.
+       The 12mm insets match @page's left/right so it lines up with the content. */
+    #nippon-print-root .page-bottom-footer {
+      position: fixed !important;
+      bottom: 0; left: 0; right: 0;
+      background: white;
+    }
     body * { visibility: hidden !important; }
     #nippon-print-root, #nippon-print-root * { visibility: visible !important; }
     .no-print, nav, aside, header, footer,
     [class*="sidebar"], [class*="topbar"], [class*="navbar"], [class*="bottom-nav"] { display: none !important; }
     /* The preview modal's scroll shell. index.css hides every [class*="fixed"]
-       element when printing and this container carries Tailwind's \`fixed\`, so the
+       element when printing and this container carries Tailwind's "fixed" class, so the
        ENTIRE preview — sheet included — was being display:none'd and the browser
        printed nothing. That rule is !important at (0,3,0); only an ID outranks it.
        Also un-fix and un-clip it, or the sheet prints as one clipped viewport. */

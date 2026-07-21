@@ -93,7 +93,7 @@ const BrandingSettings: React.FC = () => {
     setData({ ...data, [k]: v });
   };
 
-  const uploadLogoTo = (field: 'logoDataUrl' | 'logoGlasstechDataUrl' | 'logoKinlongDataUrl') =>
+  const uploadLogoTo = (field: 'logoDataUrl' | 'logoGlasstechDataUrl' | 'logoKinlongDataUrl' | 'catalogueQrDataUrl') =>
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file || !data) return;
@@ -225,11 +225,46 @@ const BrandingSettings: React.FC = () => {
                   </button>
                 )}
                 <p className="text-[10px] text-slate-400 font-bold">
-                  Max 150 KB · transparent PNG or SVG recommended · 1:1 ratio renders best.
+                  Max 150 KB · transparent PNG or SVG recommended · a flat off-white
+                  backdrop is punched out automatically on upload.
                 </p>
                 <label className="flex items-center gap-2 text-xs font-bold text-slate-700 mt-2">
                   <input type="checkbox" checked={data.showLogo} onChange={e => handleField('showLogo', e.target.checked)}/>
                   Show logo on prints
+                </label>
+              </div>
+            </div>
+          </Section>
+
+          {/* Catalogue QR — printed in the document footer when switched on */}
+          <Section title="Catalogue QR Code" icon={<ImageIcon size={14}/>}>
+            <p className="text-[11px] text-slate-500 font-bold mb-3">
+              Prints a QR in the quotation / sales-order footer. Upload the code you actually want
+              scanned — a catalogue link, a WhatsApp catalogue, a tracked short link. Leave the
+              image empty and one is generated from the Website field above instead.
+            </p>
+            <div className="flex items-start gap-4">
+              <div className="w-24 h-24 border-2 border-dashed border-slate-300 rounded-xl flex items-center justify-center bg-slate-50 shrink-0">
+                {data.catalogueQrDataUrl
+                  ? <img src={data.catalogueQrDataUrl} alt="Catalogue QR preview" className="w-full h-full object-contain p-1"/>
+                  : <ImageIcon size={28} className="text-slate-300"/>}
+              </div>
+              <div className="flex-1 space-y-2">
+                <label className="inline-flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-lg text-xs font-black uppercase hover:bg-slate-800 cursor-pointer">
+                  <Upload size={12}/> Upload QR
+                  <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={uploadLogoTo('catalogueQrDataUrl')} className="hidden"/>
+                </label>
+                {data.catalogueQrDataUrl && (
+                  <button
+                    onClick={() => handleField('catalogueQrDataUrl', '')}
+                    className="ml-2 bg-rose-50 text-rose-700 border border-rose-200 px-3 py-2 rounded-lg text-xs font-black uppercase hover:bg-rose-100 inline-flex items-center gap-2"
+                  >
+                    <X size={12}/> Clear
+                  </button>
+                )}
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-700 mt-2">
+                  <input type="checkbox" checked={data.showQrOnInvoice} onChange={e => handleField('showQrOnInvoice', e.target.checked)}/>
+                  Show QR on prints
                 </label>
               </div>
             </div>

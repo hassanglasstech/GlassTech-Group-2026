@@ -56,7 +56,16 @@ export interface CompanyBranding {
   termsGrn:             string;
   showLogo:             boolean;
   showBankOnInvoice:    boolean;
+  /** Print the catalogue QR in the document footer. */
   showQrOnInvoice:      boolean;
+  /**
+   * The QR image to print. Upload the real one (a Linktree, a WhatsApp catalogue,
+   * a tracked short link) rather than trusting a code generated from the website
+   * field — what a customer scans should be the thing you meant, not a guess.
+   * Left empty, the footer falls back to generating one from the website URL so
+   * turning the toggle on always shows something. Rides in `data` (no migration).
+   */
+  catalogueQrDataUrl:   string;
   gstPercent:           number;            // company-default GST / sales-tax % printed on quotes & invoices (0 = no GST line). Rides in the `data` jsonb (zero-migration).
   /**
    * Master switch for TAX IDENTITY on customer-facing documents. When OFF the
@@ -104,6 +113,7 @@ const _empty = (company: string): CompanyBranding => ({
   showLogo:             true,
   showBankOnInvoice:    true,
   showQrOnInvoice:      false,
+  catalogueQrDataUrl:   '',
   gstPercent:           0,
   showGstOnInvoice:     false,
 });
@@ -142,6 +152,7 @@ const _fromRow = (r: any): CompanyBranding => ({
   showLogo:             r.show_logo            !== false,
   showBankOnInvoice:    r.show_bank_on_invoice !== false,
   showQrOnInvoice:      !!r.show_qr_on_invoice,
+  catalogueQrDataUrl:   String((r.data && r.data.catalogueQr) || ''),
   gstPercent:           Number((r.data && r.data.gstPercent) ?? 0) || 0,
   showGstOnInvoice:     !!(r.data && r.data.showGst),
 });
@@ -181,7 +192,7 @@ const _toRow = (b: CompanyBranding): any => ({
   show_bank_on_invoice:     b.showBankOnInvoice,
   show_qr_on_invoice:       b.showQrOnInvoice,
   // Zero-migration extras ride in the existing `data` jsonb column.
-  data:                     { gstPercent: b.gstPercent ?? 0, showGst: !!b.showGstOnInvoice },
+  data:                     { gstPercent: b.gstPercent ?? 0, showGst: !!b.showGstOnInvoice, catalogueQr: b.catalogueQrDataUrl || '' },
   updated_at:               new Date().toISOString(),
 });
 

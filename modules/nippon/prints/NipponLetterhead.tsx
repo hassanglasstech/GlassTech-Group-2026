@@ -99,10 +99,17 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
                 and sized by max-width/max-height rather than object-fit, which
                 html2canvas does not support. */}
             {(partnerLogo || partnerName) && (
-              <td className="w-[140px] align-middle">
-                <div className="h-[54px] w-[140px] text-center leading-[54px]">
+              <td className="w-[118px] align-middle">
+                {/* Sized to sit UNDER our own mark, not beside it as an equal.
+                    Two logos of different shape balance by optical weight, not by
+                    matching one dimension: ours is near-square (renders ~90x80),
+                    KinLong's is a 2.7:1 wordmark, so at the old 140px width it
+                    read 56% wider and dominated the header of our own letterhead.
+                    Capped at 118 wide it lands ~118x44 — the supplier endorsement
+                    it is meant to be. */}
+                <div className="h-[46px] w-[118px] text-center leading-[46px]">
                   {partnerLogo
-                    ? <img src={partnerLogo} alt="" className="inline-block max-h-[54px] max-w-[140px] align-middle" />
+                    ? <img src={partnerLogo} alt="" className="inline-block max-h-[46px] max-w-[118px] align-middle" />
                     // The text mark is a FIRST-CLASS alternative to the image, not a
                     // "no logo yet" placeholder — clearing the logo in Branding is a
                     // supported way to run this letterhead, and it is the safest one:
@@ -112,7 +119,7 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
                     : <span className="align-middle text-2xl font-black tracking-tight text-slate-800 select-none">{partnerName}</span>}
                 </div>
                 {partnerLine && (
-                  <p className="mt-1 w-[140px] text-center text-[10px] font-bold uppercase tracking-tight text-blue-700 leading-tight">{partnerLine}</p>
+                  <p className="mt-1 w-[118px] text-center text-[9px] font-bold uppercase tracking-tight text-blue-700 leading-tight">{partnerLine}</p>
                 )}
               </td>
             )}
@@ -128,7 +135,7 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
  * document footer. `emailKind` picks the sales email (quotation/SO) or accounts
  * email (invoice/receipt). Renders only the lines that are configured.
  */
-export const NipponContactFooter: React.FC<{ emailKind?: 'sales' | 'accounts'; showCatalogueQr?: boolean }> = ({ emailKind = 'sales', showCatalogueQr = false }) => {
+export const NipponContactFooter: React.FC<{ emailKind?: 'sales' | 'accounts'; showCatalogueQr?: boolean }> = ({ emailKind = 'sales', showCatalogueQr }) => {
   const info = getNipponCompanyInfo();
   const b = branding();
   const email = emailKind === 'accounts' ? (info.accountsEmail || info.email) : info.email;
@@ -149,9 +156,16 @@ export const NipponContactFooter: React.FC<{ emailKind?: 'sales' | 'accounts'; s
     b.bankIban && `IBAN: ${b.bankIban}`,
   ].filter(Boolean) : [];
 
+  // The QR is a BRANDING setting now (Admin → Branding), not something each print
+  // hardcodes — it was on for quotations and sales orders whether or not anyone
+  // wanted it. A caller may still force it via the prop; otherwise the toggle rules.
+  const qrOn = showCatalogueQr ?? !!b?.showQrOnInvoice;
+  const uploadedQr = (b?.catalogueQrDataUrl || '').trim();
   const site = (info.website || 'www.nipponhardware.com.pk').trim();
   const catalogueUrl = /^https?:\/\//i.test(site) ? site : `https://${site}`;
-  const withQr = showCatalogueQr && !!site;
+  // An uploaded code is what the customer should scan; generating one from the
+  // website is only the fallback so the toggle is never a no-op.
+  const withQr = qrOn && (!!uploadedQr || !!site);
 
   if (!hasContact && !reg && bankParts.length === 0 && !withQr) return null;
 
@@ -188,7 +202,9 @@ export const NipponContactFooter: React.FC<{ emailKind?: 'sales' | 'accounts'; s
   return (
     <div className="mt-2 pt-1.5 border-t border-slate-200 flex items-center justify-between gap-3">
       <div className="w-14 shrink-0 flex flex-col items-center">
-        <QrTag value={catalogueUrl} sizeMm={15} />
+        {uploadedQr
+          ? <img src={uploadedQr} alt="Catalogue QR" className="w-[15mm] h-[15mm] object-contain" />
+          : <QrTag value={catalogueUrl} sizeMm={15} />}
         <span className="text-[6px] font-black uppercase tracking-widest text-slate-400 mt-0.5 text-center leading-tight">Scan for<br/>catalogue</span>
       </div>
       {infoBlock}
