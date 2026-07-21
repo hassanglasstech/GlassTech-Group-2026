@@ -58,9 +58,18 @@ export const NipponLetterhead: React.FC<{ printType?: NipponPrintType }> = ({ pr
       <table className="w-full border-collapse">
         <tbody>
           <tr>
+            {/* Own-logo slot. Capped on BOTH axes and centred, so it accepts either
+                shape without the header lurching: a wide horizontal wordmark hits
+                the width cap, a stacked mark (Nippon's — monogram over the name
+                over a tagline) hits the height cap. 78px of height is what makes
+                the stacked one's tagline hold together; at print resolution a
+                ~1600px-wide source lands near 1900dpi there, so it stays crisp
+                even though it looks small on screen. */}
             {ownLogo && (
-              <td className="w-[120px] pr-3 align-middle">
-                <img src={ownLogo} alt="" className="max-h-[56px] max-w-[120px]" />
+              <td className="w-[124px] pr-3 align-middle">
+                <div className="h-[78px] w-[112px] text-center leading-[78px]">
+                  <img src={ownLogo} alt="" className="inline-block max-h-[78px] max-w-[112px] align-middle" />
+                </div>
               </td>
             )}
             <td className="align-middle">
